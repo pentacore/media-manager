@@ -62,7 +62,7 @@ final readonly class BazarrActions implements ActionExecutor
         private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
         private BazarrMediaFingerprint $bazarrMediaFingerprint,
         private SubtitleCaseLifecycle $subtitleCaseLifecycle,
-        private SubtitleInventoryService $subtitleInventoryService,
+        private SubtitleCaseCandidates $subtitleCaseCandidates,
     ) {}
 
     /**
@@ -259,7 +259,7 @@ final readonly class BazarrActions implements ActionExecutor
         // written to. An unreadable target aborts; transient upstream errors
         // surface as exceptions and stay retryable.
         new BazarrCache($bazarr)->bustAll();
-        $liveCandidate = $this->subtitleInventoryService->caseCandidateFor($subtitleCase);
+        $liveCandidate = $this->subtitleCaseCandidates->caseCandidateFor($subtitleCase);
         $liveFingerprint = is_array($liveCandidate) && is_string($liveCandidate['file_fingerprint'] ?? null)
             ? $liveCandidate['file_fingerprint']
             : null;

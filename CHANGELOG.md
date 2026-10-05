@@ -1,3 +1,10 @@
+## [1.33.1](https://github.com/pentacore/media-manager/compare/v1.33.0...v1.33.1) (2026-10-05)
+
+
+### Performance Improvements
+
+* **replacement:** run one release search per escalation ([5bb7e8a](https://github.com/pentacore/media-manager/commit/5bb7e8a15f255d050c45daa9e5d06cba21ae6605))
+
 # [1.33.0](https://github.com/pentacore/media-manager/compare/v1.32.1...v1.33.0) (2026-10-05)
 
 

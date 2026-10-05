@@ -138,7 +138,11 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Run the revalidate + grab-before-delete replacement.
+     * Run the revalidate + grab-before-delete replacement, one phase at a time:
+     * settle a prior run's grab, verify the installed files, re-check the
+     * reviewed release, claim the attempt (suspending monitoring), then grab
+     * and clean up. The caller holds the execution lock and the shared target
+     * lock across every phase.
      *
      * @param  array<string, mixed>  $payload
      * @param  array<string, mixed>  $storedTarget
@@ -166,143 +170,206 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ->where('action_request_id', $actionRequest->id)
             ->first();
 
-        // A prior run persisted grab_attempted_at (pre-POST) but died before it
-        // could record the outcome (SIGKILL/OOM between arr acceptance and the
-        // grab_accepted_at save). The grab may well have been accepted, so
-        // re-entering the grab path would duplicate the download. Treat it
-        // like an indeterminate grab: hand resolution to the Grab/Download
-        // webhooks and the reconciliation sweep. Only for executor-owned
-        // states — a terminal Failed row means an operator Retry that SHOULD
-        // re-grab from scratch.
-        if ($existing instanceof MediaReplacementAttempt
-            && $existing->grab_attempted_at !== null
-            && $existing->grab_accepted_at === null
-            && in_array($existing->status, [MediaReplacementStatus::Downloading, MediaReplacementStatus::Requested], true)) {
-            if ($existing->cleanup_completed_at === null) {
-                $existing->forceFill(['cleanup_completed_at' => now()])->save();
-            }
-
-            return [
-                'attempt_id' => $existing->id,
-                'status' => MediaReplacementStatus::Downloading->value,
-                'replacement_initiated' => false,
-                'grab_outcome' => 'indeterminate',
-                'deleted_files' => 0,
-                'message' => 'A previous run attempted the grab but its outcome was never recorded; not re-grabbing. Webhooks and reconciliation will resolve it.',
-            ];
+        if ($existing instanceof MediaReplacementAttempt && $this->grabOutcomeWasNeverRecorded($existing)) {
+            return $this->leaveUnrecordedGrabToTracking($existing);
         }
 
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
-            // `cleanup_completed_at` is the durable evidence of whether the
-            // executor finished its post-grab cleanup. If it is set, the run
-            // completed (or a webhook produced a real terminal outcome after it)
-            // — nothing to do, and re-grabbing would duplicate the download.
-            if ($existing->cleanup_completed_at !== null) {
-                return [
-                    'attempt_id' => $existing->id,
-                    'status' => $existing->status->value,
-                    'replacement_initiated' => false,
-                    'grab_outcome' => 'already_resolved',
-                    'deleted_files' => 0,
-                    'message' => 'The grab was already accepted and cleanup completed; not re-grabbing or reopening.',
-                ];
-            }
-
-            // A resumed attempt genuinely starts now, so reset the age basis used by
-            // later reconciliation runs. The shared execution lock excludes a
-            // reconciliation already in progress until this cleanup releases it;
-            // once acquired, that later run also sees this current timestamp.
-            $existing->forceFill(['started_at' => now()])->save();
-
-            // Cleanup is unfinished (a worker crash after the grab, or a deletion
-            // failure). Resume the remaining destructive steps idempotently. Reopen
-            // the status to `downloading` ONLY when it is still an executor-owned
-            // state — via a single CONDITIONAL update, so a webhook that
-            // terminalizes the row between the load above and here is never
-            // regressed (a check-then-act update could clobber it). completePostGrab
-            // then finishes the delete/restore either way, without touching a
-            // webhook-produced terminal status.
-            MediaReplacementAttempt::query()
-                ->whereKey($existing->id)
-                ->whereNull('cleanup_completed_at')
-                ->where(function (Builder $builder): void {
-                    $builder->whereIn('status', [
-                        MediaReplacementStatus::Downloading->value,
-                        MediaReplacementStatus::Requested->value,
-                    ])->orWhere('failure_reason', 'deletion_failed');
-                })
-                ->update([
-                    'status' => MediaReplacementStatus::Downloading->value,
-                    'failure_reason' => null,
-                    'completed_at' => null,
-                    // An acknowledgement belongs to the run that produced the
-                    // needs_attention outcome, so a re-run must start unacknowledged —
-                    // otherwise a re-broken attempt never re-enters the badge (see the
-                    // pre-grab reset below for the full consequence list).
-                    'acknowledged_at' => null,
-                    'acknowledged_by' => null,
-                ]);
-            // fresh() rather than refresh(): refresh() is findOrFail, and this row can
-            // be pruned between the load above and here — MediaReplacementAttempt is
-            // MassPrunable and model:prune is scheduled, so a long-settled attempt an
-            // operator retries is exactly the shape that vanishes. A pruned row must
-            // fail this one ActionRequest with a stated reason, not an unhandled
-            // ModelNotFoundException. Same treatment the reconcile command already
-            // applies to its own re-read.
-            $refreshed = $existing->fresh();
-
-            throw_unless(
-                $refreshed instanceof MediaReplacementAttempt,
-                InvalidArgumentException::class,
-                'The replacement attempt was pruned while this retry was resuming; nothing was changed.',
-            );
-
-            $existing = $refreshed;
-
-            $resumeTarget = is_array($existing->target) ? $existing->target : $storedTarget;
-
-            // RE-ASSERT the suspension instead of trusting the persisted flag for the
-            // BLOCKLIST DECISION. This row has been sitting in the database since the
-            // run that died, and other actors can have remonitored the target since
-            // (the reconciliation repair pass does exactly that on settled attempts).
-            // Trusting a flag another process may have cleared is a
-            // time-of-check/time-of-use bug: it would blocklist a target that is
-            // monitored again, and the arr's queued re-search would then grab a
-            // competitor. The unmonitor PUT is idempotent, so re-issuing it is cheap
-            // and makes the blocklist decision depend on what is true NOW.
-            $wasMonitored = $existing->was_monitored === true;
-            $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $resumeTarget, $actionRequest);
-
-            // The PERSISTED flag answers a different question — "does someone still
-            // owe this target a remonitor?" — and must never lose a `true` an earlier
-            // run earned. A failed unmonitor PUT is not evidence that the target is
-            // monitored; it is evidence of nothing, and arr trouble is a likely reason
-            // the earlier run died in the first place. Writing $didSuspend here would
-            // therefore clear the obligation precisely when it is most likely still
-            // outstanding, and every actor that could discharge it stands down on a
-            // false flag: restoreSuspendedMonitoring() returns success without an arr
-            // call, verifyDownload() sees nothing to restore, and both reconciliation
-            // passes select on monitoring_suspended = true. The target would stop
-            // receiving upgrades permanently.
-            $existing->forceFill([
-                'monitoring_suspended' => $didSuspend || ($wasMonitored && $existing->monitoring_suspended === true),
-            ])->save();
-
-            return $this->completePostGrab(
-                $client,
-                $serviceType,
-                $serviceConnection,
-                $resumeTarget,
-                $existing,
-                $payload['original_history_id'] ?? null,
-                // Same rule as the fresh path: safe when nothing needed suspending,
-                // or when we just suspended it ourselves. A monitored target we
-                // could not suspend must not be blocklisted.
-                blocklistAllowed: ! $wasMonitored || $didSuspend,
-                actionRequest: $actionRequest,
-            );
+            return $this->resumeAcceptedGrab($actionRequest, $payload, $serviceType, $serviceConnection, $client, $storedTarget, $existing);
         }
 
+        $freshTarget = $this->verifiedFreshTarget($serviceType, $serviceConnection, $storedTarget);
+        $recheck = $this->recheckSelectedRelease($serviceType, $serviceConnection, $freshTarget, $fingerprint, $requiredLanguages);
+        $claim = $this->claimAttempt(
+            $actionRequest,
+            $payload,
+            $serviceType,
+            $serviceConnection,
+            $client,
+            $existing,
+            $freshTarget,
+            $fingerprint,
+            $requiredLanguages ?? $recheck['effective_languages'],
+        );
+
+        return $this->grabAndCleanUp($actionRequest, $payload, $serviceType, $serviceConnection, $client, $freshTarget, $recheck['raw_release'], $claim);
+    }
+
+    /**
+     * A prior run persisted grab_attempted_at (pre-POST) but died before it
+     * could record the outcome (SIGKILL/OOM between arr acceptance and the
+     * grab_accepted_at save). The grab may well have been accepted, so
+     * re-entering the grab path would duplicate the download. Treat it
+     * like an indeterminate grab: hand resolution to the Grab/Download
+     * webhooks and the reconciliation sweep. Only for executor-owned
+     * states — a terminal Failed row means an operator Retry that SHOULD
+     * re-grab from scratch.
+     */
+    private function grabOutcomeWasNeverRecorded(MediaReplacementAttempt $mediaReplacementAttempt): bool
+    {
+        return $mediaReplacementAttempt->grab_attempted_at !== null
+            && $mediaReplacementAttempt->grab_accepted_at === null
+            && in_array($mediaReplacementAttempt->status, [MediaReplacementStatus::Downloading, MediaReplacementStatus::Requested], true);
+    }
+
+    /**
+     * Leave an attempt whose grab outcome was never recorded for webhooks and
+     * reconciliation to resolve, without re-grabbing.
+     *
+     * @return array<string, mixed>
+     */
+    private function leaveUnrecordedGrabToTracking(MediaReplacementAttempt $mediaReplacementAttempt): array
+    {
+        if ($mediaReplacementAttempt->cleanup_completed_at === null) {
+            $mediaReplacementAttempt->forceFill(['cleanup_completed_at' => now()])->save();
+        }
+
+        return [
+            'attempt_id' => $mediaReplacementAttempt->id,
+            'status' => MediaReplacementStatus::Downloading->value,
+            'replacement_initiated' => false,
+            'grab_outcome' => 'indeterminate',
+            'deleted_files' => 0,
+            'message' => 'A previous run attempted the grab but its outcome was never recorded; not re-grabbing. Webhooks and reconciliation will resolve it.',
+        ];
+    }
+
+    /**
+     * A prior run's grab was accepted. Report it resolved when its cleanup
+     * finished; otherwise resume the remaining destructive steps.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $storedTarget
+     * @return array<string, mixed>
+     */
+    private function resumeAcceptedGrab(
+        ActionRequest $actionRequest,
+        array $payload,
+        ServiceType $serviceType,
+        ServiceConnection $serviceConnection,
+        SonarrClient|RadarrClient $client,
+        array $storedTarget,
+        MediaReplacementAttempt $mediaReplacementAttempt,
+    ): array {
+        // `cleanup_completed_at` is the durable evidence of whether the
+        // executor finished its post-grab cleanup. If it is set, the run
+        // completed (or a webhook produced a real terminal outcome after it)
+        // — nothing to do, and re-grabbing would duplicate the download.
+        if ($mediaReplacementAttempt->cleanup_completed_at !== null) {
+            return [
+                'attempt_id' => $mediaReplacementAttempt->id,
+                'status' => $mediaReplacementAttempt->status->value,
+                'replacement_initiated' => false,
+                'grab_outcome' => 'already_resolved',
+                'deleted_files' => 0,
+                'message' => 'The grab was already accepted and cleanup completed; not re-grabbing or reopening.',
+            ];
+        }
+
+        // A resumed attempt genuinely starts now, so reset the age basis used by
+        // later reconciliation runs. The shared execution lock excludes a
+        // reconciliation already in progress until this cleanup releases it;
+        // once acquired, that later run also sees this current timestamp.
+        $mediaReplacementAttempt->forceFill(['started_at' => now()])->save();
+
+        // Cleanup is unfinished (a worker crash after the grab, or a deletion
+        // failure). Resume the remaining destructive steps idempotently. Reopen
+        // the status to `downloading` ONLY when it is still an executor-owned
+        // state — via a single CONDITIONAL update, so a webhook that
+        // terminalizes the row between the attempt runReplacement() loaded and
+        // here is never regressed (a check-then-act update could clobber it).
+        // completePostGrab then finishes the delete/restore either way, without
+        // touching a webhook-produced terminal status.
+        MediaReplacementAttempt::query()
+            ->whereKey($mediaReplacementAttempt->id)
+            ->whereNull('cleanup_completed_at')
+            ->where(function (Builder $builder): void {
+                $builder->whereIn('status', [
+                    MediaReplacementStatus::Downloading->value,
+                    MediaReplacementStatus::Requested->value,
+                ])->orWhere('failure_reason', 'deletion_failed');
+            })
+            ->update([
+                'status' => MediaReplacementStatus::Downloading->value,
+                'failure_reason' => null,
+                'completed_at' => null,
+                // An acknowledgement belongs to the run that produced the
+                // needs_attention outcome, so a re-run must start unacknowledged —
+                // otherwise a re-broken attempt never re-enters the badge (see the
+                // pre-grab reset below for the full consequence list).
+                'acknowledged_at' => null,
+                'acknowledged_by' => null,
+            ]);
+        // fresh() rather than refresh(): refresh() is findOrFail, and this row can
+        // be pruned between the attempt runReplacement() loaded and here —
+        // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, so
+        // a long-settled attempt an operator retries is exactly the shape that
+        // vanishes. A pruned row must fail this one ActionRequest with a stated
+        // reason, not an unhandled ModelNotFoundException. Same treatment the
+        // reconcile command already applies to its own re-read.
+        $refreshed = $mediaReplacementAttempt->fresh();
+
+        throw_unless(
+            $refreshed instanceof MediaReplacementAttempt,
+            InvalidArgumentException::class,
+            'The replacement attempt was pruned while this retry was resuming; nothing was changed.',
+        );
+
+        $mediaReplacementAttempt = $refreshed;
+
+        $resumeTarget = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : $storedTarget;
+
+        // RE-ASSERT the suspension instead of trusting the persisted flag for the
+        // BLOCKLIST DECISION. This row has been sitting in the database since the
+        // run that died, and other actors can have remonitored the target since
+        // (the reconciliation repair pass does exactly that on settled attempts).
+        // Trusting a flag another process may have cleared is a
+        // time-of-check/time-of-use bug: it would blocklist a target that is
+        // monitored again, and the arr's queued re-search would then grab a
+        // competitor. The unmonitor PUT is idempotent, so re-issuing it is cheap
+        // and makes the blocklist decision depend on what is true NOW.
+        $wasMonitored = $mediaReplacementAttempt->was_monitored === true;
+        $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $resumeTarget, $actionRequest);
+
+        // The PERSISTED flag answers a different question — "does someone still
+        // owe this target a remonitor?" — and must never lose a `true` an earlier
+        // run earned. A failed unmonitor PUT is not evidence that the target is
+        // monitored; it is evidence of nothing, and arr trouble is a likely reason
+        // the earlier run died in the first place. Writing $didSuspend here would
+        // therefore clear the obligation precisely when it is most likely still
+        // outstanding, and every actor that could discharge it stands down on a
+        // false flag: restoreSuspendedMonitoring() returns success without an arr
+        // call, verifyDownload() sees nothing to restore, and both reconciliation
+        // passes select on monitoring_suspended = true. The target would stop
+        // receiving upgrades permanently.
+        $mediaReplacementAttempt->forceFill([
+            'monitoring_suspended' => $didSuspend || ($wasMonitored && $mediaReplacementAttempt->monitoring_suspended === true),
+        ])->save();
+
+        return $this->completePostGrab(
+            $client,
+            $serviceType,
+            $serviceConnection,
+            $resumeTarget,
+            $mediaReplacementAttempt,
+            $payload['original_history_id'] ?? null,
+            // Same rule as the fresh path: safe when nothing needed suspending,
+            // or when we just suspended it ourselves. A monitored target we
+            // could not suspend must not be blocklisted.
+            blocklistAllowed: ! $wasMonitored || $didSuspend,
+            actionRequest: $actionRequest,
+        );
+    }
+
+    /**
+     * Bust the connection cache and re-inspect the target, aborting if the
+     * installed files changed since approval.
+     *
+     * @param  array<string, mixed>  $storedTarget
+     * @return array<string, mixed>
+     */
+    private function verifiedFreshTarget(ServiceType $serviceType, ServiceConnection $serviceConnection, array $storedTarget): array
+    {
         // Bust the connection cache BEFORE the pre-grab freshness check: the
         // abort gate below compares installed files against the approval-time
         // snapshot, and a cached getSeries/getEpisodes/getMovie (TTL up to
@@ -319,7 +386,27 @@ final readonly class MediaReplacementActions implements ActionExecutor
             'Installed media files changed after approval; aborting replacement.',
         );
 
-        $eligible = $this->replacementCandidateFinder->find($freshTarget, $requiredLanguages, 10, $serviceConnection);
+        return $freshTarget;
+    }
+
+    /**
+     * Re-check the reviewed release against one fresh native search: it must
+     * still rank as eligible, and the same search must still offer its raw
+     * release resource so the grab posts exactly what was reviewed.
+     *
+     * @param  array<string, mixed>  $freshTarget
+     * @param  list<string>|null  $requiredLanguages
+     * @return array{effective_languages: list<string>, raw_release: array<string, mixed>}
+     */
+    private function recheckSelectedRelease(
+        ServiceType $serviceType,
+        ServiceConnection $serviceConnection,
+        array $freshTarget,
+        string $fingerprint,
+        ?array $requiredLanguages,
+    ): array {
+        $search = $this->replacementCandidateFinder->findWithRawRelease($freshTarget, $fingerprint, $requiredLanguages, 10, $serviceConnection);
+        $eligible = $search['found'];
         $stillEligible = array_filter(
             $eligible['candidates'],
             static fn (array $candidate): bool => ($candidate['fingerprint'] ?? null) === $fingerprint,
@@ -327,19 +414,44 @@ final readonly class MediaReplacementActions implements ActionExecutor
         throw_if($stillEligible === [], InvalidArgumentException::class, 'Selected release is no longer eligible.');
         $selectedCandidate = array_first($stillEligible);
 
-        $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint, $serviceConnection);
+        // The ranker fingerprints these same rows, so an eligible fingerprint
+        // always has a raw row here; the guard stays as a safety net.
+        $rawRelease = $search['raw_release'];
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
         if ($serviceType === ServiceType::Sonarr && ($selectedCandidate['requires_approval'] ?? false) === true) {
             $rawRelease = $this->withSonarrOverride($rawRelease, $freshTarget);
         }
 
+        return ['effective_languages' => $eligible['effective_languages'], 'raw_release' => $rawRelease];
+    }
+
+    /**
+     * Claim the attempt as `downloading` and suspend monitoring, both before the
+     * grab.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $freshTarget
+     * @param  list<string>  $requiredLanguages
+     * @return array{attempt: MediaReplacementAttempt, did_suspend: bool, owed_restore: bool, blocklist_allowed: bool}
+     */
+    private function claimAttempt(
+        ActionRequest $actionRequest,
+        array $payload,
+        ServiceType $serviceType,
+        ServiceConnection $serviceConnection,
+        SonarrClient|RadarrClient $client,
+        ?MediaReplacementAttempt $mediaReplacementAttempt,
+        array $freshTarget,
+        string $fingerprint,
+        array $requiredLanguages,
+    ): array {
         // Preserve the ORIGINAL monitored state across retries: if a prior run
         // already recorded it as monitored, keep that — a rejected-grab whose
         // restore failed leaves ARR unmonitored, and re-inspecting that current
         // state would otherwise wrongly overwrite was_monitored to false and skip
         // restoration on a later success.
-        $wasMonitored = $existing?->was_monitored === true
+        $wasMonitored = $mediaReplacementAttempt?->was_monitored === true
             || ($freshTarget['monitored'] ?? null) === true;
 
         // Carry forward a restore a prior run still OWES, for the same reason
@@ -350,7 +462,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // restoreSuspendedMonitoring() reports success without an arr call,
         // verifyDownload() sees nothing to restore, and both reconciliation passes
         // select on monitoring_suspended = true.
-        $owedRestore = $wasMonitored && $existing?->monitoring_suspended === true;
+        $owedRestore = $wasMonitored && $mediaReplacementAttempt?->monitoring_suspended === true;
 
         // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
         // on the unique action_request_id makes Action-Queue Retry idempotent — a
@@ -367,7 +479,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'target' => $freshTarget,
                 'candidate_fingerprint' => $fingerprint,
                 'candidate' => is_array($payload['candidate'] ?? null) ? $payload['candidate'] : [],
-                'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
+                'required_languages' => $requiredLanguages,
                 'download_id' => null,
                 'grab_attempted_at' => null,
                 'grab_accepted_at' => null,
@@ -421,6 +533,37 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // must NOT blocklist (that triggers the competing auto-search).
         $blocklistAllowed = ! $wasMonitored || $didSuspend;
 
+        return [
+            'attempt' => $attempt,
+            'did_suspend' => $didSuspend,
+            'owed_restore' => $owedRestore,
+            'blocklist_allowed' => $blocklistAllowed,
+        ];
+    }
+
+    /**
+     * Grab the re-checked release and settle its outcome: a rejection restores
+     * any owed monitoring and fails the attempt, an indeterminate outcome stays
+     * trackable, and an accepted grab runs the destructive post-grab cleanup.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $freshTarget
+     * @param  array<string, mixed>  $rawRelease
+     * @param  array{attempt: MediaReplacementAttempt, did_suspend: bool, owed_restore: bool, blocklist_allowed: bool}  $claim
+     * @return array<string, mixed>
+     */
+    private function grabAndCleanUp(
+        ActionRequest $actionRequest,
+        array $payload,
+        ServiceType $serviceType,
+        ServiceConnection $serviceConnection,
+        SonarrClient|RadarrClient $client,
+        array $freshTarget,
+        array $rawRelease,
+        array $claim,
+    ): array {
+        $attempt = $claim['attempt'];
+
         // Durable pre-POST marker: if this process dies between the arr
         // accepting the grab and the grab_accepted_at save below, the retry
         // must find evidence that a grab was already attempted and treat it
@@ -440,7 +583,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // took monitoring away: an inherited suspension is just as real, and
             // skipping it here was how a Retry could turn a recoverable state into a
             // permanent one.
-            if ($didSuspend || $owedRestore) {
+            if ($claim['did_suspend'] || $claim['owed_restore']) {
                 try {
                     $this->setMonitored($client, $serviceType, $freshTarget, true);
                     // Record the restore. Leaving the flag set would advertise a
@@ -499,7 +642,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
             $freshTarget,
             $attempt,
             $payload['original_history_id'] ?? null,
-            blocklistAllowed: $blocklistAllowed,
+            blocklistAllowed: $claim['blocklist_allowed'],
             actionRequest: $actionRequest,
         );
     }

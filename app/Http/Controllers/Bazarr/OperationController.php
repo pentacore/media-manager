@@ -13,7 +13,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use App\Services\Bazarr\SubtitleOperationDescriber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
@@ -22,7 +22,7 @@ final class OperationController extends Controller
 {
     public function __invoke(
         OperationRequest $operationRequest,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleInspector $subtitleInspector,
         ActionOrchestrator $actionOrchestrator,
         SubtitleOperationDescriber $subtitleOperationDescriber,
     ): JsonResponse {
@@ -30,7 +30,7 @@ final class OperationController extends Controller
         $connection = $this->connection((int) $validated['connection']);
         $mediaType = (string) $validated['media_type'];
         $mediaId = (int) $validated['media_id'];
-        $inspection = $subtitleInventoryService->inspect($connection, $mediaType, $mediaId);
+        $inspection = $subtitleInspector->inspect($connection, $mediaType, $mediaId);
         $item = $inspection['item'];
 
         if (($item['target_fingerprint'] ?? null) !== $validated['target_fingerprint']) {

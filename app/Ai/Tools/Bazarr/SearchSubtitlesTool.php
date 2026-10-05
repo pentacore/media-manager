@@ -10,7 +10,7 @@ use App\Enums\ServiceType;
 use App\Http\Resources\Bazarr\SubtitleCandidateResource;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\BazarrClient;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
@@ -40,7 +40,7 @@ final class SearchSubtitlesTool extends BaseTool
         $mediaType = (string) ($arguments['media_type'] ?? '');
         $mediaId = (int) ($arguments['media_id'] ?? 0);
 
-        $inspection = resolve(SubtitleInventoryService::class)->inspect($connection, $mediaType, $mediaId);
+        $inspection = resolve(SubtitleInspector::class)->inspect($connection, $mediaType, $mediaId);
         $bazarrClient = new BazarrClient($connection);
         $candidates = $mediaType === 'episode'
             ? $bazarrClient->searchEpisode($mediaId)

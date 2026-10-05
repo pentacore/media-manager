@@ -15,8 +15,9 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Bazarr\BazarrClient;
+use App\Services\Bazarr\SubtitleCaseCandidates;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use App\Services\Bazarr\SubtitleOperationDescriber;
 use App\Settings\BazarrAutomationSettings;
 use Carbon\CarbonInterface;
@@ -37,7 +38,8 @@ final class UploadController extends Controller
 
     public function __invoke(
         UploadRequest $uploadRequest,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleInspector $subtitleInspector,
+        SubtitleCaseCandidates $subtitleCaseCandidates,
         ActionOrchestrator $actionOrchestrator,
         SubtitleOperationDescriber $subtitleOperationDescriber,
         BazarrAutomationSettings $bazarrAutomationSettings,
@@ -45,7 +47,7 @@ final class UploadController extends Controller
         $validated = $uploadRequest->validated();
         $connection = $this->connection((int) $validated['connection']);
         $mediaType = (string) $validated['media_type'];
-        $inspection = $subtitleInventoryService->inspect(
+        $inspection = $subtitleInspector->inspect(
             $connection,
             $mediaType,
             (int) $validated['media_id'],
@@ -69,7 +71,7 @@ final class UploadController extends Controller
         // The linked case has to carry the Arr file identity that
         // BazarrActions::revalidateTarget recomputes before every write; the Bazarr
         // media fingerprint above only proves the browser's view is current.
-        $candidate = $subtitleInventoryService->caseCandidateForMedia(
+        $candidate = $subtitleCaseCandidates->caseCandidateForMedia(
             $connection,
             $mediaType,
             (int) $validated['media_id'],
