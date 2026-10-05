@@ -21,7 +21,7 @@ class ChatTemplatePreviewController extends Controller
         $validated = $previewChatTemplateRequest->validated();
         $body = (string) ($validated['body'] ?? '');
         $variables = $validated['variables'] ?? [];
-        $chatTemplatePreviewMode = ChatTemplatePreviewMode::from($validated['mode'] ?? ChatTemplatePreviewMode::Example->value);
+        $chatTemplatePreviewMode = $previewChatTemplateRequest->enum('mode', ChatTemplatePreviewMode::class) ?? ChatTemplatePreviewMode::Example;
 
         return response()->json([
             'segments' => $chatTemplateRenderer->preview($body, $variables, $chatTemplatePreviewMode),

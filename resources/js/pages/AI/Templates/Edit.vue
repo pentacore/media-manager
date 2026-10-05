@@ -19,16 +19,16 @@ import type {
     ChatTemplate,
     ChatTemplateVariable,
     ChatTemplateVariableKind,
+    PreviewModeOption,
     PreviewResponse,
     PreviewSegment,
     VariableTypeOption,
 } from '@/components/chat-templates';
 import InputError from '@/components/InputError.vue';
-import { Field, Toggle } from '@/components/mm';
+import { Field, SegmentedControl, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/composables/useAiChat';
-import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { ChatTemplatePreviewMode } from '@/typefinder';
 
@@ -36,6 +36,7 @@ const props = defineProps<{
     template: ChatTemplate | null;
     prefillBody: string;
     variableTypes: VariableTypeOption[];
+    previewModes: PreviewModeOption[];
 }>();
 
 defineOptions({
@@ -139,11 +140,6 @@ function updateVariable(index: number, variable: ChatTemplateVariable): void {
 }
 
 const PREVIEW_MODE_KEY = 'mm.chat-templates.preview-mode';
-const PREVIEW_MODES: { value: ChatTemplatePreviewMode; label: string }[] = [
-    { value: 'example', label: 'Example values' },
-    { value: 'names', label: 'Placeholder names' },
-];
-
 const previewMode = ref<ChatTemplatePreviewMode>('example');
 
 function setPreviewMode(mode: ChatTemplatePreviewMode): void {
@@ -204,7 +200,7 @@ onMounted(() => {
     try {
         const stored = localStorage.getItem(PREVIEW_MODE_KEY);
 
-        if (PREVIEW_MODES.some((mode) => mode.value === stored)) {
+        if (props.previewModes.some((mode) => mode.value === stored)) {
             previewMode.value = stored as ChatTemplatePreviewMode;
         }
     } catch {
@@ -280,30 +276,13 @@ function save(): void {
         <section class="grid gap-2">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <h2 class="text-[13px] font-semibold">Preview</h2>
-                <div
-                    class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
-                    role="group"
+                <SegmentedControl
+                    :options="previewModes"
+                    :model-value="previewMode"
+                    option-attribute="preview-mode"
                     aria-label="Preview shows"
-                >
-                    <button
-                        v-for="mode in PREVIEW_MODES"
-                        :key="mode.value"
-                        type="button"
-                        :aria-pressed="previewMode === mode.value"
-                        :class="
-                            cn(
-                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
-                                previewMode === mode.value
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                            )
-                        "
-                        :data-preview-mode="mode.value"
-                        @click="setPreviewMode(mode.value)"
-                    >
-                        {{ mode.label }}
-                    </button>
-                </div>
+                    @update:model-value="setPreviewMode"
+                />
             </div>
             <TemplatePreview
                 :segments="previewSegments"
@@ -318,14 +297,14 @@ function save(): void {
                 hint="When you pick this template, send it immediately instead of putting it in the message box."
                 data-template-auto-send
             >
-                <Toggle v-model="form.auto_send" />
+                <Toggle v-model="form.auto_send" aria-label="Send right away" />
             </Field>
             <Field
                 label="Show on new chats"
                 hint="Show as a shortcut on an empty chat."
                 data-template-pinned
             >
-                <Toggle v-model="form.pinned" />
+                <Toggle v-model="form.pinned" aria-label="Show on new chats" />
             </Field>
         </div>
 
