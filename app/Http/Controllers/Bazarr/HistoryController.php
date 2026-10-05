@@ -4,22 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Bazarr;
 
+use App\Http\Requests\Bazarr\HistoryPageRequest;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\SubtitleLibraryReader;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class HistoryController extends BazarrController
 {
-    public function __invoke(Request $request, SubtitleLibraryReader $subtitleLibraryReader): Response
+    public function __invoke(HistoryPageRequest $historyPageRequest, SubtitleLibraryReader $subtitleLibraryReader): Response
     {
-        $validated = $request->validate([
-            ...$this->commonRules(),
-            'media_type' => ['nullable', 'in:episode,movie'],
-            'provider' => ['nullable', 'string', 'max:100'],
-        ]);
-        $connectionProps = $this->connectionProps($request);
+        $validated = $historyPageRequest->validated();
+        $connectionProps = $this->connectionProps($historyPageRequest);
         $connection = $this->selectedConnection($connectionProps);
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 25);

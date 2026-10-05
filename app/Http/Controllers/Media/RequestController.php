@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Media\UpdateSeerrRequestRequest;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
@@ -204,12 +205,9 @@ class RequestController extends Controller
      * serverId + is4k aligned with Seerr's stored values; the caller can
      * only override the two fields they're supposed to be editing.
      */
-    public function update(Request $request, int $id): RedirectResponse
+    public function update(UpdateSeerrRequestRequest $updateSeerrRequestRequest, int $id): RedirectResponse
     {
-        $validated = $request->validate([
-            'profile_id' => ['required', 'integer'],
-            'root_folder' => ['required', 'string'],
-        ]);
+        $validated = $updateSeerrRequestRequest->validated();
 
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 

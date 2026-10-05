@@ -8,9 +8,13 @@ use App\Cache\Services\AnimeCache;
 use App\Enums\AnimeSeason;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Media\ConfirmAnimeMatchRequest;
+use App\Http\Requests\Media\FindAnimeMatchRequest;
+use App\Http\Requests\Media\RequestAnimeRequest;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Services\Anime\AniListClient;
 use App\Services\Anime\AnimeIdMapper;
 use App\Services\Anime\AnimeMapping;
@@ -73,68 +77,19 @@ class AnimeController extends Controller
     }
 
     /**
-     * File a Seerr request for a mapped seasonal anime entry. Every anime
-     * route sits behind `can:manage-requests`, so the requester is always a
-     * chooser — but the identity rules (validate a posted userId against
-     * Seerr's own user list, default to the chooser's own match, refuse
-     * rather than guess) are shared with DiscoverController via
-     * SeerrUserResolver::resolveUserId(), so they can never drift apart.
+     * File a Seerr request for a mapped seasonal anime entry.
      */
-    /**
-     * requestingContext() never throws: it swallows RequestException /
-     * ConnectionException itself and reports them via `error`.
-     */
-    public function request(Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
+    public function request(RequestAnimeRequest $requestAnimeRequest, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
-        $validated = $request->validate([
-            'tmdbId' => ['required', 'integer'],
-            'mediaType' => ['required', 'in:tv,movie'],
-            'tmdbSeason' => ['nullable', 'integer'],
-            'startDate' => ['nullable', 'date'],
-            'userId' => ['nullable', 'integer'],
-        ]);
-        $tmdbId = (int) $validated['tmdbId'];
-        $mediaType = (string) $validated['mediaType'];
-
-        $connection = ServiceConnection::findActive(ServiceType::Seerr);
-
-        if (! $connection instanceof ServiceConnection) {
-            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
-        }
-
-        $context = $seerrUserResolver->requestingContext($connection, $request->user());
-        $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
-
-        if ($resolved['error'] !== null) {
-            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
-        }
-
-        try {
-            $seerrClient = new SeerrClient($connection);
-
-            $seasons = $mediaType === 'tv'
-                ? $this->resolveSeasons($seerrClient, $validated)
-                : 'all';
-
-            $seerrClient->createRequest($tmdbId, $mediaType, $seasons, $resolved['userId']);
-        } catch (RequestException|ConnectionException) {
-            // A failure still redirects (a successful Inertia visit), so signal
-            // the outcome explicitly rather than letting the client assume the
-            // card is now requested.
-            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Failed to submit request.'));
-        }
-
-        return $this->requestOutcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
+        return $this->submitRequest($requestAnimeRequest->validated(), $requestAnimeRequest->user(), $seerrUserResolver);
     }
 
     /**
      * Find TMDB candidates for an unmapped title (fuzzy fallback, step B).
      */
-    public function findMatch(Request $request): RedirectResponse
+    public function findMatch(FindAnimeMatchRequest $findAnimeMatchRequest): RedirectResponse
     {
-        $validated = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-        ]);
+        $validated = $findAnimeMatchRequest->validated();
 
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
@@ -158,20 +113,9 @@ class AnimeController extends Controller
     /**
      * Persist a user-confirmed match, then request it.
      */
-    public function confirmMatch(Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
+    public function confirmMatch(ConfirmAnimeMatchRequest $confirmAnimeMatchRequest, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
-        $validated = $request->validate([
-            'anilistId' => ['nullable', 'integer'],
-            'malId' => ['nullable', 'integer'],
-            'tmdbId' => ['required', 'integer'],
-            // The chosen candidate's own media type is authoritative — it may
-            // differ from the anime's format, and it decides which TMDB
-            // namespace we persist + request against.
-            'mediaType' => ['required', 'in:tv,movie'],
-            'tmdbSeason' => ['nullable', 'integer'],
-            'startDate' => ['nullable', 'date'],
-            'userId' => ['nullable', 'integer'],
-        ]);
+        $validated = $confirmAnimeMatchRequest->validated();
 
         if (empty($validated['anilistId']) && empty($validated['malId'])) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Cannot confirm a match without an anime id.')]);
@@ -190,7 +134,54 @@ class AnimeController extends Controller
         // mapped, so drop the season cache before re-rendering.
         new AnimeCache()->bustAll();
 
-        return $this->request($request, $seerrUserResolver);
+        return $this->submitRequest($validated, $confirmAnimeMatchRequest->user(), $seerrUserResolver);
+    }
+
+    /**
+     * Every anime route sits behind `can:manage-requests`, so the requester
+     * is always a chooser — but the identity rules (validate a posted userId
+     * against Seerr's own user list, default to the chooser's own match,
+     * refuse rather than guess) are shared with DiscoverController via
+     * SeerrUserResolver::resolveUserId(), so they can never drift apart.
+     * requestingContext() never throws: it swallows RequestException /
+     * ConnectionException itself and reports them via `error`.
+     *
+     * @param  array<string, mixed>  $validated  tmdbId, mediaType and the optional tmdbSeason/startDate/userId
+     */
+    private function submitRequest(array $validated, User $user, SeerrUserResolver $seerrUserResolver): RedirectResponse
+    {
+        $tmdbId = (int) $validated['tmdbId'];
+        $mediaType = (string) $validated['mediaType'];
+
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
+        }
+
+        $context = $seerrUserResolver->requestingContext($connection, $user);
+        $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
+
+        if ($resolved['error'] !== null) {
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
+        }
+
+        try {
+            $seerrClient = new SeerrClient($connection);
+
+            $seasons = $mediaType === 'tv'
+                ? $this->resolveSeasons($seerrClient, $validated)
+                : 'all';
+
+            $seerrClient->createRequest($tmdbId, $mediaType, $seasons, $resolved['userId']);
+        } catch (RequestException|ConnectionException) {
+            // A failure still redirects (a successful Inertia visit), so signal
+            // the outcome explicitly rather than letting the client assume the
+            // card is now requested.
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Failed to submit request.'));
+        }
+
+        return $this->requestOutcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
     }
 
     /**

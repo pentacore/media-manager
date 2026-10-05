@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Bazarr;
 
+use App\Concerns\BazarrPageValidationRules;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
@@ -12,6 +13,8 @@ use Illuminate\Http\Request;
 
 abstract class BazarrController extends Controller
 {
+    use BazarrPageValidationRules;
+
     /**
      * @return array{
      *     connections: list<array{id: int, name: string}>,
@@ -76,10 +79,6 @@ abstract class BazarrController extends Controller
      */
     protected function commonRules(): array
     {
-        return [
-            'connection' => ['nullable', 'integer', 'min:1'],
-            'page' => ['nullable', 'integer', 'min:1'],
-            'per_page' => ['nullable', 'integer', 'between:1,100'],
-        ];
+        return $this->bazarrPageRules();
     }
 }

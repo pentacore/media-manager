@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Bazarr;
 
+use App\Http\Requests\Bazarr\OverviewPageRequest;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\SubtitleLibraryReader;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class OverviewController extends BazarrController
 {
-    public function __invoke(Request $request, SubtitleLibraryReader $subtitleLibraryReader): Response
+    public function __invoke(OverviewPageRequest $overviewPageRequest, SubtitleLibraryReader $subtitleLibraryReader): Response
     {
-        $request->validate($this->commonRules());
-        $connectionProps = $this->connectionProps($request);
+        $connectionProps = $this->connectionProps($overviewPageRequest);
         $connection = $this->selectedConnection($connectionProps);
 
         return Inertia::render('Bazarr/Overview', [
