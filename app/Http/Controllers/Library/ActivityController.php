@@ -239,10 +239,10 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Only a grabbed :service history entry can be marked as failed — refresh the history and try again.', ['service' => $label]));
         }
 
-        $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
+        $arrClient = $this->clientFor($service, $connection);
 
         try {
-            $client->markHistoryFailed($id);
+            $arrClient->markHistoryFailed($id);
         } catch (ConnectionException) {
             return $this->flashAndBack('error', __(':service is unreachable right now.', ['service' => $label]));
         } catch (RequestException $requestException) {

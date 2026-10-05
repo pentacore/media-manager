@@ -15,6 +15,7 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\SharedMediaTargetLock;
+use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
@@ -39,6 +40,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         private ReplacementCandidateFinder $replacementCandidateFinder,
         private MediaReplacementTracker $mediaReplacementTracker,
         private CompetingGrabSweeper $competingGrabSweeper,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -87,9 +89,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // deleted after approval) aborts rather than falling through to another
         // instance; only a genuinely absent field falls back for legacy payloads.
         $serviceConnection = $this->resolveConnection($payload, $serviceType);
-        $client = $serviceType === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = $this->arrConnections->client($serviceConnection);
 
         // Shared installed-file lock: excludes a concurrent Bazarr subtitle
         // operation (or another replacement) on the same file. Keyed on the

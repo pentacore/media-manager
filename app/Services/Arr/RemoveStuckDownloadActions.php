@@ -10,8 +10,6 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use InvalidArgumentException;
 
 /**
@@ -30,6 +28,8 @@ use InvalidArgumentException;
  */
 class RemoveStuckDownloadActions implements ActionExecutor
 {
+    public function __construct(private readonly ArrConnections $arrConnections) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -56,9 +56,7 @@ class RemoveStuckDownloadActions implements ActionExecutor
         };
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, $type);
-        $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = $this->arrConnections->client($serviceConnection);
 
         $queueParams = $type === ServiceType::Sonarr
             ? ['page' => 1, 'pageSize' => 200, 'includeUnknownSeriesItems' => 'true']

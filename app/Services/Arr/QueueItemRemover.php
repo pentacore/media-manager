@@ -7,8 +7,6 @@ namespace App\Services\Arr;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Audit\AuditLogger;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use InvalidArgumentException;
@@ -20,18 +18,23 @@ use InvalidArgumentException;
  */
 final readonly class QueueItemRemover
 {
-    public function __construct(private AuditLogger $auditLogger) {}
+    public function __construct(
+        private AuditLogger $auditLogger,
+        private ArrConnections $arrConnections,
+    ) {}
 
     /**
      * @throws RequestException|ConnectionException
      */
     public function remove(ServiceConnection $serviceConnection, int $queueId, bool $blocklist): void
     {
-        $arrClient = match ($serviceConnection->type) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
-            default => throw new InvalidArgumentException(sprintf('%s has no download queue.', $serviceConnection->type->label())),
-        };
+        throw_unless(
+            in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true),
+            InvalidArgumentException::class,
+            sprintf('%s has no download queue.', $serviceConnection->type->label()),
+        );
+
+        $arrClient = $this->arrConnections->client($serviceConnection);
 
         $arrClient->removeQueueItem(
             id: $queueId,

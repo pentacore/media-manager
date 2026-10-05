@@ -23,10 +23,10 @@ use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Actions\ManualActionOutcome;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ReleaseSelectionCache;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\MediaReplacement\PendingReplacementGuard;
-use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Sonarr\SonarrEpisodeOwnership;
 use Illuminate\Foundation\Http\FormRequest;
@@ -183,7 +183,7 @@ class MediaActionController extends Controller
         ), __('Search started.'));
     }
 
-    public function releases(ReleaseSearchRequest $releaseSearchRequest, ReleaseSelectionCache $releaseSelectionCache, SonarrEpisodeOwnership $sonarrEpisodeOwnership): JsonResponse
+    public function releases(ReleaseSearchRequest $releaseSearchRequest, ReleaseSelectionCache $releaseSelectionCache, SonarrEpisodeOwnership $sonarrEpisodeOwnership, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $releaseSearchRequest->validated();
         $connection = $releaseSearchRequest->connection();
@@ -203,7 +203,7 @@ class MediaActionController extends Controller
             default => ['seriesId' => (int) $validated['item_id'], 'seasonNumber' => (int) $validated['season_number']],
         };
 
-        $arrClient = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
+        $arrClient = $arrConnections->client($connection);
 
         try {
             $releases = $arrClient->getReleases($params);

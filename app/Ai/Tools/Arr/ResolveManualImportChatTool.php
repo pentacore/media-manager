@@ -8,9 +8,8 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ManualImportResolver;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -61,9 +60,7 @@ class ResolveManualImportChatTool extends BaseTool
         };
 
         $serviceConnection = ServiceConnection::resolveActive($type);
-        $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = resolve(ArrConnections::class)->client($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         $assessment = resolve(ManualImportResolver::class)->assess($candidates, $service, $downloadId);
