@@ -5,12 +5,15 @@ declare(strict_types=1);
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Radarr\RadarrClient;
+use App\Services\ServiceClientFactory;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Mockery\MockInterface;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -176,7 +179,7 @@ test('inspect refuses with the exact exception before or after its reads', funct
     }
 
     expect(fn (): array => subtitleCharacterisationInspector()->inspect($connections[$connectionKey], $mediaType, $mediaId))
-        ->toThrow($exception, $message);
+        ->toThrow(new $exception($message));
 
     if ($responses === []) {
         Http::assertNothingSent();
@@ -192,11 +195,62 @@ test('inspect refuses with the exact exception before or after its reads', funct
     'movie not in Bazarr' => ['bazarr', null, ['bazarr.test/api/movies?*' => ['data' => [], 'total' => 0]], 'movie', 801, ModelNotFoundException::class, 'The requested Bazarr movie was not found.'],
 ]);
 
+test('inspect refuses an episode whose scope cannot be resolved with the exact message', function (): void {
+    ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
+
+    Http::fake([
+        'bazarr.test/api/episodes?*' => Http::response([
+            'data' => [[
+                'sonarrSeriesId' => 101,
+                'sonarrEpisodeId' => 701,
+                'title' => 'Orphan Episode',
+                'subtitles' => [],
+            ]],
+        ]),
+        'sonarr.test/api/v3/series/101' => Http::response([
+            'id' => 101,
+            'title' => 'Unmapped Series',
+            'rootFolderPath' => '/unmapped',
+            'seriesType' => 'standard',
+        ]),
+    ]);
+
+    expect(fn (): array => subtitleCharacterisationInspector()->inspect($bazarr, 'episode', 701))
+        ->toThrow(new UnexpectedValueException('The requested Bazarr episode could not be projected.'));
+});
+
+test('inspect refuses an episode when the mapped Sonarr connection cannot build a Sonarr client', function (): void {
+    ['bazarr' => $bazarr, 'sonarr' => $sonarr, 'radarr' => $radarr] = subtitleCharacterisationConnections();
+
+    Http::fake([
+        'bazarr.test/api/episodes?*' => Http::response([
+            'data' => [[
+                'sonarrSeriesId' => 101,
+                'sonarrEpisodeId' => 701,
+                'title' => 'Orphan Episode',
+                'subtitles' => [],
+            ]],
+        ]),
+    ]);
+
+    $this->mock(ServiceClientFactory::class, function (MockInterface $mock) use ($bazarr, $sonarr, $radarr): void {
+        $mock->shouldReceive('make')
+            ->withArgs(fn (ServiceConnection $connection): bool => $connection->is($bazarr))
+            ->andReturn(new BazarrClient($bazarr));
+        $mock->shouldReceive('make')
+            ->withArgs(fn (ServiceConnection $connection): bool => $connection->is($sonarr))
+            ->andReturn(new RadarrClient($radarr));
+    });
+
+    expect(fn (): array => subtitleCharacterisationInspector()->inspect($bazarr, 'episode', 701))
+        ->toThrow(new InvalidArgumentException('The mapped Sonarr connection is invalid.'));
+});
+
 test('every inventory entry point refuses a connection that is not Bazarr before any request', function (string $role, string $method, array $arguments): void {
     ['sonarr' => $sonarr] = subtitleCharacterisationConnections();
 
     expect(fn (): mixed => subtitleCharacterisationTarget($role)->{$method}($sonarr, ...$arguments))
-        ->toThrow(InvalidArgumentException::class, 'Subtitle inventory requires a Bazarr connection.');
+        ->toThrow(new InvalidArgumentException('Subtitle inventory requires a Bazarr connection.'));
 
     Http::assertNothingSent();
 })->with([
@@ -211,7 +265,7 @@ test('missing and history refuse an unknown media type filter before any request
     ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
 
     expect(fn (): array => subtitleCharacterisationReader()->{$method}($bazarr, 1, 25, ['media_type' => 'season']))
-        ->toThrow(InvalidArgumentException::class, 'Media type filter must be episode or movie.');
+        ->toThrow(new InvalidArgumentException('Media type filter must be episode or movie.'));
 
     Http::assertNothingSent();
 })->with(['missing', 'history']);
@@ -278,6 +332,27 @@ test('library reports an unavailable episode and movie inventory in a fixed orde
     ]);
 });
 
+test('missing reports its own unavailable Sonarr and Radarr wanted feeds in a fixed order', function (): void {
+    ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
+
+    Http::fake([
+        'sonarr.test/api/v3/series' => Http::response([], 500),
+        'bazarr.test/api/movies/wanted*' => Http::response([], 500),
+    ]);
+
+    expect(subtitleCharacterisationReader()->missing($bazarr, 1, 25))->toBe([
+        'data' => [],
+        'page' => 1,
+        'per_page' => 25,
+        'total' => 0,
+        'partial' => true,
+        'errors' => [
+            'Sonarr wanted subtitles are temporarily unavailable.',
+            'Radarr wanted subtitles are temporarily unavailable.',
+        ],
+    ]);
+});
+
 test('history reports both unavailable feeds in a fixed order', function (): void {
     ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
 
@@ -332,7 +407,6 @@ test('a partial discovery feed is rescanned on the next page instead of being me
     $firstPage = $subtitleInventoryService->caseCandidates($bazarr, page: 1, perPage: 25);
     $readsAfterFirstPage = $movieListReads();
 
-    Cache::flush();
     $secondPage = $subtitleInventoryService->caseCandidates($bazarr, page: 2, perPage: 25);
 
     expect($firstPage['partial'])->toBeTrue()
