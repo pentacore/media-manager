@@ -17,6 +17,9 @@ use App\Services\Seerr\SeerrUserResolver;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -172,6 +175,10 @@ class SearchController extends Controller
 
         $max = $this->maxResults();
 
+        // The Scout engine is not an upstream HTTP service: it throws
+        // driver-specific exceptions (Typesense client errors, PDO for the
+        // database driver), and an index outage must read as "temporarily
+        // unavailable", so this one catch stays broad.
         try {
             $hits = IndexedSeries::search($term)
                 ->options([
@@ -213,6 +220,10 @@ class SearchController extends Controller
 
         $max = $this->maxResults();
 
+        // The Scout engine is not an upstream HTTP service: it throws
+        // driver-specific exceptions (Typesense client errors, PDO for the
+        // database driver), and an index outage must read as "temporarily
+        // unavailable", so this one catch stays broad.
         try {
             $hits = IndexedMovie::search($term)
                 ->options([
@@ -247,16 +258,16 @@ class SearchController extends Controller
      */
     private function searchSonarrFallback(string $term): array
     {
+        $connection = ServiceConnection::findActive(ServiceType::Sonarr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
+        }
+
         try {
-            $connection = ServiceConnection::findActive(ServiceType::Sonarr);
-
-            if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
-            }
-
             $items = new SonarrClient($connection)->getSeries();
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('sonarr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('sonarr', $exception);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -282,16 +293,16 @@ class SearchController extends Controller
      */
     private function searchRadarrFallback(string $term): array
     {
+        $connection = ServiceConnection::findActive(ServiceType::Radarr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
+        }
+
         try {
-            $connection = ServiceConnection::findActive(ServiceType::Radarr);
-
-            if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
-            }
-
             $items = new RadarrClient($connection)->getMovies();
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('radarr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('radarr', $exception);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -330,8 +341,8 @@ class SearchController extends Controller
 
         try {
             $response = new SeerrClient($connection)->search($term);
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('seerr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('seerr', $exception);
         }
 
         return [
@@ -357,8 +368,8 @@ class SearchController extends Controller
 
         try {
             $hits = new ProwlarrClient($connection)->searchIndexers($term);
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('prowlarr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('prowlarr', $exception);
         }
 
         $rows = array_map(static function (array $hit): array {
@@ -368,7 +379,7 @@ class SearchController extends Controller
             if (is_string($publishDate) && $publishDate !== '') {
                 try {
                     $age = CarbonImmutable::parse($publishDate)->diffForHumans();
-                } catch (Throwable) {
+                } catch (InvalidFormatException) {
                     $age = null;
                 }
             }

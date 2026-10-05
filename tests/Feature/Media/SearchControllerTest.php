@@ -672,3 +672,21 @@ test('typesense driver returns no-connection error when sonarr is not configured
             )
         );
 });
+
+test('a fallback search lets a programming error surface instead of calling the service unavailable', function (string $service, string $path, string $prop): void {
+    $factory = ServiceConnection::factory();
+    ($service === 'sonarr' ? $factory->sonarr() : $factory->radarr())->create([
+        'url' => $service === 'sonarr' ? 'http://sonarr.local:8989' : 'http://radarr.local:7878',
+        'api_key' => 'k',
+    ]);
+    Http::fake([$path => static fn (): never => throw new LogicException('a bug, not an outage')]);
+
+    expect(fn () => $this->withoutExceptionHandling()
+        ->actingAs(User::factory()->member()->create())
+        ->get(route('media.search.index', ['q' => 'dune']))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps(fn ($page) => $page->has($prop))))
+        ->toThrow(LogicException::class, 'a bug, not an outage');
+})->with([
+    'sonarr' => ['sonarr', 'sonarr.local:8989/api/v3/series', 'seriesResults'],
+    'radarr' => ['radarr', 'radarr.local:7878/api/v3/movie', 'movieResults'],
+]);
