@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Enums\ChatTemplatePreviewMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\PreviewChatTemplateRequest;
 use App\Services\Chat\ChatTemplateDefinition;
@@ -20,9 +21,10 @@ class ChatTemplatePreviewController extends Controller
         $validated = $previewChatTemplateRequest->validated();
         $body = (string) ($validated['body'] ?? '');
         $variables = $validated['variables'] ?? [];
+        $chatTemplatePreviewMode = $previewChatTemplateRequest->enum('mode', ChatTemplatePreviewMode::class) ?? ChatTemplatePreviewMode::Example;
 
         return response()->json([
-            'segments' => $chatTemplateRenderer->preview($body, $variables),
+            'segments' => $chatTemplateRenderer->preview($body, $variables, $chatTemplatePreviewMode),
             // An object even when empty, so the client always reads a map.
             'errors' => (object) $chatTemplateDefinition->errors($body, $variables),
         ]);

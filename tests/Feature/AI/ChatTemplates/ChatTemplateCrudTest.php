@@ -50,7 +50,11 @@ test('the create page pre-fills the body from the query, capped at 4000 characte
         ->assertInertia(fn ($page) => $page->component('AI/Templates/Edit')
             ->where('template', null)
             ->where('prefillBody', str_repeat('a', 4000))
-            ->has('variableTypes', 5));
+            ->has('variableTypes', 5)
+            ->where('previewModes', [
+                ['value' => 'example', 'label' => 'Example values'],
+                ['value' => 'names', 'label' => 'Placeholder names'],
+            ]));
 });
 
 test('storing a template normalises its variables and redirects with a toast', function (): void {
@@ -127,7 +131,8 @@ test('the edit page renders the owned template', function (): void {
         ->assertInertia(fn ($page) => $page->component('AI/Templates/Edit')
             ->where('template.id', $chatTemplate->id)
             ->where('template.variables.0.type', 'series')
-            ->where('prefillBody', ''));
+            ->where('prefillBody', '')
+            ->has('previewModes', 2));
 });
 
 test('updating keeps its own name and replaces the definition', function (): void {

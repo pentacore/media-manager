@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Enums\ChatTemplatePreviewMode;
 use App\Enums\ChatTemplateVariableType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\StoreChatTemplateRequest;
@@ -39,6 +40,7 @@ class ChatTemplateController extends Controller
             'template' => null,
             'prefillBody' => $request->string('body')->substr(0, ChatTemplateRenderer::MAX_LENGTH)->toString(),
             'variableTypes' => $this->variableTypes(),
+            'previewModes' => $this->previewModes(),
         ]);
     }
 
@@ -61,6 +63,7 @@ class ChatTemplateController extends Controller
             'template' => new ChatTemplateResource($chatTemplate)->toArray($request),
             'prefillBody' => '',
             'variableTypes' => $this->variableTypes(),
+            'previewModes' => $this->previewModes(),
         ]);
     }
 
@@ -135,6 +138,20 @@ class ChatTemplateController extends Controller
                 'label' => $chatTemplateVariableType->label(),
             ],
             ChatTemplateVariableType::cases(),
+        );
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function previewModes(): array
+    {
+        return array_map(
+            static fn (ChatTemplatePreviewMode $chatTemplatePreviewMode): array => [
+                'value' => $chatTemplatePreviewMode->value,
+                'label' => $chatTemplatePreviewMode->label(),
+            ],
+            ChatTemplatePreviewMode::cases(),
         );
     }
 }

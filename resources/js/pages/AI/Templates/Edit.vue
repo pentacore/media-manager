@@ -1,34 +1,42 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
 import {
+    buildToken,
     extractTokenNames,
     humanizeVariableName,
+    insertAtSelection,
+    TemplateHelp,
     TemplatePreview,
+    VariableLedger,
     VariableRow,
 } from '@/components/chat-templates';
 import type {
     ChatTemplate,
     ChatTemplateVariable,
+    ChatTemplateVariableKind,
+    PreviewModeOption,
     PreviewResponse,
     PreviewSegment,
     VariableTypeOption,
 } from '@/components/chat-templates';
 import InputError from '@/components/InputError.vue';
-import { Toggle } from '@/components/mm';
+import { Field, SegmentedControl, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/composables/useAiChat';
 import { dashboard } from '@/routes';
+import type { ChatTemplatePreviewMode } from '@/typefinder';
 
 const props = defineProps<{
     template: ChatTemplate | null;
     prefillBody: string;
     variableTypes: VariableTypeOption[];
+    previewModes: PreviewModeOption[];
 }>();
 
 defineOptions({
@@ -40,10 +48,6 @@ defineOptions({
         ],
     },
 });
-
-/** Token examples live in script: a literal "{{" inside a template interpolation breaks Vue's parser. */
-const SIMPLE_TOKEN = '{{name}}';
-const LIBRARY_TOKEN = '{{anime:title,year,id}}';
 
 const form = useForm({
     name: props.template?.name ?? '',
@@ -83,6 +87,41 @@ watch(
     { immediate: true },
 );
 
+const bodyInput = ref<HTMLTextAreaElement | null>(null);
+
+/** Until the message box has had focus its selection means nothing, so inserts append. */
+const bodyWasFocused = ref(false);
+
+async function insertIntoBody(token: string): Promise<void> {
+    const el = bodyInput.value;
+    const atEnd = form.body.length;
+    const { text, caret } = insertAtSelection(
+        form.body,
+        bodyWasFocused.value && el ? el.selectionStart : atEnd,
+        bodyWasFocused.value && el ? el.selectionEnd : atEnd,
+        token,
+    );
+
+    form.body = text;
+
+    await nextTick();
+    el?.focus();
+    el?.setSelectionRange(caret, caret);
+}
+
+/** Seeds the settings the body watcher picks up, so the new row starts with the chosen type. */
+function addVariable(name: string, type: ChatTemplateVariableKind): void {
+    remembered.set(name, {
+        name,
+        label: humanizeVariableName(name),
+        type,
+        default: null,
+        options: type === 'choice' ? [] : null,
+    });
+
+    void insertIntoBody(buildToken(name));
+}
+
 function rowErrors(index: number): Record<string, string | undefined> {
     const errors = form.errors as Record<string, string | undefined>;
     const prefix = `variables.${index}.`;
@@ -100,6 +139,19 @@ function updateVariable(index: number, variable: ChatTemplateVariable): void {
     );
 }
 
+const PREVIEW_MODE_KEY = 'mm.chat-templates.preview-mode';
+const previewMode = ref<ChatTemplatePreviewMode>('example');
+
+function setPreviewMode(mode: ChatTemplatePreviewMode): void {
+    previewMode.value = mode;
+
+    try {
+        localStorage.setItem(PREVIEW_MODE_KEY, mode);
+    } catch {
+        // localStorage full or disabled — the choice lasts for this visit.
+    }
+}
+
 const previewSegments = ref<PreviewSegment[]>([]);
 const previewErrors = ref<Record<string, string[]>>({});
 const previewFailed = ref(false);
@@ -112,7 +164,11 @@ const refreshPreview = useDebounceFn(async (): Promise<void> => {
         const response = await jsonRequest<PreviewResponse>(
             'POST',
             ChatTemplatePreviewController.url(),
-            { body: form.body, variables: form.variables },
+            {
+                body: form.body,
+                variables: form.variables,
+                mode: previewMode.value,
+            },
         );
 
         if (request !== previewRequest) {
@@ -130,7 +186,7 @@ const refreshPreview = useDebounceFn(async (): Promise<void> => {
 }, 300);
 
 watch(
-    () => [form.body, form.variables],
+    () => [form.body, form.variables, previewMode.value],
     () => {
         void refreshPreview();
     },
@@ -138,8 +194,19 @@ watch(
 );
 
 // The first preview waits for the browser: during SSR setup the fetch has no
-// server to reach and would only fail.
+// server to reach and would only fail. The stored mode is read here too, so
+// the server-rendered markup matches the first client render.
 onMounted(() => {
+    try {
+        const stored = localStorage.getItem(PREVIEW_MODE_KEY);
+
+        if (props.previewModes.some((mode) => mode.value === stored)) {
+            previewMode.value = stored as ChatTemplatePreviewMode;
+        }
+    } catch {
+        // localStorage disabled — keep example values.
+    }
+
     void refreshPreview();
 });
 
@@ -158,17 +225,11 @@ function save(): void {
     <Head :title="template ? 'Edit template' : 'New template'" />
 
     <form class="max-w-[900px] space-y-6 p-6" @submit.prevent="save">
-        <div>
+        <div class="grid gap-3">
             <h1 class="text-[20px] font-semibold">
                 {{ template ? 'Edit template' : 'New template' }}
             </h1>
-            <p class="mt-1 text-[12.5px] text-muted-foreground">
-                Write the message once and mark the parts that change with
-                <code>{{ SIMPLE_TOKEN }}</code
-                >. Series and movie variables can pick parts:
-                <code>{{ LIBRARY_TOKEN }}</code
-                >.
-            </p>
+            <TemplateHelp :default-open="template === null" />
         </div>
 
         <label class="grid gap-1.5 text-[12.5px] font-medium">
@@ -177,18 +238,28 @@ function save(): void {
             <InputError :message="form.errors.name" />
         </label>
 
-        <label class="grid gap-1.5 text-[12.5px] font-medium">
-            Message
-            <textarea
-                v-model="form.body"
-                rows="5"
-                class="rounded-md border border-input bg-background px-3 py-2 font-mono text-[13px]"
-                data-template-body
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
+                Message
+                <textarea
+                    ref="bodyInput"
+                    v-model="form.body"
+                    rows="8"
+                    class="rounded-md border border-input bg-background px-3 py-2 font-mono text-[13px]"
+                    data-template-body
+                    @focus="bodyWasFocused = true"
+                />
+                <span data-template-body-error>
+                    <InputError :message="form.errors.body" />
+                </span>
+            </label>
+            <VariableLedger
+                :variables="form.variables"
+                :types="variableTypes"
+                @insert="insertIntoBody"
+                @add="addVariable"
             />
-            <span data-template-body-error>
-                <InputError :message="form.errors.body" />
-            </span>
-        </label>
+        </div>
 
         <section v-if="form.variables.length > 0" class="grid gap-2">
             <h2 class="text-[13px] font-semibold">Variables</h2>
@@ -203,7 +274,16 @@ function save(): void {
         </section>
 
         <section class="grid gap-2">
-            <h2 class="text-[13px] font-semibold">Preview</h2>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-[13px] font-semibold">Preview</h2>
+                <SegmentedControl
+                    :options="previewModes"
+                    :model-value="previewMode"
+                    option-attribute="preview-mode"
+                    aria-label="Preview shows"
+                    @update:model-value="setPreviewMode"
+                />
+            </div>
             <TemplatePreview
                 :segments="previewSegments"
                 :errors="previewErrors"
@@ -211,22 +291,21 @@ function save(): void {
             />
         </section>
 
-        <div class="flex flex-wrap gap-6">
-            <div class="grid gap-1 text-[12.5px]" data-template-auto-send>
-                <span class="font-medium">Send right away</span>
-                <Toggle
-                    v-model="form.auto_send"
-                    :label="
-                        form.auto_send
-                            ? 'Send is the default'
-                            : 'Insert is the default'
-                    "
-                />
-            </div>
-            <div class="grid gap-1 text-[12.5px]" data-template-pinned>
-                <span class="font-medium">Show on new chats</span>
-                <Toggle v-model="form.pinned" />
-            </div>
+        <div class="grid gap-6 sm:grid-cols-2">
+            <Field
+                label="Send right away"
+                hint="When you pick this template, send it immediately instead of putting it in the message box."
+                data-template-auto-send
+            >
+                <Toggle v-model="form.auto_send" aria-label="Send right away" />
+            </Field>
+            <Field
+                label="Show on new chats"
+                hint="Show as a shortcut on an empty chat."
+                data-template-pinned
+            >
+                <Toggle v-model="form.pinned" aria-label="Show on new chats" />
+            </Field>
         </div>
 
         <div class="flex gap-2">
