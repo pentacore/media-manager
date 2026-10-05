@@ -606,6 +606,7 @@ test('both locks are free again after every way out of a replacement', function 
     'abort before the grab' => [['releases' => []], true],
     'rejected grab' => [['grab' => 'rejected'], true],
     'indeterminate grab' => [['grab' => 'indeterminate'], false],
+    'deletion failed' => [['deleteStatus' => 500], true],
 ]);
 
 test('through the job a replacement completes the request with the executor result and two status rows', function (): void {
