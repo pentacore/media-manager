@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Plus } from '@lucide/vue';
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, useId, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -57,17 +57,53 @@ function togglePart(name: string, part: LibraryPart): void {
     };
 }
 
-function insertVariable(name: string): void {
-    emit('insert', buildToken(name, partsFor(name)));
+// Drop chip choices for variables that are gone or no longer a series or
+// movie, so a later type switch can't put parts on a plain token.
+watch(
+    () => props.variables,
+    (variables) => {
+        const libraryNames = variables
+            .filter((v) => isLibrary(v.type))
+            .map((v) => v.name);
+        const kept = Object.fromEntries(
+            Object.entries(selectedParts.value).filter(([name]) =>
+                libraryNames.includes(name),
+            ),
+        );
+
+        if (
+            Object.keys(kept).length !== Object.keys(selectedParts.value).length
+        ) {
+            selectedParts.value = kept;
+        }
+    },
+);
+
+/** The token Insert puts in the message; only series and movies take parts. */
+function tokenFor(variable: ChatTemplateVariable): string {
+    return buildToken(
+        variable.name,
+        isLibrary(variable.type) ? partsFor(variable.name) : [],
+    );
+}
+
+/** Built in script: a literal "{{" inside a template interpolation breaks Vue's parser. */
+function insertLabel(variable: ChatTemplateVariable): string {
+    return `Insert ${tokenFor(variable)}`;
+}
+
+function insertVariable(variable: ChatTemplateVariable): void {
+    emit('insert', tokenFor(variable));
 
     const reset = { ...selectedParts.value };
-    delete reset[name];
+    delete reset[variable.name];
     selectedParts.value = reset;
 }
 
 const newType = ref<ChatTemplateVariableKind | null>(null);
 const newName = ref('');
 const newNameInput = ref<InstanceType<typeof Input> | null>(null);
+const newNameErrorId = useId();
 
 const newNameError = computed((): string | null => {
     if (!VARIABLE_NAME_PATTERN.test(newName.value)) {
@@ -133,15 +169,18 @@ function submitNew(): void {
                         variant="ghost"
                         size="sm"
                         class="h-6 shrink-0 px-2 text-xs"
-                        :title="`Insert ${buildToken(variable.name, partsFor(variable.name))}`"
+                        :aria-label="insertLabel(variable)"
+                        :title="insertLabel(variable)"
                         data-ledger-insert
-                        @click="insertVariable(variable.name)"
+                        @click="insertVariable(variable)"
                         >Insert</Button
                     >
                 </div>
                 <div
                     v-if="isLibrary(variable.type)"
                     class="flex flex-wrap gap-1"
+                    role="group"
+                    :aria-label="`Parts for ${variable.name}`"
                 >
                     <button
                         v-for="part in LIBRARY_PARTS"
@@ -197,6 +236,10 @@ function submitNew(): void {
                         v-model="newName"
                         class="h-7 font-mono text-[12px]"
                         aria-label="New variable name"
+                        :aria-invalid="newNameError !== null"
+                        :aria-describedby="
+                            newNameError !== null ? newNameErrorId : undefined
+                        "
                         data-ledger-new-name
                         @keydown.enter.prevent="submitNew"
                         @keydown.esc.prevent="cancelAdding"
@@ -205,6 +248,7 @@ function submitNew(): void {
                         type="button"
                         size="sm"
                         class="h-7 px-2 text-xs"
+                        :disabled="newNameError !== null"
                         data-ledger-new-insert
                         @click="submitNew"
                         >Insert</Button
@@ -212,6 +256,7 @@ function submitNew(): void {
                 </div>
                 <p
                     v-if="newNameError"
+                    :id="newNameErrorId"
                     class="text-[12px] text-destructive"
                     data-ledger-new-error
                 >

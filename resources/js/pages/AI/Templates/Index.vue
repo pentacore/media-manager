@@ -77,17 +77,21 @@ function remove(template: ChatTemplate): void {
         >
             <p class="font-medium text-foreground">No templates yet.</p>
             <p>
-                Write a message the way you'd type it to the assistant, and put
-                a placeholder like <code>{{ SIMPLE_TOKEN }}</code> wherever
-                something changes. Each placeholder becomes a field you fill in
-                when you use the template. For a series or movie, add the parts
-                you want: <code>{{ LIBRARY_TOKEN }}</code
-                >.
+                A template is a message you send the assistant often. Write it
+                the way you'd type it, and put a placeholder like
+                <code>{{ SIMPLE_TOKEN }}</code> wherever something changes. Each
+                placeholder becomes a field you fill in when you use the
+                template. For a series or movie you can choose which details to
+                include, like <code>{{ LIBRARY_TOKEN }}</code> for the title,
+                year and library id.
             </p>
             <div class="grid gap-1">
-                <p>For example, the template</p>
+                <p>For example, this template:</p>
                 <code class="text-foreground">{{ EXAMPLE_TEMPLATE_BODY }}</code>
-                <p>sends</p>
+                <p>
+                    becomes this message when you pick Frieren, season 1 and
+                    episode 7:
+                </p>
                 <code class="text-foreground">{{
                     EXAMPLE_TEMPLATE_RESULT
                 }}</code>

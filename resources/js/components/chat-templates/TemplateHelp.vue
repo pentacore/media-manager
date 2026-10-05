@@ -23,7 +23,7 @@ const PART_ROWS = [
     {
         token: '{{anime:id}}',
         result: '(Sonarr series id 42)',
-        note: 'so it can find it directly',
+        note: 'so the assistant can find it directly',
     },
 ];
 
@@ -89,7 +89,8 @@ function setOpen(value: boolean): void {
                     you fill in when you use the template.
                 </li>
                 <li>
-                    Choose a type for each variable:
+                    Each placeholder is a variable with its own settings row
+                    below the message. Choose what kind of value it is:
                     <strong class="text-foreground">Text</strong>,
                     <strong class="text-foreground">Number</strong>,
                     <strong class="text-foreground">Choice</strong> (from a list
@@ -99,8 +100,19 @@ function setOpen(value: boolean): void {
                 </li>
             </ol>
 
+            <p>
+                Use <strong class="text-foreground">Insert</strong> or the
+                <strong class="text-foreground">+ Text / + Series …</strong>
+                buttons beside the message to add placeholders without typing
+                them.
+            </p>
+
             <div class="grid gap-1.5">
-                <p>A series or movie placeholder can pick what to include:</p>
+                <p>
+                    For a series or movie, choose which details to include.
+                    Beside the message, click title, year or id before Insert,
+                    or write them yourself:
+                </p>
                 <table class="w-full max-w-[560px] text-left text-[12.5px]">
                     <thead>
                         <tr class="border-b border-border text-fg-subtle">
@@ -133,9 +145,12 @@ function setOpen(value: boolean): void {
             </div>
 
             <div class="grid gap-1">
-                <p>For example, the template</p>
+                <p>For example, this template:</p>
                 <code class="text-foreground">{{ EXAMPLE_TEMPLATE_BODY }}</code>
-                <p>sends</p>
+                <p>
+                    becomes this message when you pick Frieren, season 1 and
+                    episode 7:
+                </p>
                 <code class="text-foreground">{{
                     EXAMPLE_TEMPLATE_RESULT
                 }}</code>

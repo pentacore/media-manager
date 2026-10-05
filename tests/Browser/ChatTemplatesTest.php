@@ -94,12 +94,28 @@ test('the ledger inserts an existing variable at the message cursor', function (
         ->fill('[data-template-body]', 'Hello {{season}} world')
         ->assertSeeIn('[data-ledger-variable="season"]', 'Text');
 
-    $webpage->script(chatTemplatesPlaceCaretScript(6));
+    $webpage->script(chatTemplatesPlaceCaretScript(6, 6));
 
     $webpage->click('[data-ledger-variable="season"] [data-ledger-insert]')
         ->assertValue('[data-template-body]', 'Hello {{season}}{{season}} world');
 
     expect($webpage->script(chatTemplatesCaretScript()))->toBe(['focused' => true, 'caret' => 16]);
+});
+
+test('the ledger replaces the selected text in the message', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Season X of {{season}}')
+        ->assertVisible('[data-ledger-variable="season"]');
+
+    $webpage->script(chatTemplatesPlaceCaretScript(7, 8));
+
+    $webpage->click('[data-ledger-variable="season"] [data-ledger-insert]')
+        ->assertValue('[data-template-body]', 'Season {{season}} of {{season}}');
+
+    expect($webpage->script(chatTemplatesCaretScript()))->toBe(['focused' => true, 'caret' => 17]);
 });
 
 test('the ledger appends when the message was never focused', function (): void {
@@ -129,6 +145,22 @@ test('series part chips insert the parts in click order and reset', function ():
         ->assertAttribute('[data-ledger-variable="anime"] [data-ledger-part="title"]', 'aria-pressed', 'false');
 });
 
+test('chosen parts are dropped when a variable stops being a series', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check {{anime}} ')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
+        ->click('[data-ledger-variable="anime"] [data-ledger-part="year"]')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'text')
+        ->assertMissing('[data-ledger-variable="anime"] [data-ledger-part="year"]')
+        ->click('[data-ledger-variable="anime"] [data-ledger-insert]')
+        ->assertValue('[data-template-body]', 'Check {{anime}} {{anime}}')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
+        ->assertAttribute('[data-ledger-variable="anime"] [data-ledger-part="year"]', 'aria-pressed', 'false');
+});
+
 test('adding a series variable inserts its token with the series type pre-set', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -152,9 +184,23 @@ test('a new variable name that is taken shows an error and inserts nothing', fun
         ->assertValue('[data-ledger-new-name]', 'series')
         ->fill('[data-ledger-new-name]', 'anime')
         ->assertSeeIn('[data-ledger-new-error]', 'already has a variable')
-        ->click('[data-ledger-new-insert]')
+        ->assertDisabled('[data-ledger-new-insert]')
+        ->keys('[data-ledger-new-name]', 'Enter')
         ->assertValue('[data-template-body]', 'Check {{anime}}')
         ->assertVisible('[data-ledger-new-error]');
+});
+
+test('a taken suggestion gets a numbered name', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check {{text}} ')
+        ->click('[data-ledger-add="text"]')
+        ->assertValue('[data-ledger-new-name]', 'text_2')
+        ->click('[data-ledger-new-insert]')
+        ->assertValue('[data-template-body]', 'Check {{text}} {{text_2}}')
+        ->assertVisible('[data-variable-row="text_2"]');
 });
 
 test('enter in the new variable name inserts a choice variable', function (): void {
@@ -361,11 +407,11 @@ test('the fill dialog explains a template that changed after it opened', functio
 });
 
 /**
- * Focuses the message box with the caret at the given offset.
+ * Focuses the message box and selects [start, end); equal offsets place the caret.
  */
-function chatTemplatesPlaceCaretScript(int $offset): string
+function chatTemplatesPlaceCaretScript(int $start, int $end): string
 {
-    return sprintf("(() => { const el = document.querySelector('[data-template-body]'); el.focus(); el.setSelectionRange(%d, %d); })()", $offset, $offset);
+    return sprintf("(() => { const el = document.querySelector('[data-template-body]'); el.focus(); el.setSelectionRange(%d, %d); })()", $start, $end);
 }
 
 /**
