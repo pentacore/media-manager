@@ -10,9 +10,10 @@ use Illuminate\Support\Facades\Http;
 test('the inspector validates the media identity before building a client', function (string $mediaType, int $mediaId, string $message): void {
     Http::preventStrayRequests();
     $bazarr = ServiceConnection::factory()->bazarr()->create(['url' => 'http://bazarr.test']);
-    $serviceClientFactory = Mockery::mock(ServiceClientFactory::class);
-    $serviceClientFactory->shouldNotReceive('make');
-    app()->instance(ServiceClientFactory::class, $serviceClientFactory);
+    $mock = Mockery::mock(ServiceClientFactory::class);
+    $mock->shouldNotReceive('make');
+
+    app()->instance(ServiceClientFactory::class, $mock);
 
     expect(fn (): array => resolve(SubtitleInspector::class)->inspect($bazarr, $mediaType, $mediaId))
         ->toThrow(new InvalidArgumentException($message));
