@@ -46,7 +46,10 @@ class ResolveManualImportChatTool extends BaseTool
             'download_id' => ['required', 'string'],
             'reason' => ['required', 'string'],
         ], [
+            'download_id.required' => 'download_id is required.',
+            'download_id.string' => 'download_id must be a string.',
             'reason.required' => 'reason is required so the approver understands the decision.',
+            'reason.string' => 'reason must be a short plain-text explanation for the approver.',
         ]);
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));

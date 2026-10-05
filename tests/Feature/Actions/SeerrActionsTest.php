@@ -82,3 +82,16 @@ test('a queued approve waits for a held request lock and then gives up without c
     expect(fn (): array => resolve(SeerrActions::class)->execute($request))->toThrow(SeerrRequestBusy::class);
     Http::assertNothingSent();
 })->with(['approve_seerr_request', 'decline_seerr_request']);
+
+test('a malformed Seerr request id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    Http::fake(['seerr.local:5055/*' => Http::response([], 500)]);
+
+    expect(fn (): array => resolve(SeerrActions::class)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(InvalidArgumentException::class, $message);
+
+    Http::assertNothingSent();
+})->with([
+    'cleanup without an id' => ['cleanup_seerr_request', [], 'seerr_request_id is required'],
+    'approve with a non-numeric id' => ['approve_seerr_request', ['seerr_request_id' => 'abc'], 'seerr_request_id must be a positive integer'],
+    'decline with a zero id' => ['decline_seerr_request', ['seerr_request_id' => 0], 'seerr_request_id must be a positive integer'],
+]);

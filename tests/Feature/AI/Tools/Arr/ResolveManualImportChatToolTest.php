@@ -188,3 +188,24 @@ test('the queued import is described from the arr queue as requested in chat', f
         ->and($actionRequest->description_verified)->toBeTrue()
         ->and($actionRequest->origin)->toBe('chat');
 });
+
+test("a non-string download id or reason is refused in the tool's own words before any Sonarr call", function (array $arguments, string $field, string $message): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'is_active' => true]);
+    Http::fake(['sonarr.local:8989/*' => Http::response([], 500)]);
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'File maps cleanly.',
+        ...$arguments,
+    ])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'][$field][0])->toBe($message)
+        ->and(ActionRequest::count())->toBe(0);
+    Http::assertNothingSent();
+})->with([
+    'a list as the download id' => [['download_id' => ['HASH-A']], 'download_id', 'download_id must be a string.'],
+    'a number as the download id' => [['download_id' => 42], 'download_id', 'download_id must be a string.'],
+    'a list as the reason' => [['reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the approver.'],
+]);
