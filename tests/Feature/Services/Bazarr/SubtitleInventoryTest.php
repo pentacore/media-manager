@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleCaseCandidates;
+use App\Services\Bazarr\SubtitleInspector;
+use App\Services\Bazarr\SubtitleLibraryReader;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -110,7 +112,7 @@ test('library projects sanitized anime television and movie subtitle requirement
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->library($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleLibraryReader::class)->library($bazarr, page: 1, perPage: 25);
 
     expect($result)
         ->toMatchArray([
@@ -178,7 +180,7 @@ test('episode library batches positive Sonarr series identifiers without an unfi
         'bazarr.test/api/movies*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    resolve(SubtitleInventoryService::class)->library($bazarr, page: 1, perPage: 25);
+    resolve(SubtitleLibraryReader::class)->library($bazarr, page: 1, perPage: 25);
 
     $episodeRequests = collect(Http::recorded())
         ->map(static fn (array $record): Request => $record[0])
@@ -214,7 +216,7 @@ test('inactive mapped connections return a controlled partial inventory result',
         'bazarr.test/api/movies*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->library($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleLibraryReader::class)->library($bazarr, page: 1, perPage: 25);
 
     expect($result)
         ->toMatchArray([
@@ -260,7 +262,7 @@ test('missing inventory uses wanted feeds and MediaManager requirements', functi
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->missing($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleLibraryReader::class)->missing($bazarr, page: 1, perPage: 25);
 
     expect($result)
         ->toMatchArray([
@@ -322,9 +324,9 @@ test('missing inventory reaches movies once the episode pages are exhausted', fu
         ]),
     ]);
 
-    $subtitleInventoryService = resolve(SubtitleInventoryService::class);
-    $firstPage = $subtitleInventoryService->missing($bazarr, page: 1, perPage: 1);
-    $secondPage = $subtitleInventoryService->missing($bazarr, page: 2, perPage: 1);
+    $subtitleLibraryReader = resolve(SubtitleLibraryReader::class);
+    $firstPage = $subtitleLibraryReader->missing($bazarr, page: 1, perPage: 1);
+    $secondPage = $subtitleLibraryReader->missing($bazarr, page: 2, perPage: 1);
 
     expect($firstPage['total'])->toBe(2)
         ->and($firstPage['data'])->toHaveCount(1)
@@ -365,7 +367,7 @@ test('the library reaches movies beyond the first upstream page and totals them 
         },
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->library($bazarr, page: 2, perPage: 100);
+    $result = resolve(SubtitleLibraryReader::class)->library($bazarr, page: 2, perPage: 100);
 
     expect($result['total'])->toBe(150)
         ->and($result['data'])->toHaveCount(50)
@@ -406,7 +408,7 @@ test('missing inventory totals reflect a filter the upstream feed cannot apply',
         'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->missing(
+    $result = resolve(SubtitleLibraryReader::class)->missing(
         $bazarr,
         page: 1,
         perPage: 25,
@@ -464,14 +466,14 @@ test('case candidates scan the catalog once per cycle across pages', function ()
     // One reconciliation cycle walks successive pages through the same service
     // instance. Rebuilding the whole catalog for each page is what makes a large
     // library time out before the cursor ever advances.
-    $subtitleInventoryService = resolve(SubtitleInventoryService::class);
-    $subtitleInventoryService->caseCandidates($bazarr, page: 1, perPage: 2);
+    $subtitleCaseCandidates = resolve(SubtitleCaseCandidates::class);
+    $subtitleCaseCandidates->caseCandidates($bazarr, page: 1, perPage: 2);
 
     // The service-level caches would hide a rescan behind cache hits, so they are
     // dropped between pages: what must not repeat is the discovery work itself.
     Cache::flush();
 
-    $subtitleInventoryService->caseCandidates($bazarr, page: 2, perPage: 2);
+    $subtitleCaseCandidates->caseCandidates($bazarr, page: 2, perPage: 2);
 
     $catalogReads = Http::recorded()->filter(function (array $record): bool {
         $path = parse_url((string) $record[0]->url(), PHP_URL_PATH);
@@ -525,7 +527,7 @@ test('case candidates project one server-only identity for a shared episode file
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleCaseCandidates::class)->caseCandidates($bazarr, page: 1, perPage: 25);
 
     expect($result)
         ->toMatchArray([
@@ -606,8 +608,8 @@ test('case candidates deterministically page full mapped episode and movie libra
         ]),
     ]);
 
-    $firstPage = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 1, perPage: 3);
-    $secondPage = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 2, perPage: 3);
+    $firstPage = resolve(SubtitleCaseCandidates::class)->caseCandidates($bazarr, page: 1, perPage: 3);
+    $secondPage = resolve(SubtitleCaseCandidates::class)->caseCandidates($bazarr, page: 2, perPage: 3);
 
     $candidates = [...$firstPage['data'], ...$secondPage['data']];
 
@@ -657,7 +659,7 @@ test('history projection omits upstream paths and subtitle identifiers', functio
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->history($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleLibraryReader::class)->history($bazarr, page: 1, perPage: 25);
 
     expect($result['data'])->toHaveCount(2)
         ->and($result['data'][0])->toMatchArray([
@@ -709,9 +711,9 @@ test('history reaches movie rows on later pages and scopes reads to a requested 
         ]),
     ]);
 
-    $subtitleInventoryService = resolve(SubtitleInventoryService::class);
-    $firstPage = $subtitleInventoryService->history($bazarr, page: 1, perPage: 1);
-    $secondPage = $subtitleInventoryService->history($bazarr, page: 2, perPage: 1);
+    $subtitleLibraryReader = resolve(SubtitleLibraryReader::class);
+    $firstPage = $subtitleLibraryReader->history($bazarr, page: 1, perPage: 1);
+    $secondPage = $subtitleLibraryReader->history($bazarr, page: 2, perPage: 1);
 
     expect($firstPage['total'])->toBe(2)
         ->and($firstPage['data'][0]['media_type'])->toBe('episode')
@@ -727,7 +729,7 @@ test('history reaches movie rows on later pages and scopes reads to a requested 
     // discard it. Cache::flush() removes the service cache that would otherwise
     // answer the request without a visible read.
     Cache::flush();
-    $subtitleInventoryService->history($bazarr, page: 1, perPage: 25, filters: ['media_type' => 'episode']);
+    $subtitleLibraryReader->history($bazarr, page: 1, perPage: 25, filters: ['media_type' => 'episode']);
 
     expect($movieHistoryReads())->toBe($readsBeforeFilter);
 });
@@ -747,7 +749,7 @@ test('overview exposes bounded missing counts without raw upstream payloads', fu
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->overview($bazarr);
+    $result = resolve(SubtitleLibraryReader::class)->overview($bazarr);
 
     expect($result)->toBe([
         'missing' => [
@@ -799,7 +801,7 @@ test('inspect returns one sanitized episode and bounded history from explicit id
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->inspect($bazarr, 'episode', 701);
+    $result = resolve(SubtitleInspector::class)->inspect($bazarr, 'episode', 701);
 
     expect($result['item'])->toMatchArray([
         'media_type' => 'episode',
@@ -845,7 +847,7 @@ test('one failed wanted feed yields a partial result without discarding the othe
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->missing($bazarr, page: 1, perPage: 25);
+    $result = resolve(SubtitleLibraryReader::class)->missing($bazarr, page: 1, perPage: 25);
 
     expect($result)
         ->toMatchArray([
@@ -877,7 +879,7 @@ test('missing media type filters keep totals and upstream reads scoped to one se
         ]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->missing(
+    $result = resolve(SubtitleLibraryReader::class)->missing(
         $bazarr,
         page: 1,
         perPage: 25,
@@ -921,7 +923,7 @@ test('library tolerates malformed tracks and preserves shared episode rows witho
         'bazarr.test/api/movies*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    $result = resolve(SubtitleInventoryService::class)->library(
+    $result = resolve(SubtitleLibraryReader::class)->library(
         $bazarr,
         page: 1,
         perPage: 25,
@@ -941,7 +943,7 @@ test('inventory pagination rejects invalid bounds before upstream requests', fun
 
     ['bazarr' => $bazarr] = subtitleInventoryConnections();
 
-    expect(fn (): array => resolve(SubtitleInventoryService::class)->{$method}($bazarr, $page, $perPage))
+    expect(fn (): array => resolve(SubtitleLibraryReader::class)->{$method}($bazarr, $page, $perPage))
         ->toThrow(InvalidArgumentException::class);
 
     Http::assertNothingSent();

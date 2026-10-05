@@ -6,7 +6,9 @@ use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Services\Bazarr\BazarrClient;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleCaseCandidates;
+use App\Services\Bazarr\SubtitleInspector;
+use App\Services\Bazarr\SubtitleLibraryReader;
 use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
 use App\Settings\MediaReplacementSettings;
@@ -60,27 +62,27 @@ function subtitleCharacterisationConnections(): array
 }
 
 /**
- * The overview/library/missing/history reader. Task 9 re-points this helper.
+ * The overview/library/missing/history reader.
  */
-function subtitleCharacterisationReader(): SubtitleInventoryService
+function subtitleCharacterisationReader(): SubtitleLibraryReader
 {
-    return resolve(SubtitleInventoryService::class);
+    return resolve(SubtitleLibraryReader::class);
 }
 
 /**
- * The single-item inspector. Task 9 re-points this helper.
+ * The single-item inspector.
  */
-function subtitleCharacterisationInspector(): SubtitleInventoryService
+function subtitleCharacterisationInspector(): SubtitleInspector
 {
-    return resolve(SubtitleInventoryService::class);
+    return resolve(SubtitleInspector::class);
 }
 
 /**
- * The case-candidate projector. Task 9 re-points this helper.
+ * The case-candidate projector.
  */
-function subtitleCharacterisationCandidates(): SubtitleInventoryService
+function subtitleCharacterisationCandidates(): SubtitleCaseCandidates
 {
-    return resolve(SubtitleInventoryService::class);
+    return resolve(SubtitleCaseCandidates::class);
 }
 
 function subtitleCharacterisationTarget(string $role): object
@@ -403,11 +405,11 @@ test('a partial discovery feed is rescanned on the next page instead of being me
         fn (array $record): bool => parse_url((string) $record[0]->url(), PHP_URL_PATH) === '/api/movies',
     )->count();
 
-    $subtitleInventoryService = subtitleCharacterisationCandidates();
-    $firstPage = $subtitleInventoryService->caseCandidates($bazarr, page: 1, perPage: 25);
+    $subtitleCaseCandidates = subtitleCharacterisationCandidates();
+    $firstPage = $subtitleCaseCandidates->caseCandidates($bazarr, page: 1, perPage: 25);
     $readsAfterFirstPage = $movieListReads();
 
-    $secondPage = $subtitleInventoryService->caseCandidates($bazarr, page: 2, perPage: 25);
+    $secondPage = $subtitleCaseCandidates->caseCandidates($bazarr, page: 2, perPage: 25);
 
     expect($firstPage['partial'])->toBeTrue()
         ->and($firstPage['errors'])->toBe(['Radarr movie inventory is temporarily unavailable.'])
