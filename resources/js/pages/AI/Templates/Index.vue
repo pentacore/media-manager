@@ -3,6 +3,10 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Pin, PinOff, Plus, Trash2 } from '@lucide/vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
+import {
+    EXAMPLE_TEMPLATE_BODY,
+    EXAMPLE_TEMPLATE_RESULT,
+} from '@/components/chat-templates';
 import type { ChatTemplate } from '@/components/chat-templates';
 import { Pill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -13,7 +17,7 @@ defineProps<{
 }>();
 
 /** Token examples live in script: a literal "{{" inside a template interpolation breaks Vue's parser. */
-const SIMPLE_TOKEN = '{{name}}';
+const SIMPLE_TOKEN = '{{season}}';
 const LIBRARY_TOKEN = '{{name:title,year,id}}';
 
 defineOptions({
@@ -68,17 +72,42 @@ function remove(template: ChatTemplate): void {
 
         <div
             v-if="templates.length === 0"
-            class="rounded-xl border border-border bg-card p-6 text-[13px] text-muted-foreground"
+            class="grid gap-3 rounded-xl border border-border bg-card p-6 text-[13px] text-muted-foreground"
             data-template-empty
         >
-            <p>No templates yet.</p>
-            <p class="mt-2">
-                Mark the parts that change with
-                <code>{{ SIMPLE_TOKEN }}</code
-                >. Series and movie variables can choose what to include:
-                <code>{{ LIBRARY_TOKEN }}</code
-                >.
+            <p class="font-medium text-foreground">No templates yet.</p>
+            <p>
+                A template is a message you send the assistant often. Write it
+                the way you'd type it, and put a placeholder like
+                <code>{{ SIMPLE_TOKEN }}</code> wherever something changes. Each
+                placeholder becomes a field you fill in when you use the
+                template. For a series or movie you can choose which details to
+                include, like <code>{{ LIBRARY_TOKEN }}</code> for the title,
+                year and library id.
             </p>
+            <div class="grid gap-1">
+                <p>For example, this template:</p>
+                <code class="text-foreground">{{ EXAMPLE_TEMPLATE_BODY }}</code>
+                <p>
+                    becomes this message when you pick Frieren, season 1 and
+                    episode 7:
+                </p>
+                <code class="text-foreground">{{
+                    EXAMPLE_TEMPLATE_RESULT
+                }}</code>
+            </div>
+            <div>
+                <Button
+                    size="sm"
+                    class="gap-1.5"
+                    as-child
+                    data-template-create-first
+                >
+                    <Link :href="ChatTemplateController.create.url()">
+                        <Plus class="size-3.5" />Create your first template
+                    </Link>
+                </Button>
+            </div>
         </div>
 
         <div

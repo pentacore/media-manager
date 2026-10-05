@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Chat;
 
+use App\Enums\ChatTemplatePreviewMode;
 use App\Enums\ChatTemplateVariableType;
 use App\Models\ChatTemplate;
 use App\Models\ServiceConnection;
@@ -13,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * Turns a template into message text. render() fills saved templates from
  * user values (already shape-checked by RenderChatTemplateRequest) and
  * resolves library ids; preview() renders an unsaved editor draft with
- * defaults or placeholders and never touches the library.
+ * sample values or placeholder names and never touches the library.
  */
 final readonly class ChatTemplateRenderer
 {
@@ -24,6 +25,21 @@ final readonly class ChatTemplateRenderer
 
     /** Largest value a number variable accepts, as a fill-in value or a default. */
     public const int MAX_NUMBER = 100000;
+
+    /** Sample title an example preview shows for series variables. */
+    private const string SAMPLE_SERIES_TITLE = 'The Show';
+
+    /** Sample title an example preview shows for movie variables. */
+    private const string SAMPLE_MOVIE_TITLE = 'The Movie';
+
+    /** Sample year an example preview shows for series and movie variables. */
+    private const int SAMPLE_YEAR = 2020;
+
+    /** Sample library id an example preview shows for series and movie variables. */
+    private const int SAMPLE_LIBRARY_ID = 1234;
+
+    /** Value an example preview shows for a number variable without a default. */
+    private const string SAMPLE_NUMBER = '1';
 
     public function __construct(
         private ChatTemplateParser $chatTemplateParser,
@@ -98,7 +114,7 @@ final readonly class ChatTemplateRenderer
      * @param  array<int, mixed>  $variables  Unsaved editor rows; may be incomplete.
      * @return list<array{kind: 'text'|'placeholder', value: string}>
      */
-    public function preview(string $body, array $variables): array
+    public function preview(string $body, array $variables, ChatTemplatePreviewMode $chatTemplatePreviewMode): array
     {
         $byName = [];
 
@@ -112,7 +128,7 @@ final readonly class ChatTemplateRenderer
 
         foreach ($this->chatTemplateParser->parse($body)->segments as $segment) {
             $piece = $segment instanceof ChatTemplateToken
-                ? $this->previewToken($segment, $byName[$segment->name] ?? null)
+                ? ['kind' => 'placeholder', 'value' => $this->previewToken($segment, $byName[$segment->name] ?? null, $chatTemplatePreviewMode)]
                 : ['kind' => 'text', 'value' => $segment];
 
             $last = array_key_last($segments);
@@ -130,24 +146,46 @@ final readonly class ChatTemplateRenderer
     }
 
     /**
+     * Example values reuse ChatTemplateLibraryTitle::format() for series and
+     * movies, so the preview reads exactly like a rendered message.
+     *
      * @param  array<string, mixed>|null  $variable
-     * @return array{kind: 'text'|'placeholder', value: string}
      */
-    private function previewToken(ChatTemplateToken $chatTemplateToken, ?array $variable): array
+    private function previewToken(ChatTemplateToken $chatTemplateToken, ?array $variable, ChatTemplatePreviewMode $chatTemplatePreviewMode): string
     {
         $label = is_string($variable['label'] ?? null) && trim($variable['label']) !== '' ? trim($variable['label']) : $chatTemplateToken->name;
+        $placeholder = $chatTemplateToken->parts === []
+            ? sprintf('[%s]', $label)
+            : sprintf('[%s: %s]', $label, implode(', ', $chatTemplateToken->parts));
         $type = ChatTemplateVariableType::tryFrom(is_string($variable['type'] ?? null) ? $variable['type'] : '');
-        $default = is_scalar($variable['default'] ?? null) ? trim((string) $variable['default']) : '';
 
-        if ($type instanceof ChatTemplateVariableType && $type->supportsDefault() && $default !== '') {
-            return ['kind' => 'text', 'value' => $default];
+        if ($chatTemplatePreviewMode === ChatTemplatePreviewMode::Names || ! $type instanceof ChatTemplateVariableType) {
+            return $placeholder;
         }
 
-        return [
-            'kind' => 'placeholder',
-            'value' => $chatTemplateToken->parts === []
-                ? sprintf('[%s]', $label)
-                : sprintf('[%s: %s]', $label, implode(', ', $chatTemplateToken->parts)),
-        ];
+        $default = is_scalar($variable['default'] ?? null) ? trim((string) $variable['default']) : '';
+
+        return match ($type) {
+            ChatTemplateVariableType::Series => new ChatTemplateLibraryTitle($type, self::SAMPLE_SERIES_TITLE, self::SAMPLE_YEAR, self::SAMPLE_LIBRARY_ID)->format($chatTemplateToken->parts),
+            ChatTemplateVariableType::Movie => new ChatTemplateLibraryTitle($type, self::SAMPLE_MOVIE_TITLE, self::SAMPLE_YEAR, self::SAMPLE_LIBRARY_ID)->format($chatTemplateToken->parts),
+            ChatTemplateVariableType::Number => $default !== '' ? $default : self::SAMPLE_NUMBER,
+            ChatTemplateVariableType::Choice => $default !== '' ? $default : ($this->firstOption($variable['options'] ?? null) ?? $placeholder),
+            ChatTemplateVariableType::Text => $default !== '' ? $default : $placeholder,
+        };
+    }
+
+    private function firstOption(mixed $options): ?string
+    {
+        if (! is_array($options)) {
+            return null;
+        }
+
+        foreach ($options as $option) {
+            if (is_scalar($option) && trim((string) $option) !== '') {
+                return trim((string) $option);
+            }
+        }
+
+        return null;
     }
 }

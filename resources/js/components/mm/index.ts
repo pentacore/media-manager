@@ -10,6 +10,7 @@ export { default as Field } from './Field.vue';
 export { default as Toggle } from './Toggle.vue';
 export { default as OpenInServiceButton } from './OpenInServiceButton.vue';
 export { default as TimeStamp } from './TimeStamp.vue';
+export { default as SegmentedControl } from './SegmentedControl.vue';
 export { default as TimeWindowFilter } from './TimeWindowFilter.vue';
 export { default as RateLimitEditor } from './RateLimitEditor.vue';
 export { default as PoolFormFields } from './PoolFormFields.vue';

@@ -80,6 +80,34 @@ test('preview of an empty draft has no segments and an empty errors object', fun
         ->and($response->getContent())->toContain('"errors":{}');
 });
 
+test('preview defaults to example values when no mode is sent', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.templates.preview'), [
+            'body' => 'Check {{anime:title,year}}',
+            'variables' => [['name' => 'anime', 'label' => 'Anime', 'type' => 'series']],
+        ])
+        ->assertOk()
+        ->assertJsonPath('segments.1', ['kind' => 'placeholder', 'value' => 'The Show (2020)']);
+});
+
+test('preview in names mode shows placeholder labels', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.templates.preview'), [
+            'body' => 'Check {{anime:title,year}}',
+            'variables' => [['name' => 'anime', 'label' => 'Anime', 'type' => 'series']],
+            'mode' => 'names',
+        ])
+        ->assertOk()
+        ->assertJsonPath('segments.1', ['kind' => 'placeholder', 'value' => '[Anime: title, year]']);
+});
+
+test('preview rejects an unknown mode', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.templates.preview'), ['body' => 'x', 'variables' => [], 'mode' => 'raw'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('mode');
+});
+
 test('preview rejects a malformed request', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->postJson(route('ai.templates.preview'), ['body' => 'x', 'variables' => 'nope'])

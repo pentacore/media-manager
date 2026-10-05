@@ -1,3 +1,17 @@
+# [1.34.0](https://github.com/pentacore/media-manager/compare/v1.33.1...v1.34.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* **chat-templates:** drop stale ledger parts and clarify the help copy ([c3c0b32](https://github.com/pentacore/media-manager/commit/c3c0b3245283e4eb7eb6a1e849f0b91f74273a7a))
+
+
+### Features
+
+* **chat-templates:** explain templates in the editor and switch preview mode ([210e78e](https://github.com/pentacore/media-manager/commit/210e78ec9a5df9553b29ba261331f22379bb630d))
+* **chat-templates:** insert variables from a ledger beside the message ([2f42ee6](https://github.com/pentacore/media-manager/commit/2f42ee67e35e9b1886b46f98c4dc5b2515050638))
+* **chat-templates:** preview with example values or placeholder names ([f9d20a8](https://github.com/pentacore/media-manager/commit/f9d20a8beb282cbd89519b074356faa112e01ae7))
+
 ## [1.33.1](https://github.com/pentacore/media-manager/compare/v1.33.0...v1.33.1) (2026-10-05)
 
 
