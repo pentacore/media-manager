@@ -49,6 +49,8 @@ use Override;
  * @property CarbonImmutable|null $invite_accepted_at
  * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
+ * @property-read Collection<int, ChatTemplate> $chatTemplates
+ * @property-read int|null $chat_templates_count
  * @property-read Collection<int, EmbyUserLink> $embyUserLinks
  * @property-read int|null $emby_user_links_count
  * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
@@ -179,5 +181,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    /**
+     * @return HasMany<ChatTemplate, $this>
+     */
+    public function chatTemplates(): HasMany
+    {
+        return $this->hasMany(ChatTemplate::class);
     }
 }

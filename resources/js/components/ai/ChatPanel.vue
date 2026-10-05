@@ -11,9 +11,15 @@ import {
 } from 'vue';
 import { toast } from 'vue-sonner';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import {
+    ChatTemplateChips,
+    ChatTemplateFillDialog,
+} from '@/components/chat-templates';
+import type { ChatTemplate, TemplateAction } from '@/components/chat-templates';
 import { jsonRequest, useAiChat } from '@/composables/useAiChat';
 import type { AgentStep } from '@/composables/useAiChat';
 import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
+import { useChatTemplates } from '@/composables/useChatTemplates';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
@@ -80,6 +86,47 @@ const canStop = computed(() => sending.value && streamingIndex.value !== null);
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 const composerRef =
     useTemplateRef<InstanceType<typeof ChatComposer>>('composer');
+
+const { renderWithoutValues } = useChatTemplates();
+
+/** The template whose fill-in dialog is open. */
+const fillTemplate = ref<ChatTemplate | null>(null);
+
+/**
+ * Templates with variables open the fill-in dialog; the rest render right
+ * away and are sent (auto-send) or inserted into the composer.
+ */
+async function applyTemplate(template: ChatTemplate): Promise<void> {
+    if (template.variables.length > 0) {
+        fillTemplate.value = template;
+
+        return;
+    }
+
+    try {
+        const text = await renderWithoutValues(template);
+        deliverTemplate(text, template.auto_send ? 'send' : 'insert');
+    } catch (cause) {
+        toast.error(
+            cause instanceof Error
+                ? cause.message
+                : 'That template could not be used.',
+        );
+    }
+}
+
+/** Send rendered text, or put it in the composer while a turn is in flight. */
+function deliverTemplate(text: string, action: TemplateAction): void {
+    fillTemplate.value = null;
+
+    if (action === 'send' && !sending.value) {
+        void sendUserMessage({ text, pendingFiles: [] });
+
+        return;
+    }
+
+    composerRef.value?.insertText(text);
+}
 
 const activeTitle = computed<string>(() => {
     const id = activeConversationId.value;
@@ -644,6 +691,7 @@ function newConversation(): void {
                     health. Destructive tool calls queue an ActionRequest in
                     executive mode.
                 </p>
+                <ChatTemplateChips class="mt-3" @pick="applyTemplate" />
             </div>
 
             <ChatMessageBubble
@@ -675,6 +723,14 @@ function newConversation(): void {
             :error="error"
             @send="sendUserMessage"
             @stop="stopStreaming"
+            @template="applyTemplate"
+        />
+
+        <ChatTemplateFillDialog
+            :template="fillTemplate"
+            :sending="sending"
+            @close="fillTemplate = null"
+            @rendered="deliverTemplate"
         />
     </div>
 </template>

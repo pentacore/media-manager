@@ -117,6 +117,7 @@ class ProposeActionTool extends DecisionTool
             'rationale' => ['required', 'string'],
         ], [
             'rationale.required' => 'A plain-English rationale is required so a human can understand the proposal.',
+            'rationale.string' => 'rationale must be plain-English text so a human can understand the proposal.',
         ]);
 
         $targetService = (string) ($args['target_service'] ?? '');

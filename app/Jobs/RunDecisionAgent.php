@@ -195,22 +195,15 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             'message' => $reason,
         ]);
 
-        $attributes = [
-            'service' => $this->service,
-            'event_type' => $this->eventType,
-            'status' => AgentDecisionStatus::Failed,
-            'summary' => Str::limit(sprintf('Agent run stopped by the worker: %s', $reason !== '' ? UpstreamErrorText::sanitize($reason, 2000) : 'no reason given.'), 4000, ''),
-            'actions_count' => count($actionRequestIds),
-            'action_request_ids' => $actionRequestIds,
-        ];
-
-        if ($webhookEventId !== null) {
-            AgentDecision::query()->firstOrCreate(['webhook_event_id' => $webhookEventId], $attributes);
-
-            return;
-        }
-
-        AgentDecision::query()->create($attributes);
+        $this->persistDecision(
+            $webhookEventId,
+            $this->decisionAttributes(
+                AgentDecisionStatus::Failed,
+                sprintf('Agent run stopped by the worker: %s', $reason !== '' ? UpstreamErrorText::sanitize($reason, 2000) : 'no reason given.'),
+                $actionRequestIds,
+            ),
+            overwrite: false,
+        );
     }
 
     /**
@@ -335,25 +328,56 @@ PROMPT;
 
     private function record(?int $webhookEventId, AgentDecisionStatus $agentDecisionStatus, string $summary, ?DecisionRunContext $decisionRunContext): void
     {
-        $attributes = [
+        $this->persistDecision(
+            $webhookEventId,
+            $this->decisionAttributes($agentDecisionStatus, $summary, $decisionRunContext?->actionRequestIds() ?? []),
+            overwrite: true,
+        );
+    }
+
+    /**
+     * The decision row. Both writers cap the summary at 4000 characters
+     * without an ellipsis.
+     *
+     * @param  array<int, int>  $actionRequestIds
+     * @return array{service: string, event_type: string, status: AgentDecisionStatus, summary: string, actions_count: int, action_request_ids: array<int, int>}
+     */
+    private function decisionAttributes(AgentDecisionStatus $agentDecisionStatus, string $summary, array $actionRequestIds): array
+    {
+        return [
             'service' => $this->service,
             'event_type' => $this->eventType,
             'status' => $agentDecisionStatus,
             'summary' => Str::limit($summary, 4000, ''),
-            'actions_count' => $decisionRunContext?->count() ?? 0,
-            'action_request_ids' => $decisionRunContext?->actionRequestIds() ?? [],
+            'actions_count' => count($actionRequestIds),
+            'action_request_ids' => $actionRequestIds,
         ];
+    }
 
-        if ($webhookEventId !== null) {
-            AgentDecision::query()->updateOrCreate(
-                ['webhook_event_id' => $webhookEventId],
-                $attributes,
-            );
+    /**
+     * Write the run's one decision row. A trimmed event (null id) always
+     * gets a new row. For a persisted event, $overwrite decides who wins
+     * against a row already there: the run's own outcome replaces it
+     * (updateOrCreate); the worker-stop callback never does (firstOrCreate),
+     * so a recorded outcome survives a late stop.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function persistDecision(?int $webhookEventId, array $attributes, bool $overwrite): void
+    {
+        if ($webhookEventId === null) {
+            AgentDecision::query()->create($attributes);
 
             return;
         }
 
-        AgentDecision::query()->create($attributes);
+        if ($overwrite) {
+            AgentDecision::query()->updateOrCreate(['webhook_event_id' => $webhookEventId], $attributes);
+
+            return;
+        }
+
+        AgentDecision::query()->firstOrCreate(['webhook_event_id' => $webhookEventId], $attributes);
     }
 
     private function notify(DecisionRunContext $decisionRunContext, string $summary, DecisionAgentSettings $decisionAgentSettings): void

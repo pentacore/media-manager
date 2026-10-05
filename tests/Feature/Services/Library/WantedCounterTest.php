@@ -60,3 +60,12 @@ test('warming with the lock free recomputes and caches the total', function (): 
         ->and(Cache::get(WantedCounter::CACHE_KEY))->toBe(4)
         ->and(Cache::lock(WantedCounter::RECOMPUTE_LOCK_KEY, 10)->get())->toBeTrue();
 });
+
+test('only the active services are asked and counted', function (): void {
+    ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr.local:8989']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake(['radarr.local:7878/api/v3/wanted/missing*' => Http::response(['totalRecords' => 3, 'records' => []])]);
+
+    expect(resolve(WantedCounter::class)->recompute())->toBe(3);
+    Http::assertSentCount(1);
+});

@@ -32,5 +32,8 @@ Use static `Str::` calls for a single operation and `Str::of()` only when chaini
 ## Dates are immutable
 `Date::use(CarbonImmutable::class)` is registered globally — type-hint and annotate `CarbonImmutable`, never `Carbon`. Use the `now()`/`today()` helpers for current time, and `CarbonImmutable::parse()`/`::createFromTimestamp()` only when building a date from external input.
 
+## Optional connections: findActive(), never a caught resolveActive()
+Look up a connection that may legitimately be missing with `ServiceConnection::findActive($type)` and branch on null; never wrap `ServiceConnection::resolveActive()` in `catch (ModelNotFoundException)` (`tests/Unit/Architecture/ConnectionLookupArchTest.php` fails on it). For the primary Sonarr/Radarr client use `App\Services\Arr\ArrConnections`. `resolveActive()` stays for executors, AI tools and `ServiceClientFactory`, where a missing connection is an error.
+
 ## Activity log visibility and audit writes
 Audit rows (`activity_logs.category = audit`) are admin-only. Write them only through `App\Services\Audit\AuditLogger` (it masks secrets) — never `ActivityLog::create()` with an audit category. Every reader that lists activity to a person or a model goes through `ActivityLog::query()->visibleTo($user)` (a null user — AI tools, jobs — never sees audit rows); `tests/Unit/Architecture/ActivityLogVisibilityArchTest.php` fails on a new unscoped reader. `ActivityLogCreated` sends audit rows on the admin-only `activity.audit` channel, never on `activity`. Viewers see only their own activity rows (`visibleTo()` adds `user_id`), and the `activity` channel is manage-library only — a viewer UI renders the server rows and never subscribes to it.

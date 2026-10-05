@@ -21,7 +21,6 @@ use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrUserResolver;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -33,6 +32,8 @@ use Inertia\Response;
 
 class AnimeController extends Controller
 {
+    use FlashesRequestOutcome;
+
     public function __construct(private readonly AnimeIdMapper $animeIdMapper) {}
 
     /**
@@ -41,10 +42,10 @@ class AnimeController extends Controller
      */
     public function index(Request $request, SeerrUserResolver $seerrUserResolver): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
         // Self-bootstrap on a fresh deployment: the table is otherwise only
@@ -94,17 +95,17 @@ class AnimeController extends Controller
         $tmdbId = (int) $validated['tmdbId'];
         $mediaType = (string) $validated['mediaType'];
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
         $context = $seerrUserResolver->requestingContext($connection, $request->user());
         $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
 
         if ($resolved['error'] !== null) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
         }
 
         try {
@@ -119,10 +120,10 @@ class AnimeController extends Controller
             // A failure still redirects (a successful Inertia visit), so signal
             // the outcome explicitly rather than letting the client assume the
             // card is now requested.
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __('Failed to submit request.'));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Failed to submit request.'));
         }
 
-        return $this->outcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
+        return $this->requestOutcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
     }
 
     /**
@@ -134,11 +135,14 @@ class AnimeController extends Controller
             'title' => ['required', 'string', 'max:255'],
         ]);
 
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
+        }
+
         try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
             $results = new SeerrClient($connection)->search($validated['title']);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Search failed.')]);
 
@@ -423,20 +427,5 @@ class AnimeController extends Controller
         $current = AnimeSeason::forMonth($now->month);
 
         return $year < $now->year || ($year === $now->year && $animeSeason->startMonth() < $current->startMonth());
-    }
-
-    private function noConnectionRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Seerr connection configured.')]);
-
-        return to_route('dashboard');
-    }
-
-    private function outcome(bool $ok, int $tmdbId, string $mediaType, string $type, string $message): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => $type, 'message' => $message]);
-        Inertia::flash('requestOutcome', ['ok' => $ok, 'tmdbId' => $tmdbId, 'mediaType' => $mediaType]);
-
-        return back();
     }
 }

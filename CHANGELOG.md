@@ -1,3 +1,34 @@
+# [1.33.0](https://github.com/pentacore/media-manager/compare/v1.32.1...v1.33.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* **actions:** tell a missing executor id apart from an invalid one ([780d39b](https://github.com/pentacore/media-manager/commit/780d39b01ba955fafb7ba6fc24ef0f018aef2bd1))
+* **ai:** bound number template defaults to the fill-time range ([311cfde](https://github.com/pentacore/media-manager/commit/311cfdeb63965681df521697132721086c849a39))
+* **ai:** run the template primary action on enter and close the chat sheet on template links ([7caf939](https://github.com/pentacore/media-manager/commit/7caf93980d2a3e00e1c28e5b429412b9dd99d462))
+* **ai:** stamp template last use without touching updated_at ([d655d94](https://github.com/pentacore/media-manager/commit/d655d94d006821c930bae1e4a83defc1ede7bafc))
+* **ai:** start the template preview on mount instead of during setup ([04b7c50](https://github.com/pentacore/media-manager/commit/04b7c50267c634b384f3303f78d91cf2d3ee3da9))
+* **ai:** surface stale-template errors and drop late renders in the fill dialog ([f2f28b0](https://github.com/pentacore/media-manager/commit/f2f28b08ea58f47f1242af363e53dbd37970eab7))
+* **ai:** word a non-string decision tool argument in the tool's own terms ([aaca139](https://github.com/pentacore/media-manager/commit/aaca1399a463d8d8d33637548260a92efcbe464a))
+* **connections:** use findActive() for the remaining first-active-connection lookups ([46bcffa](https://github.com/pentacore/media-manager/commit/46bcffacd285f54194fb4e53df11fe116cca5a70))
+
+
+### Features
+
+* **ai:** add chat template editor with live variables and preview ([0ec2566](https://github.com/pentacore/media-manager/commit/0ec2566bbeace31265a7509ca4690635c2975a7e))
+* **ai:** add chat template model and variable types ([f8e1e43](https://github.com/pentacore/media-manager/commit/f8e1e4358399f628ae47eeda1d22fef91a34b81c))
+* **ai:** add chat template options, library search, preview and render endpoints ([7b4cc5b](https://github.com/pentacore/media-manager/commit/7b4cc5b1adf8004fa4c315f7482512fd3b314bfc))
+* **ai:** apply chat templates from the assistant ([069db3f](https://github.com/pentacore/media-manager/commit/069db3f7fb1653d0c180269225cb516f6651fc68))
+* **ai:** cross-check chat template bodies against variable settings ([8c369d3](https://github.com/pentacore/media-manager/commit/8c369d347d3bcab3e91ff7efc59f9d1d298304d7))
+* **ai:** manage chat templates ([4156075](https://github.com/pentacore/media-manager/commit/415607539d5c1642799708ddd83f3671ecc475cf))
+* **ai:** parse chat template placeholders ([e159b5f](https://github.com/pentacore/media-manager/commit/e159b5f1ceb676d905a6b387528c79211f137499))
+* **ai:** render chat templates against the active library ([15c37be](https://github.com/pentacore/media-manager/commit/15c37be6dbe546bb661cf7e988de928c3242ec18))
+
+
+### Performance Improvements
+
+* **actions:** read the Whisparr library list once per request when describing ([b2f5864](https://github.com/pentacore/media-manager/commit/b2f5864499611260037b7e79bc793077eb05e88a))
+
 ## [1.32.1](https://github.com/pentacore/media-manager/compare/v1.32.0...v1.32.1) (2026-10-04)
 
 

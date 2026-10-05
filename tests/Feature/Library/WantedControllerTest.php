@@ -95,3 +95,32 @@ test('a failing service is asked once, without the generic retry', function (): 
 
     Http::assertSentCount(2);
 });
+
+test('a service with no active connection is not connected, keeps the requested page, and is never asked', function (): void {
+    ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
+    Http::fake(['radarr.local:7878/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.wanted.index', ['sonarr_page' => 2]))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps(['sonarr', 'radarr'], fn ($reload) => $reload
+            ->where('sonarr', ['connected' => false, 'service_connection_id' => null, 'records' => [], 'meta' => ['current_page' => 2, 'last_page' => 1, 'total' => 0, 'per_page' => 20], 'error' => null])
+            ->where('radarr.connected', true)));
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sonarr'));
+});
+
+test('the first active connection by id is the one listed and pinned', function (): void {
+    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->sole();
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+        'radarr.local:7878/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.wanted.index'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('sonarr', fn ($reload) => $reload
+            ->where('sonarr.service_connection_id', $serviceConnection->id)));
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sonarr-4k'));
+});

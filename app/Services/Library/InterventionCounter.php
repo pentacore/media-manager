@@ -6,11 +6,8 @@ namespace App\Services\Library;
 
 use App\Enums\ServiceType;
 use App\Events\LibraryInterventionChanged;
-use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Services\Arr\ArrConnections;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
@@ -46,6 +43,8 @@ class InterventionCounter
         'failedPending',
     ];
 
+    public function __construct(private readonly ArrConnections $arrConnections) {}
+
     public function get(): int
     {
         $value = Cache::get(self::CACHE_KEY);
@@ -64,7 +63,7 @@ class InterventionCounter
         $anyFailed = false;
 
         foreach ([ServiceType::Sonarr, ServiceType::Radarr] as $type) {
-            $client = $this->resolveClient($type);
+            $client = $this->arrConnections->activeClient($type);
             if (! $client instanceof ArrClient) {
                 continue;
             }
@@ -99,19 +98,6 @@ class InterventionCounter
         event(new LibraryInterventionChanged($count));
 
         return $count;
-    }
-
-    private function resolveClient(ServiceType $serviceType): ?ArrClient
-    {
-        try {
-            $connection = ServiceConnection::resolveActive($serviceType);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
-
-        return $serviceType === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
     }
 
     /**

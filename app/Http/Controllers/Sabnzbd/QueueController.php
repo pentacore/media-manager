@@ -23,7 +23,6 @@ use App\Services\Sabnzbd\SabnzbdSlotRefused;
 use App\Services\ServiceClientFactory;
 use App\Support\UrlQueryRedactor;
 use Closure;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -41,9 +40,20 @@ class QueueController extends Controller
     public function index(Request $request): Response
     {
         $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
+
+        if (! $connection instanceof ServiceConnection) {
+            return Inertia::render('Sabnzbd/Queue/Index', [
+                'configured' => false,
+                'connection' => null,
+                'queue' => [],
+                'history' => $this->presentHistory([], $historyPage),
+                'paused' => false,
+                'error' => null,
+            ]);
+        }
 
         try {
-            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
             $client = $this->client($connection);
 
             $queue = $this->filterByCategory($client->getQueue(), 'cat', $connection);
@@ -64,15 +74,6 @@ class QueueController extends Controller
                 'history' => $this->presentHistory($history, $historyPage),
                 'paused' => (bool) ($queue['paused'] ?? false),
                 // Polls reload `error` too, so a recovered poll must clear it.
-                'error' => null,
-            ]);
-        } catch (ModelNotFoundException) {
-            return Inertia::render('Sabnzbd/Queue/Index', [
-                'configured' => false,
-                'connection' => null,
-                'queue' => [],
-                'history' => $this->presentHistory([], $historyPage),
-                'paused' => false,
                 'error' => null,
             ]);
         } catch (SabnzbdRefused) {
@@ -158,9 +159,9 @@ class QueueController extends Controller
         $validated = $bulkSabnzbdSlotsRequest->validated();
         $sabnzbdBulkAction = SabnzbdBulkAction::from((string) $validated['action']);
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
+
+        if (! $connection instanceof ServiceConnection) {
             return response()->json(['message' => __('No SABnzbd connection configured.')], 422);
         }
 
@@ -218,11 +219,15 @@ class QueueController extends Controller
      */
     private function runSlot(Closure $action, string $success, string $failure): RedirectResponse
     {
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->toastBack('error', __('No SABnzbd connection configured.'));
+        }
+
         try {
-            $action(ServiceConnection::resolveActive(ServiceType::SABnzbd));
+            $action($connection);
             Inertia::flash('toast', ['type' => 'success', 'message' => __($success)]);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No SABnzbd connection configured.')]);
         } catch (SabnzbdSlotRefused) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('SABnzbd refused the change.')]);
         } catch (RequestException|ConnectionException) {
@@ -356,16 +361,18 @@ class QueueController extends Controller
      */
     private function withClient(Closure $action, string $success, string $failure): RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
 
+        if (! $connection instanceof ServiceConnection) {
+            return $this->toastBack('error', __('No SABnzbd connection configured.'));
+        }
+
+        try {
             if (! $action($this->client($connection), $connection)) {
                 return $this->toastBack('error', __('SABnzbd refused the change.'));
             }
 
             Inertia::flash('toast', ['type' => 'success', 'message' => __($success)]);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No SABnzbd connection configured.')]);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __($failure)]);
         }
@@ -382,9 +389,9 @@ class QueueController extends Controller
      */
     private function adminAction(Closure $action, string $success): RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
+
+        if (! $connection instanceof ServiceConnection) {
             return $this->toastBack('error', __('No SABnzbd connection configured.'));
         }
 

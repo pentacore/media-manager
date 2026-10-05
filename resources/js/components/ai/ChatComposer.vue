@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ArrowRight, Paperclip, Square } from '@lucide/vue';
-import { ref, useTemplateRef } from 'vue';
+import { nextTick, ref, useTemplateRef } from 'vue';
+import { ChatTemplatePicker } from '@/components/chat-templates';
+import type { ChatTemplate } from '@/components/chat-templates';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import AttachmentChips from './AttachmentChips.vue';
@@ -18,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'send', submission: ComposerSubmission): void;
     (e: 'stop'): void;
+    (e: 'template', template: ChatTemplate): void;
 }>();
 
 /** Matches the server's chat attachment rules (count and extensions). */
@@ -110,8 +113,20 @@ function onKey(event: KeyboardEvent): void {
     }
 }
 
+/**
+ * Put rendered template text into the composer: replace an empty draft,
+ * otherwise append it after a blank line so nothing typed is lost.
+ */
+function insertText(text: string): void {
+    const draft = input.value.replace(/\s+$/, '');
+
+    input.value = draft === '' ? text : `${draft}\n\n${text}`;
+    void nextTick(() => inputRef.value?.focus());
+}
+
 defineExpose({
     focus: (): void => inputRef.value?.focus(),
+    insertText,
 });
 </script>
 
@@ -167,6 +182,7 @@ defineExpose({
             >
                 <Paperclip class="size-3.5" />
             </Button>
+            <ChatTemplatePicker @pick="emit('template', $event)" />
             <textarea
                 ref="inputArea"
                 v-model="input"

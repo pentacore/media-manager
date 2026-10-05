@@ -69,6 +69,17 @@ test('an admin grabs a release Prowlarr returned', function (): void {
         ->and(json_encode($activityLog->toArray(), JSON_THROW_ON_ERROR).$response->getContent())->not->toContain('passkey');
 });
 
+test('grabbing without an active Prowlarr connection is refused without calling Prowlarr', function (): void {
+    $this->prowlarr->update(['is_active' => false]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('prowlarr.grab'), ['release_key' => hash('sha256', 'whatever'), 'indexer_id' => 3])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'No active Prowlarr connection is configured.');
+
+    Http::assertNothingSent();
+});
+
 test('a stale or re-paired release key is refused without calling Prowlarr', function (): void {
     $row = prowlarrGrabRemembered($this->prowlarr);
 

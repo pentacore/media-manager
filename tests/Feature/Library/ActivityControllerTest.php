@@ -711,3 +711,18 @@ test('a force grab or manual import without a pin, or a manual import without a 
 
     Http::assertNothingSent();
 });
+
+test('the queue says which services are not configured and never asks them', function (): void {
+    ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr.local:8989']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake(['radarr.local:7878/api/v3/queue*' => Http::response(['records' => []])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.library.activity.queue'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('default', fn ($reload) => $reload
+            ->where('queue.services', ['sonarr' => false, 'radarr' => true])
+            ->where('queue.rows', [])
+            ->where('queue.errors', [])));
+
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'sonarr'));
+});

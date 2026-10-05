@@ -8,11 +8,9 @@ use App\Enums\WebhookHandlingStatus;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\WebhookEvent;
-use App\Notifications\ServiceWarning;
-use App\Services\Notifications\AdminNotifier;
-use App\Services\Webhook\AbstractWebhookHandler;
+use App\Services\Webhook\AbstractArrWebhookHandler;
 
-class ProwlarrWebhookHandler extends AbstractWebhookHandler
+class ProwlarrWebhookHandler extends AbstractArrWebhookHandler
 {
     protected function serviceSlug(): string
     {
@@ -38,81 +36,20 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
     }
 
     /**
-     * @param  array<string, mixed>  $payload
+     * Re-ping so the connection's stored health state catches up immediately
+     * instead of waiting for the next scheduled tick.
      */
-    private function handleTest(WebhookEvent $webhookEvent, array $payload): void
+    protected function afterHealthLogged(WebhookEvent $webhookEvent): void
     {
-        $this->logActivity(
-            $webhookEvent,
-            'test',
-            'Prowlarr webhook test received.',
-            metadata: [
-                'instance_name' => $payload['instanceName'] ?? null,
-                'application_url' => $payload['applicationUrl'] ?? null,
-            ],
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
-    {
-        $message = (string) ($payload['message'] ?? 'Unknown health event');
-        $level = (string) ($payload['level'] ?? 'ok');
-
-        $this->logActivity(
-            $webhookEvent,
-            $kind,
-            $message,
-            metadata: [
-                'level' => $payload['level'] ?? null,
-                'type' => $payload['type'] ?? null,
-                'wiki_url' => $payload['wikiUrl'] ?? null,
-            ],
-        );
-
-        // Re-ping so the connection's stored health state catches up immediately
-        // instead of waiting for the next scheduled tick.
         dispatch(new PingServiceHealth($webhookEvent->serviceConnection));
-
-        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
-            return;
-        }
-
-        resolve(AdminNotifier::class)->send(new ServiceWarning(
-            service: 'prowlarr',
-            title: (string) ($payload['type'] ?? 'Prowlarr health'),
-            message: $message,
-            level: $level,
-        ));
     }
 
     /**
-     * @param  array<string, mixed>  $payload
+     * Surface the new version on the dashboard immediately rather than
+     * waiting for the next scheduled version tick.
      */
-    private function handleApplicationUpdate(WebhookEvent $webhookEvent, array $payload): void
+    protected function afterApplicationUpdateLogged(WebhookEvent $webhookEvent): void
     {
-        $previousVersion = $payload['previousVersion'] ?? null;
-        $newVersion = $payload['newVersion'] ?? null;
-
-        $this->logActivity(
-            $webhookEvent,
-            'updated',
-            sprintf(
-                'Prowlarr updated from %s to %s.',
-                $previousVersion ?? 'unknown',
-                $newVersion ?? 'unknown',
-            ),
-            metadata: [
-                'previous_version' => $previousVersion,
-                'new_version' => $newVersion,
-                'message' => $payload['message'] ?? null,
-            ],
-        );
-
-        // Surface the new version on the dashboard immediately rather than
-        // waiting for the next scheduled version tick.
         dispatch(new FetchLatestServiceVersion($webhookEvent->serviceConnection));
     }
 }
