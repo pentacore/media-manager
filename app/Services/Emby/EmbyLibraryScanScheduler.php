@@ -46,11 +46,7 @@ final readonly class EmbyLibraryScanScheduler
      */
     public function schedule(string $sourceService, array $scanPayload, ActionDescription $description, WebhookEvent $webhookEvent): ?ActionRequest
     {
-        $embyConnectionId = ServiceConnection::query()
-            ->where('type', ServiceType::Emby)
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->value('id');
+        $embyConnectionId = ServiceConnection::findActive(ServiceType::Emby)?->id;
 
         if ($embyConnectionId === null) {
             return $this->actionOrchestrator->dispatch(

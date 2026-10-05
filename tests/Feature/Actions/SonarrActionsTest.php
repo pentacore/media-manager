@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -402,4 +403,99 @@ test('an episode search without its series is refused', function (): void {
     ])))->toThrow(InvalidArgumentException::class, 'series_id and episode_ids are required for an episode search');
 
     Http::assertNothingSent();
+});
+
+test('a malformed Sonarr id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'delete without an id' => ['delete_series', [], 'sonarr_series_id is required'],
+    'delete with a non-numeric id' => ['delete_series', ['sonarr_series_id' => 'abc'], 'sonarr_series_id must be a positive integer'],
+    'add with a zero tvdb id' => ['add_series', ['tvdb_id' => 0], 'tvdb_id must be a positive integer'],
+    'monitor without a series' => ['monitor_series', ['monitored' => false], 'series_id is required'],
+    'profile with a negative profile' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => -3], 'quality_profile_id must be a positive integer'],
+    'episodes with a non-numeric series' => ['monitor_episodes', ['series_id' => 'x', 'episode_ids' => [70]], 'series_id must be a positive integer'],
+]);
+
+test('add_series sends the looked-up series with the chosen options and returns its ids', function (array $options, bool $monitored, bool $seasonFolder): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([['title' => 'Demo Show', 'tvdbId' => 999001, 'year' => 2024]]),
+        'sonarr.local:8989/api/v3/series' => Http::response(['id' => 123, 'title' => 'Demo Show', 'tvdbId' => 999001], 201),
+    ]);
+
+    $result = (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'add_series',
+        'payload' => ['tvdb_id' => 999001, 'quality_profile_id' => 4, 'root_folder_path' => '/tv', ...$options],
+    ]));
+
+    expect($result)->toBe(['sonarr_series_id' => 123, 'title' => 'Demo Show', 'tvdb_id' => 999001]);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET' && $request['term'] === 'tvdb:999001');
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === [
+        'title' => 'Demo Show',
+        'tvdbId' => 999001,
+        'year' => 2024,
+        'qualityProfileId' => 4,
+        'rootFolderPath' => '/tv',
+        'monitored' => $monitored,
+        'seasonFolder' => $seasonFolder,
+        'addOptions' => ['searchForMissingEpisodes' => true],
+    ]);
+})->with([
+    'chosen options' => [['monitored' => false, 'season_folder' => false], false, false],
+    'defaults' => [[], true, true],
+]);
+
+test('add_series refuses a tvdb id the Sonarr lookup does not know, and adds nothing', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series/lookup*' => Http::response([])]);
+
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create(['type' => 'add_series', 'payload' => ['tvdb_id' => 5]])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException): void {
+            expect($invalidArgumentException->getMessage())->toBe('No series found in Sonarr lookup for tvdb_id 5');
+        });
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+});
+
+test('each Sonarr library write returns exactly its result', function (string $type, array $payload, array $expected): void {
+    Http::fake(['sonarr.local:8989/api/v3/series/42*' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => true, 'qualityProfileId' => 1])]);
+
+    expect((new SonarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))->toBe($expected);
+})->with([
+    'delete' => ['delete_series', ['sonarr_series_id' => 42, 'delete_files' => true], ['sonarr_series_id' => 42, 'delete_files' => true]],
+    'monitor' => ['monitor_series', ['series_id' => 42, 'monitored' => false], ['sonarr_series_id' => 42, 'monitored' => false]],
+    'quality profile' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => 7], ['sonarr_series_id' => 42, 'quality_profile_id' => 7]],
+]);
+
+test("a request meant for Radarr is refused in the Sonarr executor's words, and nothing is sent", function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'a Radarr action type' => ['delete_movie', ['radarr_movie_id' => 1], 'SonarrActions cannot execute type "delete_movie"'],
+    'a Radarr search command' => ['search_media', ['service' => 'sonarr', 'command' => 'movies_search', 'movie_ids' => [1]], 'command is not a Sonarr search'],
+]);
+
+test('a grab whose cache bust fails is logged under the Sonarr executor', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release' => Http::response(['guid' => 'g-1'], 200)]);
+    config()->set('mediamanager.cache.store', 'this-store-does-not-exist');
+    $connectionId = sonarrActionsConnectionId();
+    Log::spy();
+
+    (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => $connectionId],
+    ]));
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'SonarrActions: failed to bust the Sonarr cache after a successful grab'
+            && $context['guid'] === 'g-1'
+            && $context['service_connection_id'] === $connectionId)
+        ->once();
 });

@@ -7,7 +7,6 @@ namespace App\Services\Sabnzbd;
 use App\Enums\ServiceType;
 use App\Events\SabnzbdDownloadCountsChanged;
 use App\Models\ServiceConnection;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
@@ -48,9 +47,9 @@ class SabnzbdDownloadCounter
     {
         $counts = ['queued' => 0, 'completed' => 0];
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::SABnzbd);
+
+        if (! $connection instanceof ServiceConnection) {
             Cache::put(self::CACHE_KEY, $counts, self::CACHE_TTL);
             event(new SabnzbdDownloadCountsChanged($counts['queued'], $counts['completed']));
 

@@ -17,7 +17,6 @@ use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -66,13 +65,9 @@ class WatchHistoryController extends Controller
      */
     private function resolveConnectionPayload(): ?array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-        return ['url' => $connection->linkUrl()];
+        return $connection instanceof ServiceConnection ? ['url' => $connection->linkUrl()] : null;
     }
 
     /**
@@ -96,12 +91,10 @@ class WatchHistoryController extends Controller
         $validated = $setPlayedStateRequest->validated();
         $played = (bool) $validated['played'];
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         $embyClient = new EmbyClient($connection);

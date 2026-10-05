@@ -11,7 +11,6 @@ use App\Models\ServiceConnection;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemPresenter;
 use App\Services\Whisparr\WhisparrUnexpectedResponse;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +26,7 @@ class WhisparrController extends Controller
 {
     public function index(WhisparrItemPresenter $whisparrItemPresenter): Response
     {
-        $connection = $this->activeConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Whisparr);
 
         if (! $connection instanceof ServiceConnection) {
             return Inertia::render('Whisparr/Index', ['connection' => null]);
@@ -42,10 +41,10 @@ class WhisparrController extends Controller
 
     public function show(int $id, WhisparrItemPresenter $whisparrItemPresenter): Response|RedirectResponse
     {
-        $connection = $this->activeConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Whisparr);
 
         if (! $connection instanceof ServiceConnection) {
-            return $this->backToLibrary(__('No active Whisparr connection configured.'));
+            return $this->noActiveConnectionRedirect(ServiceType::Whisparr, to_route('media.whisparr.index'));
         }
 
         $whisparrVersion = $connection->whisparrVersion();
@@ -69,15 +68,6 @@ class WhisparrController extends Controller
                 : ['groups' => [], 'error' => null],
             'qualityProfiles' => Inertia::defer(fn (): array => $this->qualityProfiles($connection), 'qualityProfiles'),
         ]);
-    }
-
-    private function activeConnection(): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive(ServiceType::Whisparr);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
     }
 
     /**

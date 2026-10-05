@@ -13,6 +13,7 @@ use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
+use App\Services\Whisparr\WhisparrItemIndex;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,8 @@ use Throwable;
  */
 final readonly class ActionTargets
 {
+    public function __construct(private WhisparrItemIndex $whisparrItemIndex) {}
+
     /**
      * @param  array<string, mixed>  $pinContext
      * @param  bool  $strictPin  When true, a pin naming a different-type,
@@ -299,36 +302,20 @@ final readonly class ActionTargets
 
     /**
      * Whisparr has no local index, so the name comes from the cached library
-     * list the Whisparr page uses (one upstream call per TTL, normally a
-     * cache hit): a 100-title bulk then describes without 100 live lookups.
-     * Only an item missing from that list (added since it was cached) is
-     * read by id.
+     * list the Whisparr page uses, read once per request through
+     * WhisparrItemIndex: a 100-title bulk describes without 100 list reads or
+     * 100 live lookups. Only an item missing from that list (added since it
+     * was cached) is read by id.
      */
     private function whisparrItemTarget(int $itemId, ServiceConnection $serviceConnection): ?ActionTarget
     {
-        $whisparrClient = new WhisparrClient($serviceConnection);
-        $name = $this->nameFrom($this->whisparrListItem($whisparrClient->getItems(), $itemId) ?? $whisparrClient->getItemById($itemId));
+        $name = $this->nameFrom($this->whisparrItemIndex->find($serviceConnection, $itemId) ?? new WhisparrClient($serviceConnection)->getItemById($itemId));
 
         return $name === null ? null : new ActionTarget('item', $name, [
             ['label' => 'Item', 'value' => $name],
             ['label' => 'Whisparr ID', 'value' => (string) $itemId],
             ['label' => 'Connection', 'value' => $serviceConnection->name],
         ]);
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $items
-     * @return array<string, mixed>|null
-     */
-    private function whisparrListItem(array $items, int $itemId): ?array
-    {
-        foreach ($items as $item) {
-            if (is_array($item) && is_numeric($item['id'] ?? null) && (int) $item['id'] === $itemId) {
-                return $item;
-            }
-        }
-
-        return null;
     }
 
     private function whisparrLookupTarget(int $tmdbId, ServiceConnection $serviceConnection): ?ActionTarget

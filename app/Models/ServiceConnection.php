@@ -162,7 +162,25 @@ class ServiceConnection extends Model
      */
     public static function resolveActive(ServiceType $serviceType): self
     {
-        return self::where('type', $serviceType)->where('is_active', true)->orderBy('id')->firstOrFail();
+        return self::activeOfType($serviceType)->firstOrFail();
+    }
+
+    /**
+     * The connection {@see resolveActive()} would return, or null when none
+     * is active — for callers where "not configured" is an ordinary state
+     * (a page, a badge, a command) rather than an error.
+     */
+    public static function findActive(ServiceType $serviceType): ?self
+    {
+        return self::activeOfType($serviceType)->first();
+    }
+
+    /**
+     * @return Builder<self>
+     */
+    private static function activeOfType(ServiceType $serviceType): Builder
+    {
+        return self::query()->where('type', $serviceType)->where('is_active', true)->orderBy('id');
     }
 
     /**

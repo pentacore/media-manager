@@ -12,7 +12,6 @@ use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -37,12 +36,10 @@ class EmbyLinkController extends Controller
     {
         $validated = $linkEmbyAccountRequest->validated();
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         $match = $this->findEmbyUserByUsername($connection, $validated['emby_username']);
@@ -96,12 +93,10 @@ class EmbyLinkController extends Controller
      */
     public function import(AuditLogger $auditLogger): RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         try {

@@ -6,6 +6,7 @@ use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Mockery\MockInterface;
 use PragmaRX\Google2FA\Google2FA;
@@ -129,6 +130,39 @@ test('emby login fails when no active emby connection exists', function (): void
         'email' => 'user@example.com',
     ])->assertRedirect(route('login'))
         ->assertSessionHasErrors('username');
+});
+
+test('emby login authenticates against the lowest-id active connection even when a later one was updated most recently', function (): void {
+    $second = ServiceConnection::factory()->emby()->create([
+        'url' => 'http://emby2.local:8096',
+        'api_key' => 'emby2-api-key',
+    ]);
+
+    // Simulate a health ping touching connection #1 after #2 was created —
+    // an unordered lookup could then return #2 first; findActive() must
+    // still pick #1 by id regardless.
+    $this->travel(1)->minute();
+    $this->embyConnection->touch();
+
+    expect($this->embyConnection->id)->toBeLessThan($second->id);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-user-first-server', 'Name' => 'FirstServerUser'],
+            'AccessToken' => 'some-token',
+        ]),
+        'emby2.local:8096/*' => Http::response([], 500),
+    ]);
+
+    $this->post(route('auth.emby'), [
+        'username' => 'FirstServerUser',
+        'password' => 'embypass',
+        'email' => 'first-server@example.com',
+    ])->assertRedirect(route('dashboard'));
+
+    $this->assertAuthenticated();
+
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'emby.local:8096/Users/AuthenticateByName'));
 });
 
 test('emby first login requires email for new users', function (): void {

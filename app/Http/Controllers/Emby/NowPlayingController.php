@@ -8,7 +8,6 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -19,12 +18,10 @@ class NowPlayingController extends Controller
 {
     public function __invoke(): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return to_route('dashboard');
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby);
         }
 
         return Inertia::render('Emby/NowPlaying', [

@@ -16,7 +16,6 @@ use App\Services\DashboardMetrics\DashboardMetricsRepository;
 use App\Services\Emby\EmbyClient;
 use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use App\Support\Abilities;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
@@ -148,9 +147,9 @@ class DashboardController extends Controller
      */
     private function loadNowPlaying(): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
+
+        if (! $connection instanceof ServiceConnection) {
             return [];
         }
 

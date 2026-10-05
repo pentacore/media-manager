@@ -12,14 +12,12 @@ use App\Services\Actions\ManualActionOutcome;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\Radarr\RadarrClient;
 use App\Support\Abilities;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Override;
 
 class MovieController extends BaseArrController
 {
@@ -124,10 +122,13 @@ class MovieController extends BaseArrController
 
     public function store(StoreMovieRequest $storeMovieRequest): RedirectResponse
     {
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
+        }
+
         try {
-            $this->client()->addMovie($storeMovieRequest->validated());
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+            $this->buildClient($connection)->addMovie($storeMovieRequest->validated());
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to add movie.')]);
 
@@ -170,17 +171,6 @@ class MovieController extends BaseArrController
     protected function buildClient(ServiceConnection $serviceConnection): RadarrClient
     {
         return new RadarrClient($serviceConnection);
-    }
-
-    #[Override]
-    protected function client(): RadarrClient
-    {
-        return $this->buildClient(ServiceConnection::resolveActive($this->serviceType()));
-    }
-
-    protected function noConnectionMessage(): string
-    {
-        return __('No active Radarr connection configured.');
     }
 
     protected function connectionFailedMessage(): string

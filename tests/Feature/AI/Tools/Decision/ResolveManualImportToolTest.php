@@ -201,3 +201,16 @@ test('describes the import from the arr queue record with the decision agent as 
         ->and($actionRequest->description_verified)->toBeTrue()
         ->and($actionRequest->details)->toContain(['label' => 'Importable files', 'value' => '1 of 1']);
 });
+
+test("a non-string argument is refused in the tool's own words", function (array $arguments, string $field, string $message): void {
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request($arguments)), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors'][$field][0])->toBe($message);
+    expect(ActionRequest::count())->toBe(0);
+})->with([
+    'a numeric service' => [['service' => 5, 'download_id' => 'dl-1'], 'service', 'service must be "sonarr" or "radarr".'],
+    'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1']], 'download_id', 'download_id must be a string (take it from the event payload).'],
+    'a boolean as the download id' => [['service' => 'sonarr', 'download_id' => true], 'download_id', 'download_id must be a string (take it from the event payload).'],
+]);

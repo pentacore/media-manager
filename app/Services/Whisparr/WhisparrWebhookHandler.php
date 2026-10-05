@@ -7,12 +7,10 @@ namespace App\Services\Whisparr;
 use App\Cache\Services\WhisparrCache;
 use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
-use App\Notifications\ServiceWarning;
 use App\Services\Library\InterventionCounter;
-use App\Services\Notifications\AdminNotifier;
-use App\Services\Webhook\AbstractWebhookHandler;
+use App\Services\Webhook\AbstractArrWebhookHandler;
 
-class WhisparrWebhookHandler extends AbstractWebhookHandler
+class WhisparrWebhookHandler extends AbstractArrWebhookHandler
 {
     protected function serviceSlug(): string
     {
@@ -68,17 +66,6 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
             'title' => (string) ($node['title'] ?? 'Unknown item'),
             'id' => isset($node['id']) ? (int) $node['id'] : null,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleTest(WebhookEvent $webhookEvent, array $payload): void
-    {
-        $this->logActivity($webhookEvent, 'test', 'Whisparr webhook test received.', metadata: [
-            'instance_name' => $payload['instanceName'] ?? null,
-            'application_url' => $payload['applicationUrl'] ?? null,
-        ]);
     }
 
     /**
@@ -160,50 +147,5 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
         ], subjectId: $item['id']);
 
         resolve(InterventionCounter::class)->recompute();
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
-    {
-        $message = (string) ($payload['message'] ?? 'Unknown health event');
-        $level = (string) ($payload['level'] ?? 'ok');
-
-        $this->logActivity($webhookEvent, $kind, $message, metadata: [
-            'level' => $payload['level'] ?? null,
-            'type' => $payload['type'] ?? null,
-            'wiki_url' => $payload['wikiUrl'] ?? null,
-        ]);
-
-        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
-            return;
-        }
-
-        resolve(AdminNotifier::class)->send(new ServiceWarning(
-            service: 'whisparr',
-            title: (string) ($payload['type'] ?? 'Whisparr health'),
-            message: $message,
-            level: $level,
-        ));
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleApplicationUpdate(WebhookEvent $webhookEvent, array $payload): void
-    {
-        $previousVersion = $payload['previousVersion'] ?? null;
-        $newVersion = $payload['newVersion'] ?? null;
-
-        $this->logActivity($webhookEvent, 'updated', sprintf(
-            'Whisparr updated from %s to %s.',
-            $previousVersion ?? 'unknown',
-            $newVersion ?? 'unknown',
-        ), metadata: [
-            'previous_version' => $previousVersion,
-            'new_version' => $newVersion,
-            'message' => $payload['message'] ?? null,
-        ]);
     }
 }

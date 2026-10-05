@@ -9,7 +9,6 @@ use App\Models\ServiceConnection;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -20,9 +19,9 @@ class DebugEmbySessions extends Command
 {
     public function handle(): int
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
+
+        if (! $connection instanceof ServiceConnection) {
             $this->error('No active Emby connection configured.');
 
             return self::FAILURE;
