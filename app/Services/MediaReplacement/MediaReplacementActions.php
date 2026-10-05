@@ -384,9 +384,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Re-check the reviewed release against a fresh native search: it must still
-     * rank as eligible, and its raw release resource must still be offered so the
-     * grab posts exactly what was reviewed.
+     * Re-check the reviewed release against one fresh native search: it must
+     * still rank as eligible, and the same search must still offer its raw
+     * release resource so the grab posts exactly what was reviewed.
      *
      * @param  array<string, mixed>  $freshTarget
      * @param  list<string>|null  $requiredLanguages
@@ -399,7 +399,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
         string $fingerprint,
         ?array $requiredLanguages,
     ): array {
-        $eligible = $this->replacementCandidateFinder->find($freshTarget, $requiredLanguages, 10, $serviceConnection);
+        $search = $this->replacementCandidateFinder->findWithRawRelease($freshTarget, $fingerprint, $requiredLanguages, 10, $serviceConnection);
+        $eligible = $search['found'];
         $stillEligible = array_filter(
             $eligible['candidates'],
             static fn (array $candidate): bool => ($candidate['fingerprint'] ?? null) === $fingerprint,
@@ -407,7 +408,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
         throw_if($stillEligible === [], InvalidArgumentException::class, 'Selected release is no longer eligible.');
         $selectedCandidate = array_first($stillEligible);
 
-        $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint, $serviceConnection);
+        // The ranker fingerprints these same rows, so an eligible fingerprint
+        // always has a raw row here; the guard stays as a safety net.
+        $rawRelease = $search['raw_release'];
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
         if ($serviceType === ServiceType::Sonarr && ($selectedCandidate['requires_approval'] ?? false) === true) {

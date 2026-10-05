@@ -311,7 +311,6 @@ test('a fresh Sonarr replacement talks to Sonarr in this exact order and reports
         'GET /api/v3/episodefile/501',
         'GET /api/v3/history',
         'GET /api/v3/release',
-        'GET /api/v3/release',
         'PUT /api/v3/episode/monitor',
         'POST /api/v3/release',
         'DELETE /api/v3/episodefile/501',
@@ -358,7 +357,6 @@ test('a fresh Radarr replacement talks to Radarr in this exact order and reports
         'GET /api/v3/moviefile/701',
         'GET /api/v3/history',
         'GET /api/v3/release',
-        'GET /api/v3/release',
         'PUT /api/v3/movie/editor',
         'POST /api/v3/release',
         'DELETE /api/v3/moviefile/701',
@@ -398,7 +396,6 @@ test('a rejected grab restores monitoring, fails the attempt once and touches no
         'GET /api/v3/episodefile/501',
         'GET /api/v3/history',
         'GET /api/v3/release',
-        'GET /api/v3/release',
         'PUT /api/v3/episode/monitor',
         'POST /api/v3/release',
         'PUT /api/v3/episode/monitor',
@@ -427,7 +424,6 @@ test('an indeterminate grab leaves the attempt trackable with this exact result'
         'GET /api/v3/episode',
         'GET /api/v3/episodefile/501',
         'GET /api/v3/history',
-        'GET /api/v3/release',
         'GET /api/v3/release',
         'PUT /api/v3/episode/monitor',
         'POST /api/v3/release',
@@ -659,3 +655,22 @@ test('through the job an abort fails the request with the exact reason and two s
             ['action' => 'action_request.failed', 'description' => sprintf('Action #%d failed: execution_failed', $actionRequest->id)],
         ]);
 });
+
+test('one escalation runs exactly one release search', function (string $service): void {
+    $connection = $service === 'sonarr' ? replacementPhasesSonarr() : replacementPhasesRadarr();
+    $actionRequest = $service === 'sonarr'
+        ? replacementPhasesSonarrRequest($connection)
+        : replacementPhasesRadarrRequest($connection);
+    $trace = new stdClass;
+    replacementPhasesFakeArrs($trace);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $releaseSearches = array_values(array_filter(
+        $trace->calls,
+        static fn (string $call): bool => $call === 'GET /api/v3/release',
+    ));
+
+    expect($releaseSearches)->toHaveCount(1)
+        ->and($result['replacement_initiated'])->toBeTrue();
+})->with(['sonarr', 'radarr']);
