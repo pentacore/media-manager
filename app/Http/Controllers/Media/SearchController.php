@@ -167,7 +167,7 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Sonarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
         }
 
         $max = $this->maxResults();
@@ -208,7 +208,7 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Radarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
         }
 
         $max = $this->maxResults();
@@ -251,7 +251,7 @@ class SearchController extends Controller
             $connection = ServiceConnection::findActive(ServiceType::Sonarr);
 
             if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+                return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
             }
 
             $items = new SonarrClient($connection)->getSeries();
@@ -286,7 +286,7 @@ class SearchController extends Controller
             $connection = ServiceConnection::findActive(ServiceType::Radarr);
 
             if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+                return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
             }
 
             $items = new RadarrClient($connection)->getMovies();
@@ -325,7 +325,7 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Seerr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Seerr)];
         }
 
         try {
@@ -352,7 +352,7 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Prowlarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Prowlarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Prowlarr)];
         }
 
         try {
