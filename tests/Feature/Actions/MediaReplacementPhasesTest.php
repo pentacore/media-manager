@@ -22,7 +22,9 @@ use App\Services\MediaReplacement\MediaReplacementExecutionLock;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
 use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -172,7 +174,10 @@ function replacementPhasesRadarrRequest(ServiceConnection $radarr): ActionReques
  * Host-scoped fakes for both arrs. Every request is appended to $trace->calls
  * as "METHOD /path". Options: grab (accepted|rejected|indeterminate),
  * currentFileId (int), releases (list), deleteStatus (int), lockKey (string:
- * recorded into $trace->sharedLockFreeDuringGrab at the grab POST).
+ * recorded into $trace->sharedLockFreeDuringGrab at the grab POST),
+ * releaseStatus (int: the release search responds with this status and an
+ * empty body instead of releases), releaseConnectionFails (bool: the release
+ * search throws a ConnectionException instead of responding).
  *
  * @param  array<string, mixed>  $options
  */
@@ -227,9 +232,13 @@ function replacementPhasesSonarrResponse(Request $request, stdClass $trace, arra
     $call = replacementPhasesRecord($request, $trace, $options);
     $currentFileId = (int) ($options['currentFileId'] ?? 501);
 
+    throw_if($call === 'GET /api/v3/release' && ($options['releaseConnectionFails'] ?? false) === true, ConnectionException::class, 'Connection timed out.');
+
     return match (true) {
         $call === 'POST /api/v3/release' => Http::response([], replacementPhasesGrabStatus($options)),
-        $call === 'GET /api/v3/release' => Http::response($options['releases'] ?? [replacementPhasesSonarrRelease()]),
+        $call === 'GET /api/v3/release' => isset($options['releaseStatus'])
+            ? Http::response([], (int) $options['releaseStatus'])
+            : Http::response($options['releases'] ?? [replacementPhasesSonarrRelease()]),
         $call === 'PUT /api/v3/episode/monitor' => Http::response([], 200),
         str_starts_with($call, 'DELETE /api/v3/episodefile/') => Http::response([], (int) ($options['deleteStatus'] ?? 200)),
         $call === 'GET /api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
@@ -257,9 +266,13 @@ function replacementPhasesRadarrResponse(Request $request, stdClass $trace, arra
 {
     $call = replacementPhasesRecord($request, $trace, $options);
 
+    throw_if($call === 'GET /api/v3/release' && ($options['releaseConnectionFails'] ?? false) === true, ConnectionException::class, 'Connection timed out.');
+
     return match (true) {
         $call === 'POST /api/v3/release' => Http::response([], replacementPhasesGrabStatus($options)),
-        $call === 'GET /api/v3/release' => Http::response($options['releases'] ?? [replacementPhasesRadarrRelease()]),
+        $call === 'GET /api/v3/release' => isset($options['releaseStatus'])
+            ? Http::response([], (int) $options['releaseStatus'])
+            : Http::response($options['releases'] ?? [replacementPhasesRadarrRelease()]),
         $call === 'PUT /api/v3/movie/editor' => Http::response([], 200),
         $call === 'DELETE /api/v3/moviefile/701' => Http::response([], (int) ($options['deleteStatus'] ?? 200)),
         $call === 'GET /api/v3/movie/7' => Http::response(['id' => 7, 'title' => 'A Movie', 'movieFileId' => 701, 'monitored' => true]),
@@ -560,6 +573,28 @@ test('an abort before the grab names its reason, stops its requests at the faile
     ],
 ]);
 
+test('a failing release search propagates without claiming the attempt or sending a grab', function (array $options, string $exceptionClass): void {
+    $serviceConnection = replacementPhasesSonarr();
+    $actionRequest = replacementPhasesSonarrRequest($serviceConnection);
+    $trace = new stdClass;
+    replacementPhasesFakeArrs($trace, $options);
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow($exceptionClass);
+
+    expect($trace->calls)->toBe([
+        'GET /api/v3/series/42',
+        'GET /api/v3/episode',
+        'GET /api/v3/episodefile/501',
+        'GET /api/v3/history',
+        'GET /api/v3/release',
+    ])
+        ->and(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->exists())->toBeFalse();
+})->with([
+    'the search answers 5xx' => [['releaseStatus' => 500], RequestException::class],
+    'the search connection fails' => [['releaseConnectionFails' => true], ConnectionException::class],
+]);
+
 test('a failed delete after an accepted grab marks the attempt for attention with the exact reason', function (): void {
     $serviceConnection = replacementPhasesSonarr();
     $actionRequest = replacementPhasesSonarrRequest($serviceConnection);
@@ -603,6 +638,51 @@ test('both locks are free again after every way out of a replacement', function 
     'rejected grab' => [['grab' => 'rejected'], true],
     'indeterminate grab' => [['grab' => 'indeterminate'], false],
     'deletion failed' => [['deleteStatus' => 500], true],
+    'installed file changed' => [['currentFileId' => 777], true],
+    'release search failed (5xx)' => [['releaseStatus' => 500], true],
+    'release search failed (connection)' => [['releaseConnectionFails' => true], true],
+]);
+
+test('both locks are free again for every prior-attempt exit', function (array $attributes): void {
+    $serviceConnection = replacementPhasesSonarr();
+    $actionRequest = replacementPhasesSonarrRequest($serviceConnection);
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'service_connection_id' => $serviceConnection->id,
+        'target' => $actionRequest->payload['target'],
+        ...$attributes,
+    ]);
+    $trace = new stdClass;
+    replacementPhasesFakeArrs($trace);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $sharedLock = Cache::lock(SharedMediaTargetLock::key($serviceConnection->id, 'episode', 101), 1);
+    $executionLock = Cache::lock(MediaReplacementExecutionLock::key($actionRequest->id), 1);
+
+    expect($sharedLock->get())->toBeTrue()
+        ->and($executionLock->get())->toBeTrue();
+})->with([
+    'resumed accepted grab' => [[
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_attempted_at' => now()->subMinute(),
+        'grab_accepted_at' => now()->subMinute(),
+        'cleanup_completed_at' => null,
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+    ]],
+    'unrecorded prior grab' => [[
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_attempted_at' => now()->subMinute(),
+        'grab_accepted_at' => null,
+        'cleanup_completed_at' => null,
+    ]],
+    'already resolved' => [[
+        'status' => MediaReplacementStatus::Verified,
+        'grab_attempted_at' => now()->subHour(),
+        'grab_accepted_at' => now()->subHour(),
+        'cleanup_completed_at' => now()->subMinutes(50),
+    ]],
 ]);
 
 test('through the job a replacement completes the request with the executor result and two status rows', function (): void {
