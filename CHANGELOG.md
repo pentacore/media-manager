@@ -1,3 +1,25 @@
+## [1.35.2](https://github.com/pentacore/media-manager/compare/v1.35.1...v1.35.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **actions:** say whether a payload id is missing or malformed ([8b264d7](https://github.com/pentacore/media-manager/commit/8b264d72a8ac75bbcc4a97c783eb3346b9009d7d))
+* **ai-prices:** cap bulk edit/delete selections at 500 ids ([c5435a4](https://github.com/pentacore/media-manager/commit/c5435a470970de310328c515c963e2ac1afbe074))
+* **ai-prices:** let a whole-catalog select-all through the bulk cap ([b4625c0](https://github.com/pentacore/media-manager/commit/b4625c028792aacc704283c990e2390e634403dc))
+* **ai:** keep the price-refresh time box through a failover and report partial verifier writes ([16bd709](https://github.com/pentacore/media-manager/commit/16bd709b17070f5e88b132109be13a6e92f956de))
+* **ai:** stop the verifier tally from double-counting after a late failure ([e6d9d93](https://github.com/pentacore/media-manager/commit/e6d9d9336cffb638fe2c9671ef10cad2564e8def))
+* **arr:** never read a write answered with a login page as success ([a098ba2](https://github.com/pentacore/media-manager/commit/a098ba26c069bcabfda6624e894b55c98840d192))
+* **audit:** audit AI price bulk edits and deletes per row ([c739854](https://github.com/pentacore/media-manager/commit/c739854ad6d91d28685cfe06d42a0c7d23380e03))
+* **audit:** commit role changes, deletes and Emby unlinks with their audit row ([e3cb98b](https://github.com/pentacore/media-manager/commit/e3cb98b7f4621d45401bc979e294a9a45790acda))
+* **emby:** refuse a login page in place of system info ([b244feb](https://github.com/pentacore/media-manager/commit/b244feb61a2840ce7ba43b4e9b04a4ea5aa24b61))
+* **health:** store a fixed sentence for an HTTP health failure ([92ea6b8](https://github.com/pentacore/media-manager/commit/92ea6b85aba82f1fd295263efdfff417c7e6ad45))
+* **jobs:** keep the anime sync and the AI price refresh inside their timeout ([7b1b303](https://github.com/pentacore/media-manager/commit/7b1b303a9d522d0d7c5d54fd7bfd05401e3742dc))
+* **library:** word an unconfirmed arr write as unknown, not refused ([cfb490f](https://github.com/pentacore/media-manager/commit/cfb490fc17e0a69c0ed1ef5aaa04fc49641027cc))
+* **prowlarr:** report an unconfirmed grab as unknown, not refused ([f51be13](https://github.com/pentacore/media-manager/commit/f51be13662105d302ce713101a9a43b2eded0094))
+* **prowlarr:** treat a 200 that is not JSON data as an upstream failure ([725723a](https://github.com/pentacore/media-manager/commit/725723a31141aa790d6d08f418feb47488ba8153))
+* **search:** catch only upstream failures in the fallback searches ([b03463d](https://github.com/pentacore/media-manager/commit/b03463db2fcb8b886789cefee87d5e2c0355db84))
+* **whisparr:** retry a login-page outage like Sonarr and Radarr ([fef2105](https://github.com/pentacore/media-manager/commit/fef2105a9727677a971802a9a839cc62b212934b))
+
 ## [1.35.1](https://github.com/pentacore/media-manager/compare/v1.35.0...v1.35.1) (2026-10-06)
 
 # [1.35.0](https://github.com/pentacore/media-manager/compare/v1.34.0...v1.35.0) (2026-10-06)
