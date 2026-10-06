@@ -431,6 +431,59 @@ test('search does not leak provider exception details to members', function (): 
     );
 });
 
+test('a genuine upstream failure still degrades to "temporarily unavailable" for Sonarr, Seerr and Prowlarr', function (string $service, string $path, string $prop): void {
+    $factory = ServiceConnection::factory();
+    match ($service) {
+        'sonarr' => $factory->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']),
+        'seerr' => $factory->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']),
+        'prowlarr' => $factory->prowlarr()->create(['url' => 'http://prowlarr.local:9696', 'api_key' => 'k']),
+    };
+
+    Http::fake([$path => Http::response('LEAKED-PROVIDER-SECRET', 500)]);
+
+    $query = $service === 'prowlarr' ? ['q' => 'test', 'scope' => 'indexers'] : ['q' => 'test'];
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.search.index', $query))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($page) => $page
+                ->where("{$prop}.results", [])
+                ->where("{$prop}.error", sprintf('%s search is temporarily unavailable.', ucfirst($service)))));
+})->with([
+    'sonarr' => ['sonarr', 'sonarr.local:8989/api/v3/series', 'seriesResults'],
+    'seerr' => ['seerr', 'seerr.local:5055/api/v1/search*', 'requestResults'],
+    'prowlarr' => ['prowlarr', 'prowlarr.local:9696/api/v1/search*', 'indexerResults'],
+]);
+
+test('a malformed Prowlarr publishDate still degrades to a null age, not an error', function (): void {
+    ServiceConnection::factory()->prowlarr()->create(['url' => 'http://prowlarr.local:9696', 'api_key' => 'test']);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/search*' => Http::response([[
+            'guid' => 'guid-1',
+            'title' => 'Severance.S02E07.1080p.WEB-DL.x264',
+            'indexer' => 'ETTV',
+            'categories' => [['name' => 'TV/HD']],
+            'size' => 2_500_000_000,
+            'seeders' => 412,
+            'leechers' => 18,
+            'publishDate' => 'not-a-date',
+            'downloadUrl' => 'http://example/dl/1.torrent',
+            'infoUrl' => 'http://example/info/1',
+            'qualityWeight' => 96,
+        ]]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.search.index', ['q' => 'severance', 'scope' => 'indexers']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('indexerResults.error', null)
+                ->where('indexerResults.results.0.age', null)));
+});
+
 test('search reports no-connection errors when services are not configured', function (): void {
     $member = User::factory()->member()->create();
 

@@ -340,6 +340,18 @@ test('an arr write answered with an empty 200 or with JSON data still succeeds',
         ->and(fn () => $arrClient->{$method}(...$arguments))->not->toThrow(Throwable::class);
 })->with(arrWriteCases());
 
+test('an arr write answered with an empty JSON object still succeeds', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/queue/grab/9' => Http::response('{}', 200)]);
+
+    expect(fn (): array => new SonarrClient($this->connection)->grabQueueItem(9))->not->toThrow(Throwable::class);
+});
+
+test('an arr write answered with a bare JSON scalar is unconfirmed', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/queue/grab/9' => Http::response('true', 200)]);
+
+    expect(fn (): array => new SonarrClient($this->connection)->grabQueueItem(9))->toThrow(ArrWriteUnconfirmed::class);
+});
+
 test('the unconfirmed-write message survives report(), which would otherwise rebuild it from the raw body', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/command' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
 

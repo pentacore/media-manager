@@ -148,12 +148,24 @@ test('redacts url query strings from persisted failure messages', function (): v
     expect($fresh->health_message)->toContain('http://sab.local:8080/api?[redacted]');
 });
 
-test('truncates very long upstream bodies to 255 chars', function (): void {
+test('a 500 body is now irrelevant to length — the stored message is the fixed status sentence', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
     Http::fake(['sonarr.local:8989/*' => Http::response(str_repeat('A', 5000), 500)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_message)->toBe('HTTP 500: the service reported a server error.');
+});
+
+test('truncates a very long connection-failure message to 255 chars', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake(fn () => throw new ConnectionException(str_repeat('A', 5000)));
 
     new PingServiceHealth($connection)->handle();
 
@@ -293,6 +305,34 @@ test('an Emby answering its system info with a login page is unhealthy, not heal
 
     expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
         ->and($connection->fresh()->health_message)->toBe('HTTP 200: Emby answered with a body that is not JSON data.');
+});
+
+test('a SABnzbd refusal is unhealthy, not healthy', function (): void {
+    $connection = ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['sab.local:8080/api*' => Http::response(['status' => false, 'error' => 'API Key Incorrect'], 200)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
+        ->and($connection->fresh()->health_message)->toBe('HTTP 200: SABnzbd refused the request.');
+});
+
+test('two different bodies at the same status store the same message and do not re-broadcast', function (): void {
+    Sleep::fake();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'health_status' => HealthStatus::Unhealthy,
+        'health_message' => 'HTTP 500: the service reported a server error.',
+    ]);
+
+    Http::fake(['sonarr.local:8989/*' => Http::response('A completely different error body', 500)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
+        ->and($connection->fresh()->health_message)->toBe('HTTP 500: the service reported a server error.');
+
+    Event::assertNotDispatched(ServiceHealthChanged::class);
 });
 
 test('a stored and broadcast health message never carries an upstream path', function (): void {
