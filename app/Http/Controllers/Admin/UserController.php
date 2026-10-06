@@ -114,20 +114,22 @@ class UserController extends Controller
         $userRole = UserRole::from((string) $updateUserRoleRequest->validated('role'));
 
         try {
-            $modifyUserAccess->changeRole($user, $userRole);
+            DB::transaction(function () use ($modifyUserAccess, $auditLogger, $user, $userRole, $previousRole): void {
+                $modifyUserAccess->changeRole($user, $userRole);
+
+                if ($previousRole !== $userRole) {
+                    $auditLogger->record(
+                        'user.role_changed',
+                        $user,
+                        sprintf("Changed %s's role from %s to %s.", $user->name, $previousRole->label(), $userRole->label()),
+                        ['role' => ['from' => $previousRole->value, 'to' => $userRole->value]],
+                    );
+                }
+            });
         } catch (LastAdminException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('At least one admin must remain.')]);
 
             return to_route('admin.users.index');
-        }
-
-        if ($previousRole !== $userRole) {
-            $auditLogger->record(
-                'user.role_changed',
-                $user,
-                sprintf("Changed %s's role from %s to %s.", $user->name, $previousRole->label(), $userRole->label()),
-                ['role' => ['from' => $previousRole->value, 'to' => $userRole->value]],
-            );
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User role updated.')]);
@@ -144,21 +146,23 @@ class UserController extends Controller
         $pendingInvite = $user->password === null && $user->sso_provider === null && $user->invite_accepted_at === null;
 
         try {
-            $modifyUserAccess->delete($user);
+            DB::transaction(function () use ($modifyUserAccess, $auditLogger, $user, $pendingInvite): void {
+                $modifyUserAccess->delete($user);
+
+                $auditLogger->record(
+                    $pendingInvite ? 'invite.revoked' : 'user.deleted',
+                    $user,
+                    $pendingInvite
+                        ? sprintf('Revoked the invitation for %s <%s>.', $user->name, $user->email)
+                        : sprintf('Deleted %s <%s>.', $user->name, $user->email),
+                    context: ['role' => $user->role->value],
+                );
+            });
         } catch (LastAdminException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('At least one admin must remain.')]);
 
             return to_route('admin.users.index');
         }
-
-        $auditLogger->record(
-            $pendingInvite ? 'invite.revoked' : 'user.deleted',
-            $user,
-            $pendingInvite
-                ? sprintf('Revoked the invitation for %s <%s>.', $user->name, $user->email)
-                : sprintf('Deleted %s <%s>.', $user->name, $user->email),
-            context: ['role' => $user->role->value],
-        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User deleted.')]);
 
