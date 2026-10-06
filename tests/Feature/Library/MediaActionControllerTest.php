@@ -449,7 +449,7 @@ test('viewers cannot monitor a season', function (): void {
 test('a radarr connection is refused for monitor-season', function (): void {
     $this->actingAs($this->member)
         ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->radarr->id, 'series_id' => 7, 'season_number' => 1])
-        ->assertStatus(422);
+        ->assertUnprocessable();
 
     expect(ActionRequest::query()->count())->toBe(0);
 });

@@ -55,6 +55,7 @@ class AnimeIdMapFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'user_confirmed' => true,
+            'tvdb_season' => null,
         ]);
     }
 }

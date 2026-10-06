@@ -246,14 +246,16 @@ class SonarrActions extends ArrLibraryActions
         $series['seasons'] = $seasons;
         $sonarrClient->updateSeries($seriesId, $series);
 
-        $this->searchCommandRunner->run(
-            $sonarrClient,
-            'sonarr',
-            MediaSearchCommand::SeasonSearch,
-            MediaSearchCommand::SeasonSearch->arrParameters(['series_id' => $seriesId, 'season_number' => $seasonNumber]),
-        );
-
-        new SonarrCache($serviceConnection)->bustAll();
+        try {
+            $this->searchCommandRunner->run(
+                $sonarrClient,
+                'sonarr',
+                MediaSearchCommand::SeasonSearch,
+                MediaSearchCommand::SeasonSearch->arrParameters(['series_id' => $seriesId, 'season_number' => $seasonNumber]),
+            );
+        } finally {
+            new SonarrCache($serviceConnection)->bustAll();
+        }
 
         return [
             'sonarr_series_id' => $seriesId,

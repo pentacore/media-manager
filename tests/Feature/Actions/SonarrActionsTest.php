@@ -222,6 +222,7 @@ test('monitor changes are refused while a replacement for the series is in fligh
 })->with([
     'episodes' => ['monitor_episodes', ['series_id' => 7, 'episode_ids' => [70], 'monitored' => false]],
     'series' => ['monitor_series', ['series_id' => 7, 'monitored' => false]],
+    'season' => ['monitor_season', ['series_id' => 7, 'season_number' => 1]],
 ]);
 
 test('monitor_season monitors the series and the season, then searches the season', function (): void {
