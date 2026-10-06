@@ -7,6 +7,7 @@ use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\FlashesRequestOutcome;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Date;
@@ -327,6 +328,106 @@ test('index does not mark a tv entry as requested when only a movie request with
         ->assertInertia(fn ($page) => $page
             ->loadDeferredProps('default', function ($page): void {
                 $page->where('entries.0.status', 'requestable');
+            })
+        );
+});
+
+test('index marks an owned tv entry whose season is unmonitored and exposes its library target', function (): void {
+    $member = User::factory()->member()->create();
+
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => true]);
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse([
+            [
+                'id' => 154587,
+                'idMal' => 52991,
+                'format' => 'TV',
+                'status' => 'RELEASING',
+                'episodes' => 12,
+                'popularity' => 5000,
+                'averageScore' => 88,
+                'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+                'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1],
+                'coverImage' => ['large' => 'https://img/test.jpg'],
+            ],
+        ])),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'sonarr.local:8989/api/v3/series/7' => Http::response([
+            'id' => 7,
+            'title' => 'Test Show',
+            'monitored' => true,
+            'seasons' => [['seasonNumber' => 2, 'monitored' => false]],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Anime/Season')
+            ->loadDeferredProps('default', function ($page) use ($sonarr): void {
+                $page
+                    ->where('entries.0.status', 'unmonitored')
+                    ->where('entries.0.unmonitoredScope', 'season')
+                    ->where('entries.0.library.service', 'sonarr')
+                    ->where('entries.0.library.itemId', 7)
+                    ->where('entries.0.library.connectionId', $sonarr->id)
+                    ->where('entries.0.library.seasonNumber', 2)
+                    ->where('entries.0.library.onActiveConnection', true);
+            })
+        );
+});
+
+test('index keeps requestable entries free of library data', function (): void {
+    $member = User::factory()->member()->create();
+
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse([
+            [
+                'id' => 154587,
+                'idMal' => 52991,
+                'format' => 'TV',
+                'status' => 'RELEASING',
+                'episodes' => 12,
+                'popularity' => 5000,
+                'averageScore' => 88,
+                'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+                'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1],
+                'coverImage' => ['large' => 'https://img/test.jpg'],
+            ],
+        ])),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('entries.0.status', 'requestable')
+                    ->where('entries.0.library', null)
+                    ->where('entries.0.unmonitoredScope', null);
             })
         );
 });

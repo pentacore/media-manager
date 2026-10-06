@@ -10,8 +10,6 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
-use App\Models\IndexedMovie;
-use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Anime\AniListClient;
 use App\Services\Anime\AnimeIdMapper;
@@ -19,6 +17,7 @@ use App\Services\Anime\AnimeMapping;
 use App\Services\Anime\JikanClient;
 use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
+use App\Services\Anime\SeasonLibraryStatus;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrUserResolver;
 use Illuminate\Http\Client\ConnectionException;
@@ -40,7 +39,7 @@ class AnimeController extends Controller
      * Seasonal anime discovery grid. Season list is fetched live (cached) and
      * mapped to TMDB/TVDB ids; owned/requested status is overlaid fresh.
      */
-    public function index(Request $request, SeerrUserResolver $seerrUserResolver): Response|RedirectResponse
+    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeasonLibraryStatus $seasonLibraryStatus): Response|RedirectResponse
     {
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
@@ -67,7 +66,7 @@ class AnimeController extends Controller
             ],
             'navigation' => $this->navigation($year, $season),
             'requestingUsers' => Inertia::defer(fn (): array => $seerrUserResolver->pickerOptions($connection, $request->user())),
-            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonalAnimeSource, $year, $season)),
+            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonLibraryStatus, $seasonalAnimeSource, $year, $season)),
         ]);
     }
 
@@ -198,7 +197,7 @@ class AnimeController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-    private function loadSeason(ServiceConnection $serviceConnection, SeasonalAnimeSource $seasonalAnimeSource, int $year, AnimeSeason $animeSeason): array
+    private function loadSeason(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, SeasonalAnimeSource $seasonalAnimeSource, int $year, AnimeSeason $animeSeason): array
     {
         $animeCache = new AnimeCache;
         $suffix = sprintf('%s:%d:%s', $seasonalAnimeSource->slug(), $year, $animeSeason->value);
@@ -208,7 +207,7 @@ class AnimeController extends Controller
             ? $animeCache->rememberMetadata($suffix, fn (): array => $this->fetchAndMap($seasonalAnimeSource, $year, $animeSeason))
             : $animeCache->rememberList($suffix, fn (): array => $this->fetchAndMap($seasonalAnimeSource, $year, $animeSeason));
 
-        return $this->overlayStatus($serviceConnection, $mapped);
+        return $this->overlayStatus($serviceConnection, $seasonLibraryStatus, $mapped);
     }
 
     /**
@@ -232,31 +231,30 @@ class AnimeController extends Controller
     }
 
     /**
-     * Overlay volatile owned/requested flags (batch queries, not per-card).
+     * Overlay volatile owned/monitored/requested flags. Owned rows carry their
+     * Sonarr/Radarr target in `library` and, when unmonitored, the scope in
+     * `unmonitoredScope`; both are null on every other row.
      *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
-    private function overlayStatus(ServiceConnection $serviceConnection, array $rows): array
+    private function overlayStatus(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, array $rows): array
     {
-        $tvdbIds = collect($rows)->pluck('mapping.tvdbId')->filter()->unique();
-        $movieTmdbIds = collect($rows)
-            ->filter(fn (array $r): bool => $r['mapping']['mediaType'] === 'movie')
-            ->pluck('mapping.tmdbId')->filter()->unique();
-
-        $ownedTvdb = IndexedSeries::query()->whereIn('tvdb_id', $tvdbIds)->pluck('tvdb_id')->flip();
-        $ownedMovie = IndexedMovie::query()->whereIn('tmdb_id', $movieTmdbIds)->pluck('tmdb_id')->flip();
+        $owned = $seasonLibraryStatus->resolve($rows);
         $requestedKeys = $this->requestedMediaKeys($serviceConnection);
 
-        return collect($rows)->map(function (array $row) use ($ownedTvdb, $ownedMovie, $requestedKeys): array {
+        return collect($rows)->map(function (array $row) use ($owned, $requestedKeys): array {
             $mapping = $row['mapping'];
+            $library = $owned[$row['key']] ?? null;
+
             $row['status'] = match (true) {
                 ! $mapping['mapped'] => 'unmapped',
-                $mapping['mediaType'] === 'movie' && $ownedMovie->has($mapping['tmdbId']) => 'in_library',
-                $mapping['mediaType'] === 'tv' && $mapping['tvdbId'] !== null && $ownedTvdb->has($mapping['tvdbId']) => 'in_library',
+                $library !== null => $library['status'],
                 $requestedKeys->has($mapping['mediaType'].':'.$mapping['tmdbId']) => 'requested',
                 default => 'requestable',
             };
+            $row['unmonitoredScope'] = $library['unmonitoredScope'] ?? null;
+            $row['library'] = $library['library'] ?? null;
 
             return $row;
         })->all();
