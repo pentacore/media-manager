@@ -229,7 +229,7 @@ class SonarrActions extends ArrLibraryActions
 
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
 
-        $sonarrClient = new SonarrClient($serviceConnection);
+        $sonarrClient = resolve(ArrConnections::class)->sonarr($serviceConnection);
         $series = $sonarrClient->fetchSeriesById($seriesId);
         $seasons = is_array($series['seasons'] ?? null) ? $series['seasons'] : [];
         $found = false;

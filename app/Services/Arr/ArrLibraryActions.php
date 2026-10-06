@@ -42,7 +42,8 @@ abstract class ArrLibraryActions implements ActionExecutor
     public function __construct(
         protected readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
         private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
-        private readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
+        // Protected: SonarrActions::monitorSeason() runs its season search through it.
+        protected readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
     ) {}
 
     abstract protected function serviceType(): ServiceType;
