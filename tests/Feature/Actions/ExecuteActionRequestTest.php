@@ -12,6 +12,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ArrActions;
 use App\Services\Arr\ArrUnexpectedResponse;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
@@ -713,4 +714,28 @@ test('a Whisparr executor read answered with a login page is retried like Sonarr
     expect($fresh->status)->toBe(ActionRequestStatus::Executing)
         ->and($fresh->result)->toBe(['retry_scheduled' => true, 'attempt' => 1]);
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT');
+});
+
+test('an arr write answered with a login page fails for reconciliation after one request and is never retried', function (): void {
+    Http::preventStrayRequests();
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    Http::fake(['radarr.local:7878/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+        'payload' => ['radarr_movie_id' => 7, 'service_connection_id' => $connection->id],
+    ]);
+
+    executeActionRequestOnAttempt($request, 1)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toBe([
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => 'Radarr answered the change with something other than its API data, so whether it was applied is unknown. Check Radarr before retrying.',
+            'indeterminate' => true,
+            'exception' => ArrWriteUnconfirmed::class,
+        ]);
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });

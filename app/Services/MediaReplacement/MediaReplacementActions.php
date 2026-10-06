@@ -841,7 +841,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
      *  - 'accepted'      — the arr accepted the release.
      *  - 'rejected'      — an explicit client-side (4xx) rejection: definitely
      *                      not accepted, so no file was touched.
-     *  - 'indeterminate' — connection loss or a server error (5xx) on the
+     *  - 'indeterminate' — connection loss, a server error (5xx), or a 200
+     *                      that is not JSON data (ArrWriteUnconfirmed) on the
      *                      non-idempotent POST: the grab may already have been
      *                      accepted, so it must stay trackable rather than fail.
      *
@@ -864,7 +865,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 return 'rejected';
             }
 
-            Log::warning('Media replacement grab outcome indeterminate (server error); leaving the attempt trackable.', [
+            Log::warning('Media replacement grab outcome indeterminate (no confirmation); leaving the attempt trackable.', [
                 'status' => $requestException->response->status(),
             ]);
 

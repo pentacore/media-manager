@@ -6,6 +6,7 @@ namespace App\Services\Prowlarr;
 
 use App\Cache\Services\ProwlarrCache;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -49,13 +50,13 @@ class ProwlarrClient extends ArrClient
      * (a different signature). Never retried: a lost response may already
      * have started the download.
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function grabIndexerRelease(string $guid, int $indexerId): void
     {
-        $this->buildClient(withRetry: false)
+        $this->confirmedWrite($this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/search', $this->apiVersion), ['guid' => $guid, 'indexerId' => $indexerId])
-            ->throw();
+            ->throw());
     }
 
     /**

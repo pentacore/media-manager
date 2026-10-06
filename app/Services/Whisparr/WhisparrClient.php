@@ -8,6 +8,7 @@ use App\Cache\Services\WhisparrCache;
 use App\Enums\WhisparrVersion;
 use App\Jobs\ExecuteActionRequest;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\SearchCommandRunner;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -90,33 +91,33 @@ class WhisparrClient extends ArrClient
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function addItem(array $data): array
     {
-        return $this->buildClient()->post($this->resourcePath(), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->post($this->resourcePath(), $data)->throw());
     }
 
     /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateItem(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('%s/%d', $this->resourcePath(), $id), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->put(sprintf('%s/%d', $this->resourcePath(), $id), $data)->throw());
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteItem(int $id, bool $deleteFiles = false): void
     {
         $query = http_build_query(['deleteFiles' => $deleteFiles ? 'true' : 'false']);
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('%s/%d?%s', $this->resourcePath(), $id, $query))
-            ->throw();
+            ->throw());
     }
 
     /**
