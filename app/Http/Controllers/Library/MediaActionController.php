@@ -12,6 +12,7 @@ use App\Http\Requests\Library\BulkLibraryActionRequest;
 use App\Http\Requests\Library\GrabReleaseRequest;
 use App\Http\Requests\Library\MonitorEpisodesRequest;
 use App\Http\Requests\Library\MonitorMediaRequest;
+use App\Http\Requests\Library\MonitorSeasonRequest;
 use App\Http\Requests\Library\ReleaseSearchRequest;
 use App\Http\Requests\Library\SearchMediaRequest;
 use App\Http\Requests\Library\SetQualityProfileRequest;
@@ -83,6 +84,24 @@ class MediaActionController extends Controller
             ServiceType::Sonarr,
             [...$payload, 'monitored' => (bool) $validated['monitored'], 'service_connection_id' => $connection->id],
             $this->because($monitorEpisodesRequest),
+        ), __('Monitoring updated.'));
+    }
+
+    public function monitorSeason(MonitorSeasonRequest $monitorSeasonRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard): RedirectResponse
+    {
+        $validated = $monitorSeasonRequest->validated();
+        $connection = $monitorSeasonRequest->connection();
+        $seriesId = (int) $validated['series_id'];
+
+        if ($this->replacementInFlight($pendingReplacementGuard, $connection, $seriesId, null)) {
+            return $this->refuseDuringReplacement();
+        }
+
+        return $this->answer($manualActionDispatcher->dispatch(
+            'monitor_season',
+            ServiceType::Sonarr,
+            ['series_id' => $seriesId, 'season_number' => (int) $validated['season_number'], 'service_connection_id' => $connection->id],
+            $this->because($monitorSeasonRequest),
         ), __('Monitoring updated.'));
     }
 

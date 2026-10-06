@@ -415,3 +415,55 @@ test('an unreachable Sonarr answers 502 for an episode release search', function
         ->assertStatus(502)
         ->assertJsonPath('message', 'Sonarr is unreachable.');
 });
+
+test('a member monitors a season through the action pipeline, pinned to the connection', function (): void {
+    Http::fake(['sonarr.local:8989/*' => Http::response([])]);
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 2])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Monitoring updated.');
+
+    $actionRequest = ActionRequest::query()->where('type', 'monitor_season')->sole();
+    expect($actionRequest->origin)->toBe('manual')
+        ->and($actionRequest->payload)->toEqual(['series_id' => 7, 'season_number' => 2, 'service_connection_id' => $this->sonarr->id])
+        ->and($actionRequest->title)->toBe('Monitor season 2 of series "Severance (2022)"');
+});
+
+test('monitor-season validates its body', function (array $body, string $field): void {
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-season'), [...['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1], ...$body])
+        ->assertSessionHasErrors($field);
+})->with([
+    'missing season' => [['season_number' => null], 'season_number'],
+    'negative season' => [['season_number' => -1], 'season_number'],
+    'bad series' => [['series_id' => 0], 'series_id'],
+]);
+
+test('viewers cannot monitor a season', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1])
+        ->assertForbidden();
+});
+
+test('a radarr connection is refused for monitor-season', function (): void {
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->radarr->id, 'series_id' => 7, 'season_number' => 1])
+        ->assertStatus(422);
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('monitor-season is refused while a replacement is in flight', function (): void {
+    ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'status' => ActionRequestStatus::Pending,
+        'payload' => ['target' => ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1, 'episode_numbers' => [1]]],
+    ]);
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'A file replacement is in progress for this title — try again when it finishes.');
+
+    expect(ActionRequest::query()->where('type', 'monitor_season')->exists())->toBeFalse();
+});
