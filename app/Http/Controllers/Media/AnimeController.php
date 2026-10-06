@@ -48,11 +48,11 @@ class AnimeController extends Controller
             return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
-        // Self-bootstrap on a fresh deployment: the table is otherwise only
-        // filled by the weekly schedule. Check for dataset-sourced rows so a
-        // lone user-confirmed match doesn't suppress the initial load.
-        // ShouldBeUnique keeps this to one run.
-        if (AnimeIdMap::query()->where('user_confirmed', false)->doesntExist()) {
+        // Self-bootstrap on a fresh deployment, and once after the tvdb_season
+        // column arrives: the table is otherwise only filled by the weekly
+        // schedule. Only dataset-sourced rows count, so a lone user-confirmed
+        // match doesn't suppress the load. ShouldBeUnique keeps this to one run.
+        if (AnimeIdMap::query()->where('user_confirmed', false)->whereNotNull('tvdb_season')->doesntExist()) {
             dispatch(new SyncAnimeMappingJob);
         }
 

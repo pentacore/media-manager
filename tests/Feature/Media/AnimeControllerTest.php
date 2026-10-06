@@ -94,6 +94,7 @@ test('index defers entries mapped against the id map with an overlaid status', f
         'tmdb_tv_id' => 1396,
         'tvdb_id' => 81189,
         'tmdb_season' => 1,
+        'tvdb_season' => 2,
     ]);
 
     Http::fake([
@@ -127,6 +128,7 @@ test('index defers entries mapped against the id map with an overlaid status', f
                     ->where('entries.0.key', 'anilist:154587')
                     ->where('entries.0.mapping.tmdbId', 1396)
                     ->where('entries.0.mapping.mapped', true)
+                    ->where('entries.0.mapping.tvdbSeason', 2)
                     ->where('entries.0.status', 'requestable');
             })
         );
@@ -344,10 +346,25 @@ test('index dispatches the sync job when there are no dataset rows and not when 
     Queue::assertPushed(SyncAnimeMappingJob::class);
 
     // A dataset-sourced row (user_confirmed = false) → no dispatch.
-    AnimeIdMap::factory()->tv()->create(['user_confirmed' => false]);
+    AnimeIdMap::factory()->tv()->create(['user_confirmed' => false, 'tvdb_season' => 1]);
     Queue::fake();
     $this->actingAs($member)->get(route('media.anime.index'))->assertOk();
     Queue::assertNotPushed(SyncAnimeMappingJob::class);
+});
+
+test('index re-syncs mappings once when dataset rows predate the tvdb season column', function (): void {
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse()),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+    ]);
+
+    Queue::fake();
+    AnimeIdMap::factory()->tv()->create(['anilist_id' => 1, 'tmdb_tv_id' => 1396, 'tvdb_season' => null]);
+
+    $this->actingAs(User::factory()->member()->create())->get(route('media.anime.index'))->assertOk();
+
+    Queue::assertPushed(SyncAnimeMappingJob::class);
 });
 
 test('index still dispatches the sync job when only a user_confirmed row exists', function (): void {

@@ -17,6 +17,7 @@ final readonly class AnimeMapping
         public string $mediaType,
         public ?int $tvdbId,
         public ?int $tmdbSeason,
+        public ?int $tvdbSeason = null,
     ) {}
 
     public static function unmapped(AnimeFormat $animeFormat): self
@@ -30,7 +31,7 @@ final readonly class AnimeMapping
     }
 
     /**
-     * @return array{tmdbId: int|null, mediaType: string, tvdbId: int|null, tmdbSeason: int|null, mapped: bool}
+     * @return array{tmdbId: int|null, mediaType: string, tvdbId: int|null, tmdbSeason: int|null, tvdbSeason: int|null, mapped: bool}
      */
     public function toArray(): array
     {
@@ -39,6 +40,7 @@ final readonly class AnimeMapping
             'mediaType' => $this->mediaType,
             'tvdbId' => $this->tvdbId,
             'tmdbSeason' => $this->tmdbSeason,
+            'tvdbSeason' => $this->tvdbSeason,
             'mapped' => $this->isMapped(),
         ];
     }
