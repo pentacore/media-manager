@@ -35,10 +35,9 @@ class ProwlarrClient extends ArrClient
             function () use ($query, $options): array {
                 $params = ['query' => $query, ...$options];
 
-                return $this->buildClient()
+                return $this->jsonArray($this->buildClient()
                     ->get(sprintf('/api/%s/search', $this->apiVersion), $params)
-                    ->throw()
-                    ->json() ?? [];
+                    ->throw());
             },
         );
     }
@@ -68,10 +67,9 @@ class ProwlarrClient extends ArrClient
     {
         return $this->cache()->rememberList(
             'indexers',
-            fn (): array => $this->buildClient()
+            fn (): array => $this->jsonArray($this->buildClient()
                 ->get(sprintf('/api/%s/indexer', $this->apiVersion))
-                ->throw()
-                ->json() ?? [],
+                ->throw()),
         );
     }
 
@@ -112,10 +110,9 @@ class ProwlarrClient extends ArrClient
                     'since' => $sinceHours !== null ? now()->subHours($sinceHours)->toISOString() : null,
                 ], fn (int|string|null $v): bool => $v !== null);
 
-                return $this->buildClient()
+                return $this->jsonArray($this->buildClient()
                     ->get(sprintf('/api/%s/indexerstats', $this->apiVersion), $params)
-                    ->throw()
-                    ->json() ?? [];
+                    ->throw());
             },
         );
     }

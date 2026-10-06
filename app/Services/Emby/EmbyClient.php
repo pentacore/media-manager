@@ -52,14 +52,14 @@ class EmbyClient
      *
      * @return list<mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyUnexpectedResponse|RequestException|ConnectionException
      */
     public function getUsers(): array
     {
         $response = $this->buildClient()->get('/Users')->throw();
         $users = $response->json();
 
-        throw_if(! is_array($users) || ! array_is_list($users), RequestException::class, $response);
+        throw_if(! is_array($users) || ! array_is_list($users), EmbyUnexpectedResponse::class, $response);
 
         return $users;
     }
