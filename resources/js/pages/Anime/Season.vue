@@ -29,6 +29,7 @@ import { dashboard } from '@/routes';
 import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
 import type { AnimeFormat } from '@/typefinder/enums/AnimeFormat';
 import type { AnimeSeason } from '@/typefinder/enums/AnimeSeason';
+import type { FlashToast } from '@/types/ui';
 import MatchDialog from './MatchDialog.vue';
 
 type EntryStatus =
@@ -461,9 +462,19 @@ function monitorEntry(entry: SeasonEntry): void {
     router.post(url, body, {
         preserveScroll: true,
         preserveState: true,
-        // The action may wait for approval, so the card never flips to
-        // monitored here — the next load shows the real state.
-        onSuccess: () => {
+        // A refusal (action disabled, replacement in flight, item not found)
+        // is still a successful `back()` visit, told apart only by its error
+        // toast — so the button is locked only when this visit's own flash
+        // carries a non-error toast (started or queued for approval). The
+        // action may wait for approval, so the card never flips to monitored
+        // here — the next load shows the real state.
+        onFlash: (flash) => {
+            const flashed = flash.toast as FlashToast | undefined;
+
+            if (!flashed || flashed.type === 'error') {
+                return;
+            }
+
             monitorRequestedKeys.value = new Set(
                 monitorRequestedKeys.value,
             ).add(entry.key);
@@ -909,7 +920,11 @@ const matchEntryContext = computed(() =>
                                     v-if="monitoringKeys.has(entry.key)"
                                     class="mr-1 size-3.5 animate-spin"
                                 />
-                                Monitor
+                                {{
+                                    monitorRequestedKeys.has(entry.key)
+                                        ? 'Monitor requested'
+                                        : 'Monitor'
+                                }}
                             </Button>
                             <Link
                                 v-if="libraryHref(entry)"
@@ -926,8 +941,9 @@ const matchEntryContext = computed(() =>
                             <span
                                 v-if="!canMonitor(entry) && !libraryHref(entry)"
                                 class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-muted-foreground"
+                                data-anime-library-status
                             >
-                                In library
+                                {{ statusLabel(entry) }}
                             </span>
                         </template>
 
@@ -950,6 +966,7 @@ const matchEntryContext = computed(() =>
                             class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             data-anime-external
                             :title="externalLink(entry)!.title"
+                            :aria-label="externalLink(entry)!.title"
                         >
                             <ExternalLink class="size-3.5" />
                         </a>
