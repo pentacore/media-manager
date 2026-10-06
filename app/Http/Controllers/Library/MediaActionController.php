@@ -27,7 +27,6 @@ use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ReleaseSelectionCache;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\MediaReplacement\PendingReplacementGuard;
-use App\Services\Sonarr\SonarrClient;
 use App\Services\Sonarr\SonarrEpisodeOwnership;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Client\ConnectionException;
@@ -55,7 +54,7 @@ class MediaActionController extends Controller
         ), __('Monitoring updated.'));
     }
 
-    public function monitorEpisodes(MonitorEpisodesRequest $monitorEpisodesRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard, SonarrEpisodeOwnership $sonarrEpisodeOwnership): RedirectResponse
+    public function monitorEpisodes(MonitorEpisodesRequest $monitorEpisodesRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard, SonarrEpisodeOwnership $sonarrEpisodeOwnership, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $monitorEpisodesRequest->validated();
         $connection = $monitorEpisodesRequest->connection();
@@ -67,7 +66,7 @@ class MediaActionController extends Controller
             return $this->refuseDuringReplacement();
         }
 
-        $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $connection, $seriesId, $episodeIds, $seasonNumber);
+        $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $arrConnections, $connection, $seriesId, $episodeIds, $seasonNumber);
 
         if ($refusal !== null) {
             return $this->refuse($refusal['message']);
@@ -117,7 +116,7 @@ class MediaActionController extends Controller
         ), __('Quality profile updated.'));
     }
 
-    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher, LibraryActionRequester $libraryActionRequester, SonarrEpisodeOwnership $sonarrEpisodeOwnership): RedirectResponse
+    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher, LibraryActionRequester $libraryActionRequester, SonarrEpisodeOwnership $sonarrEpisodeOwnership, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $searchMediaRequest->validated();
         $connection = $searchMediaRequest->connection();
@@ -148,6 +147,7 @@ class MediaActionController extends Controller
         if ($mediaSearchCommand === MediaSearchCommand::EpisodeSearch) {
             $refusal = $this->episodeOwnershipRefusal(
                 $sonarrEpisodeOwnership,
+                $arrConnections,
                 $connection,
                 (int) $validated['series_id'],
                 $episodeIds,
@@ -190,7 +190,7 @@ class MediaActionController extends Controller
         $serviceType = $releaseSearchRequest->serviceType();
 
         if ($serviceType === ServiceType::Sonarr && isset($validated['episode_id'])) {
-            $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $connection, (int) $validated['item_id'], [(int) $validated['episode_id']], null);
+            $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $arrConnections, $connection, (int) $validated['item_id'], [(int) $validated['episode_id']], null);
 
             if ($refusal !== null) {
                 return response()->json(['message' => $refusal['message']], $refusal['status']);
@@ -315,10 +315,10 @@ class MediaActionController extends Controller
      * @param  list<int>  $episodeIds
      * @return array{message: string, status: int}|null
      */
-    private function episodeOwnershipRefusal(SonarrEpisodeOwnership $sonarrEpisodeOwnership, ServiceConnection $serviceConnection, int $seriesId, array $episodeIds, ?int $seasonNumber): ?array
+    private function episodeOwnershipRefusal(SonarrEpisodeOwnership $sonarrEpisodeOwnership, ArrConnections $arrConnections, ServiceConnection $serviceConnection, int $seriesId, array $episodeIds, ?int $seasonNumber): ?array
     {
         try {
-            if ($sonarrEpisodeOwnership->allBelongTo(new SonarrClient($serviceConnection), $seriesId, $episodeIds, $seasonNumber)) {
+            if ($sonarrEpisodeOwnership->allBelongTo($arrConnections->sonarr($serviceConnection), $seriesId, $episodeIds, $seasonNumber)) {
                 return null;
             }
         } catch (RequestException|ConnectionException) {

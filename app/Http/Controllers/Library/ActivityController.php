@@ -23,8 +23,6 @@ use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Arr\QueueItemRemover;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -51,7 +49,7 @@ class ActivityController extends Controller
         $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
 
         return Inertia::render('Library/Activity', [
-            'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue()),
+            'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue($arrConnections)),
             'historyFilters' => [
                 'service' => $historyService,
                 'page' => $historyPage,
@@ -134,7 +132,7 @@ class ActivityController extends Controller
      * stale or mismatched pin refuses the whole request before anything is
      * sent.
      */
-    public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner): JsonResponse
+    public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $bulkQueueItemsRequest->validated();
         $service = (string) $validated['service'];
@@ -182,7 +180,7 @@ class ActivityController extends Controller
 
                 return BulkItemOutcome::started();
             },
-            $this->queueTitles($connection, $unreachable),
+            $this->queueTitles($connection, $arrConnections, $unreachable),
         );
 
         return response()->json($bulkSummary->withToast($queueBulkAction->pastTense()));
@@ -195,12 +193,12 @@ class ActivityController extends Controller
      *
      * @return Closure(int): string
      */
-    private function queueTitles(ServiceConnection $serviceConnection, bool &$unreachable): Closure
+    private function queueTitles(ServiceConnection $serviceConnection, ArrConnections $arrConnections, bool &$unreachable): Closure
     {
         /** @var array<int, string>|null $titles */
         $titles = null;
 
-        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection): string {
+        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection, $arrConnections): string {
             if ($titles === null && $unreachable) {
                 return sprintf('#%d', $queueId);
             }
@@ -208,8 +206,8 @@ class ActivityController extends Controller
             if ($titles === null) {
                 $errors = [];
                 $rows = $serviceConnection->type === ServiceType::Sonarr
-                    ? $this->fetchSonarr($serviceConnection, $errors)
-                    : $this->fetchRadarr($serviceConnection, $errors);
+                    ? $this->fetchSonarr($serviceConnection, $arrConnections, $errors)
+                    : $this->fetchRadarr($serviceConnection, $arrConnections, $errors);
                 $titles = [];
 
                 foreach ($rows as $row) {
@@ -434,7 +432,7 @@ class ActivityController extends Controller
     /**
      * @return array{rows: array<int, array<string, mixed>>, errors: array<int, string>, services: array<string, bool>}
      */
-    private function loadCombinedQueue(): array
+    private function loadCombinedQueue(ArrConnections $arrConnections): array
     {
         $rows = [];
         $errors = [];
@@ -443,13 +441,13 @@ class ActivityController extends Controller
         $sonarr = ServiceConnection::findActive(ServiceType::Sonarr);
         $services['sonarr'] = $sonarr instanceof ServiceConnection;
         if ($sonarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchSonarr($sonarr, $errors)];
+            $rows = [...$rows, ...$this->fetchSonarr($sonarr, $arrConnections, $errors)];
         }
 
         $radarr = ServiceConnection::findActive(ServiceType::Radarr);
         $services['radarr'] = $radarr instanceof ServiceConnection;
         if ($radarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchRadarr($radarr, $errors)];
+            $rows = [...$rows, ...$this->fetchRadarr($radarr, $arrConnections, $errors)];
         }
 
         usort($rows, fn (array $a, array $b): int => strcmp((string) ($b['added'] ?? ''), (string) ($a['added'] ?? '')));
@@ -586,10 +584,10 @@ class ActivityController extends Controller
      * @param  array<int, string>  $errors
      * @return array<int, array<string, mixed>>
      */
-    private function fetchSonarr(ServiceConnection $serviceConnection, array &$errors): array
+    private function fetchSonarr(ServiceConnection $serviceConnection, ArrConnections $arrConnections, array &$errors): array
     {
         try {
-            $payload = new SonarrClient($serviceConnection)->getQueue([
+            $payload = $arrConnections->sonarr($serviceConnection)->getQueue([
                 'page' => 1,
                 'pageSize' => 100,
                 'sortKey' => 'timeleft',
@@ -616,10 +614,10 @@ class ActivityController extends Controller
      * @param  array<int, string>  $errors
      * @return array<int, array<string, mixed>>
      */
-    private function fetchRadarr(ServiceConnection $serviceConnection, array &$errors): array
+    private function fetchRadarr(ServiceConnection $serviceConnection, ArrConnections $arrConnections, array &$errors): array
     {
         try {
-            $payload = new RadarrClient($serviceConnection)->getQueue([
+            $payload = $arrConnections->radarr($serviceConnection)->getQueue([
                 'page' => 1,
                 'pageSize' => 100,
                 'sortKey' => 'timeleft',

@@ -9,10 +9,9 @@ use App\Enums\ServiceType;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -41,17 +40,17 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 
     public int $timeout = 270;
 
-    public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer): void
+    public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer, ArrConnections $arrConnections): void
     {
-        $this->reconcileSonarr($seriesIndexer);
-        $this->reconcileRadarr($movieIndexer);
+        $this->reconcileSonarr($seriesIndexer, $arrConnections);
+        $this->reconcileRadarr($movieIndexer, $arrConnections);
     }
 
-    private function reconcileSonarr(SeriesIndexer $seriesIndexer): void
+    private function reconcileSonarr(SeriesIndexer $seriesIndexer, ArrConnections $arrConnections): void
     {
         foreach ($this->connections(ServiceType::Sonarr) as $connection) {
             try {
-                $items = new SonarrClient($connection)->getSeries();
+                $items = $arrConnections->sonarr($connection)->getSeries();
             } catch (Throwable $throwable) {
                 Log::warning('ReconcileSearchIndex: Sonarr fetch failed', [
                     'connection_id' => $connection->id,
@@ -102,11 +101,11 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
         }
     }
 
-    private function reconcileRadarr(MovieIndexer $movieIndexer): void
+    private function reconcileRadarr(MovieIndexer $movieIndexer, ArrConnections $arrConnections): void
     {
         foreach ($this->connections(ServiceType::Radarr) as $connection) {
             try {
-                $items = new RadarrClient($connection)->getMovies();
+                $items = $arrConnections->radarr($connection)->getMovies();
             } catch (Throwable $throwable) {
                 Log::warning('ReconcileSearchIndex: Radarr fetch failed', [
                     'connection_id' => $connection->id,

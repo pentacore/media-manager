@@ -9,12 +9,11 @@ use App\Http\Controllers\Controller;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Prowlarr\ProwlarrClient;
-use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Carbon\Exceptions\InvalidFormatException;
@@ -50,7 +49,7 @@ class SearchController extends Controller
         return is_string($driver) ? $driver : 'typesense';
     }
 
-    public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
+    public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver, ArrConnections $arrConnections): Response
     {
         $request->validate([
             'q' => ['nullable', 'string', 'max:500'],
@@ -83,10 +82,10 @@ class SearchController extends Controller
             'connections' => $this->resolveConnectionUrls($seerrOnly),
             'seriesResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchSonarr($term)),
+                : Inertia::defer(fn (): array => $this->searchSonarr($term, $arrConnections)),
             'movieResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchRadarr($term)),
+                : Inertia::defer(fn (): array => $this->searchRadarr($term, $arrConnections)),
             'requestResults' => $term === ''
                 ? $empty
                 : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter)),
@@ -145,20 +144,20 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchSonarr(string $term): array
+    private function searchSonarr(string $term, ArrConnections $arrConnections): array
     {
         return $this->driver() === 'fallback'
-            ? $this->searchSonarrFallback($term)
+            ? $this->searchSonarrFallback($term, $arrConnections)
             : $this->searchSonarrTypesense($term);
     }
 
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchRadarr(string $term): array
+    private function searchRadarr(string $term, ArrConnections $arrConnections): array
     {
         return $this->driver() === 'fallback'
-            ? $this->searchRadarrFallback($term)
+            ? $this->searchRadarrFallback($term, $arrConnections)
             : $this->searchRadarrTypesense($term);
     }
 
@@ -256,7 +255,7 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchSonarrFallback(string $term): array
+    private function searchSonarrFallback(string $term, ArrConnections $arrConnections): array
     {
         $connection = ServiceConnection::findActive(ServiceType::Sonarr);
 
@@ -265,7 +264,7 @@ class SearchController extends Controller
         }
 
         try {
-            $items = new SonarrClient($connection)->getSeries();
+            $items = $arrConnections->sonarr($connection)->getSeries();
         } catch (RequestException|ConnectionException $exception) {
             return $this->serviceFailure('sonarr', $exception);
         }
@@ -291,7 +290,7 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchRadarrFallback(string $term): array
+    private function searchRadarrFallback(string $term, ArrConnections $arrConnections): array
     {
         $connection = ServiceConnection::findActive(ServiceType::Radarr);
 
@@ -300,7 +299,7 @@ class SearchController extends Controller
         }
 
         try {
-            $items = new RadarrClient($connection)->getMovies();
+            $items = $arrConnections->radarr($connection)->getMovies();
         } catch (RequestException|ConnectionException $exception) {
             return $this->serviceFailure('radarr', $exception);
         }

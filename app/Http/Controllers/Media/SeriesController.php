@@ -184,7 +184,7 @@ class SeriesController extends BaseArrController
 
     protected function buildClient(ServiceConnection $serviceConnection): SonarrClient
     {
-        return new SonarrClient($serviceConnection);
+        return $this->arrConnections->sonarr($serviceConnection);
     }
 
     protected function connectionFailedMessage(): string

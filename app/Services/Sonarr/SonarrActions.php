@@ -10,6 +10,7 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ArrLibraryActions;
 use App\Services\Arr\ReleaseGrabber;
 use App\Services\Arr\SearchCommandRunner;
@@ -68,7 +69,7 @@ class SonarrActions extends ArrLibraryActions
 
     protected function client(ServiceConnection $serviceConnection): SonarrClient
     {
-        return new SonarrClient($serviceConnection);
+        return resolve(ArrConnections::class)->sonarr($serviceConnection);
     }
 
     protected function cache(ServiceConnection $serviceConnection): SonarrCache
@@ -190,7 +191,7 @@ class SonarrActions extends ArrLibraryActions
 
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
 
-        $sonarrClient = new SonarrClient($serviceConnection);
+        $sonarrClient = resolve(ArrConnections::class)->sonarr($serviceConnection);
 
         // The guard above and the Action Queue card trust series_id; the ids
         // Sonarr acts on must really be that series' (and season's) episodes.
