@@ -82,6 +82,7 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::prefix('library/actions')->name('library.actions.')->group(function (): void {
                 Route::post('monitor', [MediaActionController::class, 'monitor'])->name('monitor');
                 Route::post('monitor-episodes', [MediaActionController::class, 'monitorEpisodes'])->name('monitor-episodes');
+                Route::post('monitor-season', [MediaActionController::class, 'monitorSeason'])->name('monitor-season');
                 Route::post('quality-profile', [MediaActionController::class, 'qualityProfile'])->name('quality-profile');
                 Route::post('search', [MediaActionController::class, 'search'])->name('search');
                 Route::get('releases', [MediaActionController::class, 'releases'])

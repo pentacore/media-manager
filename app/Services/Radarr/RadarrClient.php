@@ -61,6 +61,19 @@ class RadarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * Uncached, concurrent reads of several movies, for a page that shows
+     * what Radarr holds now for many cards at once. One attempt per movie;
+     * null for a movie that could not be read (see fetchResourcesByIds()).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array<string, mixed>|null>
+     */
+    public function fetchMoviesByIds(array $ids): array
+    {
+        return $this->fetchResourcesByIds('movie', $ids);
+    }
+
+    /**
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException

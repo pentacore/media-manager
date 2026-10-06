@@ -76,6 +76,13 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
+                'type' => 'monitor_season',
+                'label' => 'Monitor a Sonarr season',
+                'description' => 'Monitor a series and one of its seasons, then search for that season — from the Seasonal Anime page.',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
                 'type' => 'search_media',
                 'label' => 'Search indexers from Sonarr or Radarr',
                 'description' => 'Start an automatic indexer search for a series, season, episode or movie, or for everything missing or below its quality cutoff.',

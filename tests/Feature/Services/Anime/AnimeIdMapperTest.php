@@ -42,6 +42,7 @@ test('resolveMany maps a tv entry to its tmdb_tv_id and tvdb data', function ():
         'tmdb_tv_id' => 1396,
         'tvdb_id' => 81189,
         'tmdb_season' => 2,
+        'tvdb_season' => 5,
     ]);
 
     $resolved = $this->mapper->resolveMany(collect([anilistEntry(100, 200, AnimeFormat::Tv)]));
@@ -53,6 +54,7 @@ test('resolveMany maps a tv entry to its tmdb_tv_id and tvdb data', function ():
         'mediaType' => 'tv',
         'tvdbId' => 81189,
         'tmdbSeason' => 2,
+        'tvdbSeason' => 5,
         'mapped' => true,
     ]);
 });

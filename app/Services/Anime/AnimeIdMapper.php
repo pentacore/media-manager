@@ -124,6 +124,7 @@ class AnimeIdMapper
             mediaType: $mediaType,
             tvdbId: $animeIdMap->tvdb_id,
             tmdbSeason: $animeIdMap->tmdb_season,
+            tvdbSeason: $animeIdMap->tvdb_season,
         );
     }
 }

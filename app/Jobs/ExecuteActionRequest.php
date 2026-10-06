@@ -67,6 +67,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         'monitor_series' => SonarrActions::class,
         'set_series_quality_profile' => SonarrActions::class,
         'monitor_episodes' => SonarrActions::class,
+        'monitor_season' => SonarrActions::class,
         'search_media' => ArrActions::class,
         'grab_release' => ArrActions::class,
         'delete_movie' => RadarrActions::class,

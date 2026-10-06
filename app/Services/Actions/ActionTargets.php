@@ -38,7 +38,7 @@ final readonly class ActionTargets
      *                           deleted or deactivated connection aborts
      *                           instead of silently falling back to the
      *                           active connection — for action types (like
-     *                           monitor_episodes/search_media/grab_release)
+     *                           monitor_episodes/monitor_season/search_media/grab_release)
      *                           whose executor resolves the same way via
      *                           {@see ServiceConnection::resolvePinnedStrict()}.
      *                           Pre-existing callers leave this false and

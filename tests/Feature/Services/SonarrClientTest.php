@@ -3,6 +3,7 @@
 use App\Models\ServiceConnection;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\StrayRequestException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -169,4 +170,84 @@ test('setEpisodesMonitored PUTs the episode monitor toggle', function (): void {
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['episodeIds'] === [101, 102]
         && $request->data()['monitored'] === false);
+});
+
+test('fetchSeriesByIds maps each id to its series, or null when the series cannot be read', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Frieren', 'monitored' => true]),
+        'sonarr.local:8989/api/v3/series/2' => Http::response(['message' => 'NotFound'], 404),
+        'sonarr.local:8989/api/v3/series/3' => Http::response('<html>Sign in</html>'),
+        'sonarr.local:8989/api/v3/series/4' => Http::response(['message' => 'not a series']),
+        'sonarr.local:8989/api/v3/series/5' => Http::response(null, 503),
+    ]);
+
+    $result = $this->client->fetchSeriesByIds([1, 2, 3, 4, 5]);
+
+    expect($result)->toBe([
+        1 => ['id' => 1, 'title' => 'Frieren', 'monitored' => true],
+        2 => null,
+        3 => null,
+        4 => null,
+        5 => null,
+    ]);
+    // One attempt each: the 503 is not retried.
+    Http::assertSentCount(5);
+    expect(Http::recorded(fn (Request $request): bool => $request->hasHeader('X-Api-Key', 'test-api-key')
+        && str_starts_with($request->header('User-Agent')[0] ?? '', 'MediaManager/')))->toHaveCount(5);
+});
+
+test('fetchSeriesByIds maps a connection failure to null without throwing', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::failedConnection(),
+        'sonarr.local:8989/api/v3/series/2' => Http::response(['id' => 2, 'title' => 'Dandadan']),
+    ]);
+
+    $result = $this->client->fetchSeriesByIds([1, 2]);
+
+    expect($result)->toBe([1 => null, 2 => ['id' => 2, 'title' => 'Dandadan']]);
+});
+
+test('fetchSeriesByIds requests every id when there are more than one batch of ten', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/*' => fn (Request $request) => Http::response(['id' => (int) basename(parse_url($request->url(), PHP_URL_PATH))]),
+    ]);
+
+    $ids = range(1, 23);
+    $result = $this->client->fetchSeriesByIds($ids);
+
+    expect(array_keys($result))->toBe($ids)
+        ->and(array_map(static fn (?array $series): ?int => $series['id'] ?? null, $result))->toBe(array_combine($ids, $ids));
+    Http::assertSentCount(23);
+});
+
+test('fetchSeriesByIds stops after a batch that failed entirely to connect', function (): void {
+    $attempts = 0;
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/*' => function (Request $request) use (&$attempts) {
+            $attempts++;
+
+            return Http::failedConnection()($request);
+        },
+    ]);
+
+    $ids = range(1, 23);
+    $result = $this->client->fetchSeriesByIds($ids);
+
+    expect($result)->toBe(array_fill_keys($ids, null))
+        ->and($attempts)->toBe(10);
+});
+
+test('fetchSeriesByIds keeps asking after a batch of server errors, since the host answered', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series/*' => Http::response(null, 503)]);
+
+    $ids = range(1, 23);
+
+    expect($this->client->fetchSeriesByIds($ids))->toBe(array_fill_keys($ids, null));
+    Http::assertSentCount(23);
+});
+
+test('fetchSeriesByIds does not hide a request no fake answers', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1])]);
+
+    expect(fn (): array => $this->client->fetchSeriesByIds([1, 2]))->toThrow(StrayRequestException::class);
 });

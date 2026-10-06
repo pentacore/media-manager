@@ -66,6 +66,7 @@ dataset('member-only routes', [
     'requests decline' => ['POST', 'media.requests.decline', ['id' => 1]],
     'library monitor' => ['POST', 'media.library.actions.monitor', []],
     'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
+    'library monitor season' => ['POST', 'media.library.actions.monitor-season', []],
     'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
     'library search' => ['POST', 'media.library.actions.search', []],
     'library releases' => ['GET', 'media.library.actions.releases', []],
@@ -91,6 +92,7 @@ dataset('member write routes', [
     'library grab' => ['POST', 'media.library.actions.grab', []],
     'library monitor' => ['POST', 'media.library.actions.monitor', []],
     'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
+    'library monitor season' => ['POST', 'media.library.actions.monitor-season', []],
     'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
     'library bulk' => ['POST', 'media.library.actions.bulk', []],
 ]);

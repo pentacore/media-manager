@@ -11,6 +11,7 @@ test('a mapped entry reports isMapped and serialises all ids', function (): void
         mediaType: 'tv',
         tvdbId: 81189,
         tmdbSeason: 2,
+        tvdbSeason: 3,
     );
 
     expect($mapping->isMapped())->toBeTrue();
@@ -19,6 +20,7 @@ test('a mapped entry reports isMapped and serialises all ids', function (): void
         'mediaType' => 'tv',
         'tvdbId' => 81189,
         'tmdbSeason' => 2,
+        'tvdbSeason' => 3,
         'mapped' => true,
     ]);
 });
@@ -31,6 +33,7 @@ test('unmapped builds a null mapping carrying the format media type', function (
         'mediaType' => 'tv',
         'tvdbId' => null,
         'tmdbSeason' => null,
+        'tvdbSeason' => null,
         'mapped' => false,
     ]);
 
