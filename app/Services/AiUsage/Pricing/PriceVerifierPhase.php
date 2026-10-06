@@ -114,13 +114,19 @@ class PriceVerifierPhase
 
             return null;
         } catch (Throwable $throwable) {
-            // Only providers that depended on the verifier fail; providers that
-            // rode along for anomaly verification keep their stored values and
-            // stay feed-resolved — but their exact-model targets remain
-            // unverified, which still degrades the run to partial.
-            foreach ($priceRefreshLedger->providerLevelFallback as $provider) {
-                $priceRefreshLedger->providerStates[$provider]['status'] = PriceRefreshLedger::PROVIDER_FALLBACK_FAILED;
+            // A mid-agent stop (a budget cap, a provider error, or the time
+            // box) still leaves whatever the agent verified and wrote before
+            // it. Fold that real (possibly partial) coverage into the audit
+            // counters first, then resolve each provider-level fallback from
+            // it exactly like the success path: a provider the agent fully
+            // verified before the stop is reported resolved, not failed —
+            // only the still-uncovered providers fail. Ride-along anomaly
+            // providers keep their feed-resolved status either way.
+            foreach (array_keys($priceRefreshLedger->fallbackTargets) as $provider) {
+                $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
             }
+
+            $this->resolveProviderLevelFallback($priceRefreshLedger, $priceVerificationRun);
 
             $this->recordUnverifiedExactModelTargets($priceRefreshLedger, $priceVerificationRun);
 

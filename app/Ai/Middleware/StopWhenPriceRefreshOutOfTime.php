@@ -14,17 +14,21 @@ use Laravel\Ai\PendingStep;
  * time box no longer fits one more step, so RefreshAiPricesJob ends with a
  * report instead of being killed at its timeout. Throwing makes the SDK
  * dispatch AgentFailed (completed steps are still billed) and
- * PriceVerifierPhase fails the remaining providers, as for a budget stop.
- * The first step is covered by the phase's own check before prompting.
+ * PriceVerifierPhase folds in whatever the agent already verified and wrote,
+ * as for a budget stop.
+ *
+ * Checked on EVERY step, including step 0: a provider failover
+ * (UsesFailoverChain) re-runs the whole agent loop on the fallback provider
+ * starting at step 0 again (laravel/ai's Promptable::withModelFailover()),
+ * so exempting the first step would let that restarted step run unchecked,
+ * possibly well past the deadline. On the very first provider's step 0 this
+ * duplicates the phase's own pre-prompt check, which is harmless.
  */
 final class StopWhenPriceRefreshOutOfTime
 {
     public function handle(PendingStep $pendingStep, Closure $next): mixed
     {
-        throw_if(
-            ! $pendingStep->isFirstStep() && ! resolve(PriceRefreshTimeBox::class)->hasRoomFor(PriceRefreshTimeBox::AGENT_STEP_SECONDS),
-            PriceRefreshOutOfTime::class,
-        );
+        throw_unless(resolve(PriceRefreshTimeBox::class)->hasRoomFor(PriceRefreshTimeBox::AGENT_STEP_SECONDS), PriceRefreshOutOfTime::class);
 
         return $next($pendingStep);
     }

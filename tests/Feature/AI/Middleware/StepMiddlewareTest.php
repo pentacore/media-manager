@@ -163,8 +163,19 @@ test('the price verifier stops before a later step that no longer fits the refre
     resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS - 1);
 
     expect(fn (): mixed => (new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))
-        ->toThrow(PriceRefreshOutOfTime::class)
-        ->and((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ran'))->toBe('ran');
+        ->toThrow(PriceRefreshOutOfTime::class);
+});
+
+test('a provider failover restarting the run at step 0 is checked too, not exempted as the first step', function (): void {
+    $this->freezeTime();
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS - 1);
+
+    // laravel/ai's failover re-runs the whole agent loop on the fallback
+    // provider starting at step 0 again, so step 0 must stop a run just like
+    // any later step once the box no longer fits — it is not exempt as the
+    // overall run's "first step".
+    expect(fn (): mixed => (new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ran'))
+        ->toThrow(PriceRefreshOutOfTime::class);
 });
 
 test('the price verifier keeps going while a step still fits, and when no time box was opened', function (): void {
