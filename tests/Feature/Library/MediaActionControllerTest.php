@@ -470,6 +470,7 @@ test('monitor-season validates its body', function (array $body, string $field):
 })->with([
     'missing season' => [['season_number' => null], 'season_number'],
     'negative season' => [['season_number' => -1], 'season_number'],
+    'non-integer season' => [['season_number' => 'abc'], 'season_number'],
     'bad series' => [['series_id' => 0], 'series_id'],
 ]);
 

@@ -225,6 +225,22 @@ test('a series indexed on both connections resolves against the active one', fun
     Http::assertSentCount(1);
 });
 
+test('a series held only on a second active Sonarr connection is read live from it but is not on the primary', function (): void {
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-anime.local:8989', 'api_key' => 'k']);
+    IndexedSeries::factory()->for($secondSonarr, 'serviceConnection')->create(['sonarr_id' => 9, 'tvdb_id' => 81189, 'monitored' => true]);
+    Http::fake(['sonarr-anime.local:8989/api/v3/series/9' => Http::response(seasonLibrarySeries(9, true, [['seasonNumber' => 2, 'monitored' => false]]))]);
+
+    $result = (new SeasonLibraryStatus)->resolve([seasonLibraryRow('anilist:1', 'tv', 1396, 81189, 2)]);
+
+    expect($result['anilist:1'])->toBe([
+        'status' => 'unmonitored',
+        'unmonitoredScope' => 'season',
+        'library' => ['service' => 'sonarr', 'itemId' => 9, 'connectionId' => $secondSonarr->id, 'seasonNumber' => 2, 'onActiveConnection' => false],
+    ]);
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'http://sonarr-anime.local:8989/api/v3/series/9');
+    Http::assertSentCount(1);
+});
+
 test('an unmonitored Radarr movie is unmonitored at movie scope', function (): void {
     IndexedMovie::factory()->for($this->radarr, 'serviceConnection')->create(['radarr_id' => 10, 'tmdb_id' => 4935, 'monitored' => true]);
     Http::fake(['radarr.local:7878/api/v3/movie/10' => Http::response(['id' => 10, 'title' => 'Movie', 'monitored' => false])]);
