@@ -217,7 +217,7 @@ class ServiceConnection extends Model
     /**
      * Strict variant of {@see resolvePinned()} for action types that must
      * never silently redirect to a different instance than the one named in
-     * the payload: monitor_episodes/search_media/grab_release act on ids
+     * the payload: monitor_episodes/monitor_season/search_media/grab_release act on ids
      * (episode/release guids) that are meaningless against the wrong
      * instance, unlike monitor_series/monitor_movie's cross-service
      * resolveActive() fallback, which exists for actions that can

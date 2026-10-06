@@ -143,9 +143,11 @@ class SonarrActions extends ArrLibraryActions
      */
     protected function executeOther(ActionRequest $actionRequest): array
     {
-        return $actionRequest->type === 'monitor_episodes'
-            ? $this->monitorEpisodes($actionRequest->payload)
-            : parent::executeOther($actionRequest);
+        return match ($actionRequest->type) {
+            'monitor_episodes' => $this->monitorEpisodes($actionRequest->payload),
+            'monitor_season' => $this->monitorSeason($actionRequest->payload),
+            default => parent::executeOther($actionRequest),
+        };
     }
 
     /**
@@ -205,6 +207,58 @@ class SonarrActions extends ArrLibraryActions
             'sonarr_series_id' => $seriesId,
             'episode_ids' => $episodeIds,
             'monitored' => $monitored,
+        ];
+    }
+
+    /**
+     * Monitor the series and one of its seasons, then search that season.
+     * Sonarr cascades a season's monitored flag to its episodes on update.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function monitorSeason(array $payload): array
+    {
+        $seriesId = PayloadInt::required($payload, 'series_id');
+        $seasonNumber = is_numeric($payload['season_number'] ?? null) ? (int) $payload['season_number'] : -1;
+
+        throw_if($seasonNumber < 0, InvalidArgumentException::class, 'season_number is required');
+
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Sonarr);
+
+        throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
+
+        $sonarrClient = new SonarrClient($serviceConnection);
+        $series = $sonarrClient->fetchSeriesById($seriesId);
+        $seasons = is_array($series['seasons'] ?? null) ? $series['seasons'] : [];
+        $found = false;
+
+        foreach ($seasons as $index => $season) {
+            if (is_array($season) && (int) ($season['seasonNumber'] ?? -1) === $seasonNumber) {
+                $seasons[$index]['monitored'] = true;
+                $found = true;
+            }
+        }
+
+        throw_unless($found, InvalidArgumentException::class, sprintf('Series %d has no season %d', $seriesId, $seasonNumber));
+
+        $series['monitored'] = true;
+        $series['seasons'] = $seasons;
+        $sonarrClient->updateSeries($seriesId, $series);
+
+        $this->searchCommandRunner->run(
+            $sonarrClient,
+            'sonarr',
+            MediaSearchCommand::SeasonSearch,
+            MediaSearchCommand::SeasonSearch->arrParameters(['series_id' => $seriesId, 'season_number' => $seasonNumber]),
+        );
+
+        new SonarrCache($serviceConnection)->bustAll();
+
+        return [
+            'sonarr_series_id' => $seriesId,
+            'season_number' => $seasonNumber,
+            'monitored' => true,
         ];
     }
 
