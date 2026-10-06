@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\WhisparrVersion;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrUnexpectedResponse;
 use App\Services\Whisparr\WhisparrClient;
-use App\Services\Whisparr\WhisparrUnexpectedResponse;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -55,9 +55,9 @@ test('a 200 read whose body is not JSON data throws instead of reading as empty,
     $whisparrClient = new WhisparrClient($connection);
 
     expect(fn (): array => $whisparrClient->{$method}(...($method === 'getItemById' ? [11] : ($method === 'searchItems' ? ['tmdb:1'] : []))))
-        ->toThrow(WhisparrUnexpectedResponse::class)
+        ->toThrow(ArrUnexpectedResponse::class, 'Whisparr answered with a body that is not JSON data.')
         ->and(fn (): array => $whisparrClient->{$method}(...($method === 'getItemById' ? [11] : ($method === 'searchItems' ? ['tmdb:1'] : []))))
-        ->toThrow(WhisparrUnexpectedResponse::class);
+        ->toThrow(ArrUnexpectedResponse::class);
 
     // Both calls went upstream: the failure never entered the cache.
     Http::assertSentCount(2);

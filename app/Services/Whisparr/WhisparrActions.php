@@ -9,6 +9,7 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Support\PayloadInt;
 use InvalidArgumentException;
 
 class WhisparrActions implements ActionExecutor
@@ -34,8 +35,7 @@ class WhisparrActions implements ActionExecutor
     private function deleteItem(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $itemId = (int) ($payload['whisparr_item_id'] ?? 0);
-        throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
+        $itemId = PayloadInt::required($payload, 'whisparr_item_id');
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
@@ -51,8 +51,7 @@ class WhisparrActions implements ActionExecutor
     private function addItem(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $tmdbId = (int) ($payload['tmdb_id'] ?? 0);
-        throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
+        $tmdbId = PayloadInt::required($payload, 'tmdb_id');
 
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
@@ -80,8 +79,7 @@ class WhisparrActions implements ActionExecutor
     private function monitorItem(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $itemId = (int) ($payload['whisparr_item_id'] ?? 0);
-        throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
+        $itemId = PayloadInt::required($payload, 'whisparr_item_id');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
@@ -100,10 +98,8 @@ class WhisparrActions implements ActionExecutor
     private function setQualityProfile(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $itemId = (int) ($payload['whisparr_item_id'] ?? 0);
-        $qualityProfileId = (int) ($payload['quality_profile_id'] ?? 0);
-        throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
-        throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
+        $itemId = PayloadInt::required($payload, 'whisparr_item_id');
+        $qualityProfileId = PayloadInt::required($payload, 'quality_profile_id');
 
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
@@ -121,8 +117,7 @@ class WhisparrActions implements ActionExecutor
     private function search(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $itemId = (int) ($payload['whisparr_item_id'] ?? 0);
-        throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
+        $itemId = PayloadInt::required($payload, 'whisparr_item_id');
 
         // Item ids overlap between Whisparr instances: a search only ever
         // runs against the pinned connection, never "the active one".

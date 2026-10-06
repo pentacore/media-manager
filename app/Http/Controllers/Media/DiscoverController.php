@@ -64,7 +64,7 @@ class DiscoverController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return response()->json(['message' => __('No active Seerr connection configured.')], 422);
+            return response()->json(['message' => $this->noActiveConnectionMessage(ServiceType::Seerr)], 422);
         }
 
         $seerrClient = new SeerrClient($connection);
@@ -99,7 +99,7 @@ class DiscoverController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('No active Seerr connection configured.'));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->noActiveConnectionMessage(ServiceType::Seerr));
         }
 
         $context = $seerrUserResolver->requestingContext($connection, $user);

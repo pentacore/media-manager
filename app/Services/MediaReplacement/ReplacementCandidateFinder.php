@@ -8,8 +8,7 @@ use App\Enums\MediaReplacementScope;
 use App\Enums\SeasonPackPolicy;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Settings\MediaReplacementSettings;
 use InvalidArgumentException;
 
@@ -25,6 +24,7 @@ final readonly class ReplacementCandidateFinder
         private MediaReplacementSettings $mediaReplacementSettings,
         private ReleaseCandidateRanker $releaseCandidateRanker,
         private ReleaseFingerprint $releaseFingerprint,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -171,11 +171,13 @@ final readonly class ReplacementCandidateFinder
     {
         $serviceConnection ??= $this->connectionFor($service, $target);
 
-        return match ($service) {
-            'sonarr' => new SonarrClient($serviceConnection)->getReleases($this->sonarrSearchParams($target)),
-            'radarr' => new RadarrClient($serviceConnection)->getReleases(['movieId' => (int) ($target['movie_id'] ?? 0)]),
-            default => throw new InvalidArgumentException('target service must be "sonarr" or "radarr".'),
-        };
+        throw_unless(in_array($service, ['sonarr', 'radarr'], true), InvalidArgumentException::class, 'target service must be "sonarr" or "radarr".');
+
+        return $this->arrConnections->client($serviceConnection)->getReleases(
+            $service === 'sonarr'
+                ? $this->sonarrSearchParams($target)
+                : ['movieId' => (int) ($target['movie_id'] ?? 0)],
+        );
     }
 
     /**

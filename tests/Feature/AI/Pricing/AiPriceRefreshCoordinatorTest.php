@@ -9,6 +9,8 @@ use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
+use App\Services\AiUsage\Pricing\InUsePricingModels;
+use App\Services\AiUsage\Pricing\PriceRefreshFallbackQueue;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
 use Illuminate\Http\Client\Request;
@@ -1615,4 +1617,52 @@ test('characterization: the coordinator carries no state from one run into the n
     expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->unverified_targets)->toBeNull()
         ->and($refreshReport->fallbackProviders)->toBe([])
         ->and(array_keys(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results))->toBe(['anthropic']);
+});
+
+test('a DB error after the verifier tally does not double-count the agent outcomes', function (): void {
+    // Zero stored openai rows: PriceVerifierPhase::run() calls
+    // storedModels('openai') four times for this scenario — once in
+    // providerChecklists() (pre-agent, building the prompt checklist), twice
+    // inside the try's resolveProviderLevelFallback() (uncoveredStoredModels()
+    // then the resolved-ternary), and twice more when the catch retries
+    // resolveProviderLevelFallback() after a stop. Call #2 (the first one
+    // AFTER the tally loop already ran) is made to throw, simulating the DB
+    // error the review named; later calls succeed, so the catch's retry
+    // still resolves the provider.
+    fakeVerifierWrites(['openai' => ['gpt-fresh']]);
+    fakeFeed([]);
+
+    $calls = new stdClass;
+    $calls->count = 0;
+
+    $mock = Mockery::mock(PriceRefreshFallbackQueue::class, [resolve(InUsePricingModels::class)])->makePartial();
+    $mock->shouldReceive('storedModels')
+        ->with('openai')
+        ->times(4)
+        ->andReturnUsing(function () use ($calls): array {
+            $calls->count++;
+
+            throw_if($calls->count === 2, RuntimeException::class, 'simulated DB error');
+
+            return [];
+        });
+
+    $this->instance(PriceRefreshFallbackQueue::class, $mock);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai']));
+
+    // The catch's retry still resolves the only requested provider, so the
+    // run reads succeeded overall — and a succeeded run clears the stray
+    // "simulated DB error" message rather than reporting an error alongside
+    // a clean result (see the AiPriceRefreshCoordinator::finalize() fix for
+    // a succeeded run carrying an out-of-time message).
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->errorMessage)->toBeNull();
+
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+
+    // A single tally of one receipt-backed Created write — doubled would read 2.
+    expect($aiPriceRefreshRun->provider_results['openai']['created'])->toBe(1)
+        ->and($aiPriceRefreshRun->models_created)->toBe(1)
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback');
 });

@@ -8,8 +8,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -54,9 +53,7 @@ class GetDownloadHistoryTool extends BaseTool
         };
 
         $serviceConnection = ServiceConnection::resolveActive($type);
-        $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = resolve(ArrConnections::class)->client($serviceConnection);
 
         $page = max(1, (int) ($args['page'] ?? 1));
         $pageSize = max(1, min(self::MAX_PAGE_SIZE, (int) ($args['page_size'] ?? self::DEFAULT_PAGE_SIZE)));

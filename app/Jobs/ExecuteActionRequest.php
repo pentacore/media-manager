@@ -11,6 +11,7 @@ use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\ActionRequestActivityLogger;
 use App\Services\Arr\ArrActions;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
@@ -152,14 +153,28 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             ]);
 
             return;
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // The arr answered the write with something other than its API
+            // data (usually a proxy login page). Whether the change landed is
+            // unknown, so it is never retried: a second send could repeat it.
+            $this->markFailed([
+                'reason' => 'needs_reconciliation',
+                'message' => $arrWriteUnconfirmed->getMessage(),
+                'indeterminate' => true,
+                'exception' => ArrWriteUnconfirmed::class,
+            ]);
+
+            return;
         } catch (ConnectionException|RequestException $exception) {
             // Only a deterministic 4xx is permanent (deleting an
             // already-removed series will 404 on every attempt) — retrying
             // it three times with backoff just delayed the Failed state and
             // mislabeled it retries_exhausted. Everything else retries:
             // connection loss, upstream 5xx, and a 200 that isn't usable
-            // data (ArrUnexpectedResponse/SabnzbdRefused) — the same policy
-            // as BaseArrController::upstreamFailureMessage(), which treats
+            // data (ArrUnexpectedResponse/SabnzbdRefused) — an unconfirmed
+            // write (ArrWriteUnconfirmed) is caught above and never reaches
+            // here — the same policy as
+            // BaseArrController::upstreamFailureMessage(), which treats
             // anything short of a clientError() as an outage, not a refusal.
             $transient = ! $exception instanceof RequestException || ! $exception->response->clientError();
 

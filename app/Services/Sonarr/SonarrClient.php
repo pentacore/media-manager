@@ -6,6 +6,7 @@ namespace App\Services\Sonarr;
 
 use App\Cache\Services\SonarrCache;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Support\Cache\Warmable;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -77,33 +78,33 @@ class SonarrClient extends ArrClient implements Warmable
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function addSeries(array $data): array
     {
         // Write — not cached; bust handled by SonarrActions.
-        return $this->buildClient()->post(sprintf('/api/%s/series', $this->apiVersion), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->post(sprintf('/api/%s/series', $this->apiVersion), $data)->throw());
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateSeries(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('/api/%s/series/%d', $this->apiVersion, $id), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->put(sprintf('/api/%s/series/%d', $this->apiVersion, $id), $data)->throw());
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteSeries(int $id, bool $deleteFiles = false): void
     {
         $query = http_build_query(['deleteFiles' => $deleteFiles ? 'true' : 'false']);
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/series/%d?%s', $this->apiVersion, $id, $query))
-            ->throw();
+            ->throw());
     }
 
     /**
@@ -303,13 +304,13 @@ class SonarrClient extends ArrClient implements Warmable
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteEpisodeFile(int $episodeFileId): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
-            ->throw();
+            ->throw());
     }
 
     /**
@@ -318,16 +319,16 @@ class SonarrClient extends ArrClient implements Warmable
      *
      * @param  array<int, int>  $episodeIds
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function setEpisodesMonitored(array $episodeIds, bool $monitored): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->put(sprintf('/api/%s/episode/monitor', $this->apiVersion), [
                 'episodeIds' => array_values($episodeIds),
                 'monitored' => $monitored,
             ])
-            ->throw();
+            ->throw());
     }
 
     /**

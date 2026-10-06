@@ -21,8 +21,10 @@ use Throwable;
  * HTTP 429, and HTTP 5xx). Deterministic client errors (non-429 4xx),
  * oversized bodies, and invalid JSON are never retried.
  */
-final class PricingFeedFetcher
+final readonly class PricingFeedFetcher
 {
+    public function __construct(private PriceRefreshTimeBox $priceRefreshTimeBox) {}
+
     /**
      * @param  string  $configKey  Key under `mediamanager.ai.pricing` holding url, timeouts, retries, and max_response_bytes.
      * @param  string  $sourceLabel  Human-readable source name used in failure messages.
@@ -42,6 +44,15 @@ final class PricingFeedFetcher
         $url = (string) config(sprintf('%s.url', $configPath));
 
         $attempts = max(1, $retries + 1);
+
+        // A queued refresh is time-boxed (RefreshAiPricesJob): skip a source
+        // whose worst case — every attempt timing out, plus the 1 s, 2 s, …
+        // back-off between them — no longer fits, instead of being killed.
+        $worstCaseSeconds = $attempts * $timeout + intdiv($attempts * ($attempts - 1), 2);
+
+        if (! $this->priceRefreshTimeBox->hasRoomFor($worstCaseSeconds)) {
+            throw PricingTransportException::outOfTime($sourceLabel);
+        }
 
         try {
             $response = Http::acceptJson()

@@ -14,6 +14,7 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
 use App\Services\Bazarr\SubtitleCaseSupersession;
@@ -21,9 +22,7 @@ use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Services\Prowlarr\ProwlarrClient;
-use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -94,6 +93,7 @@ class ServiceConnectionController extends Controller
         ServiceConnection $serviceConnection,
         SonarrRootFolderCatalog $sonarrRootFolderCatalog,
         SubtitleCheckTagSettings $subtitleCheckTagSettings,
+        ArrConnections $arrConnections,
     ): Response {
         $serviceConnection->load('bazarrServiceLinks');
 
@@ -156,7 +156,7 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
             'arrTags' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
-                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection))
+                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection, $arrConnections))
                 : null,
             'subtitleCheckTags' => $subtitleCheckTagSettings->forConnection($serviceConnection),
         ]);
@@ -179,16 +179,14 @@ class ServiceConnectionController extends Controller
      *
      * @return list<array{id: int, label: string}>|null
      */
-    private function arrTags(ServiceConnection $serviceConnection): ?array
+    private function arrTags(ServiceConnection $serviceConnection, ArrConnections $arrConnections): ?array
     {
         if (! $serviceConnection->is_active) {
             return null;
         }
 
         try {
-            $tags = $serviceConnection->type === ServiceType::Sonarr
-                ? new SonarrClient($serviceConnection)->getTags()
-                : new RadarrClient($serviceConnection)->getTags();
+            $tags = $arrConnections->client($serviceConnection)->getTags();
         } catch (Throwable $throwable) {
             Log::warning('Failed to load arr tags for connection edit page', [
                 'connection_id' => $serviceConnection->id,

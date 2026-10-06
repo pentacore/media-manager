@@ -170,7 +170,7 @@ class MovieController extends BaseArrController
 
     protected function buildClient(ServiceConnection $serviceConnection): RadarrClient
     {
-        return new RadarrClient($serviceConnection);
+        return $this->arrConnections->radarr($serviceConnection);
     }
 
     protected function connectionFailedMessage(): string

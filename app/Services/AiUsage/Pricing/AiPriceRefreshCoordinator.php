@@ -256,6 +256,15 @@ final readonly class AiPriceRefreshCoordinator
             );
         }
 
+        // A fully succeeded run (every provider resolved, nothing left
+        // unverified) must not carry a stale error message — e.g. the
+        // verifier's "ran out of time" notice when the stop landed after
+        // every provider had already resolved. A failed or partial run keeps
+        // whatever message it earned above.
+        if ($finalResult === RefreshReport::RESULT_SUCCEEDED) {
+            $errorMessage = null;
+        }
+
         $aiPriceRefreshRun->fill([
             'status' => $finalResult,
             'models_dev_status' => $modelsDevStatus,

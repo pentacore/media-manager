@@ -25,6 +25,7 @@ class PriceVerifierPhase
     public function __construct(
         private readonly AiBudgetGuard $aiBudgetGuard,
         private readonly PriceRefreshFallbackQueue $priceRefreshFallbackQueue,
+        private readonly PriceRefreshTimeBox $priceRefreshTimeBox,
     ) {}
 
     /**
@@ -58,7 +59,18 @@ class PriceVerifierPhase
         // the agent phase aborts before (or while) prompting.
         $priceVerificationRun = new PriceVerificationRun;
 
+        // The try's own tally loop (below) already folds the agent's outcomes
+        // into the ledger; if a later statement in the try throws (a DB error
+        // in the legacy-safety-net count(), for example), the catch must not
+        // tally again — applyAgentTally() is additive, so a repeat run would
+        // double every counter and append each unverified target twice.
+        $tallied = false;
+
         try {
+            // A queued refresh must still fit one verifier step, or the job
+            // would be killed mid-agent; the catch below fails the providers.
+            throw_unless($this->priceRefreshTimeBox->hasRoomFor(PriceRefreshTimeBox::AGENT_STEP_SECONDS), PriceRefreshOutOfTime::class);
+
             // The 40-step, fetch-heavy verifier must respect the monthly
             // budget like every other AI entry point.
             $this->aiBudgetGuard->enforce();
@@ -88,6 +100,8 @@ class PriceVerifierPhase
                 $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
             }
 
+            $tallied = true;
+
             // Resolve every provider-level fallback target from the ledger's
             // VERIFICATION-GRADE outcomes (a wildcard provider must cover every
             // stored row; an exact-model provider must cover its listed models).
@@ -109,13 +123,21 @@ class PriceVerifierPhase
 
             return null;
         } catch (Throwable $throwable) {
-            // Only providers that depended on the verifier fail; providers that
-            // rode along for anomaly verification keep their stored values and
-            // stay feed-resolved — but their exact-model targets remain
-            // unverified, which still degrades the run to partial.
-            foreach ($priceRefreshLedger->providerLevelFallback as $provider) {
-                $priceRefreshLedger->providerStates[$provider]['status'] = PriceRefreshLedger::PROVIDER_FALLBACK_FAILED;
+            // A mid-agent stop (a budget cap, a provider error, or the time
+            // box) still leaves whatever the agent verified and wrote before
+            // it. Fold that real (possibly partial) coverage into the audit
+            // counters first, then resolve each provider-level fallback from
+            // it exactly like the success path: a provider the agent fully
+            // verified before the stop is reported resolved, not failed —
+            // only the still-uncovered providers fail. Ride-along anomaly
+            // providers keep their feed-resolved status either way.
+            if (! $tallied) {
+                foreach (array_keys($priceRefreshLedger->fallbackTargets) as $provider) {
+                    $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
+                }
             }
+
+            $this->resolveProviderLevelFallback($priceRefreshLedger, $priceVerificationRun);
 
             $this->recordUnverifiedExactModelTargets($priceRefreshLedger, $priceVerificationRun);
 

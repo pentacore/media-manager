@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -18,6 +19,8 @@ use InvalidArgumentException;
 
 abstract class BaseArrController extends Controller
 {
+    public function __construct(protected readonly ArrConnections $arrConnections) {}
+
     abstract protected function serviceType(): ServiceType;
 
     abstract protected function buildClient(ServiceConnection $serviceConnection): SonarrClient|RadarrClient;

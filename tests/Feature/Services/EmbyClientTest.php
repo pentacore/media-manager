@@ -2,6 +2,7 @@
 
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
+use App\Services\Emby\EmbyUnexpectedResponse;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -136,4 +137,32 @@ test('markItemUnplayed DELETEs the PlayedItems endpoint', function (): void {
     expect($result['Played'])->toBeFalse();
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/Users/user1/PlayedItems/item1'));
+});
+
+test('a 200 user list that is not a JSON list is a RequestException with a fixed message that never quotes the body', function (): void {
+    Http::fake(['emby.local:8096/Users' => Http::response('<html>Sign in at /sso/login?token=abc</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => $this->client->getUsers())->toThrow(function (EmbyUnexpectedResponse $embyUnexpectedResponse): void {
+        expect($embyUnexpectedResponse)->toBeInstanceOf(RequestException::class)
+            ->and($embyUnexpectedResponse->response->status())->toBe(200)
+            ->and($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not a JSON user list.');
+
+        $embyUnexpectedResponse->report();
+
+        expect($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not a JSON user list.');
+    });
+});
+
+test('a 200 system info that is not JSON data is a RequestException with a fixed message that never quotes the body', function (): void {
+    Http::fake(['emby.local:8096/System/Info' => Http::response('<html>Sign in at /sso/login?token=abc</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => $this->client->getSystemInfo())->toThrow(function (EmbyUnexpectedResponse $embyUnexpectedResponse): void {
+        expect($embyUnexpectedResponse)->toBeInstanceOf(RequestException::class)
+            ->and($embyUnexpectedResponse->response->status())->toBe(200)
+            ->and($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not JSON data.');
+
+        $embyUnexpectedResponse->report();
+
+        expect($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not JSON data.');
+    });
 });

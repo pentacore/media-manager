@@ -8,9 +8,8 @@ use App\Ai\Decision\DecisionRunContext;
 use App\Enums\ServiceType;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ManualImportResolver;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -84,9 +83,7 @@ class ResolveManualImportTool extends DecisionTool
 
         try {
             $connection = $decisionRunContext->resolveConnection($type);
-            $client = $type === ServiceType::Sonarr
-                ? new SonarrClient($connection)
-                : new RadarrClient($connection);
+            $client = resolve(ArrConnections::class)->client($connection);
             $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         } catch (Throwable $throwable) {
             Log::warning('ResolveManualImportTool: candidate lookup failed', [

@@ -197,9 +197,11 @@ class AiModelPriceController extends Controller
      * Apply the same automatic-updates, free-pool and rate-limit settings to
      * every selected row; a field the request leaves out stays unchanged.
      * Like the single-row edit, toggling automatic updates only flips the
-     * lock and never rewrites the stored price's pricing_source.
+     * lock and never rewrites the stored price's pricing_source, and every
+     * changed row gets the single edit's audit row (marked bulk), committed
+     * with the change.
      */
-    public function bulkUpdate(BulkUpdateAiModelPriceRequest $bulkUpdateAiModelPriceRequest): RedirectResponse
+    public function bulkUpdate(BulkUpdateAiModelPriceRequest $bulkUpdateAiModelPriceRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $bulkUpdateAiModelPriceRequest->validated();
         $ids = Arr::pull($validated, 'ids');
@@ -212,16 +214,28 @@ class AiModelPriceController extends Controller
             $attributes['is_price_locked'] = ! $automaticUpdatesEnabled;
         }
 
-        DB::transaction(function () use ($ids, $attributes, $rateLimits): void {
-            if ($attributes !== []) {
-                AiModelPrice::query()->whereKey($ids)->update($attributes);
-            }
+        DB::transaction(function () use ($ids, $attributes, $rateLimits, $auditLogger): void {
+            $aiModelPrices = AiModelPrice::query()->whereKey($ids)->orderBy('id')->lockForUpdate()->get();
 
-            if ($rateLimits !== null) {
-                AiModelPrice::query()->whereKey($ids)->get()->each(function (AiModelPrice $aiModelPrice) use ($rateLimits): void {
+            foreach ($aiModelPrices as $aiModelPrice) {
+                $before = $this->auditSnapshot($aiModelPrice);
+
+                if ($attributes !== []) {
+                    $aiModelPrice->update($attributes);
+                }
+
+                if ($rateLimits !== null) {
                     $aiModelPrice->rateLimits()->delete();
                     $aiModelPrice->rateLimits()->createMany($rateLimits);
-                });
+                }
+
+                $auditLogger->settingsUpdated(
+                    SettingsGroup::AiModelPrices,
+                    $before,
+                    $this->auditSnapshot($aiModelPrice),
+                    ['operation' => 'updated', 'record_id' => $aiModelPrice->id, 'bulk' => true],
+                    sprintf('Updated the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+                );
             }
         });
 
@@ -233,11 +247,33 @@ class AiModelPriceController extends Controller
         return to_route('admin.ai-prices.index');
     }
 
-    public function bulkDestroy(BulkDestroyAiModelPriceRequest $bulkDestroyAiModelPriceRequest): RedirectResponse
+    /**
+     * Remove every selected row with the single delete's audit row (marked
+     * bulk), all in one transaction. Rate limits go with their price
+     * (cascading foreign key).
+     */
+    public function bulkDestroy(BulkDestroyAiModelPriceRequest $bulkDestroyAiModelPriceRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $bulkDestroyAiModelPriceRequest->validated();
 
-        $removed = AiModelPrice::query()->whereKey($validated['ids'])->delete();
+        $removed = DB::transaction(function () use ($validated, $auditLogger): int {
+            $aiModelPrices = AiModelPrice::query()->whereKey($validated['ids'])->orderBy('id')->lockForUpdate()->get();
+
+            foreach ($aiModelPrices as $aiModelPrice) {
+                $before = $this->auditSnapshot($aiModelPrice);
+                $aiModelPrice->delete();
+
+                $auditLogger->settingsUpdated(
+                    SettingsGroup::AiModelPrices,
+                    $before,
+                    [],
+                    ['operation' => 'deleted', 'record_id' => $aiModelPrice->id, 'bulk' => true],
+                    sprintf('Removed the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+                );
+            }
+
+            return $aiModelPrices->count();
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -357,14 +393,17 @@ class AiModelPriceController extends Controller
 
     /**
      * The price row plus its rate limits, which the edit form replaces as a
-     * whole, so they diff as one list.
+     * whole, so they diff as one list. `automatic_updates_enabled` is derived
+     * from `is_price_locked` (the model appends it for display), so it is
+     * excluded here — otherwise every lock toggle would double up as two
+     * "changed" fields instead of one.
      *
      * @return array<string, mixed>
      */
     private function auditSnapshot(AiModelPrice $aiModelPrice): array
     {
         return [
-            ...AuditChanges::snapshot($aiModelPrice),
+            ...Arr::except(AuditChanges::snapshot($aiModelPrice), ['automatic_updates_enabled']),
             'rate_limits' => $aiModelPrice->rateLimits()
                 ->orderBy('id')
                 ->get()

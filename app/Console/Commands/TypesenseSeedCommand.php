@@ -8,10 +8,9 @@ use App\Enums\ServiceType;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -25,7 +24,7 @@ use Throwable;
         {--fresh : Truncate the indexed_* rows for the targeted connections first}')]
 class TypesenseSeedCommand extends Command
 {
-    public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer): int
+    public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer, ArrConnections $arrConnections): int
     {
         $service = $this->option('service') ?: 'all';
         $connectionId = $this->option('connection');
@@ -43,11 +42,11 @@ class TypesenseSeedCommand extends Command
         $movieCount = 0;
 
         if (in_array($service, ['sonarr', 'all'], true)) {
-            $sonarrCount = $this->seedSonarr($seriesIndexer, $connectionId, $fresh);
+            $sonarrCount = $this->seedSonarr($seriesIndexer, $arrConnections, $connectionId, $fresh);
         }
 
         if (in_array($service, ['radarr', 'all'], true)) {
-            $movieCount = $this->seedRadarr($movieIndexer, $connectionId, $fresh);
+            $movieCount = $this->seedRadarr($movieIndexer, $arrConnections, $connectionId, $fresh);
         }
 
         if ($sonarrCount > 0) {
@@ -65,7 +64,7 @@ class TypesenseSeedCommand extends Command
         return self::SUCCESS;
     }
 
-    private function seedSonarr(SeriesIndexer $seriesIndexer, ?int $connectionId, bool $fresh): int
+    private function seedSonarr(SeriesIndexer $seriesIndexer, ArrConnections $arrConnections, ?int $connectionId, bool $fresh): int
     {
         $count = 0;
 
@@ -77,7 +76,7 @@ class TypesenseSeedCommand extends Command
             }
 
             try {
-                $items = new SonarrClient($connection)->getSeries();
+                $items = $arrConnections->sonarr($connection)->getSeries();
             } catch (Throwable $throwable) {
                 $this->warn(sprintf('Sonarr fetch failed for connection #%d: %s', $connection->id, $throwable->getMessage()));
 
@@ -101,7 +100,7 @@ class TypesenseSeedCommand extends Command
         return $count;
     }
 
-    private function seedRadarr(MovieIndexer $movieIndexer, ?int $connectionId, bool $fresh): int
+    private function seedRadarr(MovieIndexer $movieIndexer, ArrConnections $arrConnections, ?int $connectionId, bool $fresh): int
     {
         $count = 0;
 
@@ -113,7 +112,7 @@ class TypesenseSeedCommand extends Command
             }
 
             try {
-                $items = new RadarrClient($connection)->getMovies();
+                $items = $arrConnections->radarr($connection)->getMovies();
             } catch (Throwable $throwable) {
                 $this->warn(sprintf('Radarr fetch failed for connection #%d: %s', $connection->id, $throwable->getMessage()));
 

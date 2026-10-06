@@ -67,6 +67,15 @@ final class PricingTransportException extends RuntimeException
      */
     public const string CATEGORY_NOT_CONFIGURED = 'not_configured';
 
+    /**
+     * A queued refresh's time box no longer fit this source's worst case, so
+     * no request was made. Distinct from CATEGORY_TIMEOUT (an upstream call
+     * that was actually attempted and did not finish in time): reusing that
+     * category would read as if this source was contacted and timed out. It
+     * still escalates like any other failure (not CATEGORY_NOT_CONFIGURED).
+     */
+    public const string CATEGORY_SKIPPED_OUT_OF_TIME = 'skipped_out_of_time';
+
     private function __construct(
         public readonly string $category,
         string $message,
@@ -137,6 +146,19 @@ final class PricingTransportException extends RuntimeException
         return new self(
             category: self::CATEGORY_INVALID_SHAPE,
             message: sprintf('%s pricing response was not %s.', $source, $expected),
+        );
+    }
+
+    /**
+     * A queued refresh's time box no longer fits this source's worst case,
+     * so no request was made. Skipped, not a timeout: the source still
+     * escalates like any other feed failure.
+     */
+    public static function outOfTime(string $source): self
+    {
+        return new self(
+            category: self::CATEGORY_SKIPPED_OUT_OF_TIME,
+            message: sprintf('Skipped the %s pricing API: the price refresh ran out of time.', $source),
         );
     }
 

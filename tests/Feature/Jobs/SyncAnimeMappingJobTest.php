@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -263,4 +265,22 @@ test('job has unique-for duration', function (): void {
     $reflection = new ReflectionClass($job);
 
     expect($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1800);
+});
+
+test('a dataset mirror that keeps failing is tried twice per run, not three times', function (): void {
+    Sleep::fake();
+    Http::fake(['fribb.test/*' => Http::response('', 503)]);
+
+    expect(fn (): int => (new SyncAnimeMappingJob)->handle())->toThrow(RequestException::class);
+
+    Http::assertSentCount(2);
+});
+
+test('the worst-case download leaves at least a minute of the job timeout to parse and write', function (): void {
+    $perAttemptSeconds = new ReflectionClassConstant(SyncAnimeMappingJob::class, 'FETCH_TIMEOUT_SECONDS')->getValue();
+    $attempts = new ReflectionClassConstant(SyncAnimeMappingJob::class, 'FETCH_ATTEMPTS')->getValue();
+    // retry() sleeps $attempt * 500 ms after every attempt but the last.
+    $backOffSeconds = 0.5 * $attempts * ($attempts - 1) / 2;
+
+    expect($attempts * $perAttemptSeconds + $backOffSeconds)->toBeLessThanOrEqual((new SyncAnimeMappingJob)->timeout - 60);
 });

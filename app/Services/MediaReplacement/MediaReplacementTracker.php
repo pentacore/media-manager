@@ -12,9 +12,8 @@ use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\Arr\ArrConnections;
 use App\Services\Notifications\AdminNotifier;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +45,7 @@ final readonly class MediaReplacementTracker
         private LanguageNormalizer $languageNormalizer,
         private CompetingGrabSweeper $competingGrabSweeper,
         private AdminNotifier $adminNotifier,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -752,7 +752,7 @@ final readonly class MediaReplacementTracker
                 $movieId = (int) ($target['movie_id'] ?? 0);
 
                 if ($movieId > 0) {
-                    new RadarrClient($serviceConnection)->setMovieMonitored($movieId, true);
+                    $this->arrConnections->radarr($serviceConnection)->setMovieMonitored($movieId, true);
                 }
 
                 return true;
@@ -761,7 +761,7 @@ final readonly class MediaReplacementTracker
             $episodeIds = array_values(array_map(intval(...), is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : []));
 
             if ($episodeIds !== []) {
-                new SonarrClient($serviceConnection)->setEpisodesMonitored($episodeIds, true);
+                $this->arrConnections->sonarr($serviceConnection)->setEpisodesMonitored($episodeIds, true);
             }
 
             return true;

@@ -8,6 +8,7 @@ use App\Ai\Concerns\SendsOpenRouterOptions;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
 use App\Ai\ModelSelection;
 use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
@@ -200,7 +201,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenPriceRefreshOutOfTime];
     }
 
     /**

@@ -10,7 +10,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemPresenter;
-use App\Services\Whisparr\WhisparrUnexpectedResponse;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -52,7 +51,7 @@ class WhisparrController extends Controller
 
         try {
             $item = $whisparrItemPresenter->detail($whisparrVersion, $whisparrClient->getItemById($id));
-        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
+        } catch (RequestException|ConnectionException $exception) {
             return $this->backToLibrary($this->failureMessage($exception, __('That title is no longer in Whisparr.')));
         }
 
@@ -90,7 +89,7 @@ class WhisparrController extends Controller
     {
         try {
             $items = new WhisparrClient($serviceConnection)->getItems();
-        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
+        } catch (RequestException|ConnectionException $exception) {
             return ['items' => [], 'error' => $this->failureMessage($exception)];
         }
 
@@ -104,7 +103,7 @@ class WhisparrController extends Controller
     {
         try {
             $episodes = $whisparrClient->getEpisodes($id);
-        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
+        } catch (RequestException|ConnectionException $exception) {
             return ['groups' => [], 'error' => $this->failureMessage($exception)];
         }
 
@@ -121,7 +120,7 @@ class WhisparrController extends Controller
     {
         try {
             $profiles = new WhisparrClient($serviceConnection)->getQualityProfiles();
-        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
+        } catch (RequestException|ConnectionException $exception) {
             return ['items' => [], 'error' => $this->failureMessage($exception)];
         }
 
@@ -140,7 +139,7 @@ class WhisparrController extends Controller
      * Transport errors, 5xx and a 200 that is not JSON data read as an
      * outage, 4xx as a refusal; the upstream body is never echoed.
      */
-    private function failureMessage(RequestException|ConnectionException|WhisparrUnexpectedResponse $exception, ?string $notFoundMessage = null): string
+    private function failureMessage(RequestException|ConnectionException $exception, ?string $notFoundMessage = null): string
     {
         if ($notFoundMessage !== null && $exception instanceof RequestException && $exception->response->notFound()) {
             return $notFoundMessage;

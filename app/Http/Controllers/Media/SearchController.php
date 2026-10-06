@@ -9,14 +9,16 @@ use App\Http\Controllers\Controller;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Prowlarr\ProwlarrClient;
-use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -47,7 +49,7 @@ class SearchController extends Controller
         return is_string($driver) ? $driver : 'typesense';
     }
 
-    public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
+    public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver, ArrConnections $arrConnections): Response
     {
         $request->validate([
             'q' => ['nullable', 'string', 'max:500'],
@@ -80,10 +82,10 @@ class SearchController extends Controller
             'connections' => $this->resolveConnectionUrls($seerrOnly),
             'seriesResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchSonarr($term)),
+                : Inertia::defer(fn (): array => $this->searchSonarr($term, $arrConnections)),
             'movieResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchRadarr($term)),
+                : Inertia::defer(fn (): array => $this->searchRadarr($term, $arrConnections)),
             'requestResults' => $term === ''
                 ? $empty
                 : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter)),
@@ -142,20 +144,20 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchSonarr(string $term): array
+    private function searchSonarr(string $term, ArrConnections $arrConnections): array
     {
         return $this->driver() === 'fallback'
-            ? $this->searchSonarrFallback($term)
+            ? $this->searchSonarrFallback($term, $arrConnections)
             : $this->searchSonarrTypesense($term);
     }
 
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchRadarr(string $term): array
+    private function searchRadarr(string $term, ArrConnections $arrConnections): array
     {
         return $this->driver() === 'fallback'
-            ? $this->searchRadarrFallback($term)
+            ? $this->searchRadarrFallback($term, $arrConnections)
             : $this->searchRadarrTypesense($term);
     }
 
@@ -167,11 +169,15 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Sonarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
         }
 
         $max = $this->maxResults();
 
+        // The Scout engine is not an upstream HTTP service: it throws
+        // driver-specific exceptions (Typesense client errors, PDO for the
+        // database driver), and an index outage must read as "temporarily
+        // unavailable", so this one catch stays broad.
         try {
             $hits = IndexedSeries::search($term)
                 ->options([
@@ -208,11 +214,15 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Radarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
         }
 
         $max = $this->maxResults();
 
+        // The Scout engine is not an upstream HTTP service: it throws
+        // driver-specific exceptions (Typesense client errors, PDO for the
+        // database driver), and an index outage must read as "temporarily
+        // unavailable", so this one catch stays broad.
         try {
             $hits = IndexedMovie::search($term)
                 ->options([
@@ -245,18 +255,18 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchSonarrFallback(string $term): array
+    private function searchSonarrFallback(string $term, ArrConnections $arrConnections): array
     {
+        $connection = ServiceConnection::findActive(ServiceType::Sonarr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Sonarr)];
+        }
+
         try {
-            $connection = ServiceConnection::findActive(ServiceType::Sonarr);
-
-            if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
-            }
-
-            $items = new SonarrClient($connection)->getSeries();
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('sonarr', $throwable);
+            $items = $arrConnections->sonarr($connection)->getSeries();
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('sonarr', $exception);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -280,18 +290,18 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchRadarrFallback(string $term): array
+    private function searchRadarrFallback(string $term, ArrConnections $arrConnections): array
     {
+        $connection = ServiceConnection::findActive(ServiceType::Radarr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Radarr)];
+        }
+
         try {
-            $connection = ServiceConnection::findActive(ServiceType::Radarr);
-
-            if (! $connection instanceof ServiceConnection) {
-                return ['results' => [], 'error' => 'No active Radarr connection configured.'];
-            }
-
-            $items = new RadarrClient($connection)->getMovies();
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('radarr', $throwable);
+            $items = $arrConnections->radarr($connection)->getMovies();
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('radarr', $exception);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -325,13 +335,13 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Seerr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Seerr)];
         }
 
         try {
             $response = new SeerrClient($connection)->search($term);
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('seerr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('seerr', $exception);
         }
 
         return [
@@ -352,13 +362,13 @@ class SearchController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Prowlarr);
 
         if (! $connection instanceof ServiceConnection) {
-            return ['results' => [], 'error' => 'No active Prowlarr connection configured.'];
+            return ['results' => [], 'error' => $this->noActiveConnectionMessage(ServiceType::Prowlarr)];
         }
 
         try {
             $hits = new ProwlarrClient($connection)->searchIndexers($term);
-        } catch (Throwable $throwable) {
-            return $this->serviceFailure('prowlarr', $throwable);
+        } catch (RequestException|ConnectionException $exception) {
+            return $this->serviceFailure('prowlarr', $exception);
         }
 
         $rows = array_map(static function (array $hit): array {
@@ -368,7 +378,7 @@ class SearchController extends Controller
             if (is_string($publishDate) && $publishDate !== '') {
                 try {
                     $age = CarbonImmutable::parse($publishDate)->diffForHumans();
-                } catch (Throwable) {
+                } catch (InvalidFormatException) {
                     $age = null;
                 }
             }
