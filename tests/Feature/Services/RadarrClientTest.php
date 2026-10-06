@@ -159,3 +159,28 @@ test('setMovieMonitored PUTs the movie editor toggle', function (): void {
         && $request->data()['movieIds'] === [88]
         && $request->data()['monitored'] === true);
 });
+
+test('fetchMoviesByIds maps each id to its movie, or null when the movie cannot be read', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/10' => Http::response(['id' => 10, 'title' => 'Your Name', 'monitored' => false]),
+        'radarr.local:7878/api/v3/movie/11' => Http::response(['message' => 'NotFound'], 404),
+        'radarr.local:7878/api/v3/movie/12' => Http::failedConnection(),
+        'radarr.local:7878/api/v3/movie/13' => Http::response(null, 500),
+    ]);
+
+    $result = $this->client->fetchMoviesByIds([10, 11, 12, 13]);
+
+    expect($result)->toBe([
+        10 => ['id' => 10, 'title' => 'Your Name', 'monitored' => false],
+        11 => null,
+        12 => null,
+        13 => null,
+    ]);
+    // One attempt each: the 500 is not retried.
+    expect(Http::recorded(fn (Request $request): bool => str_ends_with($request->url(), '/movie/13')))->toHaveCount(1);
+});
+
+test('fetchMoviesByIds without ids sends nothing', function (): void {
+    expect($this->client->fetchMoviesByIds([]))->toBe([]);
+    Http::assertNothingSent();
+});

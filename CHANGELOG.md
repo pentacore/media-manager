@@ -1,3 +1,30 @@
+# [1.35.0](https://github.com/pentacore/media-manager/compare/v1.34.0...v1.35.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* **anime:** judge season 0 (Specials) at series level ([6cc79c4](https://github.com/pentacore/media-manager/commit/6cc79c450147150f59c15052e9c03b8a7450e05f))
+* **anime:** keep a connection in use after a per-item 4xx in the library overlay ([4dd7add](https://github.com/pentacore/media-manager/commit/4dd7add64f63b94a203210aa593e4ef8f6c63f2e))
+* **anime:** keep Monitor retryable after a refusal and label requested cards ([b5f0e96](https://github.com/pentacore/media-manager/commit/b5f0e960e1a606d17864ceb665e2deb193c8226b))
+* **sonarr:** bust the cache when a monitor_season search fails ([4d6e605](https://github.com/pentacore/media-manager/commit/4d6e605732fa3db00a0428cc6c8070d17c5cc5a6))
+
+
+### Features
+
+* **actions:** add monitor_season action for Sonarr ([ff8d6f5](https://github.com/pentacore/media-manager/commit/ff8d6f55c6b65dd3bc534357996dcbf565e36921))
+* **anime:** flag owned seasonal entries that Sonarr or Radarr does not monitor ([ab09897](https://github.com/pentacore/media-manager/commit/ab098970c173c1ed6e0df4275bd949b293d3d77e))
+* **anime:** load seasonal entries in their own deferred group ([43717bb](https://github.com/pentacore/media-manager/commit/43717bb6c68a05b622e6c79c57a5ac241f2b64e4))
+* **anime:** monitor, open and external links on seasonal anime cards ([62c3f12](https://github.com/pentacore/media-manager/commit/62c3f12e0e65d3de03d7669d9d480d63a47a4121))
+* **anime:** store the TVDB season of each anime mapping ([866d2c3](https://github.com/pentacore/media-manager/commit/866d2c3ec8e5463faf9812528aaef33f0da1a6fb))
+* **library:** add a monitor-season library action endpoint ([81ca6a1](https://github.com/pentacore/media-manager/commit/81ca6a102215eea18a86fb74f6638329831a6be4))
+* **library:** name the Seasonal Anime page in action reasons ([9c12db5](https://github.com/pentacore/media-manager/commit/9c12db57fa296e629f872b9064455d368bdbd857))
+
+
+### Performance Improvements
+
+* **anime:** look up library monitoring concurrently ([70f8562](https://github.com/pentacore/media-manager/commit/70f856220093cacd40a6f3a353c4c187ece61201))
+* **arr:** stop pooled reads after a batch fails entirely on transport ([eeba13e](https://github.com/pentacore/media-manager/commit/eeba13e75f3054d93c2d6e09d0268cedf8cddf33))
+
 # [1.34.0](https://github.com/pentacore/media-manager/compare/v1.33.1...v1.34.0) (2026-10-05)
 
 

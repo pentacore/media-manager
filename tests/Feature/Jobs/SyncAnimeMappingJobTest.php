@@ -49,7 +49,7 @@ test('handle loads the dataset and inserts one row per valid entry', function ()
             'mal_id' => 200,
             'themoviedb_id' => ['tv' => 1396],
             'tvdb_id' => 81189,
-            'season' => ['tmdb' => 2, 'tvdb' => 2],
+            'season' => ['tmdb' => 2, 'tvdb' => 3],
         ],
         [
             'type' => 'MOVIE',
@@ -72,12 +72,36 @@ test('handle loads the dataset and inserts one row per valid entry', function ()
     expect($animeIdMap->tmdb_movie_id)->toBeNull();
     expect($animeIdMap->tvdb_id)->toBe(81189);
     expect($animeIdMap->tmdb_season)->toBe(2);
+    expect($animeIdMap->tvdb_season)->toBe(3);
     expect($animeIdMap->user_confirmed)->toBeFalse();
 
     $movie = AnimeIdMap::query()->where('anilist_id', 300)->firstOrFail();
     // The array id must extract its first element (128), not collapse to 1.
     expect($movie->tmdb_movie_id)->toBe(128);
     expect($movie->tmdb_tv_id)->toBeNull();
+});
+
+test('a tvdb season of 0 (specials) is stored, and a missing one stays null', function (): void {
+    fakeMappingDataset(fribbDatasetWithMinRows([
+        [
+            'type' => 'SPECIAL',
+            'anilist_id' => 501,
+            'themoviedb_id' => ['tv' => 1396],
+            'tvdb_id' => 81189,
+            'season' => ['tmdb' => 0, 'tvdb' => 0],
+        ],
+        [
+            'type' => 'TV',
+            'anilist_id' => 502,
+            'themoviedb_id' => ['tv' => 1397],
+            'season' => ['tmdb' => 1],
+        ],
+    ]));
+
+    (new SyncAnimeMappingJob)->handle();
+
+    expect(AnimeIdMap::query()->where('anilist_id', 501)->sole()->tvdb_season)->toBe(0)
+        ->and(AnimeIdMap::query()->where('anilist_id', 502)->sole()->tvdb_season)->toBeNull();
 });
 
 test('handle picks the lowest of multiple array movie ids and keeps scalar tv ids', function (): void {

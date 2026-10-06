@@ -24,6 +24,7 @@ class AnimeIdMapFactory extends Factory
             'tmdb_movie_id' => null,
             'tvdb_id' => fake()->numberBetween(1, 1_000_000),
             'tmdb_season' => fake()->numberBetween(1, 5),
+            'tvdb_season' => fake()->numberBetween(1, 5),
             'type' => 'TV',
             'user_confirmed' => false,
         ];
@@ -45,6 +46,7 @@ class AnimeIdMapFactory extends Factory
             'tmdb_movie_id' => fake()->numberBetween(1, 1_000_000),
             'tvdb_id' => null,
             'tmdb_season' => null,
+            'tvdb_season' => null,
             'type' => 'MOVIE',
         ]);
     }
@@ -53,6 +55,7 @@ class AnimeIdMapFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'user_confirmed' => true,
+            'tvdb_season' => null,
         ]);
     }
 }

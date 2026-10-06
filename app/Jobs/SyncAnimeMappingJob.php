@@ -179,6 +179,7 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
             'tmdb_movie_id' => $tmdbMovieId,
             'tvdb_id' => isset($entry['tvdb_id']) && is_numeric($entry['tvdb_id']) ? (int) $entry['tvdb_id'] : null,
             'tmdb_season' => isset($entry['season']['tmdb']) ? (int) $entry['season']['tmdb'] : null,
+            'tvdb_season' => isset($entry['season']['tvdb']) && is_numeric($entry['season']['tvdb']) ? (int) $entry['season']['tvdb'] : null,
             'type' => $entry['type'] ?? null,
             'user_confirmed' => false,
             'created_at' => $now,

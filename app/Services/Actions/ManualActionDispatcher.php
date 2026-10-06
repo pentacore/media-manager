@@ -24,7 +24,7 @@ final readonly class ManualActionDispatcher
     /**
      * @param  array<string, mixed>  $payload
      *
-     * monitor_episodes/search_media/grab_release resolve their pinned
+     * monitor_episodes/monitor_season/search_media/grab_release resolve their pinned
      * connection strictly (ServiceConnection::resolvePinnedStrict()), which
      * throws InvalidArgumentException for a missing/wrong-type pin and
      * ModelNotFoundException for a deleted/deactivated one. The describer

@@ -54,6 +54,7 @@ final readonly class ActionDescriber
             'remove_stuck_download' => $this->removeStuckDownload($type, $payload, $fallbackName),
             'resolve_manual_import' => $this->resolveManualImport($type, $payload, $fallbackName),
             'monitor_episodes' => $this->monitorEpisodes($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true), $payload),
+            'monitor_season' => $this->monitorSeason($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true), $payload),
             'search_media' => $this->searchMedia($type, $payload, $fallbackName),
             'grab_release' => $this->grabRelease($type, $payload, $fallbackName),
             'whisparr_search' => $this->whisparrSearch($this->actionTargets->whisparrItem($this->id($type, $payload, 'whisparr_item_id'), $payload, $fallbackName)),
@@ -198,6 +199,19 @@ final readonly class ActionDescriber
             ->withDetail('Episodes', $count)
             ->withDetail('Season', $season)
             ->withDetail('Monitored', $monitored);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function monitorSeason(ActionTarget $target, array $payload): ActionDescription
+    {
+        $season = is_numeric($payload['season_number'] ?? null) ? (int) $payload['season_number'] : null;
+
+        return $target->describe(
+            sprintf('Monitor season %s of %s', $season ?? '?', $target->label()),
+            sprintf('Sonarr will monitor the series and season %s, then search for the season.', $season ?? '?'),
+        )->withDetail('Season', $season);
     }
 
     /**

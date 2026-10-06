@@ -6,6 +6,7 @@ use App\Cache\Services\SonarrCache;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Sonarr\SonarrActions;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -178,4 +179,38 @@ test('failed HTTP write does NOT bust the Sonarr cache', function (): void {
     });
 
     expect($hits)->toBe(0);
+});
+
+test('monitorSeason busts the Sonarr cache even when the season search fails after the update', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'k',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => false, 'seasons' => [
+            ['seasonNumber' => 1, 'monitored' => false],
+        ]]),
+        'sonarr.local:8989/api/v3/command' => Http::response('boom', 500),
+    ]);
+
+    $cache = new SonarrCache($connection);
+    $cache->rememberList('list', fn (): array => ['warm' => true]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'monitor_season',
+        'target_service' => 'sonarr',
+        'payload' => ['series_id' => 42, 'season_number' => 1, 'service_connection_id' => $connection->id],
+    ]);
+
+    expect(fn (): array => new SonarrActions()->execute($actionRequest))->toThrow(RequestException::class);
+
+    $hits = 0;
+    $cache->rememberList('list', function () use (&$hits): array {
+        $hits++;
+
+        return ['fresh' => true];
+    });
+
+    expect($hits)->toBe(1);
 });

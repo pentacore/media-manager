@@ -11,6 +11,9 @@ use Illuminate\Validation\Rule;
 trait MediaActionValidationRules
 {
     /**
+     * `origin` names the page a request came from when it is not the library
+     * pages, for the action reason (MediaActionController::because()).
+     *
      * @return array<string, mixed>
      */
     protected function mediaActionTargetRules(): array
@@ -18,6 +21,7 @@ trait MediaActionValidationRules
         return [
             'service' => ['required', Rule::in([ServiceType::Sonarr->value, ServiceType::Radarr->value])],
             'service_connection_id' => ['required', 'integer'],
+            'origin' => ['nullable', Rule::in(['seasonal_anime'])],
         ];
     }
 
