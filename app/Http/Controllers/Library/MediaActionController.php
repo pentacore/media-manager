@@ -29,11 +29,11 @@ use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Sonarr\SonarrEpisodeOwnership;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 /**
@@ -345,9 +345,15 @@ class MediaActionController extends Controller
         return $this->refuse(__('A file replacement is in progress for this title — try again when it finishes.'));
     }
 
-    private function because(Request $request): string
+    /**
+     * The action reason, naming the page the request came from: the library
+     * pages by default, or the Seasonal Anime page when it says so.
+     */
+    private function because(FormRequest $formRequest): string
     {
-        return sprintf('Requested from the library by %s.', $request->user()->name);
+        $page = $formRequest->validated('origin') === 'seasonal_anime' ? 'Seasonal Anime' : 'the library';
+
+        return sprintf('Requested from %s by %s.', $page, $formRequest->user()->name);
     }
 
     private function answer(ManualActionOutcome $manualActionOutcome, string $startedMessage): RedirectResponse

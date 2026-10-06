@@ -251,7 +251,7 @@ function animeSeasonOwnedMovieFixture(): ServiceConnection
 test('an owned entry with an unmonitored season shows the pill, opens the series and monitors the season', function (): void {
     $serviceConnection = animeSeasonOwnedFixture(seasonMonitored: false);
     $this->seed(ActionTypeConfigSeeder::class);
-    $this->actingAs(User::factory()->member()->create(['email' => 'nobody@example.com']));
+    $this->actingAs(User::factory()->member()->create(['email' => 'nobody@example.com', 'name' => 'Mia']));
 
     visit(route('media.anime.index', absolute: false))
         ->assertNoSmoke()
@@ -264,8 +264,10 @@ test('an owned entry with an unmonitored season shows the pill, opens the series
         ->assertDisabled('[data-anime-monitor]')
         ->assertSeeIn('[data-anime-monitor]', 'Monitor requested');
 
-    expect(ActionRequest::query()->where('type', 'monitor_season')->sole()->payload)
-        ->toEqual(['series_id' => 7, 'season_number' => 2, 'service_connection_id' => $serviceConnection->id]);
+    $actionRequest = ActionRequest::query()->where('type', 'monitor_season')->sole();
+    expect($actionRequest->payload)
+        ->toEqual(['series_id' => 7, 'season_number' => 2, 'service_connection_id' => $serviceConnection->id])
+        ->and($actionRequest->description)->toStartWith('Requested from Seasonal Anime by Mia.');
 });
 
 test('a fully monitored owned entry offers Open series but no Monitor button', function (): void {
@@ -299,7 +301,7 @@ test('an owned anime movie Radarr does not monitor shows the pill, opens the mov
 test('an unmonitored series with an unknown season is monitored at series level', function (): void {
     $serviceConnection = animeSeasonOwnedFixture(seasonMonitored: true, seriesMonitored: false, tvdbSeason: null);
     $this->seed(ActionTypeConfigSeeder::class);
-    $this->actingAs(User::factory()->member()->create(['email' => 'nobody@example.com']));
+    $this->actingAs(User::factory()->member()->create(['email' => 'nobody@example.com', 'name' => 'Mia']));
 
     visit(route('media.anime.index', absolute: false))
         ->assertNoSmoke()
@@ -307,8 +309,10 @@ test('an unmonitored series with an unknown season is monitored at series level'
         ->click('[data-anime-monitor]')
         ->assertSee('Monitoring updated.');
 
-    expect(ActionRequest::query()->where('type', 'monitor_series')->sole()->payload)
+    $actionRequest = ActionRequest::query()->where('type', 'monitor_series')->sole();
+    expect($actionRequest->payload)
         ->toEqual(['series_id' => 7, 'monitored' => true, 'service_connection_id' => $serviceConnection->id])
+        ->and($actionRequest->description)->toStartWith('Requested from Seasonal Anime by Mia.')
         ->and(ActionRequest::query()->where('type', 'monitor_season')->exists())->toBeFalse();
 });
 

@@ -447,6 +447,7 @@ function monitorEntry(entry: SeasonEntry): void {
                       service_connection_id: library.connectionId,
                       series_id: library.itemId,
                       season_number: library.seasonNumber,
+                      origin: 'seasonal_anime',
                   },
               ]
             : [
@@ -456,6 +457,7 @@ function monitorEntry(entry: SeasonEntry): void {
                       service_connection_id: library.connectionId,
                       item_id: library.itemId,
                       monitored: true,
+                      origin: 'seasonal_anime',
                   },
               ];
 

@@ -430,6 +430,39 @@ test('a member monitors a season through the action pipeline, pinned to the conn
         ->and($actionRequest->title)->toBe('Monitor season 2 of series "Severance (2022)"');
 });
 
+test('a monitor sent from the Seasonal Anime page names that page in the action reason', function (string $routeName, array $body, string $type): void {
+    Http::fake(['sonarr.local:8989/*' => Http::response([])]);
+
+    $this->actingAs($this->member)
+        ->post(route($routeName), [...$body, 'service_connection_id' => $this->sonarr->id, 'origin' => 'seasonal_anime'])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Monitoring updated.');
+
+    expect(ActionRequest::query()->where('type', $type)->sole()->description)
+        ->toStartWith('Requested from Seasonal Anime by Mia.');
+})->with([
+    'season' => ['media.library.actions.monitor-season', ['series_id' => 7, 'season_number' => 2], 'monitor_season'],
+    'series' => ['media.library.actions.monitor', ['service' => 'sonarr', 'item_id' => 7, 'monitored' => true], 'monitor_series'],
+]);
+
+test('a monitor without an origin keeps the library wording in the action reason', function (): void {
+    Http::fake(['sonarr.local:8989/*' => Http::response([])]);
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-season'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 2])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Monitoring updated.');
+
+    expect(ActionRequest::query()->where('type', 'monitor_season')->sole()->description)
+        ->toStartWith('Requested from the library by Mia.');
+});
+
+test('an unknown origin is rejected', function (): void {
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'monitored' => true, 'origin' => 'somewhere_else'])
+        ->assertSessionHasErrors('origin');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
 test('monitor-season validates its body', function (array $body, string $field): void {
     $this->actingAs($this->member)
         ->post(route('media.library.actions.monitor-season'), [...['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1], ...$body])
