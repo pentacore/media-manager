@@ -11,10 +11,14 @@ use App\Services\Sonarr\SonarrClient;
 use InvalidArgumentException;
 
 /**
- * Sonarr/Radarr clients for the library pages and sidebar badges. "Active"
- * is the primary connection — the first active one by id, exactly as
- * ServiceConnection::findActive() picks it — so every surface reads the
- * same instance and only its items get library links.
+ * The single Sonarr/Radarr client builder: library pages, sidebar badges,
+ * executors (ArrLibraryActions and its subclasses), AI tools, and
+ * ServiceClientFactory (which delegates Sonarr/Radarr here) all go through
+ * `client()` instead of a local `new SonarrClient`/`new RadarrClient`
+ * ternary — see app.md. "Active" is the primary connection — the first
+ * active one by id, exactly as ServiceConnection::findActive() picks it —
+ * so every surface reads the same instance and only its items get library
+ * links.
  */
 final readonly class ArrConnections
 {
