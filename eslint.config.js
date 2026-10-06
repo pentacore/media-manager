@@ -1,7 +1,8 @@
 import stylistic from '@stylistic/eslint-plugin';
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript';
 import prettier from 'eslint-config-prettier/flat';
-import importPlugin from 'eslint-plugin-import';
+import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
+import importX, { createNodeResolver } from 'eslint-plugin-import-x';
 import vue from 'eslint-plugin-vue';
 
 const controlStatements = [
@@ -26,16 +27,16 @@ export default defineConfigWithVueTs(
     vueTsConfigs.recommended,
     {
         plugins: {
-            import: importPlugin,
+            'import-x': importX,
         },
         settings: {
-            'import/resolver': {
-                typescript: {
+            'import-x/resolver-next': [
+                createTypeScriptImportResolver({
                     alwaysTryTypes: true,
                     project: './tsconfig.json',
-                },
-                node: true,
-            },
+                }),
+                createNodeResolver(),
+            ],
         },
         rules: {
             'vue/multi-word-component-names': 'off',
@@ -47,7 +48,7 @@ export default defineConfigWithVueTs(
                     fixStyle: 'separate-type-imports',
                 },
             ],
-            'import/order': [
+            'import-x/order': [
                 'error',
                 {
                     groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
@@ -57,7 +58,7 @@ export default defineConfigWithVueTs(
                     },
                 },
             ],
-            'import/consistent-type-specifier-style': [
+            'import-x/consistent-type-specifier-style': [
                 'error',
                 'prefer-top-level',
             ],
