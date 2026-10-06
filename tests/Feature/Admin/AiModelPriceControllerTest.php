@@ -1000,7 +1000,7 @@ test('bulk update rejects an invalid selection or a request that changes nothing
         ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1],
         ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 2],
     ]], 'rate_limits.1.metric'],
-    'over the cap' => [['ids' => range(1, 501), 'automatic_updates_enabled' => true], 'ids'],
+    'over the cap' => [['ids' => range(1, 2001), 'automatic_updates_enabled' => true], 'ids'],
 ]);
 
 test('bulk delete removes only the selected rows and their rate limits', function (): void {
@@ -1028,5 +1028,5 @@ test('bulk delete rejects an empty or unknown selection', function (array $ids, 
 })->with([
     'empty' => [[], 'ids'],
     'unknown' => [[999999], 'ids.0'],
-    'over the cap' => [range(1, 501), 'ids'],
+    'over the cap' => [range(1, 2001), 'ids'],
 ]);
