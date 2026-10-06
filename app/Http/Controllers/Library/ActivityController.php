@@ -39,15 +39,13 @@ use InvalidArgumentException;
 
 class ActivityController extends Controller
 {
-    public function __construct(private readonly ArrConnections $arrConnections) {}
-
     /**
      * Sonarr + Radarr activity. The live queue (both services, merged) and
      * one service's history page are deferred separately so the shell
      * renders first; history is per service because two independently
      * paged feeds cannot be merged into one correct page.
      */
-    public function queue(Request $request, GrabbedHistoryCache $grabbedHistoryCache): Response
+    public function queue(Request $request, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): Response
     {
         $historyService = $request->query('history_service') === 'radarr' ? 'radarr' : 'sonarr';
         $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
@@ -59,7 +57,7 @@ class ActivityController extends Controller
                 'page' => $historyPage,
                 'active' => $request->has('history_service') || $request->has('history_page'),
             ],
-            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage, $grabbedHistoryCache), 'history'),
+            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage, $grabbedHistoryCache, $arrConnections), 'history'),
         ]);
     }
 
@@ -69,7 +67,7 @@ class ActivityController extends Controller
      * release is good and doesn't want to wait an hour for the next
      * indexer poll. Pinned to the connection the row was rendered from.
      */
-    public function grabQueueItem(GrabQueueItemRequest $grabQueueItemRequest, string $service, int $id): RedirectResponse
+    public function grabQueueItem(GrabQueueItemRequest $grabQueueItemRequest, string $service, int $id, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $grabQueueItemRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -80,7 +78,7 @@ class ActivityController extends Controller
         }
 
         try {
-            $this->clientFor($connection)->grabQueueItem($id);
+            $this->clientFor($connection, $arrConnections)->grabQueueItem($id);
         } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
             // A 200 that is not JSON data (usually a proxy login page): the
             // grab may already have reached the arr, so this must read as
@@ -232,7 +230,7 @@ class ActivityController extends Controller
      * was rendered from and refuses anything else, and only an id the
      * History tab rendered as a grab (see GrabbedHistoryCache) is accepted.
      */
-    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id, GrabbedHistoryCache $grabbedHistoryCache): RedirectResponse
+    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $markHistoryFailedRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -248,7 +246,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Only a grabbed :service history entry can be marked as failed — refresh the history and try again.', ['service' => $label]));
         }
 
-        $arrClient = $this->clientFor($connection);
+        $arrClient = $this->clientFor($connection, $arrConnections);
 
         try {
             $arrClient->markHistoryFailed($id);
@@ -284,7 +282,7 @@ class ActivityController extends Controller
      * upstream ManualImportResource trimmed to what the modal needs.
      * Pinned to the connection the row was rendered from.
      */
-    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId): JsonResponse
+    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $manualImportCandidatesRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -295,7 +293,7 @@ class ActivityController extends Controller
         }
 
         try {
-            $candidates = $this->clientFor($connection)->getManualImport(['downloadId' => $downloadId]);
+            $candidates = $this->clientFor($connection, $arrConnections)->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
             return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
@@ -314,7 +312,7 @@ class ActivityController extends Controller
      * frontend only supplies the downloadId we already showed it, and the
      * connection its row was rendered from.
      */
-    public function executeManualImport(ExecuteManualImportRequest $executeManualImportRequest, string $service, ManualImportResolver $manualImportResolver): RedirectResponse
+    public function executeManualImport(ExecuteManualImportRequest $executeManualImportRequest, string $service, ManualImportResolver $manualImportResolver, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $executeManualImportRequest->validated();
         $downloadId = (string) $validated['download_id'];
@@ -325,7 +323,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
-        $arrClient = $this->clientFor($connection);
+        $arrClient = $this->clientFor($connection, $arrConnections);
 
         try {
             $candidates = $arrClient->getManualImport(['downloadId' => $downloadId]);
@@ -421,9 +419,9 @@ class ActivityController extends Controller
         return __('That :service connection is unavailable — refresh and try again.', ['service' => $serviceType->label()]);
     }
 
-    private function clientFor(ServiceConnection $serviceConnection): ArrClient
+    private function clientFor(ServiceConnection $serviceConnection, ArrConnections $arrConnections): ArrClient
     {
-        return $this->arrConnections->client($serviceConnection);
+        return $arrConnections->client($serviceConnection);
     }
 
     private function flashAndBack(string $type, string $message): RedirectResponse
@@ -465,7 +463,7 @@ class ActivityController extends Controller
     /**
      * @return array{service: string, configured: bool, connection_id: int|null, rows: list<array<string, mixed>>, page: int, page_size: int, total: int, error: string|null}
      */
-    private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache): array
+    private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): array
     {
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
         $connection = ServiceConnection::findActive($serviceType);
@@ -494,8 +492,8 @@ class ActivityController extends Controller
 
         try {
             $payload = $serviceType === ServiceType::Sonarr
-                ? $this->arrConnections->client($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
-                : $this->arrConnections->client($connection)->getHistory([...$params, 'includeMovie' => 'true']);
+                ? $arrConnections->client($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
+                : $arrConnections->client($connection)->getHistory([...$params, 'includeMovie' => 'true']);
         } catch (RequestException|ConnectionException) {
             return [...$result, 'error' => sprintf('%s is unreachable right now — its history could not be loaded.', $serviceType->label())];
         }
