@@ -25,6 +25,7 @@ class PriceVerifierPhase
     public function __construct(
         private readonly AiBudgetGuard $aiBudgetGuard,
         private readonly PriceRefreshFallbackQueue $priceRefreshFallbackQueue,
+        private readonly PriceRefreshTimeBox $priceRefreshTimeBox,
     ) {}
 
     /**
@@ -59,6 +60,10 @@ class PriceVerifierPhase
         $priceVerificationRun = new PriceVerificationRun;
 
         try {
+            // A queued refresh must still fit one verifier step, or the job
+            // would be killed mid-agent; the catch below fails the providers.
+            throw_unless($this->priceRefreshTimeBox->hasRoomFor(PriceRefreshTimeBox::AGENT_STEP_SECONDS), PriceRefreshOutOfTime::class);
+
             // The 40-step, fetch-heavy verifier must respect the monthly
             // budget like every other AI entry point.
             $this->aiBudgetGuard->enforce();

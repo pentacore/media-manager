@@ -11,9 +11,12 @@ use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
 use App\Http\Streaming\ClientConnection;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiUsage\Pricing\PriceRefreshOutOfTime;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\PendingStep;
@@ -80,7 +83,7 @@ test('every tool-using agent runs the step middleware its runs need', function (
     'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
     'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
     'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class]],
-    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class]],
+    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class]],
 ]);
 
 /**
@@ -153,4 +156,23 @@ test('an unwatched connection never stops a run', function (): void {
     stepMiddlewareGoneClient(watched: false);
 
     expect((new StopWhenClientDisconnected)->handle(stepMiddlewarePendingStep(2, false), fn (): string => 'ok'))->toBe('ok');
+});
+
+test('the price verifier stops before a later step that no longer fits the refresh time box', function (): void {
+    $this->freezeTime();
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS - 1);
+
+    expect(fn (): mixed => (new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))
+        ->toThrow(PriceRefreshOutOfTime::class)
+        ->and((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ran'))->toBe('ran');
+});
+
+test('the price verifier keeps going while a step still fits, and when no time box was opened', function (): void {
+    $this->freezeTime();
+
+    expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
+
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS);
+
+    expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
 });

@@ -140,6 +140,19 @@ final class PricingTransportException extends RuntimeException
         );
     }
 
+    /**
+     * A queued refresh's time box no longer fits this source's worst case,
+     * so no request was made. A timeout: the source escalates like any
+     * other feed failure.
+     */
+    public static function outOfTime(string $source): self
+    {
+        return new self(
+            category: self::CATEGORY_TIMEOUT,
+            message: sprintf('Skipped the %s pricing API: the price refresh ran out of time.', $source),
+        );
+    }
+
     public static function notConfigured(string $source): self
     {
         return new self(

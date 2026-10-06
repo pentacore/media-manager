@@ -11,6 +11,7 @@ use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Services\AiUsage\BatchPricingContext;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
@@ -43,6 +44,10 @@ class AIServiceProvider extends ServiceProvider
         // Memoizes the in-use provider/model map; scoped so a long-running
         // worker never prices against another request's or job's usage.
         $this->app->scoped(InUsePricingModels::class);
+
+        // The queued price refresh's deadline; scoped so one job's time box
+        // never limits the next job or an Octane request.
+        $this->app->scoped(PriceRefreshTimeBox::class);
 
         // Whether the current chat stream's browser is still connected;
         // scoped so one request's watch flag never carries into the next
