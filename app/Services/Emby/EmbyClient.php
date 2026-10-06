@@ -37,13 +37,22 @@ class EmbyClient
     }
 
     /**
+     * A 200 that is not JSON data (an SSO or reverse-proxy login page, an
+     * HTML error page) is a failed request, never an empty/healthy system
+     * info — otherwise a login page in front of Emby would read as Healthy.
+     *
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyUnexpectedResponse|RequestException|ConnectionException
      */
     public function getSystemInfo(): array
     {
-        return $this->buildClient()->get('/System/Info')->throw()->json() ?? [];
+        $response = $this->buildClient()->get('/System/Info')->throw();
+        $info = $response->json();
+
+        throw_unless(is_array($info), EmbyUnexpectedResponse::class, $response, 'Emby answered with a body that is not JSON data.');
+
+        return $info;
     }
 
     /**

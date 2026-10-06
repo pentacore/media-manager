@@ -285,6 +285,16 @@ test('a Sonarr answering its status with a login page is unhealthy, not healthy'
         ->and($connection->fresh()->health_message)->toBe('HTTP 200: Sonarr answered with a body that is not JSON data.');
 });
 
+test('an Emby answering its system info with a login page is unhealthy, not healthy', function (): void {
+    $connection = ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['emby.local:8096/System/Info' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
+        ->and($connection->fresh()->health_message)->toBe('HTTP 200: Emby answered with a body that is not JSON data.');
+});
+
 test('a stored and broadcast health message never carries an upstream path', function (): void {
     Sleep::fake();
     $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'health_status' => HealthStatus::Healthy]);
