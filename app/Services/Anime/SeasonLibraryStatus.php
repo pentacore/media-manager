@@ -28,22 +28,24 @@ use Illuminate\Support\Collection;
  * `fetchMovieById()` reads are used, never the client's entity cache.
  *
  * Each distinct (connection, series/movie) is looked up once per call, so
- * several seasons of one series share a single request. The first failure on
- * a connection (a RequestException, a ConnectionException, or an answer that
- * is not a series/movie) stops every further call to that connection for the
- * rest of the call, so an outage costs one retried request instead of one per
- * card; inactive connections are never called. Without live data the indexed
- * `monitored` flag decides, at series/movie level only, and no season number
- * is offered.
+ * several seasons of one series share a single request. The first connection
+ * failure (a 5xx, a ConnectionException, or a 200 that is not a series/movie)
+ * stops every further call to that connection for the rest of the call, so an
+ * outage costs one retried request instead of one per card. A 4xx — such as a
+ * 404 for a series deleted upstream but still indexed — only drops live data
+ * for that item; the connection stays in use. Inactive connections are never
+ * called. Without live data the indexed `monitored` flag decides, at
+ * series/movie level only, and no season number is offered.
  *
  * @phpstan-type OwnedStatus array{status: 'in_library'|'unmonitored', unmonitoredScope: 'series'|'season'|'movie'|null, library: array{service: 'sonarr'|'radarr', itemId: int, connectionId: int, seasonNumber: int|null, onActiveConnection: bool}}
  */
 final readonly class SeasonLibraryStatus
 {
     /**
+     * Statuses keyed by row `key`; rows that are not owned are absent.
+     *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<string, array{status: 'in_library'|'unmonitored', unmonitoredScope: 'series'|'season'|'movie'|null, library: array{service: 'sonarr'|'radarr', itemId: int, connectionId: int, seasonNumber: int|null, onActiveConnection: bool}}>
-     *                                                                                                                                                                                                                                                  keyed by row `key`; rows that are not owned are absent.
      */
     public function resolve(array $rows): array
     {
@@ -170,7 +172,15 @@ final readonly class SeasonLibraryStatus
 
             try {
                 $item = $this->fetchItem($serviceConnection, $itemId);
-            } catch (RequestException|ConnectionException) {
+            } catch (RequestException $requestException) {
+                // A 4xx (e.g. a series deleted upstream but still indexed) is
+                // about this item only; the connection itself answered.
+                if ($requestException->response->clientError()) {
+                    return $items[$memoKey] = null;
+                }
+
+                $item = [];
+            } catch (ConnectionException) {
                 $item = [];
             }
 

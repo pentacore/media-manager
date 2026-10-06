@@ -136,9 +136,30 @@ test('a Sonarr outage falls back to the indexed monitored flag and stops calling
         ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull()
         ->and($result['anilist:2']['status'])->toBe('in_library')
         ->and($result['anilist:2']['library']['seasonNumber'])->toBeNull();
-    // The client tries a 5xx three times before giving up; the second series is never requested.
-    Http::assertSentCount(3);
+    // The second series is never requested once the connection has failed.
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/series/8'));
+});
+
+test('a series Sonarr no longer has falls back to the index without stopping other lookups', function (): void {
+    IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => false]);
+    IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 8, 'tvdb_id' => 81190, 'monitored' => true]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/7' => Http::response(['message' => 'NotFound'], 404),
+        'sonarr.local:8989/api/v3/series/8' => Http::response(seasonLibrarySeries(8, true, [['seasonNumber' => 2, 'monitored' => false]])),
+    ]);
+
+    $result = (new SeasonLibraryStatus)->resolve([
+        seasonLibraryRow('anilist:1', 'tv', 1396, 81189, 2),
+        seasonLibraryRow('anilist:2', 'tv', 1397, 81190, 2),
+    ]);
+
+    expect($result['anilist:1']['status'])->toBe('unmonitored')
+        ->and($result['anilist:1']['unmonitoredScope'])->toBe('series')
+        ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull()
+        ->and($result['anilist:2']['status'])->toBe('unmonitored')
+        ->and($result['anilist:2']['unmonitoredScope'])->toBe('season')
+        ->and($result['anilist:2']['library']['seasonNumber'])->toBe(2);
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/series/8'));
 });
 
 test('a Sonarr answer that is not a series counts as a failure', function (): void {
