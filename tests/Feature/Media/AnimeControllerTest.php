@@ -122,7 +122,7 @@ test('index defers entries mapped against the id map with an overlaid status', f
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Anime/Season')
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('entries', function ($page): void {
                 $page
                     ->has('entries', 1)
                     ->where('entries.0.title', 'Test Show')
@@ -158,6 +158,33 @@ test('index defers requesting users with an email-matched default', function ():
                 $page
                     ->has('requestingUsers.users', 2)
                     ->where('requestingUsers.defaultId', 2);
+            })
+        );
+});
+
+test('index defers entries in their own group so the requesting users never wait for library lookups', function (): void {
+    Queue::fake();
+    $member = User::factory()->member()->create(['email' => 'me@example.com']);
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse()),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response([
+            'results' => [['id' => 2, 'displayName' => 'Me', 'email' => 'me@example.com']],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.anime.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->missing('entries')
+            ->missing('requestingUsers')
+            ->loadDeferredProps('default', function ($page): void {
+                $page->has('requestingUsers.users', 1)->missing('entries');
+            })
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->has('entries')->missing('requestingUsers');
             })
         );
 });
@@ -239,7 +266,7 @@ test('index marks a tv entry requested when the matching request is on the secon
         ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('entries', function ($page): void {
                 $page->where('entries.0.status', 'requested');
             })
         );
@@ -282,7 +309,7 @@ test('index marks a tv entry as requested when a matching tv request keyed by me
         ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('entries', function ($page): void {
                 $page->where('entries.0.status', 'requested');
             })
         );
@@ -326,7 +353,7 @@ test('index does not mark a tv entry as requested when only a movie request with
         ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('entries', function ($page): void {
                 $page->where('entries.0.status', 'requestable');
             })
         );
@@ -376,7 +403,7 @@ test('index marks an owned tv entry whose season is unmonitored and exposes its 
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Anime/Season')
-            ->loadDeferredProps('default', function ($page) use ($sonarr): void {
+            ->loadDeferredProps('entries', function ($page) use ($sonarr): void {
                 $page
                     ->where('entries.0.status', 'unmonitored')
                     ->where('entries.0.unmonitoredScope', 'season')
@@ -423,7 +450,7 @@ test('index keeps requestable entries free of library data', function (): void {
         ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('entries', function ($page): void {
                 $page
                     ->where('entries.0.status', 'requestable')
                     ->where('entries.0.library', null)

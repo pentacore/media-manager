@@ -38,6 +38,8 @@ class AnimeController extends Controller
     /**
      * Seasonal anime discovery grid. Season list is fetched live (cached) and
      * mapped to TMDB/TVDB ids; owned/requested status is overlaid fresh.
+     * Entries load in their own deferred group, so the Seerr user picker is
+     * not held back by the live Sonarr/Radarr lookups.
      */
     public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeasonLibraryStatus $seasonLibraryStatus): Response|RedirectResponse
     {
@@ -66,7 +68,7 @@ class AnimeController extends Controller
             ],
             'navigation' => $this->navigation($year, $season),
             'requestingUsers' => Inertia::defer(fn (): array => $seerrUserResolver->pickerOptions($connection, $request->user())),
-            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonLibraryStatus, $seasonalAnimeSource, $year, $season)),
+            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonLibraryStatus, $seasonalAnimeSource, $year, $season), 'entries'),
         ]);
     }
 
