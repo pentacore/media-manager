@@ -59,6 +59,13 @@ class PriceVerifierPhase
         // the agent phase aborts before (or while) prompting.
         $priceVerificationRun = new PriceVerificationRun;
 
+        // The try's own tally loop (below) already folds the agent's outcomes
+        // into the ledger; if a later statement in the try throws (a DB error
+        // in the legacy-safety-net count(), for example), the catch must not
+        // tally again — applyAgentTally() is additive, so a repeat run would
+        // double every counter and append each unverified target twice.
+        $tallied = false;
+
         try {
             // A queued refresh must still fit one verifier step, or the job
             // would be killed mid-agent; the catch below fails the providers.
@@ -93,6 +100,8 @@ class PriceVerifierPhase
                 $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
             }
 
+            $tallied = true;
+
             // Resolve every provider-level fallback target from the ledger's
             // VERIFICATION-GRADE outcomes (a wildcard provider must cover every
             // stored row; an exact-model provider must cover its listed models).
@@ -122,8 +131,10 @@ class PriceVerifierPhase
             // verified before the stop is reported resolved, not failed —
             // only the still-uncovered providers fail. Ride-along anomaly
             // providers keep their feed-resolved status either way.
-            foreach (array_keys($priceRefreshLedger->fallbackTargets) as $provider) {
-                $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
+            if (! $tallied) {
+                foreach (array_keys($priceRefreshLedger->fallbackTargets) as $provider) {
+                    $this->applyAgentTally($priceRefreshLedger, $provider, $priceVerificationRun);
+                }
             }
 
             $this->resolveProviderLevelFallback($priceRefreshLedger, $priceVerificationRun);

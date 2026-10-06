@@ -151,8 +151,8 @@ final class PricingTransportException extends RuntimeException
 
     /**
      * A queued refresh's time box no longer fits this source's worst case,
-     * so no request was made. A timeout: the source escalates like any
-     * other feed failure.
+     * so no request was made. Skipped, not a timeout: the source still
+     * escalates like any other feed failure.
      */
     public static function outOfTime(string $source): self
     {
