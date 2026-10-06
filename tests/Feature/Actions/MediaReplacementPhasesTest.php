@@ -172,8 +172,8 @@ function replacementPhasesRadarrRequest(ServiceConnection $radarr): ActionReques
 
 /**
  * Host-scoped fakes for both arrs. Every request is appended to $trace->calls
- * as "METHOD /path". Options: grab (accepted|rejected|indeterminate),
- * currentFileId (int), releases (list), deleteStatus (int), lockKey (string:
+ * as "METHOD /path". Options: grab (accepted|rejected|indeterminate|login_page,
+ * Sonarr only), currentFileId (int), releases (list), deleteStatus (int), lockKey (string:
  * recorded into $trace->sharedLockFreeDuringGrab at the grab POST),
  * releaseStatus (int: the release search responds with this status and an
  * empty body instead of releases), releaseConnectionFails (bool: the release
@@ -235,7 +235,9 @@ function replacementPhasesSonarrResponse(Request $request, stdClass $trace, arra
     throw_if($call === 'GET /api/v3/release' && ($options['releaseConnectionFails'] ?? false) === true, ConnectionException::class, 'Connection timed out.');
 
     return match (true) {
-        $call === 'POST /api/v3/release' => Http::response([], replacementPhasesGrabStatus($options)),
+        $call === 'POST /api/v3/release' => ($options['grab'] ?? null) === 'login_page'
+            ? Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])
+            : Http::response([], replacementPhasesGrabStatus($options)),
         $call === 'GET /api/v3/release' => isset($options['releaseStatus'])
             ? Http::response([], (int) $options['releaseStatus'])
             : Http::response($options['releases'] ?? [replacementPhasesSonarrRelease()]),
@@ -754,3 +756,26 @@ test('one escalation runs exactly one release search', function (string $service
     expect($releaseSearches)->toHaveCount(1)
         ->and($result['replacement_initiated'])->toBeTrue();
 })->with(['sonarr', 'radarr']);
+
+test('a grab answered with a login page is indeterminate and touches no file', function (): void {
+    $serviceConnection = replacementPhasesSonarr();
+    $actionRequest = replacementPhasesSonarrRequest($serviceConnection);
+    $trace = new stdClass;
+    replacementPhasesFakeArrs($trace, ['grab' => 'login_page']);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+    $mediaReplacementAttempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+
+    expect($trace->calls)->toBe([
+        'GET /api/v3/series/42',
+        'GET /api/v3/episode',
+        'GET /api/v3/episodefile/501',
+        'GET /api/v3/history',
+        'GET /api/v3/release',
+        'PUT /api/v3/episode/monitor',
+        'POST /api/v3/release',
+    ])
+        ->and($result['grab_outcome'])->toBe('indeterminate')
+        ->and($result['deleted_files'])->toBe(0)
+        ->and($mediaReplacementAttempt->grab_accepted_at)->toBeNull();
+});

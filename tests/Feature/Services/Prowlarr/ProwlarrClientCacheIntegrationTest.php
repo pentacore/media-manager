@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrUnexpectedResponse;
 use App\Services\Prowlarr\ProwlarrClient;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -90,3 +91,20 @@ test('getQualityProfiles caches inherited ArrClient call', function (): void {
 
     Http::assertSentCount(1);
 });
+
+test('a 200 Prowlarr read that is not JSON data is an upstream failure and is never cached', function (string $method, array $arguments, string $path): void {
+    Http::fake(['prowlarr.local:9696'.$path => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    $client = new ProwlarrClient($this->connection);
+
+    expect(fn (): array => $client->{$method}(...$arguments))
+        ->toThrow(ArrUnexpectedResponse::class, 'Prowlarr answered with a body that is not JSON data.')
+        ->and(fn (): array => $client->{$method}(...$arguments))
+        ->toThrow(ArrUnexpectedResponse::class);
+
+    // Both calls went upstream: the failure never entered the cache.
+    Http::assertSentCount(2);
+})->with([
+    'indexer search' => ['searchIndexers', ['Severance'], '/api/v1/search*'],
+    'indexer list' => ['listIndexers', [], '/api/v1/indexer'],
+    'indexer stats' => ['getIndexerStats', [], '/api/v1/indexerstats*'],
+]);

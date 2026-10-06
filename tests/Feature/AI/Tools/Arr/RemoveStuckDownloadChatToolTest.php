@@ -163,3 +163,21 @@ test('the queued removal is described from the arr queue as requested in chat', 
         ->and($actionRequest->description_verified)->toBeTrue()
         ->and($actionRequest->origin)->toBe('chat');
 });
+
+test("a non-string argument is refused in the tool's own words", function (array $arguments, string $field, string $message): void {
+    $result = json_decode((new RemoveStuckDownloadChatTool)->handle(new Request([
+        'service' => 'radarr',
+        'download_id' => 'HASH-B',
+        'reason' => 'Not an upgrade for existing file.',
+        ...$arguments,
+    ])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'][$field][0])->toBe($message)
+        ->and(ActionRequest::count())->toBe(0);
+})->with([
+    'a numeric service' => [['service' => 5], 'service', 'service must be "sonarr" or "radarr".'],
+    'a list as the download id' => [['download_id' => ['HASH-B']], 'download_id', 'download_id must be a string.'],
+    'a list as the reason' => [['reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the approver.'],
+    'a boolean as the reason' => [['reason' => true], 'reason', 'reason must be a short plain-text explanation for the approver.'],
+]);

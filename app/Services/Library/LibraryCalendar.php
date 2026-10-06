@@ -6,8 +6,7 @@ namespace App\Services\Library;
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -21,6 +20,8 @@ use Throwable;
  */
 final readonly class LibraryCalendar
 {
+    public function __construct(private ArrConnections $arrConnections) {}
+
     /**
      * @return array{items: list<array<string, mixed>>, failures: list<array{service: string, instance: string}>}
      */
@@ -40,9 +41,7 @@ final readonly class LibraryCalendar
 
             foreach ($connections as $connection) {
                 try {
-                    $entries = $serviceType === ServiceType::Sonarr
-                        ? new SonarrClient($connection)->getCalendar($start, $end, withRetry: false)
-                        : new RadarrClient($connection)->getCalendar($start, $end, withRetry: false);
+                    $entries = $this->arrConnections->client($connection)->getCalendar($start, $end, withRetry: false);
                 } catch (RequestException|ConnectionException) {
                     $failures[] = ['service' => ucfirst($serviceType->value), 'instance' => $connection->name];
 

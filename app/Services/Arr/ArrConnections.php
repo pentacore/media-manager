@@ -11,10 +11,16 @@ use App\Services\Sonarr\SonarrClient;
 use InvalidArgumentException;
 
 /**
- * Sonarr/Radarr clients for the library pages and sidebar badges. "Active"
- * is the primary connection — the first active one by id, exactly as
- * ServiceConnection::findActive() picks it — so every surface reads the
- * same instance and only its items get library links.
+ * The single Sonarr/Radarr client builder: every Sonarr/Radarr client in the
+ * app — library pages, sidebar badges, executors (ArrLibraryActions and its
+ * subclasses), AI tools, jobs and console commands, and ServiceClientFactory
+ * (which delegates Sonarr/Radarr here) — is built here through `client()`,
+ * `sonarr()`, or `radarr()`, never a local `new SonarrClient`/`new
+ * RadarrClient` — see app.md. `tests/Unit/Architecture/ArrClientConstructionArchTest.php`
+ * fails on a `new SonarrClient`/`new RadarrClient` anywhere else under
+ * `app/`. "Active" is the primary connection — the first active one by id,
+ * exactly as ServiceConnection::findActive() picks it — so every surface
+ * reads the same instance and only its items get library links.
  */
 final readonly class ArrConnections
 {
@@ -42,9 +48,29 @@ final readonly class ArrConnections
     public function client(ServiceConnection $serviceConnection): SonarrClient|RadarrClient
     {
         return match ($serviceConnection->type) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
+            ServiceType::Sonarr => $this->sonarr($serviceConnection),
+            ServiceType::Radarr => $this->radarr($serviceConnection),
             default => throw new InvalidArgumentException(sprintf('%s is not a Sonarr or Radarr service.', $serviceConnection->type->label())),
         };
+    }
+
+    /**
+     * @throws InvalidArgumentException for a connection that is not Sonarr
+     */
+    public function sonarr(ServiceConnection $serviceConnection): SonarrClient
+    {
+        throw_unless($serviceConnection->type === ServiceType::Sonarr, InvalidArgumentException::class, sprintf('%s is not a Sonarr service.', $serviceConnection->type->label()));
+
+        return new SonarrClient($serviceConnection);
+    }
+
+    /**
+     * @throws InvalidArgumentException for a connection that is not Radarr
+     */
+    public function radarr(ServiceConnection $serviceConnection): RadarrClient
+    {
+        throw_unless($serviceConnection->type === ServiceType::Radarr, InvalidArgumentException::class, sprintf('%s is not a Radarr service.', $serviceConnection->type->label()));
+
+        return new RadarrClient($serviceConnection);
     }
 }

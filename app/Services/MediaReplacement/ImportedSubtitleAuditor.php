@@ -13,9 +13,9 @@ use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Arr\ArrConnections;
 use App\Services\Notifications\AdminNotifier;
 use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +46,7 @@ final readonly class ImportedSubtitleAuditor
         private ActionOrchestrator $actionOrchestrator,
         private LanguageNormalizer $languageNormalizer,
         private AdminNotifier $adminNotifier,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -94,7 +95,7 @@ final readonly class ImportedSubtitleAuditor
             return;
         }
 
-        if (! $this->hasConfiguredTag($serviceConnection, $itemId, $configuredTags, $isRadarr)) {
+        if (! $this->hasConfiguredTag($serviceConnection, $itemId, $configuredTags)) {
             $this->skip($serviceConnection, 'no_configured_tag');
 
             return;
@@ -367,10 +368,9 @@ final readonly class ImportedSubtitleAuditor
         ServiceConnection $serviceConnection,
         int $itemId,
         array $configuredTags,
-        bool $isRadarr,
     ): bool {
-        $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
-        $item = $isRadarr ? $client->getMovieById($itemId) : $client->getSeriesById($itemId);
+        $client = $this->arrConnections->client($serviceConnection);
+        $item = $client instanceof RadarrClient ? $client->getMovieById($itemId) : $client->getSeriesById($itemId);
         $tagIds = is_array($item['tags'] ?? null) ? $item['tags'] : [];
 
         if ($tagIds === []) {

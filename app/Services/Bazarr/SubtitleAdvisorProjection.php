@@ -10,10 +10,10 @@ use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Services\Arr\ArrConnections;
 use App\Services\MediaReplacement\LanguageNormalizer;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -38,6 +38,7 @@ final readonly class SubtitleAdvisorProjection
         private ReplacementCandidateFinder $replacementCandidateFinder,
         private SubtitleCaseFingerprint $subtitleCaseFingerprint,
         private LanguageNormalizer $languageNormalizer,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -197,7 +198,7 @@ final readonly class SubtitleAdvisorProjection
                 'The subtitle case episode target is invalid.',
             );
 
-            $episode = collect(new SonarrClient($serviceConnection)->getEpisodesBySeries($seriesId))
+            $episode = collect($this->arrConnections->sonarr($serviceConnection)->getEpisodesBySeries($seriesId))
                 ->first(fn (mixed $candidate): bool => is_array($candidate)
                     && $this->positiveInteger($candidate['id'] ?? null) === $episodeId);
             throw_unless(is_array($episode), InvalidArgumentException::class, 'The subtitle case episode no longer exists.');

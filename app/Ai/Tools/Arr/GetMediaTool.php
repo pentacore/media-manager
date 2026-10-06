@@ -10,7 +10,7 @@ use App\Enums\ServiceType;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -63,9 +63,11 @@ class GetMediaTool extends BaseTool
         }
 
         if ($itemId !== null) {
-            return $service === 'sonarr'
-                ? new SonarrClient($serviceConnection)->getSeriesById((int) $itemId)
-                : new RadarrClient($serviceConnection)->getMovieById((int) $itemId);
+            $client = resolve(ArrConnections::class)->client($serviceConnection);
+
+            return $client instanceof SonarrClient
+                ? $client->getSeriesById((int) $itemId)
+                : $client->getMovieById((int) $itemId);
         }
 
         return $this->listFromIndex($service, $serviceConnection->id, $args);

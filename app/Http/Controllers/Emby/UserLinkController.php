@@ -227,14 +227,18 @@ class UserLinkController extends Controller
         );
 
         $embyUserLink->loadMissing('user:id,name');
-        $embyUserLink->delete();
 
-        $auditLogger->record(
-            'emby.user_unlinked',
-            $embyUserLink,
-            sprintf('Unlinked Emby user "%s" from %s.', $embyUserLink->emby_username, $embyUserLink->user->name),
-            context: ['emby_user_id' => $embyUserLink->emby_user_id, 'user_id' => $embyUserLink->user_id],
-        );
+        // The unlink and its audit row commit together, like the link paths.
+        DB::transaction(function () use ($embyUserLink, $auditLogger): void {
+            $embyUserLink->delete();
+
+            $auditLogger->record(
+                'emby.user_unlinked',
+                $embyUserLink,
+                sprintf('Unlinked Emby user "%s" from %s.', $embyUserLink->emby_username, $embyUserLink->user->name),
+                context: ['emby_user_id' => $embyUserLink->emby_user_id, 'user_id' => $embyUserLink->user_id],
+            );
+        });
 
         if ($user->role === UserRole::Admin) {
             Inertia::flash('toast', ['type' => 'success', 'message' => __('Link removed.')]);

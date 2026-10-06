@@ -9,6 +9,9 @@ use App\Enums\ServiceType;
 use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
+use App\Services\Arr\ArrUnexpectedResponse;
+use App\Services\Emby\EmbyUnexpectedResponse;
+use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\ServiceClientFactory;
 use App\Support\UpstreamErrorText;
 use Illuminate\Bus\Batchable;
@@ -16,7 +19,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Str;
 use Throwable;
 
 class PingServiceHealth implements ShouldQueue
@@ -94,25 +96,22 @@ class PingServiceHealth implements ShouldQueue
 
     /**
      * The result is persisted, broadcast to every manage-library user (via
-     * ServiceHealthChanged) and echoed by the scheduler. Exception messages
-     * embed the full request URI, whose query string can carry credentials
-     * (SABnzbd's mandatory `apikey`), and upstream bodies quote local paths,
-     * so every branch goes through UpstreamErrorText::sanitize(). Response
-     * snippets lose their HTML tags first so an error page stays readable.
+     * ServiceHealthChanged) and echoed by the scheduler. An HTTP failure is
+     * stored as a fixed sentence per status class: an error page can carry
+     * internal hostnames or tokens the sanitizer does not recognise. The
+     * app's own fixed-message refusals keep their sentence, which never
+     * quotes the body. Connection and other exception messages embed the
+     * request URI (SABnzbd's mandatory `apikey`) or local paths, so they
+     * still go through UpstreamErrorText::sanitize().
      */
     private function formatFailureReason(Throwable $throwable): string
     {
-        if ($throwable instanceof RequestException) {
-            $snippet = Str::of(strip_tags(trim((string) $throwable->response->body())))
-                ->replaceMatches('/\s+/', ' ')
-                ->trim()
-                ->limit(160, '…')
-                ->toString();
+        if ($throwable instanceof ArrUnexpectedResponse || $throwable instanceof SabnzbdRefused || $throwable instanceof EmbyUnexpectedResponse) {
+            return sprintf('HTTP %d: %s', $throwable->response->status(), $throwable->getMessage());
+        }
 
-            return UpstreamErrorText::sanitize(
-                sprintf('HTTP %d%s', $throwable->response->status(), $snippet === '' ? '' : ': '.$snippet),
-                255,
-            );
+        if ($throwable instanceof RequestException) {
+            return $this->httpFailureSentence($throwable->response->status());
         }
 
         if ($throwable instanceof ConnectionException) {
@@ -120,6 +119,16 @@ class PingServiceHealth implements ShouldQueue
         }
 
         return UpstreamErrorText::sanitize(sprintf('%s: %s', class_basename($throwable), $throwable->getMessage()), 255);
+    }
+
+    private function httpFailureSentence(int $status): string
+    {
+        return match (true) {
+            in_array($status, [401, 403], true) => sprintf('HTTP %d: the service rejected the API key.', $status),
+            $status >= 500 => sprintf('HTTP %d: the service reported a server error.', $status),
+            $status >= 400 => sprintf('HTTP %d: the service refused the request.', $status),
+            default => sprintf('HTTP %d: the service answered with something other than its API data.', $status),
+        };
     }
 
     /**

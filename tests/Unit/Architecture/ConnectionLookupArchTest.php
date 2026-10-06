@@ -7,9 +7,9 @@ use Symfony\Component\Finder\Finder;
 /**
  * A missing connection is an ordinary state: look it up with
  * ServiceConnection::findActive() and branch on null. resolveActive() is for
- * callers where a missing connection is an error (executors, AI tools,
- * ServiceClientFactory), so no class may catch its ModelNotFoundException
- * to mean "not configured". The pinned lookups' own
+ * callers where a missing connection is an error (executors, AI tools), so
+ * no class may catch its ModelNotFoundException to mean "not configured".
+ * The pinned lookups' own
  * `catch (InvalidArgumentException|ModelNotFoundException)` sit in files
  * that no longer call resolveActive().
  */

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Emby\EmbyClient;
 use App\Services\Prowlarr\ProwlarrClient;
@@ -14,15 +15,19 @@ use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 
+/**
+ * A client for any connection type. Sonarr and Radarr come from
+ * ArrConnections::client(), the one place those two are built.
+ */
 class ServiceClientFactory
 {
+    public function __construct(private readonly ArrConnections $arrConnections) {}
+
     public function make(ServiceConnection $serviceConnection): SonarrClient|RadarrClient|BazarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
     {
         return match ($serviceConnection->type) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
+            ServiceType::Sonarr, ServiceType::Radarr => $this->arrConnections->client($serviceConnection),
             ServiceType::Bazarr => new BazarrClient($serviceConnection),
             ServiceType::Emby => new EmbyClient($serviceConnection),
             ServiceType::Seerr => new SeerrClient($serviceConnection),
@@ -30,15 +35,5 @@ class ServiceClientFactory
             ServiceType::SABnzbd => new SabnzbdClient($serviceConnection),
             ServiceType::Whisparr => new WhisparrClient($serviceConnection),
         };
-    }
-
-    /**
-     * Build a client by resolving the active connection for the given type.
-     *
-     * @throws ModelNotFoundException when no active connection exists
-     */
-    public function makeForType(ServiceType $serviceType): SonarrClient|RadarrClient|BazarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
-    {
-        return $this->make(ServiceConnection::resolveActive($serviceType));
     }
 }

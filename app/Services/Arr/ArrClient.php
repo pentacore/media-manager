@@ -149,6 +149,32 @@ abstract class ArrClient
     }
 
     /**
+     * The decoded body of a write. A blank body is a success (deletes and
+     * several POSTs answer `200 ''`). A body that is not JSON data — a
+     * reverse-proxy login page in front of the arr — throws, so it never
+     * reads as a change that happened; callers must not retry it, because
+     * whether it landed is unknown.
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws ArrWriteUnconfirmed
+     */
+    protected function confirmedWrite(Response $response): array
+    {
+        if (trim($response->body()) === '') {
+            return [];
+        }
+
+        $body = $response->json();
+
+        if (! is_array($body)) {
+            throw new ArrWriteUnconfirmed($response, $this->connection->type->label());
+        }
+
+        return $body;
+    }
+
+    /**
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException
@@ -206,14 +232,14 @@ abstract class ArrClient
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function runCommand(string $name, array $params = [], bool $withRetry = true): array
     {
-        return $this->buildClient($withRetry)->post(sprintf('/api/%s/command', $this->apiVersion), [
+        return $this->confirmedWrite($this->buildClient($withRetry)->post(sprintf('/api/%s/command', $this->apiVersion), [
             'name' => $name,
             ...$params,
-        ])->throw()->json() ?? [];
+        ])->throw());
     }
 
     /**
@@ -346,14 +372,13 @@ abstract class ArrClient
      *
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function grabQueueItem(int $id): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->post(sprintf('/api/%s/queue/grab/%d', $this->apiVersion, $id))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -362,7 +387,7 @@ abstract class ArrClient
      * remember it so it never returns (`blocklist`), and whether the
      * post-removal re-search is skipped (`skipRedownload`).
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function removeQueueItem(
         int $id,
@@ -376,9 +401,9 @@ abstract class ArrClient
             'skipRedownload' => $skipRedownload ? 'true' : 'false',
         ]);
 
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/queue/%d?%s', $this->apiVersion, $id, $query))
-            ->throw();
+            ->throw());
     }
 
     /**
@@ -414,29 +439,31 @@ abstract class ArrClient
      * retry: a server error may mean the grab was already accepted, so retrying
      * could start duplicate downloads. Callers must treat a server error /
      * connection loss as an indeterminate outcome, not a definitive rejection.
+     * A 200 that is not JSON data throws ArrWriteUnconfirmed, which is just as
+     * indeterminate.
      *
      * @param  array<string, mixed>  $release
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function grabRelease(array $release): void
     {
-        $this->buildClient(withRetry: false)
+        $this->confirmedWrite($this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/release', $this->apiVersion), $release)
-            ->throw();
+            ->throw());
     }
 
     /**
      * Mark a history record as failed so the managing service blocklists the
      * bad release and does not re-grab it.
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function markHistoryFailed(int $historyId): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->post(sprintf('/api/%s/history/failed/%d', $this->apiVersion, $historyId))
-            ->throw();
+            ->throw());
     }
 
     /**
@@ -455,38 +482,36 @@ abstract class ArrClient
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function createNotification(array $payload): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->post(sprintf('/api/%s/notification', $this->apiVersion), $payload)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateNotification(int $id, array $payload): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->put(sprintf('/api/%s/notification/%d', $this->apiVersion, $id), $payload)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteNotification(int $id): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/notification/%d', $this->apiVersion, $id))
-            ->throw();
+            ->throw());
     }
 
     /**

@@ -8,7 +8,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -46,11 +46,15 @@ class SearchMediaTool extends BaseTool
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
         });
 
-        return match ($service) {
-            'sonarr' => new SonarrClient($serviceConnection)->searchSeries($query),
-            'radarr' => new RadarrClient($serviceConnection)->searchMovies($query),
-            default => new WhisparrClient($serviceConnection)->searchItems($query),
-        };
+        if ($service === 'whisparr') {
+            return new WhisparrClient($serviceConnection)->searchItems($query);
+        }
+
+        $client = resolve(ArrConnections::class)->client($serviceConnection);
+
+        return $client instanceof SonarrClient
+            ? $client->searchSeries($query)
+            : $client->searchMovies($query);
     }
 
     /**

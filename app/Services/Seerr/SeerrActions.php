@@ -9,6 +9,7 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Support\PayloadInt;
 use InvalidArgumentException;
 
 class SeerrActions implements ActionExecutor
@@ -33,10 +34,7 @@ class SeerrActions implements ActionExecutor
      */
     private function cleanupRequest(ActionRequest $actionRequest): array
     {
-        $payload = $actionRequest->payload;
-        $requestId = (int) ($payload['seerr_request_id'] ?? 0);
-
-        throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
+        $requestId = PayloadInt::required($actionRequest->payload, 'seerr_request_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($actionRequest->payload, ServiceType::Seerr);
         new SeerrClient($serviceConnection)->deleteRequest($requestId);
@@ -52,9 +50,7 @@ class SeerrActions implements ActionExecutor
      */
     private function approveRequest(ActionRequest $actionRequest): array
     {
-        $requestId = (int) ($actionRequest->payload['seerr_request_id'] ?? 0);
-
-        throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
+        $requestId = PayloadInt::required($actionRequest->payload, 'seerr_request_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($actionRequest->payload, ServiceType::Seerr);
         $this->seerrRequestLock->run($serviceConnection, $requestId, function () use ($serviceConnection, $requestId): void {
@@ -73,9 +69,7 @@ class SeerrActions implements ActionExecutor
      */
     private function declineRequest(ActionRequest $actionRequest): array
     {
-        $requestId = (int) ($actionRequest->payload['seerr_request_id'] ?? 0);
-
-        throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
+        $requestId = PayloadInt::required($actionRequest->payload, 'seerr_request_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($actionRequest->payload, ServiceType::Seerr);
         $this->seerrRequestLock->run($serviceConnection, $requestId, function () use ($serviceConnection, $requestId): void {

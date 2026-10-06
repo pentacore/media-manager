@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Services\MediaReplacement;
 
 use App\Models\ServiceConnection;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use Throwable;
 
 class SonarrRootFolderCatalog
 {
     public function __construct(
         private readonly SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+        private readonly ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -30,7 +31,7 @@ class SonarrRootFolderCatalog
         }
 
         try {
-            $importedRootFolders = new SonarrClient($serviceConnection)->getRootFolders();
+            $importedRootFolders = $this->arrConnections->sonarr($serviceConnection)->getRootFolders();
         } catch (Throwable) {
             return $configuredRootFolders;
         }

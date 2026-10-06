@@ -8,6 +8,7 @@ use App\Models\AiModelPrice;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -281,4 +282,25 @@ test('tryLock is atomic and rejects a second caller until released', function ()
     Cache::forget(RefreshAiPricesJob::LOCK_KEY);
 
     expect(RefreshAiPricesJob::tryLock(3))->toBeTrue();
+});
+
+test('handle opens a 255 second time box before the coordinator runs', function (): void {
+    Event::fake([AiPriceRefreshStateChanged::class]);
+    $this->freezeTime();
+    $seen = new stdClass;
+
+    bindCoordinator(function () use ($seen): RefreshReport {
+        $priceRefreshTimeBox = resolve(PriceRefreshTimeBox::class);
+        $seen->fits255 = $priceRefreshTimeBox->hasRoomFor(255);
+        $seen->fits256 = $priceRefreshTimeBox->hasRoomFor(256);
+
+        return refreshReport(RefreshReport::RESULT_SUCCEEDED);
+    });
+
+    $refreshAiPricesJob = new RefreshAiPricesJob(User::factory()->admin()->create());
+    $refreshAiPricesJob->handle();
+
+    expect($seen->fits255)->toBeTrue()
+        ->and($seen->fits256)->toBeFalse()
+        ->and(RefreshAiPricesJob::RUN_BUDGET_SECONDS)->toBeLessThan($refreshAiPricesJob->timeout);
 });

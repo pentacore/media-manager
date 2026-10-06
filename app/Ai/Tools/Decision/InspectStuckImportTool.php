@@ -7,9 +7,8 @@ namespace App\Ai\Tools\Decision;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ManualImportResolver;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
@@ -72,9 +71,7 @@ class InspectStuckImportTool extends DecisionTool
             $connection = $context instanceof DecisionRunContext
                 ? $context->resolveConnection($type)
                 : ServiceConnection::resolveActive($type);
-            $client = $type === ServiceType::Sonarr
-                ? new SonarrClient($connection)
-                : new RadarrClient($connection);
+            $client = resolve(ArrConnections::class)->client($connection);
             $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         } catch (Throwable $throwable) {
             Log::warning('InspectStuckImportTool: lookup failed', [

@@ -131,6 +131,19 @@ test('Prowlarr refusals are sanitized and never retried', function (int $status,
     'bare refusal' => [400, '', 422, 'Prowlarr refused the grab.'],
 ]);
 
+test('an unconfirmed grab (a 200 that is not JSON data) is reported as unknown, not refused', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/search' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    $row = prowlarrGrabRemembered($this->prowlarr);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('prowlarr.grab'), ['release_key' => $row['key'], 'indexer_id' => $row['indexer_id']])
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Prowlarr answered the change with something other than its API data, so whether it was applied is unknown. Check Prowlarr before retrying.');
+
+    Http::assertSentCount(1);
+    expect(ActivityLog::query()->where('action', 'prowlarr.release.grabbed')->exists())->toBeFalse();
+});
+
 test('a lost connection is reported as an unknown outcome, not a plain outage', function (): void {
     $attempts = 0;
     // A fake that throws never reaches recordRequestResponsePair(), so

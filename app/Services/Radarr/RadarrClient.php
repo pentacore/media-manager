@@ -6,6 +6,7 @@ namespace App\Services\Radarr;
 
 use App\Cache\Services\RadarrCache;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Support\Cache\Warmable;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -76,33 +77,33 @@ class RadarrClient extends ArrClient implements Warmable
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function addMovie(array $data): array
     {
         // Write — not cached; bust handled by RadarrActions.
-        return $this->buildClient()->post(sprintf('/api/%s/movie', $this->apiVersion), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->post(sprintf('/api/%s/movie', $this->apiVersion), $data)->throw());
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateMovie(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('/api/%s/movie/%d', $this->apiVersion, $id), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->put(sprintf('/api/%s/movie/%d', $this->apiVersion, $id), $data)->throw());
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteMovie(int $id, bool $deleteFiles = false): void
     {
         $query = http_build_query(['deleteFiles' => $deleteFiles ? 'true' : 'false']);
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/movie/%d?%s', $this->apiVersion, $id, $query))
-            ->throw();
+            ->throw());
     }
 
     /**
@@ -216,29 +217,29 @@ class RadarrClient extends ArrClient implements Warmable
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteMovieFile(int $movieFileId): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
-            ->throw();
+            ->throw());
     }
 
     /**
      * Toggle monitoring for a movie via the editor endpoint. Used to suppress
      * the arr's auto-redownload search while a subtitle replacement is in flight.
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function setMovieMonitored(int $movieId, bool $monitored): void
     {
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->put(sprintf('/api/%s/movie/editor', $this->apiVersion), [
                 'movieIds' => [$movieId],
                 'monitored' => $monitored,
             ])
-            ->throw();
+            ->throw());
     }
 
     /**

@@ -8,8 +8,7 @@ use App\Enums\ServiceType;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
@@ -71,8 +70,8 @@ final readonly class SeasonLibraryStatus
         $seriesByTvdbId = $this->preferConnection($indexedSeries, 'tvdb_id', $activeSonarrId);
         $moviesByTmdbId = $this->preferConnection($indexedMovies, 'tmdb_id', $activeRadarrId);
 
-        $liveSeries = $this->liveItems($seriesByTvdbId, 'sonarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => new SonarrClient($serviceConnection)->fetchSeriesByIds($ids));
-        $liveMovies = $this->liveItems($moviesByTmdbId, 'radarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => new RadarrClient($serviceConnection)->fetchMoviesByIds($ids));
+        $liveSeries = $this->liveItems($seriesByTvdbId, 'sonarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => resolve(ArrConnections::class)->sonarr($serviceConnection)->fetchSeriesByIds($ids));
+        $liveMovies = $this->liveItems($moviesByTmdbId, 'radarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => resolve(ArrConnections::class)->radarr($serviceConnection)->fetchMoviesByIds($ids));
         $resolved = [];
 
         foreach ($rows as $row) {

@@ -9,9 +9,8 @@ use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClient;
-use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemIndex;
 use Closure;
@@ -30,7 +29,10 @@ use Throwable;
  */
 final readonly class ActionTargets
 {
-    public function __construct(private WhisparrItemIndex $whisparrItemIndex) {}
+    public function __construct(
+        private WhisparrItemIndex $whisparrItemIndex,
+        private ArrConnections $arrConnections,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $pinContext
@@ -77,7 +79,7 @@ final readonly class ActionTargets
     {
         return $this->attempt('series', $tvdbId, $fallbackName, false, function () use ($tvdbId, $pinContext): ?ActionTarget {
             $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
-            $name = $this->nameFrom(new SonarrClient($serviceConnection)->searchSeries(sprintf('tvdb:%d', $tvdbId))[0] ?? []);
+            $name = $this->nameFrom($this->arrConnections->sonarr($serviceConnection)->searchSeries(sprintf('tvdb:%d', $tvdbId))[0] ?? []);
 
             return $name === null ? null : new ActionTarget('series', $name, [
                 ['label' => 'Series', 'value' => $name],
@@ -94,7 +96,7 @@ final readonly class ActionTargets
     {
         return $this->attempt('movie', $tmdbId, $fallbackName, false, function () use ($tmdbId, $pinContext): ?ActionTarget {
             $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
-            $name = $this->nameFrom(new RadarrClient($serviceConnection)->searchMovies(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+            $name = $this->nameFrom($this->arrConnections->radarr($serviceConnection)->searchMovies(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
 
             return $name === null ? null : new ActionTarget('movie', $name, [
                 ['label' => 'Movie', 'value' => $name],
@@ -273,7 +275,7 @@ final readonly class ActionTargets
 
         $name = $indexed instanceof IndexedSeries
             ? $this->withYear($indexed->title, $indexed->year)
-            : $this->nameFrom(new SonarrClient($serviceConnection)->getSeriesById($sonarrId));
+            : $this->nameFrom($this->arrConnections->sonarr($serviceConnection)->getSeriesById($sonarrId));
 
         return $name === null ? null : new ActionTarget('series', $name, [
             ['label' => 'Series', 'value' => $name],
@@ -291,7 +293,7 @@ final readonly class ActionTargets
 
         $name = $indexed instanceof IndexedMovie
             ? $this->withYear($indexed->title, $indexed->year)
-            : $this->nameFrom(new RadarrClient($serviceConnection)->getMovieById($radarrId));
+            : $this->nameFrom($this->arrConnections->radarr($serviceConnection)->getMovieById($radarrId));
 
         return $name === null ? null : new ActionTarget('movie', $name, [
             ['label' => 'Movie', 'value' => $name],
@@ -398,8 +400,7 @@ final readonly class ActionTargets
     private function arrClient(ServiceType $serviceType, ServiceConnection $serviceConnection): ArrClient
     {
         return match ($serviceType) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
+            ServiceType::Sonarr, ServiceType::Radarr => $this->arrConnections->client($serviceConnection),
             ServiceType::Whisparr => new WhisparrClient($serviceConnection),
             default => throw new InvalidArgumentException(sprintf('No arr client for %s', $serviceType->value)),
         };

@@ -18,11 +18,11 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Arr\QueueItemRemover;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -43,19 +43,19 @@ class ActivityController extends Controller
      * renders first; history is per service because two independently
      * paged feeds cannot be merged into one correct page.
      */
-    public function queue(Request $request, GrabbedHistoryCache $grabbedHistoryCache): Response
+    public function queue(Request $request, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): Response
     {
         $historyService = $request->query('history_service') === 'radarr' ? 'radarr' : 'sonarr';
         $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
 
         return Inertia::render('Library/Activity', [
-            'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue()),
+            'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue($arrConnections)),
             'historyFilters' => [
                 'service' => $historyService,
                 'page' => $historyPage,
                 'active' => $request->has('history_service') || $request->has('history_page'),
             ],
-            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage, $grabbedHistoryCache), 'history'),
+            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage, $grabbedHistoryCache, $arrConnections), 'history'),
         ]);
     }
 
@@ -65,7 +65,7 @@ class ActivityController extends Controller
      * release is good and doesn't want to wait an hour for the next
      * indexer poll. Pinned to the connection the row was rendered from.
      */
-    public function grabQueueItem(GrabQueueItemRequest $grabQueueItemRequest, string $service, int $id): RedirectResponse
+    public function grabQueueItem(GrabQueueItemRequest $grabQueueItemRequest, string $service, int $id, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $grabQueueItemRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -76,7 +76,12 @@ class ActivityController extends Controller
         }
 
         try {
-            $this->clientFor($service, $connection)->grabQueueItem($id);
+            $this->clientFor($connection, $arrConnections)->grabQueueItem($id);
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // A 200 that is not JSON data (usually a proxy login page): the
+            // grab may already have reached the arr, so this must read as
+            // unknown, never as a refusal.
+            return $this->flashAndBack('error', $arrWriteUnconfirmed->getMessage());
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
@@ -127,7 +132,7 @@ class ActivityController extends Controller
      * stale or mismatched pin refuses the whole request before anything is
      * sent.
      */
-    public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner): JsonResponse
+    public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $bulkQueueItemsRequest->validated();
         $service = (string) $validated['service'];
@@ -175,7 +180,7 @@ class ActivityController extends Controller
 
                 return BulkItemOutcome::started();
             },
-            $this->queueTitles($connection, $unreachable),
+            $this->queueTitles($connection, $arrConnections, $unreachable),
         );
 
         return response()->json($bulkSummary->withToast($queueBulkAction->pastTense()));
@@ -188,12 +193,12 @@ class ActivityController extends Controller
      *
      * @return Closure(int): string
      */
-    private function queueTitles(ServiceConnection $serviceConnection, bool &$unreachable): Closure
+    private function queueTitles(ServiceConnection $serviceConnection, ArrConnections $arrConnections, bool &$unreachable): Closure
     {
         /** @var array<int, string>|null $titles */
         $titles = null;
 
-        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection): string {
+        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection, $arrConnections): string {
             if ($titles === null && $unreachable) {
                 return sprintf('#%d', $queueId);
             }
@@ -201,8 +206,8 @@ class ActivityController extends Controller
             if ($titles === null) {
                 $errors = [];
                 $rows = $serviceConnection->type === ServiceType::Sonarr
-                    ? $this->fetchSonarr($serviceConnection, $errors)
-                    : $this->fetchRadarr($serviceConnection, $errors);
+                    ? $this->fetchSonarr($serviceConnection, $arrConnections, $errors)
+                    : $this->fetchRadarr($serviceConnection, $arrConnections, $errors);
                 $titles = [];
 
                 foreach ($rows as $row) {
@@ -223,7 +228,7 @@ class ActivityController extends Controller
      * was rendered from and refuses anything else, and only an id the
      * History tab rendered as a grab (see GrabbedHistoryCache) is accepted.
      */
-    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id, GrabbedHistoryCache $grabbedHistoryCache): RedirectResponse
+    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $markHistoryFailedRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -239,10 +244,15 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Only a grabbed :service history entry can be marked as failed — refresh the history and try again.', ['service' => $label]));
         }
 
-        $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
+        $arrClient = $this->clientFor($connection, $arrConnections);
 
         try {
-            $client->markHistoryFailed($id);
+            $arrClient->markHistoryFailed($id);
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // A 200 that is not JSON data (usually a proxy login page): the
+            // write may already have reached the arr, so this must read as
+            // unknown, never as a refusal.
+            return $this->flashAndBack('error', $arrWriteUnconfirmed->getMessage());
         } catch (ConnectionException) {
             return $this->flashAndBack('error', __(':service is unreachable right now.', ['service' => $label]));
         } catch (RequestException $requestException) {
@@ -270,7 +280,7 @@ class ActivityController extends Controller
      * upstream ManualImportResource trimmed to what the modal needs.
      * Pinned to the connection the row was rendered from.
      */
-    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId): JsonResponse
+    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $manualImportCandidatesRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -281,7 +291,7 @@ class ActivityController extends Controller
         }
 
         try {
-            $candidates = $this->clientFor($service, $connection)->getManualImport(['downloadId' => $downloadId]);
+            $candidates = $this->clientFor($connection, $arrConnections)->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
             return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
@@ -300,7 +310,7 @@ class ActivityController extends Controller
      * frontend only supplies the downloadId we already showed it, and the
      * connection its row was rendered from.
      */
-    public function executeManualImport(ExecuteManualImportRequest $executeManualImportRequest, string $service, ManualImportResolver $manualImportResolver): RedirectResponse
+    public function executeManualImport(ExecuteManualImportRequest $executeManualImportRequest, string $service, ManualImportResolver $manualImportResolver, ArrConnections $arrConnections): RedirectResponse
     {
         $validated = $executeManualImportRequest->validated();
         $downloadId = (string) $validated['download_id'];
@@ -311,7 +321,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
-        $arrClient = $this->clientFor($service, $connection);
+        $arrClient = $this->clientFor($connection, $arrConnections);
 
         try {
             $candidates = $arrClient->getManualImport(['downloadId' => $downloadId]);
@@ -407,11 +417,9 @@ class ActivityController extends Controller
         return __('That :service connection is unavailable — refresh and try again.', ['service' => $serviceType->label()]);
     }
 
-    private function clientFor(string $service, ServiceConnection $serviceConnection): ArrClient
+    private function clientFor(ServiceConnection $serviceConnection, ArrConnections $arrConnections): ArrClient
     {
-        return $service === 'sonarr'
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        return $arrConnections->client($serviceConnection);
     }
 
     private function flashAndBack(string $type, string $message): RedirectResponse
@@ -424,7 +432,7 @@ class ActivityController extends Controller
     /**
      * @return array{rows: array<int, array<string, mixed>>, errors: array<int, string>, services: array<string, bool>}
      */
-    private function loadCombinedQueue(): array
+    private function loadCombinedQueue(ArrConnections $arrConnections): array
     {
         $rows = [];
         $errors = [];
@@ -433,13 +441,13 @@ class ActivityController extends Controller
         $sonarr = ServiceConnection::findActive(ServiceType::Sonarr);
         $services['sonarr'] = $sonarr instanceof ServiceConnection;
         if ($sonarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchSonarr($sonarr, $errors)];
+            $rows = [...$rows, ...$this->fetchSonarr($sonarr, $arrConnections, $errors)];
         }
 
         $radarr = ServiceConnection::findActive(ServiceType::Radarr);
         $services['radarr'] = $radarr instanceof ServiceConnection;
         if ($radarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchRadarr($radarr, $errors)];
+            $rows = [...$rows, ...$this->fetchRadarr($radarr, $arrConnections, $errors)];
         }
 
         usort($rows, fn (array $a, array $b): int => strcmp((string) ($b['added'] ?? ''), (string) ($a['added'] ?? '')));
@@ -453,7 +461,7 @@ class ActivityController extends Controller
     /**
      * @return array{service: string, configured: bool, connection_id: int|null, rows: list<array<string, mixed>>, page: int, page_size: int, total: int, error: string|null}
      */
-    private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache): array
+    private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache, ArrConnections $arrConnections): array
     {
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
         $connection = ServiceConnection::findActive($serviceType);
@@ -482,8 +490,8 @@ class ActivityController extends Controller
 
         try {
             $payload = $serviceType === ServiceType::Sonarr
-                ? new SonarrClient($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
-                : new RadarrClient($connection)->getHistory([...$params, 'includeMovie' => 'true']);
+                ? $arrConnections->client($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
+                : $arrConnections->client($connection)->getHistory([...$params, 'includeMovie' => 'true']);
         } catch (RequestException|ConnectionException) {
             return [...$result, 'error' => sprintf('%s is unreachable right now — its history could not be loaded.', $serviceType->label())];
         }
@@ -576,10 +584,10 @@ class ActivityController extends Controller
      * @param  array<int, string>  $errors
      * @return array<int, array<string, mixed>>
      */
-    private function fetchSonarr(ServiceConnection $serviceConnection, array &$errors): array
+    private function fetchSonarr(ServiceConnection $serviceConnection, ArrConnections $arrConnections, array &$errors): array
     {
         try {
-            $payload = new SonarrClient($serviceConnection)->getQueue([
+            $payload = $arrConnections->sonarr($serviceConnection)->getQueue([
                 'page' => 1,
                 'pageSize' => 100,
                 'sortKey' => 'timeleft',
@@ -606,10 +614,10 @@ class ActivityController extends Controller
      * @param  array<int, string>  $errors
      * @return array<int, array<string, mixed>>
      */
-    private function fetchRadarr(ServiceConnection $serviceConnection, array &$errors): array
+    private function fetchRadarr(ServiceConnection $serviceConnection, ArrConnections $arrConnections, array &$errors): array
     {
         try {
-            $payload = new RadarrClient($serviceConnection)->getQueue([
+            $payload = $arrConnections->radarr($serviceConnection)->getQueue([
                 'page' => 1,
                 'pageSize' => 100,
                 'sortKey' => 'timeleft',
