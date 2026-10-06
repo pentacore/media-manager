@@ -3,6 +3,10 @@
 #   chore(deps)     → patch  (production dependencies)
 #   chore(deps-dev) → none   (development dependencies — not shipped to runtime)
 #   ci(deps)        → none   (github-actions versions)
+#
+# Minor/patch updates are grouped per ecosystem and dependency type, so the
+# deps vs deps-dev prefix (and therefore the release decision) stays accurate.
+# Major updates are left ungrouped and arrive as individual PRs.
 
 version: 2
 updates:
@@ -10,11 +14,25 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      composer-production:
+        dependency-type: production
+        update-types: [minor, patch]
+      composer-development:
+        dependency-type: development
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    groups:
+      npm-production:
+        dependency-type: production
+        update-types: [minor, patch]
+      npm-development:
+        dependency-type: development
+        update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
@@ -22,6 +40,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: 'ci(deps)'
+    groups:
+      github-actions:
+        patterns: ['*']
 
   - package-ecosystem: docker
     directory: /docker/production
