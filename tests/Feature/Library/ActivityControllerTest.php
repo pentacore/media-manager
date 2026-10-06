@@ -578,6 +578,17 @@ test('a refused force grab reports the reason without paths', function (): void 
         ->not->toContain('/data/torrents');
 });
 
+test('a force grab behind a login page reports the outcome as unknown, not refused', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/queue/grab/55' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $connection->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Sonarr answered the change with something other than its API data, so whether it was applied is unknown. Check Sonarr before retrying.');
+});
+
 test('manual import failures never echo upstream paths', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('Folder /downloads/complete/ABC123 is not readable', 400)]);

@@ -19,6 +19,7 @@ use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Arr\QueueItemRemover;
@@ -80,6 +81,11 @@ class ActivityController extends Controller
 
         try {
             $this->clientFor($connection)->grabQueueItem($id);
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // A 200 that is not JSON data (usually a proxy login page): the
+            // grab may already have reached the arr, so this must read as
+            // unknown, never as a refusal.
+            return $this->flashAndBack('error', $arrWriteUnconfirmed->getMessage());
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
@@ -246,6 +252,11 @@ class ActivityController extends Controller
 
         try {
             $arrClient->markHistoryFailed($id);
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // A 200 that is not JSON data (usually a proxy login page): the
+            // write may already have reached the arr, so this must read as
+            // unknown, never as a refusal.
+            return $this->flashAndBack('error', $arrWriteUnconfirmed->getMessage());
         } catch (ConnectionException) {
             return $this->flashAndBack('error', __(':service is unreachable right now.', ['service' => $label]));
         } catch (RequestException $requestException) {

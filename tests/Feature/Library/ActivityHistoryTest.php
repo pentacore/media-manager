@@ -185,6 +185,17 @@ test('mark failed reports upstream refusals and outages', function (int $status,
     'down' => [503, 'Sonarr is unreachable right now.'],
 ]);
 
+test('mark failed reports a write behind a login page as unknown, not refused', function (): void {
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
+    Http::fake(['sonarr.local:8989/api/v3/history/failed/55' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.history.failed', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $this->sonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Sonarr answered the change with something other than its API data, so whether it was applied is unknown. Check Sonarr before retrying.');
+});
+
 test('mark failed is admin-only and validates the pin', function (): void {
     $this->actingAs(User::factory()->member()->create())
         ->post(route('media.library.activity.history.failed', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $this->sonarr->id])
