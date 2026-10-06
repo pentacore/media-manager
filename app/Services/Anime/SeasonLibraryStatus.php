@@ -25,10 +25,13 @@ use Illuminate\Support\Collection;
  * to show what is true now — so the uncached `fetchSeriesByIds()` /
  * `fetchMoviesByIds()` reads are used, never the client's entity cache.
  *
- * Each connection gets one concurrent round per call: its distinct
- * series/movie ids are read together, one attempt each, so several seasons of
- * one series share a single request and a hung connection costs one timeout
- * rather than one per card. Inactive connections are never called. An item
+ * Each connection's distinct series/movie ids are read concurrently, one
+ * attempt each, in pools of ten (see ArrClient::fetchResourcesByIds()), so
+ * several seasons of one series share a single request. A hung or
+ * unreachable connection costs one pool — at most one 10s timeout — per call,
+ * because no further pool is sent once a whole pool fails on transport; a
+ * host that answers some requests and stalls others can cost up to one
+ * timeout per pool of ten. Inactive connections are never called. An item
  * that could not be read — a connection failure, any non-2xx such as a 404
  * for a series deleted upstream but still indexed, or a 200 that is not a
  * series/movie — falls back on its own: the indexed `monitored` flag decides,
@@ -148,7 +151,7 @@ final readonly class SeasonLibraryStatus
     }
 
     /**
-     * Live payloads of the chosen indexed rows, read in one concurrent round
+     * Live payloads of the chosen indexed rows, read with one batched call
      * per active connection: connection id => item id => payload, or null for
      * an item that could not be read. Rows on an inactive or missing
      * connection are left out, so they fall back to the index.
@@ -176,7 +179,7 @@ final readonly class SeasonLibraryStatus
         }
 
         return array_map(
-            static fn (array $connectionIds): array => $fetchByIds($connectionIds['connection'], array_values(array_unique($connectionIds['ids']))),
+            static fn (array $connectionIds): array => $fetchByIds($connectionIds['connection'], $connectionIds['ids']),
             $wanted,
         );
     }

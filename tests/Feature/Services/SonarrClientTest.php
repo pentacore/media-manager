@@ -192,8 +192,8 @@ test('fetchSeriesByIds maps each id to its series, or null when the series canno
     ]);
     // One attempt each: the 503 is not retried.
     Http::assertSentCount(5);
-    Http::assertSent(fn (Request $request): bool => $request->hasHeader('X-Api-Key', 'test-api-key')
-        && str_starts_with($request->header('User-Agent')[0] ?? '', 'MediaManager/'));
+    expect(Http::recorded(fn (Request $request): bool => $request->hasHeader('X-Api-Key', 'test-api-key')
+        && str_starts_with($request->header('User-Agent')[0] ?? '', 'MediaManager/')))->toHaveCount(5);
 });
 
 test('fetchSeriesByIds maps a connection failure to null without throwing', function (): void {
@@ -217,6 +217,32 @@ test('fetchSeriesByIds requests every id when there are more than one batch of t
 
     expect(array_keys($result))->toBe($ids)
         ->and(array_map(static fn (?array $series): ?int => $series['id'] ?? null, $result))->toBe(array_combine($ids, $ids));
+    Http::assertSentCount(23);
+});
+
+test('fetchSeriesByIds stops after a batch that failed entirely to connect', function (): void {
+    $attempts = 0;
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/*' => function (Request $request) use (&$attempts) {
+            $attempts++;
+
+            return Http::failedConnection()($request);
+        },
+    ]);
+
+    $ids = range(1, 23);
+    $result = $this->client->fetchSeriesByIds($ids);
+
+    expect($result)->toBe(array_fill_keys($ids, null))
+        ->and($attempts)->toBe(10);
+});
+
+test('fetchSeriesByIds keeps asking after a batch of server errors, since the host answered', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series/*' => Http::response(null, 503)]);
+
+    $ids = range(1, 23);
+
+    expect($this->client->fetchSeriesByIds($ids))->toBe(array_fill_keys($ids, null));
     Http::assertSentCount(23);
 });
 

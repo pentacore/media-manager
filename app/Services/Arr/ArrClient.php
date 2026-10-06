@@ -59,25 +59,32 @@ abstract class ArrClient
 
     /**
      * Read one resource per id concurrently: `{resource}/{id}` for every id,
-     * in pools of ten. Each id maps to its decoded body, or to null when it
-     * could not be read — a connection failure, a non-2xx answer, a body
-     * that is not JSON, or JSON without an `id` (a login page or an error
-     * payload). The caller decides what null means; an unreadable item never
-     * throws (only a test's missing fake does, see readableItem()).
+     * in pools of ten run one after another. Each id maps to its decoded
+     * body, or to null when it could not be read — a connection failure, a
+     * non-2xx answer, a body that is not JSON, or JSON without an `id` (a
+     * login page or an error payload). The caller decides what null means;
+     * an unreadable item never throws (only a test's missing fake does, see
+     * readableItem()).
      *
      * Every request gets one attempt, unlike buildClient()'s retrying reads:
      * a retry would multiply the wait on a hung upstream for every id in the
      * pool, and a caller reading many items at once already has a fallback
-     * per item.
+     * per item. Once a whole pool fails on transport (every request a
+     * ConnectionException: unreachable host, connect or read timeout), no
+     * further pool is sent and the remaining ids map to null, so a hung or
+     * unreachable host costs one pool — at most the 10s timeout — per call.
+     * A host that answers some requests and stalls others can still cost up
+     * to one timeout per pool: ceil(ids / 10) × 10s.
      *
      * @param  list<int>  $ids
      * @return array<int, array<string, mixed>|null>
      */
     protected function fetchResourcesByIds(string $resource, array $ids): array
     {
-        $items = [];
+        $uniqueIds = array_values(array_unique($ids));
+        $items = array_fill_keys($uniqueIds, null);
 
-        foreach (array_chunk(array_values(array_unique($ids)), 10) as $batch) {
+        foreach (array_chunk($uniqueIds, 10) as $batch) {
             $responses = Http::pool(function (Pool $pool) use ($resource, $batch): void {
                 foreach ($batch as $id) {
                     $this->configureRequest($pool->as((string) $id))
@@ -87,6 +94,12 @@ abstract class ArrClient
 
             foreach ($batch as $id) {
                 $items[$id] = $this->readableItem($responses[$id] ?? null);
+            }
+
+            $unreachable = array_filter($batch, static fn (int $id): bool => ($responses[$id] ?? null) instanceof ConnectionException);
+
+            if (count($unreachable) === count($batch)) {
+                break;
             }
         }
 
