@@ -8,6 +8,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Http/Controllers/Admin/AiSettingsController.php | .ai/rules/admin.md |
 | app/Ai/** | .ai/rules/ai.md |
 | app/** | .ai/rules/app.md |
+| app/Services/Arr/** | .ai/rules/arr.md |
 | tests/Browser/** | .ai/rules/browser.md |
 | app/Cache/Services/*.php | .ai/rules/cache-services.md |
 | app/Notifications/Channels/** | .ai/rules/channels.md |

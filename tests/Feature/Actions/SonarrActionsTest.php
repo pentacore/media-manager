@@ -222,7 +222,64 @@ test('monitor changes are refused while a replacement for the series is in fligh
 })->with([
     'episodes' => ['monitor_episodes', ['series_id' => 7, 'episode_ids' => [70], 'monitored' => false]],
     'series' => ['monitor_series', ['series_id' => 7, 'monitored' => false]],
+    'season' => ['monitor_season', ['series_id' => 7, 'season_number' => 1]],
 ]);
+
+test('monitor_season monitors the series and the season, then searches the season', function (): void {
+    $serviceConnection = ServiceConnection::query()->sole();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => false, 'seasons' => [
+            ['seasonNumber' => 1, 'monitored' => true],
+            ['seasonNumber' => 2, 'monitored' => false],
+        ]]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 900, 'name' => 'SeasonSearch', 'status' => 'queued']),
+    ]);
+
+    $result = (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'monitor_season',
+        'target_service' => 'sonarr',
+        'payload' => ['series_id' => 42, 'season_number' => 2, 'service_connection_id' => $serviceConnection->id],
+    ]));
+
+    expect($result)->toBe(['sonarr_series_id' => 42, 'season_number' => 2, 'monitored' => true]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_ends_with((string) $request->url(), '/api/v3/series/42')
+        && $request->data()['monitored'] === true
+        && $request->data()['seasons'] === [['seasonNumber' => 1, 'monitored' => true], ['seasonNumber' => 2, 'monitored' => true]]);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v3/command')
+        && $request->data()['name'] === 'SeasonSearch'
+        && $request->data()['seriesId'] === 42
+        && $request->data()['seasonNumber'] === 2);
+});
+
+test('monitor_season treats season 0 as a real season', function (): void {
+    $serviceConnection = ServiceConnection::query()->sole();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => true, 'seasons' => [['seasonNumber' => 0, 'monitored' => false]]]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 901]),
+    ]);
+
+    (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'monitor_season',
+        'payload' => ['series_id' => 42, 'season_number' => 0, 'service_connection_id' => $serviceConnection->id],
+    ]));
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT' && $request->data()['seasons'][0]['monitored'] === true);
+});
+
+test('monitor_season refuses a season the series does not have and changes nothing', function (): void {
+    $serviceConnection = ServiceConnection::query()->sole();
+    Http::fake(['sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => true, 'seasons' => [['seasonNumber' => 1, 'monitored' => true]]])]);
+
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'monitor_season',
+        'payload' => ['series_id' => 42, 'season_number' => 5, 'service_connection_id' => $serviceConnection->id],
+    ])))->toThrow(InvalidArgumentException::class, 'season 5');
+
+    Http::assertNotSent(fn (Request $request): bool => in_array($request->method(), ['PUT', 'POST'], true));
+});
 
 test('the pinned-connection executors refuse to run without a pinned connection', function (string $type, array $payload): void {
     expect(fn (): array => resolve(SonarrActions::class)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
@@ -230,6 +287,7 @@ test('the pinned-connection executors refuse to run without a pinned connection'
 
     Http::assertNothingSent();
 })->with([
+    'monitor_season' => ['monitor_season', ['series_id' => 7, 'season_number' => 1]],
     'monitor_episodes' => ['monitor_episodes', ['series_id' => 7, 'episode_ids' => [70], 'monitored' => false]],
     'search_media' => ['search_media', ['service' => 'sonarr', 'command' => 'series_search', 'series_id' => 7]],
     'grab_release' => ['grab_release', ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x']]],

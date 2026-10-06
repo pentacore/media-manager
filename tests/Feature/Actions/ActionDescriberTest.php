@@ -234,6 +234,18 @@ test('monitor_episodes names the season or the episode count', function (array $
     'one episode' => [['episode_ids' => [1], 'monitored' => true], 'Monitor 1 episode of series "Severance (2022)"', 'Sonarr will start monitoring the selected episodes.'],
 ]);
 
+test('monitor_season names the season and its effect', function (): void {
+    describerSeries();
+    $serviceConnection = ServiceConnection::query()->sole();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('monitor_season', ['series_id' => 142, 'season_number' => 2, 'service_connection_id' => $serviceConnection->id]);
+
+    expect($actionDescription->title)->toBe('Monitor season 2 of series "Severance (2022)"')
+        ->and($actionDescription->description)->toBe('Sonarr will monitor the series and season 2, then search for the season.')
+        ->and($actionDescription->details)->toContain(['label' => 'Season', 'value' => '2'])
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
 test('search_media words each targeted search', function (array $payload, string $title): void {
     describerSeries();
 

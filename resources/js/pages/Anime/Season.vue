@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Deferred, Head, router } from '@inertiajs/vue3';
+import { Deferred, Head, Link, router } from '@inertiajs/vue3';
 import {
     ChevronLeft,
     ChevronRight,
@@ -8,8 +8,11 @@ import {
     Sprout,
 } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { request as requestAnime } from '@/actions/App/Http/Controllers/Media/AnimeController';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,14 +23,26 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
 import type { AnimeFormat } from '@/typefinder/enums/AnimeFormat';
 import type { AnimeSeason } from '@/typefinder/enums/AnimeSeason';
+import type { FlashToast } from '@/types/ui';
 import MatchDialog from './MatchDialog.vue';
 
-type EntryStatus = 'in_library' | 'requested' | 'requestable' | 'unmapped';
+type EntryStatus =
+    'in_library' | 'unmonitored' | 'requested' | 'requestable' | 'unmapped';
+type UnmonitoredScope = 'series' | 'season' | 'movie';
+
+interface EntryLibrary {
+    service: 'sonarr' | 'radarr';
+    itemId: number;
+    connectionId: number;
+    seasonNumber: number | null;
+    onActiveConnection: boolean;
+}
 
 interface EntryMapping {
     tmdbId: number | null;
@@ -51,6 +66,8 @@ interface SeasonEntry {
     score: number | null;
     mapping: EntryMapping;
     status: EntryStatus;
+    unmonitoredScope: UnmonitoredScope | null;
+    library: EntryLibrary | null;
 }
 
 interface RequestingUser {
@@ -347,15 +364,129 @@ function metaLine(entry: SeasonEntry): string {
 
 const STATUS_META: Record<EntryStatus, { status: string; label: string }> = {
     in_library: { status: 'available', label: 'In library' },
+    unmonitored: { status: 'warn', label: 'Unmonitored' },
     requested: { status: 'approved', label: 'Requested' },
     requestable: { status: 'ok', label: 'Available' },
     unmapped: { status: 'warn', label: 'Unmapped' },
 };
 
-function anilistUrl(entry: SeasonEntry): string | null {
-    return entry.anilistId
-        ? `https://anilist.co/anime/${entry.anilistId}`
-        : null;
+function statusLabel(entry: SeasonEntry): string {
+    const status = effectiveStatus(entry);
+
+    if (status === 'unmonitored' && entry.unmonitoredScope === 'season') {
+        return 'Season unmonitored';
+    }
+
+    return STATUS_META[status].label;
+}
+
+function externalLink(
+    entry: SeasonEntry,
+): { href: string; title: string } | null {
+    if (entry.anilistId) {
+        return {
+            href: `https://anilist.co/anime/${entry.anilistId}`,
+            title: 'Open on AniList',
+        };
+    }
+
+    if (entry.malId) {
+        return {
+            href: `https://myanimelist.net/anime/${entry.malId}`,
+            title: 'Open on MyAnimeList',
+        };
+    }
+
+    return null;
+}
+
+function libraryHref(entry: SeasonEntry): string | null {
+    if (!entry.library?.onActiveConnection) {
+        return null;
+    }
+
+    return entry.library.service === 'sonarr'
+        ? SeriesController.show.url(entry.library.itemId)
+        : MovieController.show.url(entry.library.itemId);
+}
+
+// ── Monitor action ────────────────────────────────────────────────────
+const { can } = useCan();
+const monitoringKeys = ref<Set<string>>(new Set());
+const monitorRequestedKeys = ref<Set<string>>(new Set());
+
+function canMonitor(entry: SeasonEntry): boolean {
+    return (
+        effectiveStatus(entry) === 'unmonitored' &&
+        can('manage-library') &&
+        entry.library?.onActiveConnection === true
+    );
+}
+
+function isMonitorBusy(entry: SeasonEntry): boolean {
+    return (
+        monitoringKeys.value.has(entry.key) ||
+        monitorRequestedKeys.value.has(entry.key)
+    );
+}
+
+function monitorEntry(entry: SeasonEntry): void {
+    const library = entry.library;
+
+    if (!library || isMonitorBusy(entry)) {
+        return;
+    }
+
+    monitoringKeys.value = new Set(monitoringKeys.value).add(entry.key);
+
+    const [url, body] =
+        library.service === 'sonarr' && library.seasonNumber !== null
+            ? [
+                  MediaActionController.monitorSeason.url(),
+                  {
+                      service_connection_id: library.connectionId,
+                      series_id: library.itemId,
+                      season_number: library.seasonNumber,
+                      origin: 'seasonal_anime',
+                  },
+              ]
+            : [
+                  MediaActionController.monitor.url(),
+                  {
+                      service: library.service,
+                      service_connection_id: library.connectionId,
+                      item_id: library.itemId,
+                      monitored: true,
+                      origin: 'seasonal_anime',
+                  },
+              ];
+
+    router.post(url, body, {
+        preserveScroll: true,
+        preserveState: true,
+        // A refusal (action disabled, replacement in flight, item not found)
+        // is still a successful `back()` visit, told apart only by its error
+        // toast — so the button is locked only when this visit's own flash
+        // carries a non-error toast (started or queued for approval). The
+        // action may wait for approval, so the card never flips to monitored
+        // here — the next load shows the real state.
+        onFlash: (flash) => {
+            const flashed = flash.toast as FlashToast | undefined;
+
+            if (!flashed || flashed.type === 'error') {
+                return;
+            }
+
+            monitorRequestedKeys.value = new Set(
+                monitorRequestedKeys.value,
+            ).add(entry.key);
+        },
+        onFinish: () => {
+            const next = new Set(monitoringKeys.value);
+            next.delete(entry.key);
+            monitoringKeys.value = next;
+        },
+    });
 }
 
 // ── Request action ────────────────────────────────────────────────────
@@ -722,10 +853,14 @@ const matchEntryContext = computed(() =>
                         >
                             {{ entry.title }}
                         </h3>
-                        <StatusPill
-                            :status="STATUS_META[effectiveStatus(entry)].status"
-                            :label="STATUS_META[effectiveStatus(entry)].label"
-                        />
+                        <span data-anime-status>
+                            <StatusPill
+                                :status="
+                                    STATUS_META[effectiveStatus(entry)].status
+                                "
+                                :label="statusLabel(entry)"
+                            />
+                        </span>
                     </div>
 
                     <p class="text-[11px] text-muted-foreground">
@@ -760,15 +895,57 @@ const matchEntryContext = computed(() =>
                         </template>
 
                         <template
-                            v-else-if="
-                                effectiveStatus(entry) === 'in_library' ||
-                                effectiveStatus(entry) === 'requested'
-                            "
+                            v-else-if="effectiveStatus(entry) === 'requested'"
                         >
                             <span
                                 class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-muted-foreground"
                             >
                                 {{ STATUS_META[effectiveStatus(entry)].label }}
+                            </span>
+                        </template>
+
+                        <template
+                            v-else-if="
+                                effectiveStatus(entry) === 'in_library' ||
+                                effectiveStatus(entry) === 'unmonitored'
+                            "
+                        >
+                            <Button
+                                v-if="canMonitor(entry)"
+                                size="sm"
+                                class="h-7 flex-1 text-xs"
+                                data-anime-monitor
+                                :disabled="isMonitorBusy(entry)"
+                                @click="monitorEntry(entry)"
+                            >
+                                <Loader2
+                                    v-if="monitoringKeys.has(entry.key)"
+                                    class="mr-1 size-3.5 animate-spin"
+                                />
+                                {{
+                                    monitorRequestedKeys.has(entry.key)
+                                        ? 'Monitor requested'
+                                        : 'Monitor'
+                                }}
+                            </Button>
+                            <Link
+                                v-if="libraryHref(entry)"
+                                :href="libraryHref(entry)!"
+                                data-anime-open
+                                class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-foreground hover:bg-bg-hover"
+                            >
+                                {{
+                                    entry.library!.service === 'sonarr'
+                                        ? 'Open series'
+                                        : 'Open movie'
+                                }}
+                            </Link>
+                            <span
+                                v-if="!canMonitor(entry) && !libraryHref(entry)"
+                                class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-muted-foreground"
+                                data-anime-library-status
+                            >
+                                {{ statusLabel(entry) }}
                             </span>
                         </template>
 
@@ -781,17 +958,20 @@ const matchEntryContext = computed(() =>
                             >
                                 Find match
                             </Button>
-                            <a
-                                v-if="anilistUrl(entry)"
-                                :href="anilistUrl(entry)!"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
-                                title="Open on AniList"
-                            >
-                                <ExternalLink class="size-3.5" />
-                            </a>
                         </template>
+
+                        <a
+                            v-if="externalLink(entry)"
+                            :href="externalLink(entry)!.href"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            data-anime-external
+                            :title="externalLink(entry)!.title"
+                            :aria-label="externalLink(entry)!.title"
+                        >
+                            <ExternalLink class="size-3.5" />
+                        </a>
                     </div>
                 </div>
             </div>

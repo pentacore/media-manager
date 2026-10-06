@@ -22,6 +22,7 @@ use Override;
  * @property int|null $tmdb_movie_id
  * @property int|null $tvdb_id
  * @property int|null $tmdb_season
+ * @property int|null $tvdb_season
  * @property string|null $type
  * @property bool $user_confirmed
  */
@@ -32,6 +33,7 @@ use Override;
     'tmdb_movie_id',
     'tvdb_id',
     'tmdb_season',
+    'tvdb_season',
     'type',
     'user_confirmed',
 ])]
@@ -53,6 +55,7 @@ class AnimeIdMap extends Model
             'tmdb_movie_id' => 'integer',
             'tvdb_id' => 'integer',
             'tmdb_season' => 'integer',
+            'tvdb_season' => 'integer',
             'user_confirmed' => 'boolean',
         ];
     }

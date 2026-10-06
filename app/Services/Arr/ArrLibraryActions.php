@@ -22,7 +22,7 @@ use Throwable;
  * quality-profile writes on one series/movie, plus search_media and
  * grab_release (reached through ArrActions). A subclass names its payload
  * keys and bridges to its client's series/movie methods; Sonarr adds
- * monitor_episodes and its episode-ownership check.
+ * monitor_episodes, monitor_season and its episode-ownership check.
  *
  * Connection pinning per action is deliberate: the library writes use
  * resolvePinned() (an unpinned request may run against the active
@@ -132,7 +132,7 @@ abstract class ArrLibraryActions implements ActionExecutor
     }
 
     /**
-     * Action types only one service has (Sonarr's monitor_episodes).
+     * Action types only one service has (Sonarr's monitor_episodes, monitor_season).
      *
      * @return array<string, mixed>
      */
