@@ -8,10 +8,10 @@ use App\Cache\Services\WhisparrCache;
 use App\Enums\WhisparrVersion;
 use App\Jobs\ExecuteActionRequest;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\SearchCommandRunner;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Http\Client\Response;
 use Override;
 
 /**
@@ -26,20 +26,20 @@ class WhisparrClient extends ArrClient
     /**
      * @return array<int, array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function getItems(): array
     {
         return $this->cache()->rememberList(
             'list',
-            fn (): array => $this->arrayBody($this->buildClient()->get($this->resourcePath())->throw()),
+            fn (): array => $this->jsonArray($this->buildClient()->get($this->resourcePath())->throw()),
         );
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function getItemById(int $id): array
     {
@@ -57,11 +57,11 @@ class WhisparrClient extends ArrClient
      *
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function fetchItemById(int $id): array
     {
-        return $this->arrayBody($this->buildClient()->get(sprintf('%s/%d', $this->resourcePath(), $id))->throw());
+        return $this->jsonArray($this->buildClient()->get(sprintf('%s/%d', $this->resourcePath(), $id))->throw());
     }
 
     /**
@@ -70,14 +70,14 @@ class WhisparrClient extends ArrClient
      *
      * @return list<array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function getEpisodes(int $seriesId): array
     {
         return $this->cache()->rememberList(
             'episodes:'.$seriesId,
             function () use ($seriesId): array {
-                $body = $this->arrayBody($this->buildClient()->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])->throw());
+                $body = $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])->throw());
 
                 // Same boundary sanitisation as ArrClient::getCalendar(): a
                 // non-array entry is dropped here so callers can trust the
@@ -91,59 +91,59 @@ class WhisparrClient extends ArrClient
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function addItem(array $data): array
     {
-        return $this->buildClient()->post($this->resourcePath(), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->post($this->resourcePath(), $data)->throw());
     }
 
     /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateItem(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('%s/%d', $this->resourcePath(), $id), $data)->throw()->json() ?? [];
+        return $this->confirmedWrite($this->buildClient()->put(sprintf('%s/%d', $this->resourcePath(), $id), $data)->throw());
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteItem(int $id, bool $deleteFiles = false): void
     {
         $query = http_build_query(['deleteFiles' => $deleteFiles ? 'true' : 'false']);
-        $this->buildClient()
+        $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('%s/%d?%s', $this->resourcePath(), $id, $query))
-            ->throw();
+            ->throw());
     }
 
     /**
      * @return array<int, array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function searchItems(string $query): array
     {
         return $this->cache()->rememberList(
             'search:'.md5($query),
-            fn (): array => $this->arrayBody($this->buildClient()->get(sprintf('%s/lookup', $this->resourcePath()), ['term' => $query])->throw()),
+            fn (): array => $this->jsonArray($this->buildClient()->get(sprintf('%s/lookup', $this->resourcePath()), ['term' => $query])->throw()),
         );
     }
 
     /**
      * @return array<int, array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     #[Override]
     public function getQualityProfiles(): array
     {
         return $this->cache()->rememberMetadata(
             'quality-profiles',
-            fn (): array => $this->arrayBody($this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw()),
+            fn (): array => $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw()),
         );
     }
 
@@ -178,24 +178,6 @@ class WhisparrClient extends ArrClient
         return $this->connection->whisparrVersion() === WhisparrVersion::V2
             ? $this->runCommand('SeriesSearch', ['seriesId' => $id], withRetry: false)
             : $this->runCommand('MoviesSearch', ['movieIds' => [$id]], withRetry: false);
-    }
-
-    /**
-     * A 200 read whose body is not a JSON array or object (an SSO login
-     * page, HTML, a scalar) is a failure, never an empty result: throwing
-     * inside the cache closure also keeps it out of the cache.
-     *
-     * @return array<array-key, mixed>
-     *
-     * @throws WhisparrUnexpectedResponse
-     */
-    private function arrayBody(Response $response): array
-    {
-        $body = $response->json();
-
-        throw_unless(is_array($body), WhisparrUnexpectedResponse::class, 'Whisparr answered with a body that is not JSON data.');
-
-        return $body;
     }
 
     /**

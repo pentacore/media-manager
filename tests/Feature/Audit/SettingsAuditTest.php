@@ -259,3 +259,47 @@ test('adding and editing an AI model price are audited with what changed', funct
         ->and($rows[1]->metadata['changes'])->toHaveKey('input_per_mtok')
         ->and($rows[1]->metadata['changes'])->not->toHaveKey('model');
 });
+
+test('a bulk price edit audits each selected row it changed, like the single edit', function (): void {
+    $admin = User::factory()->admin()->create();
+    $changed = AiModelPrice::factory()->count(2)->create(['is_price_locked' => false]);
+    $alreadyLocked = AiModelPrice::factory()->create(['is_price_locked' => true]);
+    $untouched = AiModelPrice::factory()->create(['is_price_locked' => false]);
+
+    $this->actingAs($admin)->put(route('admin.ai-prices.bulk-update'), [
+        'ids' => [...$changed->pluck('id')->all(), $alreadyLocked->id],
+        'automatic_updates_enabled' => false,
+    ])->assertRedirect(route('admin.ai-prices.index'));
+
+    $rows = settingsAuditRows('ai_model_prices');
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows->map(fn (ActivityLog $activityLog): array => $activityLog->metadata['context'])->all())->toBe([
+            ['operation' => 'updated', 'record_id' => $changed[0]->id, 'bulk' => true],
+            ['operation' => 'updated', 'record_id' => $changed[1]->id, 'bulk' => true],
+        ])
+        ->and($rows[0]->metadata['changes'])->toBe(['is_price_locked' => ['from' => false, 'to' => true]])
+        ->and($rows[0]->description)->toBe(sprintf('Updated the AI model price for %s/%s.', $changed[0]->provider, $changed[0]->model))
+        ->and($untouched->fresh()->is_price_locked)->toBeFalse();
+});
+
+test('a bulk price delete audits each removed row with what it held', function (): void {
+    $admin = User::factory()->admin()->create();
+    $selected = AiModelPrice::factory()->count(2)->create();
+    $selected[0]->rateLimits()->create(['metric' => RateLimitMetric::Requests, 'period' => RateLimitPeriod::Minute, 'limit_value' => 60]);
+
+    $this->actingAs($admin)
+        ->delete(route('admin.ai-prices.bulk-destroy'), ['ids' => $selected->pluck('id')->all()])
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', '2 model prices removed.');
+
+    $rows = settingsAuditRows('ai_model_prices');
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]->metadata['context'])->toBe(['operation' => 'deleted', 'record_id' => $selected[0]->id, 'bulk' => true])
+        ->and($rows[0]->metadata['changes']['rate_limits'])->toBe([
+            'from' => [['metric' => 'requests', 'period' => 'minute', 'limit_value' => 60]],
+            'to' => null,
+        ])
+        ->and($rows[1]->description)->toBe(sprintf('Removed the AI model price for %s/%s.', $selected[1]->provider, $selected[1]->model));
+});

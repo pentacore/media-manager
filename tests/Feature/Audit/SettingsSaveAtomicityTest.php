@@ -141,3 +141,22 @@ test('a notification destination create, update or delete whose audit row cannot
 
     expect(NotificationDestination::query()->pluck('label')->all())->toBe(['Ops channel']);
 });
+
+test('a bulk price edit or delete whose audit row cannot be written changes nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prices = AiModelPrice::factory()->count(2)->create(['is_price_locked' => false]);
+    $prices[0]->rateLimits()->create(['metric' => RateLimitMetric::Requests, 'period' => RateLimitPeriod::Minute, 'limit_value' => 60]);
+    settingsAtomicityFailAudits();
+    $this->withoutExceptionHandling()->actingAs($admin);
+
+    expect(fn () => $this->put(route('admin.ai-prices.bulk-update'), [
+        'ids' => $prices->pluck('id')->all(),
+        'automatic_updates_enabled' => false,
+        'rate_limits' => [],
+    ]))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->delete(route('admin.ai-prices.bulk-destroy'), ['ids' => $prices->pluck('id')->all()]))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect($prices->map(fn (AiModelPrice $aiModelPrice): bool => $aiModelPrice->fresh()->is_price_locked)->all())->toBe([false, false])
+        ->and($prices[0]->fresh()->rateLimits()->count())->toBe(1);
+});

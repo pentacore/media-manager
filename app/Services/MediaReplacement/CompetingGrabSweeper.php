@@ -9,6 +9,7 @@ use App\Enums\ServiceType;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\Arr\ArrConnections;
 use App\Services\Notifications\AdminNotifier;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
@@ -37,6 +38,8 @@ use Throwable;
 final readonly class CompetingGrabSweeper
 {
     private const int QUEUE_PAGE_SIZE = 200;
+
+    public function __construct(private ArrConnections $arrConnections) {}
 
     /**
      * Remove every queue item on the attempt's target that is not the vetted
@@ -89,7 +92,7 @@ final readonly class CompetingGrabSweeper
         // whose stored `service` disagrees with it then reduces to a null parent
         // id and matches nothing, which is the safe direction for corrupt data.
         $isRadarr = $serviceConnection->type === ServiceType::Radarr;
-        $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
+        $client = $this->arrConnections->client($serviceConnection);
 
         // Reduce our target once, not once per queue row.
         $targetIdentity = $this->targetIdentity($target, $isRadarr);

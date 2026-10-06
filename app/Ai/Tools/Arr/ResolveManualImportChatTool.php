@@ -8,9 +8,8 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ManualImportResolver;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -47,7 +46,10 @@ class ResolveManualImportChatTool extends BaseTool
             'download_id' => ['required', 'string'],
             'reason' => ['required', 'string'],
         ], [
+            'download_id.required' => 'download_id is required.',
+            'download_id.string' => 'download_id must be a string.',
             'reason.required' => 'reason is required so the approver understands the decision.',
+            'reason.string' => 'reason must be a short plain-text explanation for the approver.',
         ]);
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
@@ -61,9 +63,7 @@ class ResolveManualImportChatTool extends BaseTool
         };
 
         $serviceConnection = ServiceConnection::resolveActive($type);
-        $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = resolve(ArrConnections::class)->client($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         $assessment = resolve(ManualImportResolver::class)->assess($candidates, $service, $downloadId);

@@ -29,6 +29,16 @@ function upstreamEchoReviewedLines(): array
             "return response()->json(['message' => \$catalogUnavailableException->getMessage()], 503);",
             "'models' => __('Could not load the pricing catalog: :message', ['message' => \$catalogUnavailableException->getMessage()]),",
         ],
+        'app/Http/Controllers/Prowlarr/GrabReleaseController.php' => [
+            // ArrWriteUnconfirmed carries a fixed, app-authored sentence
+            // (D2) — it never quotes the upstream body.
+            "return response()->json(['message' => \$arrWriteUnconfirmed->getMessage()], 502);",
+        ],
+        'app/Http/Controllers/Library/ActivityController.php' => [
+            // ArrWriteUnconfirmed carries a fixed, app-authored sentence
+            // (D2) — it never quotes the upstream body.
+            "return \$this->flashAndBack('error', \$arrWriteUnconfirmed->getMessage());",
+        ],
         'app/Http/Controllers/Admin/ServiceConnectionController.php' => [
             // A QueryException inspected for a constraint name, never shown.
             "return str_contains(\$queryException->getMessage(), 'subtitle_cases_bazarr_connection_id_foreign')",

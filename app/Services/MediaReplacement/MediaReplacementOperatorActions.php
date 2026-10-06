@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Services\MediaReplacement;
 
 use App\Enums\MediaReplacementStatus;
-use App\Enums\ServiceType;
 use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Client\ConnectionException;
@@ -30,7 +30,10 @@ final readonly class MediaReplacementOperatorActions
 
     private const int QUEUE_PAGE_SIZE = 200;
 
-    public function __construct(private MediaReplacementTracker $mediaReplacementTracker) {}
+    public function __construct(
+        private MediaReplacementTracker $mediaReplacementTracker,
+        private ArrConnections $arrConnections,
+    ) {}
 
     /**
      * Records that a human has looked at a needs_attention attempt. Touches
@@ -162,9 +165,7 @@ final readonly class MediaReplacementOperatorActions
             return true;
         }
 
-        $client = $serviceConnection->type === ServiceType::Radarr
-            ? new RadarrClient($serviceConnection)
-            : new SonarrClient($serviceConnection);
+        $client = $this->arrConnections->client($serviceConnection);
 
         try {
             // Keyed by queue item id: queueRecords() has already validated every

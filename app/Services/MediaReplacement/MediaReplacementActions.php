@@ -15,6 +15,7 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\SharedMediaTargetLock;
+use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
@@ -39,6 +40,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         private ReplacementCandidateFinder $replacementCandidateFinder,
         private MediaReplacementTracker $mediaReplacementTracker,
         private CompetingGrabSweeper $competingGrabSweeper,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -87,9 +89,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // deleted after approval) aborts rather than falling through to another
         // instance; only a genuinely absent field falls back for legacy payloads.
         $serviceConnection = $this->resolveConnection($payload, $serviceType);
-        $client = $serviceType === ServiceType::Sonarr
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        $client = $this->arrConnections->client($serviceConnection);
 
         // Shared installed-file lock: excludes a concurrent Bazarr subtitle
         // operation (or another replacement) on the same file. Keyed on the
@@ -841,7 +841,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
      *  - 'accepted'      — the arr accepted the release.
      *  - 'rejected'      — an explicit client-side (4xx) rejection: definitely
      *                      not accepted, so no file was touched.
-     *  - 'indeterminate' — connection loss or a server error (5xx) on the
+     *  - 'indeterminate' — connection loss, a server error (5xx), or a 200
+     *                      that is not JSON data (ArrWriteUnconfirmed) on the
      *                      non-idempotent POST: the grab may already have been
      *                      accepted, so it must stay trackable rather than fail.
      *
@@ -864,7 +865,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 return 'rejected';
             }
 
-            Log::warning('Media replacement grab outcome indeterminate (server error); leaving the attempt trackable.', [
+            Log::warning('Media replacement grab outcome indeterminate (no confirmation); leaving the attempt trackable.', [
                 'status' => $requestException->response->status(),
             ]);
 

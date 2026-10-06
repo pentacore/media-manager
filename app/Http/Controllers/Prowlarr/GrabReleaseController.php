@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Prowlarr\GrabIndexerReleaseRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Prowlarr\IndexerReleaseCache;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Support\UpstreamErrorText;
@@ -43,6 +44,12 @@ class GrabReleaseController extends Controller
             // the grab before the response was lost, so this must not read
             // as "nothing happened."
             return response()->json(['message' => __('No answer from Prowlarr — check the download client before grabbing again.')], 502);
+        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
+            // A 200 that is not JSON data (usually a proxy login page): the
+            // grab may already have reached Prowlarr, so this must read as
+            // unknown, never as a refusal — refusal() would tell the member
+            // it definitely did not happen and invite a duplicate download.
+            return response()->json(['message' => $arrWriteUnconfirmed->getMessage()], 502);
         } catch (RequestException $requestException) {
             return $this->refusal($requestException);
         }

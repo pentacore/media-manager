@@ -7,8 +7,7 @@ namespace App\Services\MediaReplacement;
 use App\Enums\MediaReplacementScope;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use InvalidArgumentException;
 
 /**
@@ -23,6 +22,7 @@ final readonly class MediaFileInspector
     public function __construct(
         private LanguageNormalizer $languageNormalizer,
         private SonarrMediaScopeResolver $sonarrMediaScopeResolver,
+        private ArrConnections $arrConnections,
     ) {}
 
     /**
@@ -109,7 +109,7 @@ final readonly class MediaFileInspector
         ?ServiceConnection $connection = null,
     ): array {
         $serviceConnection = $connection ?? ServiceConnection::resolveActive(ServiceType::Sonarr);
-        $sonarrClient = new SonarrClient($serviceConnection);
+        $sonarrClient = $this->arrConnections->sonarr($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $scope = $this->sonarrMediaScopeResolver->resolve($serviceConnection, $series);
 
@@ -205,7 +205,7 @@ final readonly class MediaFileInspector
     private function inspectRadarr(int $movieId, ?ServiceConnection $connection = null): array
     {
         $serviceConnection = $connection ?? ServiceConnection::resolveActive(ServiceType::Radarr);
-        $radarrClient = new RadarrClient($serviceConnection);
+        $radarrClient = $this->arrConnections->radarr($serviceConnection);
         $movie = $radarrClient->getMovieById($movieId);
         $fileId = $this->integer($movie['movieFileId'] ?? null);
 

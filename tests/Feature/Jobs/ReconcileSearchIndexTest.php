@@ -5,6 +5,7 @@ use App\Jobs\ReconcileSearchIndex;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrConnections;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
 use Illuminate\Queue\Attributes\UniqueFor;
@@ -26,7 +27,7 @@ test('prunes rows missing from the arr payload and keeps listed ones', function 
 
     Http::fake(['sonarr.local:8989/api/v3/series*' => Http::response([['id' => 10, 'title' => 'Kept']])]);
 
-    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class));
+    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class), new ArrConnections);
 
     expect(IndexedSeries::query()->where('sonarr_id', 10)->exists())->toBeTrue()
         ->and(IndexedSeries::query()->where('sonarr_id', 99)->exists())->toBeFalse();
@@ -45,7 +46,7 @@ test('a failed upsert never marks the row stale', function (): void {
         ['id' => 11, 'title' => 'B'],
     ])]);
 
-    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class));
+    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class), new ArrConnections);
 
     // Regression: seen-set used to be built from successful upserts only, so
     // an all-fail run pruned every row for the connection.
@@ -61,7 +62,7 @@ test('skips the prune when the payload has items but no usable ids', function ()
 
     Http::fake(['sonarr.local:8989/api/v3/series*' => Http::response([['unexpected' => 'shape'], ['id' => 0]])]);
 
-    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class));
+    new ReconcileSearchIndex()->handle($seriesIndexer, $this->mock(MovieIndexer::class), new ArrConnections);
 
     expect(IndexedSeries::query()->where('service_connection_id', $serviceConnection->id)->count())->toBe(1);
 });
@@ -72,7 +73,7 @@ test('an empty payload legitimately empties the index for the connection', funct
 
     Http::fake(['sonarr.local:8989/api/v3/series*' => Http::response([])]);
 
-    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $this->mock(MovieIndexer::class));
+    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $this->mock(MovieIndexer::class), new ArrConnections);
 
     expect(IndexedSeries::query()->where('service_connection_id', $serviceConnection->id)->exists())->toBeFalse();
 });
@@ -83,7 +84,7 @@ test('a fetch failure leaves the connection index untouched', function (): void 
 
     Http::fake(['sonarr.local:8989/*' => Http::response('boom', 500)]);
 
-    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $this->mock(MovieIndexer::class));
+    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $this->mock(MovieIndexer::class), new ArrConnections);
 
     expect(IndexedSeries::query()->where('service_connection_id', $serviceConnection->id)->count())->toBe(1);
 });
@@ -99,7 +100,7 @@ test('radarr reconciliation shares the failed-upsert protection', function (): v
 
     Http::fake(['radarr.local:7878/api/v3/movie*' => Http::response([['id' => 5, 'title' => 'Kept']])]);
 
-    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $movieIndexer);
+    new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $movieIndexer, new ArrConnections);
 
     expect(IndexedMovie::query()->where('radarr_id', 5)->exists())->toBeTrue();
 });

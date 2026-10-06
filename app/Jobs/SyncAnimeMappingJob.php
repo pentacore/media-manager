@@ -29,8 +29,9 @@ use Throwable;
  * been fully parsed, so a truncated/empty/error payload can never wipe the
  * mappings. ShouldBeUnique + a timeout below the queue `retry_after` prevent a
  * second worker from reserving this destructive job while it is still running.
- * Runs on the maintenance lane (drained by the queue-ai worker): the dataset
- * fetch plus parse can hold the worker for up to 270s.
+ * Runs on the maintenance lane (drained by the queue-ai worker): the bounded
+ * download (at most 180.5 s, see FETCH_TIMEOUT_SECONDS) plus the parse stays
+ * inside the 270 s timeout.
  *
  * @see https://github.com/Fribb/anime-lists
  */
@@ -59,6 +60,17 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 
     private const int CHUNK = 1000;
 
+    /**
+     * Per-attempt cap on the dataset download. cURL's timeout covers the
+     * whole transfer, connect included, so FETCH_ATTEMPTS attempts cost at
+     * most 2 × 90 s plus the 0.5 s back-off — 180.5 s of the 270 s timeout,
+     * leaving ~90 s to decode, map and insert (seconds in practice). The
+     * queue's own tries/backoff still retry a slow mirror later.
+     */
+    private const int FETCH_TIMEOUT_SECONDS = 90;
+
+    private const int FETCH_ATTEMPTS = 2;
+
     private const string LAST_SUCCESS_KEY = 'anime:mapping:last-synced-at';
 
     public function uniqueId(): string
@@ -79,11 +91,11 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
         $url = (string) config('mediamanager.anime.mapping_url');
 
         $dataset = Http::acceptJson()
-            ->timeout(120)
+            ->timeout(self::FETCH_TIMEOUT_SECONDS)
             ->connectTimeout(10)
             ->withUserAgent('MediaManager/'.config('app.version').' SyncAnimeMappingJob')
             ->retry(
-                times: 3,
+                times: self::FETCH_ATTEMPTS,
                 sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
                 when: fn (Throwable $throwable): bool => $throwable instanceof RequestException
                     ? $throwable->response->serverError()

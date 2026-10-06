@@ -127,3 +127,16 @@ test('results never carry Prowlarr download links or other credential-bearing fi
         ->not->toContain('prowlarr-secret-key')
         ->not->toContain('tracker-passkey');
 });
+
+test('a Prowlarr answering the search with a login page is a failed search, not an empty one', function (): void {
+    ServiceConnection::factory()->prowlarr()->create(['url' => 'http://prowlarr.local:9696', 'api_key' => 'test']);
+    Http::fake(['prowlarr.local:9696/api/v1/search*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs($this->member)
+        ->get('/prowlarr/search?q=Demo')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->component('Prowlarr/Search')
+            ->where('error', 'Indexer search failed.')
+            ->where('results', []));
+});

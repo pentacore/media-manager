@@ -8,6 +8,7 @@ use App\Cache\Services\RadarrCache;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\ArrLibraryActions;
 
 /**
@@ -47,7 +48,7 @@ class RadarrActions extends ArrLibraryActions
 
     protected function client(ServiceConnection $serviceConnection): RadarrClient
     {
-        return new RadarrClient($serviceConnection);
+        return resolve(ArrConnections::class)->radarr($serviceConnection);
     }
 
     protected function cache(ServiceConnection $serviceConnection): RadarrCache

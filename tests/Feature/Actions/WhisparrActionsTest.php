@@ -226,3 +226,20 @@ test('a Whisparr write starts from what Whisparr holds now, not from a cached sn
     'monitoring keeps a profile changed in Whisparr' => ['whisparr_monitor_item', ['whisparr_item_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
     'a profile change keeps monitoring changed in Whisparr' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
 ]);
+
+test('a malformed Whisparr id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    Http::fake(['whisparr.local:6969/*' => Http::response([], 500)]);
+
+    expect(fn (): array => (new WhisparrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(InvalidArgumentException::class, $message);
+
+    Http::assertNothingSent();
+})->with([
+    'delete without an id' => ['whisparr_delete_item', [], 'whisparr_item_id is required'],
+    'delete with a non-numeric id' => ['whisparr_delete_item', ['whisparr_item_id' => 'abc'], 'whisparr_item_id must be a positive integer'],
+    'add with a zero tmdb id' => ['whisparr_add_item', ['tmdb_id' => 0], 'tmdb_id must be a positive integer'],
+    'monitor with a negative id' => ['whisparr_monitor_item', ['whisparr_item_id' => -4], 'whisparr_item_id must be a positive integer'],
+    'profile without a profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 9], 'quality_profile_id is required'],
+    'profile with a non-numeric profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 9, 'quality_profile_id' => 'x'], 'quality_profile_id must be a positive integer'],
+    'search with a non-numeric id' => ['whisparr_search', ['whisparr_item_id' => 'x'], 'whisparr_item_id must be a positive integer'],
+]);

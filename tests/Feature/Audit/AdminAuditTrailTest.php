@@ -374,3 +374,54 @@ test('an invite whose audit row cannot be written creates no account and sends n
     expect(User::query()->where('email', 'ivy@example.com')->exists())->toBeFalse();
     Mail::assertNothingSent();
 });
+
+test('a role change whose audit row cannot be written keeps the old role', function (): void {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->member()->create();
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()->actingAs($admin)->patch(route('admin.users.update-role', $member), ['role' => 'viewer']))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect($member->fresh()->role)->toBe(UserRole::Member);
+});
+
+test('an account delete whose audit row cannot be written keeps the account', function (): void {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->member()->create();
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()->actingAs($admin)->delete(route('admin.users.destroy', $member)))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect($member->fresh())->not->toBeNull();
+});
+
+test('an Emby unlink whose audit row cannot be written keeps the link', function (): void {
+    $viewer = User::factory()->create();
+    $link = EmbyUserLink::factory()->create(['user_id' => $viewer->id, 'emby_username' => 'vic-emby', 'emby_user_id' => 'emby-7']);
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()->actingAs($viewer)->delete(route('emby.links.destroy', $link)))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect($link->fresh())->not->toBeNull();
+});
+
+test('deleting one of two admins still commits the delete and audits it once', function (): void {
+    $admin = User::factory()->admin()->create();
+    $otherAdmin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->delete(route('admin.users.destroy', $otherAdmin))
+        ->assertRedirect(route('admin.users.index'));
+
+    expect($otherAdmin->fresh())->toBeNull()
+        ->and(ActivityLog::query()->where('action', 'user.deleted')->count())->toBe(1);
+});

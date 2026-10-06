@@ -10,6 +10,7 @@ use App\Models\AiModelPrice;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -32,8 +33,8 @@ class RefreshAiPricesJob implements ShouldQueue
     public int $tries = 1;
 
     /**
-     * Below the workers' --timeout (300s) and redis retry_after (330s); no
-     * tighter bound is known for this job.
+     * Below the workers' --timeout (300s) and redis retry_after (330s). The
+     * run itself stays inside RUN_BUDGET_SECONDS through PriceRefreshTimeBox.
      */
     public int $timeout = 270;
 
@@ -52,10 +53,19 @@ class RefreshAiPricesJob implements ShouldQueue
      */
     public const string TRIGGER = 'admin';
 
+    /**
+     * Seconds of the 270 s timeout the refresh itself may use; the rest
+     * finalizes the run row and broadcasts the result. Feeds and the
+     * verifier do not start work that would not fit (PriceRefreshTimeBox).
+     */
+    public const int RUN_BUDGET_SECONDS = 255;
+
     public function __construct(public User $triggeredBy) {}
 
     public function handle(): void
     {
+        resolve(PriceRefreshTimeBox::class)->open(self::RUN_BUDGET_SECONDS);
+
         event(new AiPriceRefreshStateChanged(
             state: AiPriceRefreshStateChanged::STATE_RUNNING,
             triggeredBy: $this->triggeredBy,

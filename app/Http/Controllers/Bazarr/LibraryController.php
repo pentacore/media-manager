@@ -4,23 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Bazarr;
 
+use App\Http\Requests\Bazarr\LibraryPageRequest;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\SubtitleLibraryReader;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class LibraryController extends BazarrController
 {
-    public function __invoke(Request $request, SubtitleLibraryReader $subtitleLibraryReader): Response
+    public function __invoke(LibraryPageRequest $libraryPageRequest, SubtitleLibraryReader $subtitleLibraryReader): Response
     {
-        $validated = $request->validate([
-            ...$this->commonRules(),
-            'media_type' => ['nullable', 'in:episode,movie'],
-            'scope' => ['nullable', 'in:anime,tv,movie'],
-            'missing_only' => ['nullable', 'boolean'],
-        ]);
-        $connectionProps = $this->connectionProps($request);
+        $validated = $libraryPageRequest->validated();
+        $connectionProps = $this->connectionProps($libraryPageRequest);
         $connection = $this->selectedConnection($connectionProps);
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 25);
