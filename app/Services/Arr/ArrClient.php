@@ -8,8 +8,10 @@ use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Http\Client\StrayRequestException;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Throwable;
@@ -24,11 +26,7 @@ abstract class ArrClient
 
     protected function buildClient(bool $withRetry = true): PendingRequest
     {
-        $pendingRequest = Http::baseUrl(rtrim($this->connection->url, '/'))
-            ->withHeaders(['X-Api-Key' => $this->connection->api_key])
-            ->timeout(10)
-            ->connectTimeout(3)
-            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this));
+        $pendingRequest = $this->configureRequest(Http::createPendingRequest());
 
         // Non-idempotent writes (e.g. grabbing a release) must opt out of the
         // generic retry: a server error could mean the request was already
@@ -44,6 +42,75 @@ abstract class ArrClient
                 || ($throwable instanceof RequestException && $throwable->response->serverError()),
             throw: false,
         );
+    }
+
+    /**
+     * Base URL, API key, timeouts and user agent shared by every request to
+     * this connection, single or pooled.
+     */
+    private function configureRequest(PendingRequest $pendingRequest): PendingRequest
+    {
+        return $pendingRequest->baseUrl(rtrim($this->connection->url, '/'))
+            ->withHeaders(['X-Api-Key' => $this->connection->api_key])
+            ->timeout(10)
+            ->connectTimeout(3)
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this));
+    }
+
+    /**
+     * Read one resource per id concurrently: `{resource}/{id}` for every id,
+     * in pools of ten. Each id maps to its decoded body, or to null when it
+     * could not be read — a connection failure, a non-2xx answer, a body
+     * that is not JSON, or JSON without an `id` (a login page or an error
+     * payload). The caller decides what null means; an unreadable item never
+     * throws (only a test's missing fake does, see readableItem()).
+     *
+     * Every request gets one attempt, unlike buildClient()'s retrying reads:
+     * a retry would multiply the wait on a hung upstream for every id in the
+     * pool, and a caller reading many items at once already has a fallback
+     * per item.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array<string, mixed>|null>
+     */
+    protected function fetchResourcesByIds(string $resource, array $ids): array
+    {
+        $items = [];
+
+        foreach (array_chunk(array_values(array_unique($ids)), 10) as $batch) {
+            $responses = Http::pool(function (Pool $pool) use ($resource, $batch): void {
+                foreach ($batch as $id) {
+                    $this->configureRequest($pool->as((string) $id))
+                        ->get(sprintf('/api/%s/%s/%d', $this->apiVersion, $resource, $id));
+                }
+            });
+
+            foreach ($batch as $id) {
+                $items[$id] = $this->readableItem($responses[$id] ?? null);
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * A pooled answer's body when it is a JSON object carrying an `id`.
+     * Http::preventStrayRequests() failures are rethrown so a test with a
+     * missing fake fails instead of reading as an unreadable item.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function readableItem(mixed $response): ?array
+    {
+        throw_if($response instanceof StrayRequestException, $response);
+
+        if (! $response instanceof Response || ! $response->successful()) {
+            return null;
+        }
+
+        $body = $response->json();
+
+        return is_array($body) && isset($body['id']) ? $body : null;
     }
 
     /**

@@ -62,6 +62,19 @@ class SonarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * Uncached, concurrent reads of several series, for a page that shows
+     * what Sonarr holds now for many cards at once. One attempt per series;
+     * null for a series that could not be read (see fetchResourcesByIds()).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array<string, mixed>|null>
+     */
+    public function fetchSeriesByIds(array $ids): array
+    {
+        return $this->fetchResourcesByIds('series', $ids);
+    }
+
+    /**
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException

@@ -13,8 +13,6 @@ use App\Services\Sonarr\SonarrClient;
 use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,18 +22,17 @@ use Illuminate\Support\Collection;
  * `indexed_movies.tmdb_id`); when several connections hold it, the row on
  * that service's active connection wins. Monitoring state is read live from
  * Sonarr/Radarr over the index, because it changes and the overlay is meant
- * to show what is true now — so the uncached `fetchSeriesById()` /
- * `fetchMovieById()` reads are used, never the client's entity cache.
+ * to show what is true now — so the uncached `fetchSeriesByIds()` /
+ * `fetchMoviesByIds()` reads are used, never the client's entity cache.
  *
- * Each distinct (connection, series/movie) is looked up once per call, so
- * several seasons of one series share a single request. The first connection
- * failure (a 5xx, a ConnectionException, or a 200 that is not a series/movie)
- * stops every further call to that connection for the rest of the call, so an
- * outage costs one retried request instead of one per card. A 4xx — such as a
- * 404 for a series deleted upstream but still indexed — only drops live data
- * for that item; the connection stays in use. Inactive connections are never
- * called. Without live data the indexed `monitored` flag decides, at
- * series/movie level only, and no season number is offered.
+ * Each connection gets one concurrent round per call: its distinct
+ * series/movie ids are read together, one attempt each, so several seasons of
+ * one series share a single request and a hung connection costs one timeout
+ * rather than one per card. Inactive connections are never called. An item
+ * that could not be read — a connection failure, any non-2xx such as a 404
+ * for a series deleted upstream but still indexed, or a 200 that is not a
+ * series/movie — falls back on its own: the indexed `monitored` flag decides,
+ * at series/movie level only, and no season number is offered.
  *
  * Season 0 (Specials) is judged at series level, like an unknown season: no
  * season-scope check and no season number. Sonarr leaves Specials unmonitored
@@ -71,7 +68,8 @@ final readonly class SeasonLibraryStatus
         $seriesByTvdbId = $this->preferConnection($indexedSeries, 'tvdb_id', $activeSonarrId);
         $moviesByTmdbId = $this->preferConnection($indexedMovies, 'tmdb_id', $activeRadarrId);
 
-        $liveItem = $this->liveLookup();
+        $liveSeries = $this->liveItems($seriesByTvdbId, 'sonarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => new SonarrClient($serviceConnection)->fetchSeriesByIds($ids));
+        $liveMovies = $this->liveItems($moviesByTmdbId, 'radarr_id', static fn (ServiceConnection $serviceConnection, array $ids): array => new RadarrClient($serviceConnection)->fetchMoviesByIds($ids));
         $resolved = [];
 
         foreach ($rows as $row) {
@@ -85,13 +83,13 @@ final readonly class SeasonLibraryStatus
                 $resolved[$row['key']] = $this->seriesStatus(
                     $series,
                     $mapping['tvdbSeason'] ?? null,
-                    $liveItem($series->serviceConnection, (int) $series->sonarr_id),
+                    $liveSeries[(int) $series->service_connection_id][(int) $series->sonarr_id] ?? null,
                     $activeSonarrId,
                 );
             } elseif ($movie instanceof IndexedMovie) {
                 $resolved[$row['key']] = $this->movieStatus(
                     $movie,
-                    $liveItem($movie->serviceConnection, (int) $movie->radarr_id),
+                    $liveMovies[(int) $movie->service_connection_id][(int) $movie->radarr_id] ?? null,
                     $activeRadarrId,
                 );
             }
@@ -150,66 +148,37 @@ final readonly class SeasonLibraryStatus
     }
 
     /**
-     * A memoizing live reader for one resolve() call.
+     * Live payloads of the chosen indexed rows, read in one concurrent round
+     * per active connection: connection id => item id => payload, or null for
+     * an item that could not be read. Rows on an inactive or missing
+     * connection are left out, so they fall back to the index.
      *
-     * @return Closure(?ServiceConnection, int): (array<string, mixed>|null)
-     */
-    private function liveLookup(): Closure
-    {
-        /** @var array<string, array<string, mixed>|null> $items */
-        $items = [];
-        /** @var array<int, true> $failedConnections */
-        $failedConnections = [];
-
-        return function (?ServiceConnection $serviceConnection, int $itemId) use (&$items, &$failedConnections): ?array {
-            if (! $serviceConnection instanceof ServiceConnection) {
-                return null;
-            }
-
-            $memoKey = sprintf('%d:%d', $serviceConnection->id, $itemId);
-
-            if (array_key_exists($memoKey, $items)) {
-                return $items[$memoKey];
-            }
-
-            if (! $serviceConnection->is_active || isset($failedConnections[$serviceConnection->id])) {
-                return null;
-            }
-
-            try {
-                $item = $this->fetchItem($serviceConnection, $itemId);
-            } catch (RequestException $requestException) {
-                // A 4xx (e.g. a series deleted upstream but still indexed) is
-                // about this item only; the connection itself answered.
-                if ($requestException->response->clientError()) {
-                    return $items[$memoKey] = null;
-                }
-
-                $item = [];
-            } catch (ConnectionException) {
-                $item = [];
-            }
-
-            if (! isset($item['id'])) {
-                $failedConnections[$serviceConnection->id] = true;
-
-                return $items[$memoKey] = null;
-            }
-
-            return $items[$memoKey] = $item;
-        };
-    }
-
-    /**
-     * @return array<array-key, mixed>
+     * @template TModel of Model
      *
-     * @throws RequestException|ConnectionException
+     * @param  Collection<int, TModel>  $indexed
+     * @param  Closure(ServiceConnection, list<int>): array<int, array<string, mixed>|null>  $fetchByIds
+     * @return array<int, array<int, array<string, mixed>|null>>
      */
-    private function fetchItem(ServiceConnection $serviceConnection, int $itemId): array
+    private function liveItems(Collection $indexed, string $itemIdColumn, Closure $fetchByIds): array
     {
-        return $serviceConnection->type === ServiceType::Radarr
-            ? new RadarrClient($serviceConnection)->fetchMovieById($itemId)
-            : new SonarrClient($serviceConnection)->fetchSeriesById($itemId);
+        /** @var array<int, array{connection: ServiceConnection, ids: list<int>}> $wanted */
+        $wanted = [];
+
+        foreach ($indexed as $model) {
+            $serviceConnection = $model->getRelationValue('serviceConnection');
+
+            if (! $serviceConnection instanceof ServiceConnection || ! $serviceConnection->is_active) {
+                continue;
+            }
+
+            $wanted[$serviceConnection->id] ??= ['connection' => $serviceConnection, 'ids' => []];
+            $wanted[$serviceConnection->id]['ids'][] = (int) $model->getAttribute($itemIdColumn);
+        }
+
+        return array_map(
+            static fn (array $connectionIds): array => $fetchByIds($connectionIds['connection'], array_values(array_unique($connectionIds['ids']))),
+            $wanted,
+        );
     }
 
     /**

@@ -131,7 +131,7 @@ test('two entries for different seasons of one series share a single Sonarr look
     Http::assertSentCount(1);
 });
 
-test('a Sonarr outage falls back to the indexed monitored flag and stops calling Sonarr', function (): void {
+test('a Sonarr outage falls back to the indexed monitored flag for each series, asking once per series', function (): void {
     Sleep::fake();
     IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => false]);
     IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 8, 'tvdb_id' => 81190, 'monitored' => true]);
@@ -147,8 +147,9 @@ test('a Sonarr outage falls back to the indexed monitored flag and stops calling
         ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull()
         ->and($result['anilist:2']['status'])->toBe('in_library')
         ->and($result['anilist:2']['library']['seasonNumber'])->toBeNull();
-    // The second series is never requested once the connection has failed.
-    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/series/8'));
+    // Both series are asked for, each exactly once: no retries.
+    expect(Http::recorded(fn (Request $request): bool => str_contains($request->url(), '/series/7')))->toHaveCount(1)
+        ->and(Http::recorded(fn (Request $request): bool => str_contains($request->url(), '/series/8')))->toHaveCount(1);
 });
 
 test('a series Sonarr no longer has falls back to the index without stopping other lookups', function (): void {
@@ -173,10 +174,13 @@ test('a series Sonarr no longer has falls back to the index without stopping oth
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/series/8'));
 });
 
-test('a Sonarr answer that is not a series counts as a failure', function (): void {
+test('a Sonarr answer that is not a series falls back to the index for that series only', function (): void {
     IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => false]);
     IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 8, 'tvdb_id' => 81190, 'monitored' => true]);
-    Http::fake(['sonarr.local:8989/*' => Http::response(['message' => 'NotFound'])]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/7' => Http::response(['message' => 'NotFound']),
+        'sonarr.local:8989/api/v3/series/8' => Http::response(seasonLibrarySeries(8, true, [['seasonNumber' => 1, 'monitored' => false]])),
+    ]);
 
     $result = (new SeasonLibraryStatus)->resolve([
         seasonLibraryRow('anilist:1', 'tv', 1396, 81189, 2),
@@ -185,8 +189,11 @@ test('a Sonarr answer that is not a series counts as a failure', function (): vo
 
     expect($result['anilist:1']['status'])->toBe('unmonitored')
         ->and($result['anilist:1']['unmonitoredScope'])->toBe('series')
-        ->and($result['anilist:2']['status'])->toBe('in_library');
-    Http::assertSentCount(1);
+        ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull()
+        ->and($result['anilist:2']['status'])->toBe('unmonitored')
+        ->and($result['anilist:2']['unmonitoredScope'])->toBe('season')
+        ->and($result['anilist:2']['library']['seasonNumber'])->toBe(1);
+    Http::assertSentCount(2);
 });
 
 test('a series owned only on a non-active Sonarr connection is not openable from the card', function (): void {
