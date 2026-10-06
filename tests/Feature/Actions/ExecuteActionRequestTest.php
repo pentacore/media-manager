@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\WhisparrVersion;
 use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
@@ -25,6 +26,7 @@ use App\Services\Whisparr\WhisparrActions;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Queue\Attributes\Timeout;
@@ -693,4 +695,22 @@ test('a first delivery that finds the request already executing still skips it',
 
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Executing)
         ->and($request->fresh()->result)->toBeNull();
+});
+
+test('a Whisparr executor read answered with a login page is retried like Sonarr and Radarr', function (): void {
+    Http::preventStrayRequests();
+    $connection = ServiceConnection::factory()->whisparr()->whisparrVersion(WhisparrVersion::V3)->create(['url' => 'http://whisparr.local:6969', 'api_key' => 'k']);
+    Http::fake(['whisparr.local:6969/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'whisparr_monitor_item',
+        'payload' => ['whisparr_item_id' => 99, 'monitored' => false, 'service_connection_id' => $connection->id],
+    ]);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ArrUnexpectedResponse::class);
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Executing)
+        ->and($fresh->result)->toBe(['retry_scheduled' => true, 'attempt' => 1]);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT');
 });

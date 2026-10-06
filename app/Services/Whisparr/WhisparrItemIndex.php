@@ -28,7 +28,7 @@ final class WhisparrItemIndex
      *
      * @return array<string, mixed>|null
      *
-     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     * @throws RequestException|ConnectionException
      */
     public function find(ServiceConnection $serviceConnection, int $itemId): ?array
     {
