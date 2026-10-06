@@ -165,7 +165,7 @@ test('truncates a very long connection-failure message to 255 chars', function (
         'url' => 'http://sonarr.local:8989',
     ]);
 
-    Http::fake(fn () => throw new ConnectionException(str_repeat('A', 5000)));
+    Http::fake(['sonarr.local:8989/*' => fn () => throw new ConnectionException(str_repeat('A', 5000))]);
 
     new PingServiceHealth($connection)->handle();
 
