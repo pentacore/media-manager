@@ -37,6 +37,12 @@ use Illuminate\Support\Collection;
  * called. Without live data the indexed `monitored` flag decides, at
  * series/movie level only, and no season number is offered.
  *
+ * Season 0 (Specials) is judged at series level, like an unknown season: no
+ * season-scope check and no season number. Sonarr leaves Specials unmonitored
+ * by default and the Fribb mapping puts OVAs, specials and movies on season 0,
+ * so a season-level check would flag every such entry of a monitored series, and
+ * monitoring season 0 would search for every special.
+ *
  * @phpstan-type OwnedStatus array{status: 'in_library'|'unmonitored', unmonitoredScope: 'series'|'season'|'movie'|null, library: array{service: 'sonarr'|'radarr', itemId: int, connectionId: int, seasonNumber: int|null, onActiveConnection: bool}}
  */
 final readonly class SeasonLibraryStatus
@@ -207,12 +213,15 @@ final readonly class SeasonLibraryStatus
     }
 
     /**
+     * Season 0 (Specials) counts as an unknown season: it is never checked at
+     * season level and offers no season number (see the class docblock).
+     *
      * @param  array<string, mixed>|null  $live
      * @return OwnedStatus
      */
     private function seriesStatus(IndexedSeries $indexedSeries, mixed $tvdbSeason, ?array $live, ?int $activeConnectionId): array
     {
-        $seasonNumber = $tvdbSeason !== null ? (int) $tvdbSeason : null;
+        $seasonNumber = $tvdbSeason !== null && (int) $tvdbSeason !== 0 ? (int) $tvdbSeason : null;
         $season = $live !== null && $seasonNumber !== null ? $this->liveSeason($live, $seasonNumber) : null;
 
         $scope = match (true) {

@@ -72,15 +72,26 @@ test('an unmonitored season of a monitored series is unmonitored at season scope
     ]);
 });
 
-test('season 0 is checked like any other season', function (): void {
+test('season 0 is judged at series level, so an unmonitored Specials season never flags a monitored series', function (): void {
     IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => true]);
     Http::fake(['sonarr.local:8989/api/v3/series/7' => Http::response(seasonLibrarySeries(7, true, [['seasonNumber' => 0, 'monitored' => false], ['seasonNumber' => 1, 'monitored' => true]]))]);
 
     $result = (new SeasonLibraryStatus)->resolve([seasonLibraryRow('anilist:1', 'tv', 1396, 81189, 0)]);
 
+    expect($result['anilist:1']['status'])->toBe('in_library')
+        ->and($result['anilist:1']['unmonitoredScope'])->toBeNull()
+        ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull();
+});
+
+test('season 0 of an unmonitored series is flagged at series level without a season number', function (): void {
+    IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'tvdb_id' => 81189, 'monitored' => false]);
+    Http::fake(['sonarr.local:8989/api/v3/series/7' => Http::response(seasonLibrarySeries(7, false, [['seasonNumber' => 0, 'monitored' => false], ['seasonNumber' => 1, 'monitored' => false]]))]);
+
+    $result = (new SeasonLibraryStatus)->resolve([seasonLibraryRow('anilist:1', 'tv', 1396, 81189, 0)]);
+
     expect($result['anilist:1']['status'])->toBe('unmonitored')
-        ->and($result['anilist:1']['unmonitoredScope'])->toBe('season')
-        ->and($result['anilist:1']['library']['seasonNumber'])->toBe(0);
+        ->and($result['anilist:1']['unmonitoredScope'])->toBe('series')
+        ->and($result['anilist:1']['library']['seasonNumber'])->toBeNull();
 });
 
 test('an unknown tvdb season is judged at series level only', function (): void {
