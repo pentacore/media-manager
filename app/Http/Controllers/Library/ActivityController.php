@@ -18,6 +18,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Arr\QueueItemRemover;
@@ -37,6 +38,8 @@ use InvalidArgumentException;
 
 class ActivityController extends Controller
 {
+    public function __construct(private readonly ArrConnections $arrConnections) {}
+
     /**
      * Sonarr + Radarr activity. The live queue (both services, merged) and
      * one service's history page are deferred separately so the shell
@@ -76,7 +79,7 @@ class ActivityController extends Controller
         }
 
         try {
-            $this->clientFor($service, $connection)->grabQueueItem($id);
+            $this->clientFor($connection)->grabQueueItem($id);
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
@@ -239,7 +242,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Only a grabbed :service history entry can be marked as failed — refresh the history and try again.', ['service' => $label]));
         }
 
-        $arrClient = $this->clientFor($service, $connection);
+        $arrClient = $this->clientFor($connection);
 
         try {
             $arrClient->markHistoryFailed($id);
@@ -281,7 +284,7 @@ class ActivityController extends Controller
         }
 
         try {
-            $candidates = $this->clientFor($service, $connection)->getManualImport(['downloadId' => $downloadId]);
+            $candidates = $this->clientFor($connection)->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
             return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
@@ -311,7 +314,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
-        $arrClient = $this->clientFor($service, $connection);
+        $arrClient = $this->clientFor($connection);
 
         try {
             $candidates = $arrClient->getManualImport(['downloadId' => $downloadId]);
@@ -407,11 +410,9 @@ class ActivityController extends Controller
         return __('That :service connection is unavailable — refresh and try again.', ['service' => $serviceType->label()]);
     }
 
-    private function clientFor(string $service, ServiceConnection $serviceConnection): ArrClient
+    private function clientFor(ServiceConnection $serviceConnection): ArrClient
     {
-        return $service === 'sonarr'
-            ? new SonarrClient($serviceConnection)
-            : new RadarrClient($serviceConnection);
+        return $this->arrConnections->client($serviceConnection);
     }
 
     private function flashAndBack(string $type, string $message): RedirectResponse
@@ -482,8 +483,8 @@ class ActivityController extends Controller
 
         try {
             $payload = $serviceType === ServiceType::Sonarr
-                ? new SonarrClient($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
-                : new RadarrClient($connection)->getHistory([...$params, 'includeMovie' => 'true']);
+                ? $this->arrConnections->client($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
+                : $this->arrConnections->client($connection)->getHistory([...$params, 'includeMovie' => 'true']);
         } catch (RequestException|ConnectionException) {
             return [...$result, 'error' => sprintf('%s is unreachable right now — its history could not be loaded.', $serviceType->label())];
         }

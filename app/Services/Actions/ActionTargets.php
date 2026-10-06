@@ -9,6 +9,7 @@ use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
@@ -30,7 +31,10 @@ use Throwable;
  */
 final readonly class ActionTargets
 {
-    public function __construct(private WhisparrItemIndex $whisparrItemIndex) {}
+    public function __construct(
+        private WhisparrItemIndex $whisparrItemIndex,
+        private ArrConnections $arrConnections,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $pinContext
@@ -398,8 +402,7 @@ final readonly class ActionTargets
     private function arrClient(ServiceType $serviceType, ServiceConnection $serviceConnection): ArrClient
     {
         return match ($serviceType) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
+            ServiceType::Sonarr, ServiceType::Radarr => $this->arrConnections->client($serviceConnection),
             ServiceType::Whisparr => new WhisparrClient($serviceConnection),
             default => throw new InvalidArgumentException(sprintf('No arr client for %s', $serviceType->value)),
         };

@@ -8,8 +8,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -42,11 +41,9 @@ class GetMediaAddOptionsTool extends BaseTool
 
         $serviceType = ServiceType::from((string) $validated['service']);
         $serviceConnection = ServiceConnection::resolveActive($serviceType);
-        $client = match ($serviceType) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
-            default => new WhisparrClient($serviceConnection),
-        };
+        $client = $serviceType === ServiceType::Whisparr
+            ? new WhisparrClient($serviceConnection)
+            : resolve(ArrConnections::class)->client($serviceConnection);
 
         return [
             'quality_profiles' => array_map(static fn (array $profile): array => [
