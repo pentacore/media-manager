@@ -22,6 +22,7 @@ use App\Services\AiUsage\AiModelRateLimitExceededException;
 use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatWorkflowContinuation;
+use App\Services\Chat\ConversationModelOverride;
 use App\Services\Chat\WorkflowContinuationRefused;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
@@ -47,9 +48,11 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride): JsonResponse
     {
         $validated = $sendChatRequest->validated();
+
+        $conversationModelOverride->applyToTurn($validated['conversation_id'] ?? null, $validated['override'] ?? []);
 
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $sendChatRequest->user();
@@ -85,6 +88,7 @@ class ChatController extends Controller
         $chatAttachmentStore->assignConversation($attachments, $newConversationId);
 
         if ($isNewConversation && $newConversationId !== null) {
+            $conversationModelOverride->persist($newConversationId);
             $this->seedConversationTitle($newConversationId, $validated['message']);
             dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
         }
@@ -105,9 +109,11 @@ class ChatController extends Controller
      * Workflow continuations are intentionally NOT supported here — they stay on
      * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload): JsonResponse|StreamableAgentResponse
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ConversationModelOverride $conversationModelOverride): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
+
+        $conversationModelOverride->applyToTurn($validated['conversation_id'] ?? null, $validated['override'] ?? []);
 
         $user = $streamChatRequest->user();
 
@@ -129,17 +135,18 @@ class ChatController extends Controller
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore): void {
+        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride): void {
             $newConversationId = $response->conversationId ?? null;
             $chatAttachmentStore->assignConversation($attachments, $newConversationId);
 
             if ($isNewConversation && $newConversationId !== null) {
+                $conversationModelOverride->persist($newConversationId);
                 $this->seedConversationTitle($newConversationId, $message);
                 dispatch(new GenerateConversationTitle($newConversationId, $message));
             }
         });
 
-        $stream->catch(function () use ($stream, $isNewConversation, $message): void {
+        $stream->catch(function () use ($stream, $isNewConversation, $message, $conversationModelOverride): void {
             // 1.0 stores a failed first turn once a step completed, so the
             // conversation exists — give it the same readable title a
             // successful turn gets. A turn that died before its first step
@@ -148,6 +155,7 @@ class ChatController extends Controller
                 && $stream->conversationId !== null
                 && DB::table('agent_conversations')->where('id', $stream->conversationId)->exists()
             ) {
+                $conversationModelOverride->persist($stream->conversationId);
                 $this->seedConversationTitle($stream->conversationId, $message);
                 dispatch(new GenerateConversationTitle($stream->conversationId, $message));
             }
@@ -189,7 +197,8 @@ class ChatController extends Controller
      * order: apply the requested mode, the monthly hard cap (402), the chat
      * model's rate limit (429), then conversation ownership (404). Returns
      * the refusal, or null when the turn may proceed. Shared by send() and
-     * stream().
+     * stream(), which apply the conversation's model override first so the
+     * rate limit checks the model the turn will actually run on.
      *
      * @param  array<string, mixed>  $validated
      */

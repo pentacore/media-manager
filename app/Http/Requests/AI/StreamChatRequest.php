@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\AI;
 
+use App\Concerns\AiModelSelectionValidationRules;
 use App\Concerns\ChatAttachmentValidationRules;
 use App\Enums\AiMode;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class StreamChatRequest extends FormRequest
 {
+    use AiModelSelectionValidationRules;
     use ChatAttachmentValidationRules;
 
     /**
@@ -31,6 +34,24 @@ class StreamChatRequest extends FormRequest
             'conversation_id' => ['nullable', 'string', 'uuid'],
             'mode' => ['nullable', 'string', AiMode::validationRule()],
             ...$this->chatAttachmentRules(),
+            'override' => ['nullable', 'array:provider,model,reasoning'],
+            ...$this->selectionRules('override'),
         ];
+    }
+
+    /**
+     * A new conversation's requested override must name a priced model of
+     * its provider. Ignored for an existing conversation, which keeps its own.
+     *
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [fn (Validator $validator) => $this->validatePricedSelection(
+            $validator,
+            'override',
+            $this->input('override.provider'),
+            $this->input('override.model'),
+        )];
     }
 }
