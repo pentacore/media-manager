@@ -11,7 +11,7 @@ use App\Settings\AiSettings;
  * The admin settings surfaces the audit log records as `settings.updated`
  * rows (subject = the case value). Key-backed groups live in app_settings
  * under their prefixes; record-backed groups (notification destinations,
- * AI free pools, AI model prices) diff the saved row instead.
+ * AI free pools, AI model prices, AI models) diff the saved row instead.
  */
 enum SettingsGroup: string
 {
@@ -25,6 +25,7 @@ enum SettingsGroup: string
     case NotificationDestinations = 'notification_destinations';
     case AiFreeUsagePools = 'ai_free_usage_pools';
     case AiModelPrices = 'ai_model_prices';
+    case AiModels = 'ai_models';
 
     public function label(): string
     {
@@ -37,6 +38,7 @@ enum SettingsGroup: string
             self::NotificationDestinations => 'Notification destination',
             self::AiFreeUsagePools => 'AI free usage pool',
             self::AiModelPrices => 'AI model price',
+            self::AiModels => 'AI models',
         };
     }
 
@@ -53,7 +55,7 @@ enum SettingsGroup: string
             self::MediaReplacement => ['ai.media_replacement'],
             self::BazarrAutomation => ['bazarr.automation'],
             self::Webhooks => ['webhooks.'],
-            self::NotificationDestinations, self::AiFreeUsagePools, self::AiModelPrices => [],
+            self::NotificationDestinations, self::AiFreeUsagePools, self::AiModelPrices, self::AiModels => [],
         };
     }
 
