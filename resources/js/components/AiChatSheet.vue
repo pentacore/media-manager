@@ -15,9 +15,7 @@ import { cn } from '@/lib/utils';
 import ChatPanel from './ai/ChatPanel.vue';
 
 const page = usePage();
-const { can } = useCan();
-
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 

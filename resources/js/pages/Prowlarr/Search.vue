@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Antenna, Download, Loader2, Search } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import GrabReleaseController from '@/actions/App/Http/Controllers/Prowlarr/GrabReleaseController';
@@ -50,8 +50,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const queryInput = ref(props.query);
 const grabbing = ref<string | null>(null);

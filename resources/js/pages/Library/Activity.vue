@@ -140,8 +140,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const refreshing = ref(false);
 const serviceFilter = ref<'all' | 'sonarr' | 'radarr'>('all');

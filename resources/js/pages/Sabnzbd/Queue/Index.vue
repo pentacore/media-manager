@@ -98,8 +98,7 @@ const PRIORITY_LABELS: Record<string, string> = {
     '2': 'Force',
 };
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const slotIds = computed<string[]>(() =>
     (props.queue.slots ?? []).map((slot) => slot.nzo_id),

@@ -113,9 +113,7 @@ const { subscribe: subscribeReload } = useRealtimeReload<{
 
 onMounted(subscribeReload);
 
-const { can } = useCan();
-
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 type FilterId =
     | 'pending'

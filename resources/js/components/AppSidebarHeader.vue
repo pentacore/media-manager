@@ -23,15 +23,13 @@ withDefaults(
 
 const palette = useCommandPalette();
 const page = usePage();
-const { can } = useCan();
+const { isAdmin } = useCan();
 
 const unreadNotifications = computed<number>(
     () => page.props.nav?.unreadNotifications ?? 0,
 );
 
 const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
-
-const isAdmin = computed(() => can('admin'));
 </script>
 
 <template>
