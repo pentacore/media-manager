@@ -108,12 +108,17 @@ final readonly class ReasoningCapability
     }
 
     /**
-     * The ai_model_prices columns this capability knows.
+     * The ai_model_prices columns this capability knows. A model that does not
+     * reason also clears its stale levels and style.
      *
      * @return array<string, mixed>
      */
     public function attributes(): array
     {
+        if ($this->supported === false) {
+            return ['supports_reasoning' => false, 'reasoning_levels' => null, 'reasoning_style' => null];
+        }
+
         return array_filter([
             'supports_reasoning' => $this->supported,
             'reasoning_levels' => $this->levels,

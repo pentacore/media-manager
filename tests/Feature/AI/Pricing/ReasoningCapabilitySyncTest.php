@@ -9,6 +9,7 @@ use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\Data\CandidatePriceField;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
+use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\LiteLlmPricingAdapter;
 use App\Services\AiUsage\Pricing\ModelsDevPricingAdapter;
 use App\Services\AiUsage\Pricing\OpenRouterPricingAdapter;
@@ -105,13 +106,14 @@ test('the writer refreshes capabilities on an unlocked row even when prices are 
         'supports_reasoning' => null,
     ]);
 
-    resolve(AiModelPriceWriter::class)->write(
+    $outcome = resolve(AiModelPriceWriter::class)->write(
         capabilityCandidate('gpt-cap-update', new ReasoningCapability(true, ['medium'], null)),
         RefreshScope::all(),
         PricingSource::ModelsDev,
     );
 
-    expect(AiModelPrice::query()->where('model', 'gpt-cap-update')->value('supports_reasoning'))->toBeTrue();
+    expect($outcome)->toBe(WriteOutcome::Unchanged)
+        ->and(AiModelPrice::query()->where('model', 'gpt-cap-update')->value('supports_reasoning'))->toBeTrue();
 });
 
 test('the writer leaves a locked row alone', function (): void {
@@ -176,4 +178,45 @@ test('the litellm adapter attaches the capability to its candidates', function (
     $candidate = collect($results['anthropic']->candidates)->firstWhere('model', 'claude-opus-5-5');
 
     expect($candidate?->reasoning?->levels)->toBe(['low', 'medium']);
+});
+
+test('a price change and a capability change land together', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai', 'model' => 'gpt-cap-both',
+        'input_per_mtok' => '1.2000', 'output_per_mtok' => '10',
+        'supports_reasoning' => null,
+    ]);
+
+    $outcome = resolve(AiModelPriceWriter::class)->write(
+        capabilityCandidate('gpt-cap-both', new ReasoningCapability(true, ['low'], null)),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    $row = AiModelPrice::query()->where('model', 'gpt-cap-both')->firstOrFail();
+
+    expect($outcome)->toBe(WriteOutcome::Updated)
+        ->and($row->input_per_mtok)->toBe('1.2500')
+        ->and($row->supports_reasoning)->toBeTrue()
+        ->and($row->reasoning_levels)->toBe(['low']);
+});
+
+test('a feed flipping a model to unsupported clears stale levels and style', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai', 'model' => 'gpt-cap-flip',
+        'input_per_mtok' => '1.25', 'output_per_mtok' => '10',
+        'supports_reasoning' => true, 'reasoning_levels' => ['low', 'high'], 'reasoning_style' => 'effort',
+    ]);
+
+    resolve(AiModelPriceWriter::class)->write(
+        capabilityCandidate('gpt-cap-flip', new ReasoningCapability(false, null, null)),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    $row = AiModelPrice::query()->where('model', 'gpt-cap-flip')->firstOrFail();
+
+    expect($row->supports_reasoning)->toBeFalse()
+        ->and($row->reasoning_levels)->toBeNull()
+        ->and($row->reasoning_style)->toBeNull();
 });
