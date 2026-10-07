@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiTask;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Settings\AiSettings;
@@ -593,13 +595,13 @@ test('index lists selected models the hard cap cannot price', function (): void 
     config()->set('ai.default', 'openai');
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setHardBudgetUsd(10.0);
-    $aiSettings->setSubAgentModel('mystery-model');
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'mystery-model')->create();
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-usage.index'))
         ->assertInertia(fn ($page) => $page
             ->component('Admin/AiUsage/Index')
-            ->where('unpricedModels', fn ($models): bool => collect($models)->contains(fn (array $model): bool => $model['role'] === 'Sub-agents' && $model['model'] === 'mystery-model')));
+            ->where('unpricedModels', fn ($models): bool => collect($models)->contains(fn (array $model): bool => $model['role'] === 'File inspector' && $model['model'] === 'mystery-model')));
 });
 
 test('index reports no unpriced models when no hard cap is set', function (): void {
