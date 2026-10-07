@@ -17,9 +17,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { jsonRequest } from '@/composables/useAiChat';
 import { useCan } from '@/composables/useCan';
 import { formatBytes } from '@/lib/format';
+import { jsonRequest } from '@/lib/http';
 import { dashboard } from '@/routes';
 
 interface IndexerRelease {

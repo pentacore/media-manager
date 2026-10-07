@@ -23,3 +23,6 @@ Inertia's `useHttp` calls `onError` only for a 422 validation response. A 500 go
 
 ## Byte sizes render through formatBytes()
 Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, whole numbers to MB, one decimal from GB, `"0 B"` for zero, `"—"` for a missing value). Never add a local size formatter; `tests/Browser/ByteFormatTest.php` pins the output.
+
+## JSON requests come from @/lib/http
+Ad-hoc JSON calls use `jsonRequest<T>()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.

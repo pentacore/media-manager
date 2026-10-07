@@ -16,8 +16,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { jsonRequest } from '@/composables/useAiChat';
 import { formatBytes } from '@/lib/format';
+import { jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type { QueryParams } from '@/wayfinder';
 
