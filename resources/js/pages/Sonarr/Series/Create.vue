@@ -16,6 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { UpstreamList } from '@/types';
 
@@ -104,14 +105,8 @@ function submit() {
     form.post(SeriesController.store.url());
 }
 
-function formatFreeSpace(bytes: number | null): string {
-    if (!bytes || bytes <= 0) {
-        return '';
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    return ` (${gb.toFixed(0)} GB free)`;
+function freeSpaceLabel(bytes: number | null): string {
+    return bytes !== null && bytes > 0 ? ` (${formatBytes(bytes)} free)` : '';
 }
 </script>
 
@@ -311,7 +306,7 @@ function formatFreeSpace(bytes: number | null): string {
                                     :value="folder.path"
                                 >
                                     {{ folder.path
-                                    }}{{ formatFreeSpace(folder.free_space) }}
+                                    }}{{ freeSpaceLabel(folder.free_space) }}
                                 </SelectItem>
                             </SelectContent>
                         </Select>

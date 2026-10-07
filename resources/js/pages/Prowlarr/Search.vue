@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { jsonRequest } from '@/composables/useAiChat';
 import { useCan } from '@/composables/useCan';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
 interface IndexerRelease {
@@ -104,18 +105,6 @@ async function grab(release: IndexerRelease): Promise<void> {
     } finally {
         grabbing.value = null;
     }
-}
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1_000_000) {
-        return `${(bytes / 1_000).toFixed(0)} KB`;
-    }
-
-    if (bytes < 1_000_000_000) {
-        return `${(bytes / 1_000_000).toFixed(0)} MB`;
-    }
-
-    return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
 }
 
 function formatAge(days: number): string {

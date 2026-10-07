@@ -32,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
@@ -453,23 +454,6 @@ function refresh(): void {
             refreshing.value = false;
         },
     });
-}
-
-function formatBytes(bytes: number | null): string {
-    if (bytes === null || bytes <= 0) {
-        return '—';
-    }
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = bytes;
-    let unitIndex = 0;
-
-    while (value >= 1024 && unitIndex < units.length - 1) {
-        value /= 1024;
-        unitIndex++;
-    }
-
-    return `${value.toFixed(value >= 100 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function progress(row: QueueRow): number {

@@ -14,6 +14,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { jsonRequest } from '@/composables/useAiChat';
+import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { ReleaseRow } from '@/types';
 import type { QueryParams } from '@/wayfinder';
@@ -204,18 +205,6 @@ async function grab(row: ReleaseRow): Promise<void> {
     }
 }
 
-function formatSize(bytes: number): string {
-    if (bytes <= 0) {
-        return '—';
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    return gb >= 1
-        ? `${gb.toFixed(1)} GB`
-        : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-}
-
 function formatAge(hours: number | null): string {
     if (hours === null) {
         return '—';
@@ -344,7 +333,7 @@ watch(
                         </td>
                         <td class="px-2 py-2">{{ row.quality ?? '—' }}</td>
                         <td class="font-mono-tabular px-2 py-2">
-                            {{ formatSize(row.size) }}
+                            {{ formatBytes(row.size) }}
                         </td>
                         <td class="font-mono-tabular px-2 py-2">
                             {{ formatAge(row.age_hours) }}

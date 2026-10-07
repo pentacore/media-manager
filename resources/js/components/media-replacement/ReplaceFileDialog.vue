@@ -17,6 +17,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { jsonRequest } from '@/composables/useAiChat';
+import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { QueryParams } from '@/wayfinder';
 
@@ -295,20 +296,6 @@ async function submitReplacement(): Promise<void> {
     }
 }
 
-function formatSize(bytes: number | null): string {
-    if (!bytes || bytes <= 0) {
-        return '-';
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    if (gb >= 1) {
-        return `${gb.toFixed(1)} GB`;
-    }
-
-    return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-}
-
 function ruleBadgeVariant(
     strength: MatchedRule['strength'],
 ): 'success' | 'default' | 'secondary' {
@@ -384,7 +371,7 @@ watch(
                     <div
                         class="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground"
                     >
-                        <span>{{ formatSize(snapshot.size) }}</span>
+                        <span>{{ formatBytes(snapshot.size) }}</span>
                         <span v-if="snapshot.subtitles.length">
                             Subtitles: {{ snapshot.subtitles.join(', ') }}
                         </span>
@@ -498,7 +485,7 @@ watch(
                             <div
                                 class="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground"
                             >
-                                <span>{{ formatSize(candidate.size) }}</span>
+                                <span>{{ formatBytes(candidate.size) }}</span>
                                 <span v-if="candidate.seeders">
                                     {{ candidate.seeders }} seeders
                                 </span>

@@ -20,3 +20,6 @@ User feedback comes from the server via `Inertia::flash('toast', ...)`, rendered
 
 ## useHttp onError only covers 422s
 Inertia's `useHttp` calls `onError` only for a 422 validation response. A 500 goes to `onHttpException`, a dropped connection to `onNetworkError`, and in both cases the returned promise rejects. Handle all three callbacks and `.catch()` the promise for every request whose failure must be visible. Otherwise state stays stuck (e.g. SubtitleItemDrawer left every operation disabled), nothing tells the user, and the rejection goes unhandled. Pest browser tests won't catch this: they record only window errors and console.* calls, not unhandled rejections or failed-resource messages.
+
+## Byte sizes render through formatBytes()
+Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, whole numbers to MB, one decimal from GB, `"0 B"` for zero, `"—"` for a missing value). Never add a local size formatter; `tests/Browser/ByteFormatTest.php` pins the output.

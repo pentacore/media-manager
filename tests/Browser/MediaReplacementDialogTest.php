@@ -103,6 +103,7 @@ test('member replaces a movie file end to end from the show page', function (): 
     visit(route('media.movies.show', ['id' => 10], absolute: false))
         ->assertSee('A Movie')
         ->assertNoSmoke()
+        ->assertSee('4.7 GB')
         ->click('[data-replacement-trigger]')
         ->assertSeeIn('[data-replacement-current-file]', 'A Movie')
         ->assertSeeIn('[data-replacement-current-file]', 'Bluray-1080p')

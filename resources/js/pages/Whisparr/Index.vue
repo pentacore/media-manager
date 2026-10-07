@@ -22,8 +22,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
-import { formatSize } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
+import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type {
@@ -388,7 +388,7 @@ function sync(): void {
                             class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
                         >
                             <span>{{ item.year ?? '—' }}</span>
-                            <span>{{ formatSize(item.size_bytes) }}</span>
+                            <span>{{ formatBytes(item.size_bytes) }}</span>
                         </div>
                     </div>
                 </Link>

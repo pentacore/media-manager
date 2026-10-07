@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
-import { formatSize } from '@/lib/arr';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type {
     WhisparrConnection,
@@ -330,7 +330,7 @@ const profileName = computed(() => {
                                 Size on disk
                             </dt>
                             <dd class="font-mono-tabular">
-                                {{ formatSize(item.size_bytes) }}
+                                {{ formatBytes(item.size_bytes) }}
                             </dd>
                         </div>
                         <div>
