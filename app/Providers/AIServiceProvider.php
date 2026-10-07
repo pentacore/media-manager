@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\ChatTurnContext;
+use App\Ai\TaskModelResolver;
 use App\Http\Streaming\ClientConnection;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
@@ -32,6 +34,13 @@ class AIServiceProvider extends ServiceProvider
         // Holds the user who triggered the in-flight AI run; scoped so it
         // cannot leak into the next Octane request or queued job.
         $this->app->scoped(AiRunAttribution::class);
+
+        // The conversation override for the chat turn in flight; scoped so it
+        // never applies to the next Octane request or queued job.
+        $this->app->scoped(ChatTurnContext::class);
+
+        // Memoises ai_task_models for the request; scoped for the same reason.
+        $this->app->scoped(TaskModelResolver::class);
 
         // Per-run step usage keyed by invocation id; scoped so partial runs
         // never bleed into the next Octane request or queued job.
