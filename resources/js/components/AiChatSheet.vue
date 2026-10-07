@@ -19,11 +19,7 @@ const { can } = useCan();
 
 const isAdmin = computed(() => can('admin'));
 
-const aiEnabled = computed(() =>
-    Boolean(
-        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
-    ),
-);
+const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 
 const visible = computed(() => isAdmin.value && aiEnabled.value);
 

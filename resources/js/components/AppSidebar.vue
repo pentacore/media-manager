@@ -50,11 +50,7 @@ const visibleGroups = computed<NavGroup[]>(() =>
 
 const isAdmin = computed(() => can('admin'));
 
-const aiEnabled = computed(() =>
-    Boolean(
-        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
-    ),
-);
+const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 
 const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
 </script>
