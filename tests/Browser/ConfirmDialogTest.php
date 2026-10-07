@@ -56,6 +56,7 @@ test('a connection delete asks in the app dialog; Cancel keeps it and Delete rem
         ->assertSeeIn('[data-confirm-dialog]', 'This cannot be undone.')
         ->assertScript("document.activeElement?.hasAttribute('data-confirm-cancel') === true")
         ->assertScript("document.querySelector('[data-confirm-accept]').classList.contains('bg-destructive') === true")
+        ->assertScript("document.querySelector('[data-confirm-dialog]').hasAttribute('aria-describedby') === true")
         ->click('[data-confirm-cancel]');
 
     $webpage->script(confirmDialogGoneScript());
@@ -90,6 +91,30 @@ test('Escape closes the confirm as a cancel', function (): void {
     expect(ServiceConnection::query()->whereKey($serviceConnection->id)->exists())->toBeTrue();
 });
 
+test('clicking the overlay closes the confirm as a cancel', function (): void {
+    $serviceConnection = confirmDialogConnection();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.connections.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-connection-row="%d"] [data-connection-menu]', $serviceConnection->id))
+        ->click('[data-connection-delete]')
+        ->assertVisible('[data-confirm-dialog]');
+
+    // A real click lands on the centered dialog content, not the overlay
+    // behind it, so dismiss via the same pointerdown-outside event reka's
+    // DismissableLayer listens for on the overlay element itself.
+    $webpage->script(<<<'JS'
+        document
+            .querySelector('[data-slot="dialog-overlay"]')
+            .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+        JS);
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertCount('[data-confirm-dialog]', 0);
+
+    expect(ServiceConnection::query()->whereKey($serviceConnection->id)->exists())->toBeTrue();
+});
+
 test('leaving the page while a confirm is open cancels it and deletes nothing', function (): void {
     $serviceConnection = confirmDialogConnection();
     $this->actingAs(User::factory()->admin()->create());
@@ -97,7 +122,7 @@ test('leaving the page while a confirm is open cancels it and deletes nothing', 
     $webpage = visit(route('admin.connections.index', absolute: false))
         ->assertNoSmoke()
         ->click('[data-connection-add]');
-    $webpage->script(confirmDialogWaitUntilScript("window.location.pathname === '/admin/connections/create'"));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("window.location.pathname === '%s'", route('admin.connections.create', absolute: false))));
 
     // Back to the list through the browser history, so a forward entry exists.
     $webpage->script('window.history.back()');
@@ -107,7 +132,7 @@ test('leaving the page while a confirm is open cancels it and deletes nothing', 
         ->assertSeeIn('[data-confirm-dialog]', 'Delete Primary Sonarr?');
 
     $webpage->script('window.history.forward()');
-    $webpage->script(confirmDialogWaitUntilScript("window.location.pathname === '/admin/connections/create'"));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("window.location.pathname === '%s'", route('admin.connections.create', absolute: false))));
     $webpage->script(confirmDialogGoneScript());
     $webpage->assertCount('[data-confirm-dialog]', 0);
 
@@ -126,6 +151,7 @@ test('a user delete asks first; Cancel keeps the user and Delete removes them', 
         ->click('[data-confirm-cancel]');
 
     $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript("document.activeElement?.hasAttribute('data-user-delete') === true");
 
     expect(User::query()->whereKey($mallory->id)->exists())->toBeTrue();
 
@@ -146,10 +172,6 @@ test('an admin unlinking a user from Emby asks first; Cancel keeps the link and 
     $webpage = visit(route('admin.users.index', absolute: false))
         ->assertNoSmoke()
         ->click($unlink)
-        // Scoped to the title: with no description the dialog also renders
-        // the title as a screen-reader-only description, and both are
-        // visible to Playwright's locator (sr-only hides visually, not from
-        // the accessibility tree), so an unscoped match is ambiguous.
         ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'Unlink Emby account "mallory-emby" from Mallory?')
         ->click('[data-confirm-cancel]');
 
@@ -246,10 +268,8 @@ test('a model price removal asks first; Cancel keeps it and Remove deletes it', 
     $webpage = visit(route('admin.ai-prices.index', absolute: false))
         ->assertNoSmoke()
         ->click($remove)
-        // Scoped to the title: no description means the dialog also renders
-        // the title as the (visually hidden but Playwright-visible)
-        // accessible description, which makes an unscoped match ambiguous.
         ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'Remove pricing for openai/gpt-5-mini?')
+        ->assertScript("document.querySelector('[data-confirm-dialog]').hasAttribute('aria-describedby') === false")
         ->click('[data-confirm-cancel]');
 
     $webpage->script(confirmDialogGoneScript());
