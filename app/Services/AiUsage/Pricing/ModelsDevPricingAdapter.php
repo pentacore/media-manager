@@ -10,6 +10,7 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 use DateTimeImmutable;
 
 /**
@@ -255,6 +256,7 @@ final class ModelsDevPricingAdapter
             sourceUrl: $this->sourceUrl(),
             sourceUpdatedAt: $this->sourceUpdatedAt($modelData),
             tiered: $tierSignal !== null,
+            reasoning: ReasoningCapability::fromModelsDev($modelData),
         );
 
         return [$modelPriceCandidate, null, $warning];

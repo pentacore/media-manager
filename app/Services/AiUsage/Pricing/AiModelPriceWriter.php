@@ -222,7 +222,11 @@ final readonly class AiModelPriceWriter
             $attributes[$column] = $supplied[$column] ?? null;
         }
 
-        $attributes = [...$attributes, ...$this->provenanceAttributes($candidate, $source, $firstPartyVerified)];
+        $attributes = [
+            ...$attributes,
+            ...($candidate->reasoning?->attributes() ?? []),
+            ...$this->provenanceAttributes($candidate, $source, $firstPartyVerified),
+        ];
 
         AiModelPrice::query()->create($attributes);
 
@@ -259,7 +263,18 @@ final readonly class AiModelPriceWriter
             }
         }
 
+        $capabilityChanges = array_filter(
+            $candidate->reasoning?->attributes() ?? [],
+            static fn (mixed $value, string $column): bool => $aiModelPrice->{$column} !== $value,
+            ARRAY_FILTER_USE_BOTH,
+        );
+
         if ($changes === []) {
+            if ($capabilityChanges !== [] && ! $dryRun) {
+                $aiModelPrice->fill($capabilityChanges);
+                $aiModelPrice->save();
+            }
+
             if ($firstPartyVerified && ! $dryRun) {
                 $aiModelPrice->fill(['pricing_verified_at' => CarbonImmutable::now()]);
                 $aiModelPrice->save();
@@ -272,7 +287,7 @@ final readonly class AiModelPriceWriter
             return WriteOutcome::WouldUpdate;
         }
 
-        $aiModelPrice->fill([...$changes, ...$this->provenanceAttributes($candidate, $source, $firstPartyVerified)]);
+        $aiModelPrice->fill([...$changes, ...$capabilityChanges, ...$this->provenanceAttributes($candidate, $source, $firstPartyVerified)]);
         $aiModelPrice->save();
 
         return WriteOutcome::Updated;

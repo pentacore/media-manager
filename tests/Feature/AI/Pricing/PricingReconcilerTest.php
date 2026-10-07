@@ -8,12 +8,13 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 use App\Services\AiUsage\Pricing\PricingReconciler;
 
 /**
  * @param  array<string, string|null>  $rates  column => value (null = missing)
  */
-function reconcilerCandidate(string $model, PricingSource $pricingSource, array $rates, bool $tiered = false): ModelPriceCandidate
+function reconcilerCandidate(string $model, PricingSource $pricingSource, array $rates, bool $tiered = false, ?ReasoningCapability $reasoningCapability = null): ModelPriceCandidate
 {
     $fields = [];
 
@@ -29,6 +30,7 @@ function reconcilerCandidate(string $model, PricingSource $pricingSource, array 
         source: $pricingSource,
         sourceUrl: $pricingSource === PricingSource::ModelsDev ? 'https://models.dev/api.json' : 'https://litellm.example/prices.json',
         tiered: $tiered,
+        reasoning: $reasoningCapability,
     );
 }
 
@@ -159,4 +161,18 @@ test('a malformed feed is ignored when the other feed is usable', function (): v
 
     expect(new PricingReconciler()->reconcile('openai', $malformed, $providerPricingResult))->toBe($providerPricingResult)
         ->and(new PricingReconciler()->reconcile('openai', $malformed, null))->toBe($malformed);
+});
+
+test('the consensus candidate merges reasoning capabilities preferring models.dev', function (): void {
+    $modelsDev = new ReasoningCapability(true, null, ReasoningCapability::STYLE_EFFORT);
+    $liteLlm = new ReasoningCapability(false, ['low', 'high'], null);
+    $rates = ['input_per_mtok' => '2.5', 'output_per_mtok' => '10'];
+
+    $result = new PricingReconciler()->reconcile(
+        'openai',
+        reconcilerResult([reconcilerCandidate('gpt-r', PricingSource::ModelsDev, $rates, reasoningCapability: $modelsDev)]),
+        reconcilerResult([reconcilerCandidate('gpt-r', PricingSource::LiteLlm, $rates, reasoningCapability: $liteLlm)]),
+    );
+
+    expect(reconcilerFind($result, 'gpt-r')->reasoning)->toEqual(ReasoningCapability::preferring($modelsDev, $liteLlm));
 });

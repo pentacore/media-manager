@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\AiReasoningLevel;
 use App\Enums\PricingSource;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Appends;
@@ -40,6 +41,9 @@ use Override;
  * @property CarbonImmutable|null $pricing_synced_at
  * @property CarbonImmutable|null $pricing_verified_at
  * @property bool $is_price_locked
+ * @property bool|null $supports_reasoning
+ * @property list<string>|null $reasoning_levels
+ * @property string|null $reasoning_style
  * @property-read bool $automatic_updates_enabled
  * @property-read AiFreeUsagePool|null $freeUsagePool
  * @property-read Collection<int, AiModelRateLimit> $rateLimits
@@ -74,6 +78,9 @@ use Override;
     'pricing_synced_at',
     'pricing_verified_at',
     'is_price_locked',
+    'supports_reasoning',
+    'reasoning_levels',
+    'reasoning_style',
 ])]
 #[Appends(['automatic_updates_enabled'])]
 class AiModelPrice extends Model
@@ -100,6 +107,8 @@ class AiModelPrice extends Model
             'search_unit_per_k' => 'decimal:4',
             'batch_search_unit_per_k' => 'decimal:4',
             'free_usage_pool_id' => 'integer',
+            'supports_reasoning' => 'boolean',
+            'reasoning_levels' => 'array',
             'pricing_source' => PricingSource::class,
             'pricing_source_updated_at' => 'immutable_date',
             'pricing_synced_at' => 'immutable_datetime',
@@ -133,5 +142,23 @@ class AiModelPrice extends Model
     public function rateLimits(): HasMany
     {
         return $this->hasMany(AiModelRateLimit::class);
+    }
+
+    /**
+     * The reasoning levels this model accepts, in scale order; null when the
+     * feeds don't say, [] when it accepts none.
+     *
+     * @return list<AiReasoningLevel>|null
+     */
+    public function acceptedReasoningLevels(): ?array
+    {
+        if ($this->reasoning_levels === null) {
+            return null;
+        }
+
+        $levels = array_values(array_filter(array_map(AiReasoningLevel::tryFrom(...), $this->reasoning_levels)));
+        usort($levels, static fn (AiReasoningLevel $a, AiReasoningLevel $b): int => $a->rank() <=> $b->rank());
+
+        return $levels;
     }
 }
