@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Form, Head, router } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill, Toggle } from '@/components/mm';
@@ -192,6 +193,16 @@ const budgetState = computed<{
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                 Toggle the assistant and set the execution mode. Overrides
                 <span class="font-mono-tabular">.env</span> at runtime.
+            </p>
+            <p class="mt-2 text-[13px]">
+                Models and reasoning levels are configured on
+                <Link
+                    :href="AiModelsController.index.url()"
+                    class="underline underline-offset-2"
+                    data-ai-models-link
+                >
+                    AI Models →
+                </Link>
             </p>
         </div>
 

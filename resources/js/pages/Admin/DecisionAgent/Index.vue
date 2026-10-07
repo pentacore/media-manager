@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import InputError from '@/components/InputError.vue';
 import { Field, Toggle } from '@/components/mm';
@@ -87,6 +88,16 @@ function submit(): void {
                 is governed per-action by
                 <span class="font-mono-tabular">Approval Rules</span>; this page
                 controls which events wake it and what it may attempt.
+            </p>
+            <p class="mt-2 text-[13px]">
+                Models and reasoning levels are configured on
+                <Link
+                    :href="AiModelsController.index.url()"
+                    class="underline underline-offset-2"
+                    data-ai-models-link
+                >
+                    AI Models →
+                </Link>
             </p>
         </div>
 
