@@ -11,11 +11,13 @@ use App\Ai\ResolvedSelection;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiTask;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Laravel\Ai\Ai;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Gateway\Anthropic\AnthropicSchemaSanitizer;
 use Laravel\Ai\ObjectSchema;
+use LogicException;
 use ReflectionClass;
 
 /**
@@ -70,7 +72,7 @@ trait RunsAsAiTask
 
         $model = match (true) {
             $providerName === $resolvedSelection->provider => $resolvedSelection->model,
-            $failover !== null && $failover['provider'] === $providerName => $failover['model'],
+            $failover !== null && $failover['provider'] === $providerName => $failover['model'] ?? $this->providerDefaultModel($providerName),
             default => null,
         };
 
@@ -99,6 +101,20 @@ trait RunsAsAiTask
         }
 
         return $options;
+    }
+
+    /**
+     * The model the SDK falls back to when a provider in the chain has no
+     * model (Promptable::getDefaultModelFor()), or null when the provider
+     * cannot be resolved.
+     */
+    private function providerDefaultModel(string $provider): ?string
+    {
+        try {
+            return Ai::textProvider($provider)->defaultTextModel();
+        } catch (LogicException) {
+            return null;
+        }
     }
 
     private function declaredMaxTokens(): ?int

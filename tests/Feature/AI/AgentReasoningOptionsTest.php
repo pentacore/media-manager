@@ -93,3 +93,11 @@ test('the failover provider gets the reasoning mapped for its own model', functi
 
     expect(new MediaAgent()->providerOptions(Lab::Anthropic))->toBe(['thinking' => ['type' => 'between_tools']]);
 });
+
+test('a failover without a model is mapped for the provider default model', function (): void {
+    config()->set('ai.providers.anthropic.models.text.default', 'claude-haiku-4-5');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'anthropic'])->create();
+
+    expect(new MediaAgent()->providerOptions(Lab::Anthropic))->toBe(['thinking' => ['type' => 'enabled', 'budget_tokens' => 16384]]);
+});
