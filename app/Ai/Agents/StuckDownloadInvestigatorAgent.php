@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Concerns\ActsAsStructuredSubAgent;
-use App\Ai\Concerns\SendsOpenRouterOptions;
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
-use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
-use App\Settings\AiSettings;
+use App\Enums\AiTask;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -37,7 +36,7 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
     use ActsAsStructuredSubAgent, Promptable {
         ActsAsStructuredSubAgent::stream insteadof Promptable;
     }
-    use SendsOpenRouterOptions;
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
     public function name(): string
@@ -50,14 +49,9 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
         return 'Investigates why a Sonarr/Radarr download is stuck and recommends import, remove or manual handling. Read-only. In the task, name the service (sonarr or radarr) and the download (download_id if known, otherwise the title).';
     }
 
-    public function model(): string
+    public function aiTask(): AiTask
     {
-        return resolve(AiSettings::class)->subAgentModel();
-    }
-
-    public function modelSelection(): ModelSelection
-    {
-        return resolve(AiSettings::class)->subAgentSelection();
+        return AiTask::StuckDownloadInvestigator;
     }
 
     public function instructions(): string

@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Enums\AiTask;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\RefreshScope;
@@ -314,9 +316,8 @@ test('code execution is offered only when every provider in the chain supports i
 });
 
 test('the price fetcher runs on the price updater model rather than the chat model', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModel('gpt-chat');
-    $aiSettings->setPriceUpdaterModel('gpt-updater');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
+    AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-updater')->create();
 
     expect((new PriceFetcherAgent)->model())->toBe('gpt-updater');
 });

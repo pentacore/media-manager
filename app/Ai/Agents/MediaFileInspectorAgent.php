@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Concerns\ActsAsStructuredSubAgent;
-use App\Ai\Concerns\SendsOpenRouterOptions;
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
-use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
-use App\Settings\AiSettings;
+use App\Enums\AiTask;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -38,7 +37,7 @@ final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddlewar
     use ActsAsStructuredSubAgent, Promptable {
         ActsAsStructuredSubAgent::stream insteadof Promptable;
     }
-    use SendsOpenRouterOptions;
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
     public function name(): string
@@ -51,14 +50,9 @@ final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddlewar
         return 'Resolves a movie/series/episode file and inspects its tracks and ranked replacement candidates. Read-only. In the task, give the title (and season/episode), the service, and any subtitle-language override.';
     }
 
-    public function model(): string
+    public function aiTask(): AiTask
     {
-        return resolve(AiSettings::class)->subAgentModel();
-    }
-
-    public function modelSelection(): ModelSelection
-    {
-        return resolve(AiSettings::class)->subAgentSelection();
+        return AiTask::FileInspector;
     }
 
     public function instructions(): string

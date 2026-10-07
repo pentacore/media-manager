@@ -9,8 +9,9 @@ use App\Ai\Concerns\ActsAsStructuredSubAgent;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
-use App\Settings\AiSettings;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Streaming\Events\TextDelta;
@@ -43,8 +44,9 @@ test('the investigator returns structured findings to the parent and is billed a
     expect(AiUsageRecord::where('parent_invocation_id', $agentResponse->invocationId)->sole()->agent_class)->toBe(StuckDownloadInvestigatorAgent::class);
 });
 
-test('sub-agents use the sub-agent model setting', function (): void {
-    resolve(AiSettings::class)->setSubAgentModel('gpt-5.4-nano');
+test('sub-agents use their own task selections', function (): void {
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'gpt-5.4-nano')->create();
+    AiTaskModel::factory()->task(AiTask::StuckDownloadInvestigator)->selecting('openai', 'gpt-5.4-nano')->create();
 
     expect((new MediaFileInspectorAgent)->model())->toBe('gpt-5.4-nano')
         ->and((new StuckDownloadInvestigatorAgent)->model())->toBe('gpt-5.4-nano');

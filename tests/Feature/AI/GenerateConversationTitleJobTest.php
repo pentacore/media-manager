@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\TitleAgent;
+use App\Enums\AiTask;
 use App\Jobs\Ai\GenerateConversationTitle;
-use App\Settings\AiSettings;
+use App\Models\AiTaskModel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Ai;
@@ -67,7 +68,7 @@ test('missing or empty structured title leaves the fallback intact', function ()
 
 test('uses the configured title model', function (): void {
     TitleAgent::fake([['title' => 'Library Audit']]);
-    resolve(AiSettings::class)->setTitleModel('gpt-5.4-nano-custom');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5.4-nano-custom')->create();
     $id = seedTitleConvo('audit my library');
 
     new GenerateConversationTitle($id, 'audit my library')->handle();
@@ -77,7 +78,7 @@ test('uses the configured title model', function (): void {
 
 test('auto title model resolves the provider cheapest model', function (): void {
     TitleAgent::fake([['title' => 'Library Audit']]);
-    resolve(AiSettings::class)->setTitleModel('auto');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting((string) config('ai.default'), 'auto')->create();
     $id = seedTitleConvo('audit my library');
 
     new GenerateConversationTitle($id, 'audit my library')->handle();
@@ -86,7 +87,7 @@ test('auto title model resolves the provider cheapest model', function (): void 
     // model changes between laravel/ai releases.
     $cheapest = Ai::textProvider()->cheapestTextModel();
 
-    expect($cheapest)->not->toBe(AiSettings::AUTO_MODEL);
+    expect($cheapest)->not->toBe('auto');
 
     TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === $cheapest);
 });

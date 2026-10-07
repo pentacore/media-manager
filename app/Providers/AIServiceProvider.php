@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
 use App\Ai\ChatTurnContext;
+use App\Ai\ReasoningOptions;
 use App\Ai\TaskModelResolver;
 use App\Http\Streaming\ClientConnection;
 use App\Listeners\Ai\EnforceAiRateLimit;
@@ -41,6 +42,10 @@ class AIServiceProvider extends ServiceProvider
 
         // Memoises ai_task_models for the request; scoped for the same reason.
         $this->app->scoped(TaskModelResolver::class);
+
+        // Memoises the price rows it reads reasoning capabilities from; scoped
+        // so a long-running worker never maps against stale capabilities.
+        $this->app->scoped(ReasoningOptions::class);
 
         // Per-run step usage keyed by invocation id; scoped so partial runs
         // never bleed into the next Octane request or queued job.
