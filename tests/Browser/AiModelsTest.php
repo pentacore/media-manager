@@ -90,7 +90,7 @@ test('admin can add and remove a decision event override', function (): void {
     visit(route('admin.ai-models.index', absolute: false))
         ->assertNoSmoke()
         ->click('[data-add-event-override] button')
-        ->click('sonarr:Download')
+        ->click('[data-event-option="sonarr:Download"]')
         ->click('[data-event-override="sonarr:Download"] [data-reasoning-select] button')
         ->click('[data-reasoning-option="none"]')
         ->click('Save models')
@@ -106,6 +106,23 @@ test('admin can add and remove a decision event override', function (): void {
         ->assertSee('AI models updated.');
 
     expect(AiTaskModel::query()->where('scope', 'sonarr:Download')->exists())->toBeFalse();
+});
+
+test('a removed event override can be added again before saving', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download', 'radarr:Grab']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-add-event-override] button')
+        ->click('[data-event-option="sonarr:Download"]')
+        ->assertVisible('[data-event-override="sonarr:Download"]')
+        ->assertSeeIn('[data-add-event-override]', 'Add an event override')
+        ->click('[data-event-override="sonarr:Download"] [data-remove-override]')
+        ->assertMissing('[data-event-override="sonarr:Download"]')
+        ->click('[data-add-event-override] button')
+        ->click('[data-event-option="sonarr:Download"]')
+        ->assertVisible('[data-event-override="sonarr:Download"]');
 });
 
 test('an override for a disabled event is flagged', function (): void {

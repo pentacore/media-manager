@@ -415,7 +415,9 @@ function submit(): void {
                                 v-if="addableEvents.length > 0"
                                 data-add-event-override
                             >
+                                <!-- Held empty so every pick emits and the placeholder returns. -->
                                 <Select
+                                    :model-value="''"
                                     @update:model-value="
                                         (value) => addOverride(String(value))
                                     "
@@ -433,6 +435,7 @@ function submit(): void {
                                             v-for="eventKey in addableEvents"
                                             :key="eventKey"
                                             :value="eventKey"
+                                            :data-event-option="eventKey"
                                         >
                                             {{ eventKey }}
                                         </SelectItem>
