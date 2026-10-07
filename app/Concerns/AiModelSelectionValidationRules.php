@@ -32,8 +32,13 @@ trait AiModelSelectionValidationRules
         ];
     }
 
-    protected function validatePricedSelection(Validator $validator, string $prefix, ?string $provider, ?string $model, bool $allowAuto = false): void
+    protected function validatePricedSelection(Validator $validator, string $prefix, mixed $provider, mixed $model, bool $allowAuto = false): void
     {
+        // Non-string values are reported by the field rules; this hook still runs after them.
+        if (! (is_null($provider) || is_string($provider)) || ! (is_null($model) || is_string($model))) {
+            return;
+        }
+
         if (! filled($model)) {
             return;
         }

@@ -155,7 +155,10 @@ test('an override for an event that is not allowlisted survives saves and is fla
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), [
         'enabled' => true, 'event_allowlist' => [], 'allow_manual_import' => false,
         'notify_on_suggest' => false, 'notify_on_act' => false, 'max_actions_per_run' => 3,
-    ]);
+        'model' => 'gpt-5-nano', 'reasoning_level' => 'low',
+    ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
 
     expect(AiTaskModel::query()->where('scope', 'radarr:Grab')->exists())->toBeTrue();
 });
@@ -192,4 +195,18 @@ test('saving records one audit row for the ai models group', function (): void {
         ->put(route('admin.ai-models.update'), aiModelsPayload());
 
     expect(ActivityLog::query()->where('action', 'settings.updated')->where('subject_type', 'ai_models')->count())->toBe(1);
+});
+
+test('malformed selections get a validation error instead of a server error', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload([
+            'tasks' => ['chat' => ['provider' => 'openai', 'model' => ['x']]],
+        ]))
+        ->assertSessionHasErrors('tasks.chat.model');
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['event_overrides' => ['not-an-array']]))
+        ->assertSessionHasErrors('event_overrides.0.event_key');
 });

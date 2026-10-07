@@ -50,13 +50,22 @@ class UpdateAiModelsRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             foreach (self::defaultTasks() as $task) {
-                $selection = (array) $this->input(sprintf('tasks.%s', $task), []);
+                $selection = $this->input(sprintf('tasks.%s', $task));
+
+                if (! is_array($selection)) {
+                    continue;
+                }
+
                 $this->validatePricedSelection($validator, sprintf('tasks.%s', $task), $selection['provider'] ?? null, $selection['model'] ?? null, allowAuto: $task === AiTask::Title->value);
             }
 
             $this->validatePricedSelection($validator, 'failover', $this->input('failover.provider'), $this->input('failover.model'));
 
             foreach ((array) $this->input('event_overrides', []) as $index => $override) {
+                if (! is_array($override)) {
+                    continue;
+                }
+
                 $this->validatePricedSelection($validator, sprintf('event_overrides.%d', $index), $override['provider'] ?? null, $override['model'] ?? null);
             }
         }];
