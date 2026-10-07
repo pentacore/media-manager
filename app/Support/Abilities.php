@@ -4,27 +4,29 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Enums\Ability;
 use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * The capability vocabulary shared by route middleware (`can:<ability>`),
- * the `auth.can` Inertia prop and the frontend `useCan()` composable. Each
- * ability is granted from a minimum UserRole, so the role hierarchy stays
- * the single source of truth. This is the only place that defines Gates.
+ * Grants the App\Enums\Ability vocabulary — shared by route middleware
+ * (`can:<ability>`), the `auth.can` Inertia prop and the frontend `useCan()`
+ * composable — each from a minimum UserRole, so the role hierarchy stays the
+ * single source of truth. This is the only place that defines Gates. The
+ * constants alias the enum values for `$user->can(Abilities::X)` call sites.
  */
 final class Abilities
 {
-    public const string VIEW_LIBRARY = 'view-library';
+    public const string VIEW_LIBRARY = Ability::ViewLibrary->value;
 
-    public const string REQUEST_MEDIA = 'request-media';
+    public const string REQUEST_MEDIA = Ability::RequestMedia->value;
 
-    public const string MANAGE_LIBRARY = 'manage-library';
+    public const string MANAGE_LIBRARY = Ability::ManageLibrary->value;
 
-    public const string MANAGE_REQUESTS = 'manage-requests';
+    public const string MANAGE_REQUESTS = Ability::ManageRequests->value;
 
-    public const string ADMIN = 'admin';
+    public const string ADMIN = Ability::Admin->value;
 
     /**
      * @var array<string, UserRole>
