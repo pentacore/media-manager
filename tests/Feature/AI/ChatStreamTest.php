@@ -249,13 +249,13 @@ test('admin cannot stream against another users conversation', function (): void
 
 test('streaming endpoint refuses with 429 when the chat model has exhausted its rate limit', function (): void {
     resolve(AiSettings::class)->setRateLimitsEnforced(true);
-    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->chatSelection()->model]);
     $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
     DB::table('ai_usage_records')->insert([
         'invocation_id' => 'inv-'.uniqid(),
         'agent_class' => 'TestAgent',
         'provider' => 'openai',
-        'model' => resolve(AiSettings::class)->model(),
+        'model' => resolve(AiSettings::class)->chatSelection()->model,
         'prompt_tokens' => 10,
         'completion_tokens' => 5,
         'cache_read_input_tokens' => 0,

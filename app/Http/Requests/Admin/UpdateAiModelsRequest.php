@@ -11,7 +11,13 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
+use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
+/**
+ * `tasks` is overridden because typefinder cannot render the per-task
+ * `tasks.{task}.{field}` rules as a nested object.
+ */
+#[TypefinderOverrides(['tasks' => 'Record<string, { provider: string | null; model: string | null; reasoning: string | null }>'])]
 class UpdateAiModelsRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;

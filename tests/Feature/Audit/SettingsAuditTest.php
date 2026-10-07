@@ -38,13 +38,11 @@ test('a decision agent save records its changed keys once and a repeat save reco
     $admin = User::factory()->admin()->create();
     $payload = [
         'enabled' => true,
-        'model' => 'gpt-5-mini',
         'event_allowlist' => ['sonarr:ManualInteractionRequired'],
         'allow_manual_import' => true,
         'notify_on_suggest' => false,
         'notify_on_act' => true,
         'max_actions_per_run' => 5,
-        'reasoning_level' => 'high',
     ];
 
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), $payload)->assertRedirect(route('admin.decision-agent.index'));
@@ -65,41 +63,35 @@ test('an AI settings save is audited without the budget notification bookkeeping
 
     $this->actingAs(User::factory()->admin()->create())->put(route('admin.ai-settings.update'), [
         'mode' => 'executive',
-        'model' => 'gpt-5-mini',
-        'title_model' => 'gpt-5.4-nano',
-        'advisor_reasoning_level' => 'none',
         'soft_budget_usd' => 25,
     ])->assertRedirect(route('admin.ai-settings.index'));
 
     $changes = settingsAuditRows('ai')->sole()->metadata['changes'];
 
-    expect($changes['ai.model'])->toBe(['from' => null, 'to' => 'gpt-5-mini'])
+    expect($changes['ai.mode'])->toBe(['from' => null, 'to' => 'executive'])
         ->and($changes['ai.budget.soft_monthly_usd']['to'])->toEqual(25)
         ->and($changes)->not->toHaveKey('ai.budget.soft_notified_at')
         ->and($changes)->not->toHaveKey('ai.media_replacement');
 });
 
 test('an AI settings save audits a setting only written after the brief-documented audit call site', function (): void {
-    // updateModelProviders()/updateOpenRouterSettings()/embeddings writes all
-    // run after updateClassificationSettings() inside update(); the audit
-    // must still be recorded after every one of them so this change lands in
-    // the diff (controller ruling A).
+    // updateOpenRouterSettings()/embeddings writes run after
+    // updateClassificationSettings() inside update(); the audit must still be
+    // recorded after every one of them so this change lands in the diff
+    // (controller ruling A).
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
 
     $this->actingAs(User::factory()->admin()->create())->put(route('admin.ai-settings.update'), [
         'mode' => 'executive',
-        'model' => 'gpt-5-mini',
-        'title_model' => 'gpt-5.4-nano',
-        'advisor_reasoning_level' => 'none',
         'soft_budget_usd' => 25,
-        'model_provider' => 'openrouter',
+        'openrouter_order' => 'anthropic',
         'embeddings_provider' => 'openrouter',
         'embeddings_model' => 'text-embedding-3-small',
     ])->assertRedirect(route('admin.ai-settings.index'));
 
     $changes = settingsAuditRows('ai')->sole()->metadata['changes'];
 
-    expect($changes['ai.model_provider'])->toBe(['from' => null, 'to' => 'openrouter'])
+    expect($changes['ai.openrouter.order'])->toBe(['from' => null, 'to' => ['anthropic']])
         ->and($changes['ai.embeddings.provider'])->toBe(['from' => null, 'to' => 'openrouter'])
         ->and($changes['ai.embeddings.model'])->toBe(['from' => null, 'to' => 'text-embedding-3-small']);
 });
@@ -109,9 +101,6 @@ test('an AI settings save never leaks a provider API key into the audit metadata
 
     $response = $this->actingAs(User::factory()->admin()->create())->put(route('admin.ai-settings.update'), [
         'mode' => 'executive',
-        'model' => 'gpt-5-mini',
-        'title_model' => 'gpt-5.4-nano',
-        'advisor_reasoning_level' => 'none',
         'soft_budget_usd' => 25,
     ]);
 
@@ -120,6 +109,36 @@ test('an AI settings save never leaks a provider API key into the audit metadata
     $activityLog = settingsAuditRows('ai')->sole();
 
     expect(json_encode($activityLog->metadata))->not->toContain('sk-or-v1-super-secret-audit-key');
+});
+
+test('an AI Models save records its changes once and a repeat save records nothing', function (): void {
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
+    $admin = User::factory()->admin()->create();
+    $blank = ['provider' => null, 'model' => null, 'reasoning' => null];
+    $payload = [
+        'tasks' => [
+            'chat' => ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium'],
+            'title' => $blank,
+            'decision' => $blank,
+            'file_inspector' => $blank,
+            'stuck_download_investigator' => $blank,
+            'price_updater' => $blank,
+        ],
+        'failover' => ['provider' => null, 'model' => null],
+        'event_overrides' => [],
+    ];
+
+    $this->actingAs($admin)->put(route('admin.ai-models.update'), $payload)->assertRedirect(route('admin.ai-models.index'));
+    $this->actingAs($admin)->put(route('admin.ai-models.update'), $payload)->assertRedirect(route('admin.ai-models.index'));
+
+    $rows = settingsAuditRows('ai_models');
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()->isAudit())->toBeTrue()
+        ->and($rows->first()->user_id)->toBe($admin->id)
+        ->and($rows->first()->metadata['changes']['chat:default'])->toBe(['from' => null, 'to' => 'openai/gpt-5.6-luna · medium'])
+        ->and(settingsAuditRows('ai'))->toHaveCount(0);
 });
 
 test('webhook capture and Bazarr automation saves are audited with their values', function (): void {

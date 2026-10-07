@@ -1441,7 +1441,11 @@ test('an update-only provider with in-use models but no stored rows still reache
 
 test('the verifier runs on the configured price updater model', function (?Lab $failover): void {
     config()->set('ai.default', 'openai');
-    resolve(AiSettings::class)->setFailoverProvider($failover);
+
+    if ($failover instanceof Lab) {
+        AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => $failover->value])->create();
+    }
+
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
     AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-updater')->create();
     PriceFetcherAgent::fake(['done']);

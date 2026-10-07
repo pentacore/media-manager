@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Cache;
-use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -19,19 +20,14 @@ beforeEach(function (): void {
  */
 function validAiSettingsPayload(array $overrides = []): array
 {
-    $aiSettings = resolve(AiSettings::class);
-
     return [
-        'mode' => $aiSettings->mode()->value,
-        'model' => $aiSettings->model(),
-        'title_model' => $aiSettings->rawTitleModel(),
-        'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
+        'mode' => resolve(AiSettings::class)->mode()->value,
         'auto_create_pricing_providers' => [''],
         ...$overrides,
     ];
 }
 
-test('admin saves classification, reranking and sub-agent settings', function (): void {
+test('admin saves classification and reranking settings', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), validAiSettingsPayload([
             'classification_provider' => 'typesafe',
@@ -43,15 +39,10 @@ test('admin saves classification, reranking and sub-agent settings', function ()
             'chat_routing_enabled' => '1',
             'reranking_provider' => 'jina',
             'reranking_model' => 'jina-reranker-v3',
-            'sub_agent_model' => 'gpt-5.4-nano',
-            'price_updater_model' => 'gpt-5.4-mini',
         ]))
         ->assertRedirect();
 
     $aiSettings = resolve(AiSettings::class);
-
-    expect($aiSettings->priceUpdaterModel())->toBe('gpt-5.4-mini')
-        ->and($aiSettings->rawPriceUpdaterModel())->toBe('gpt-5.4-mini');
 
     expect($aiSettings->classificationProvider())->toBe('typesafe')
         ->and($aiSettings->classificationModel())->toBe('ts-classify-1')
@@ -61,12 +52,10 @@ test('admin saves classification, reranking and sub-agent settings', function ()
         ->and($aiSettings->subtitleTriageThreshold())->toBe(0.25)
         ->and($aiSettings->chatRoutingEnabled())->toBeTrue()
         ->and($aiSettings->rerankingProvider())->toBe('jina')
-        ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3')
-        ->and($aiSettings->subAgentModel())->toBe('gpt-5.4-nano')
-        ->and($aiSettings->rawSubAgentModel())->toBe('gpt-5.4-nano');
+        ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3');
 });
 
-test('gates default to off and the sub-agent model follows the chat model', function (): void {
+test('gates default to off', function (): void {
     $aiSettings = resolve(AiSettings::class);
 
     expect($aiSettings->decisionGateEnabled())->toBeFalse()
@@ -77,33 +66,23 @@ test('gates default to off and the sub-agent model follows the chat model', func
         ->and($aiSettings->classificationProvider())->toBe('openrouter')
         ->and($aiSettings->classificationModel())->toBeNull()
         ->and($aiSettings->rerankingProvider())->toBe('cohere')
-        ->and($aiSettings->rerankingModel())->toBeNull()
-        ->and($aiSettings->rawSubAgentModel())->toBeNull()
-        ->and($aiSettings->subAgentModel())->toBe($aiSettings->model());
+        ->and($aiSettings->rerankingModel())->toBeNull();
 });
 
 test('blank model fields clear back to their defaults', function (): void {
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setClassificationModel('ts-classify-1');
     $aiSettings->setRerankingModel('jina-reranker-v3');
-    $aiSettings->setSubAgentModel('gpt-5.4-nano');
-    $aiSettings->setPriceUpdaterModel('gpt-5.4-mini');
 
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), validAiSettingsPayload([
             'classification_model' => '',
             'reranking_model' => '',
-            'sub_agent_model' => '',
-            'price_updater_model' => '',
         ]))
         ->assertRedirect();
 
-    expect($aiSettings->rawPriceUpdaterModel())->toBeNull()
-        ->and($aiSettings->priceUpdaterModel())->toBe($aiSettings->model())
-        ->and($aiSettings->classificationModel())->toBeNull()
-        ->and($aiSettings->rerankingModel())->toBeNull()
-        ->and($aiSettings->rawSubAgentModel())->toBeNull()
-        ->and($aiSettings->subAgentModel())->toBe($aiSettings->model());
+    expect($aiSettings->classificationModel())->toBeNull()
+        ->and($aiSettings->rerankingModel())->toBeNull();
 });
 
 test('omitted classification fields leave the saved settings untouched', function (): void {
@@ -137,7 +116,7 @@ test('index exposes classification settings, provider keys and advanced tool ava
     config()->set('ai.providers.typesafe.key');
     config()->set('ai.providers.cohere.key', 'cohere-test-key');
 
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'gemini'])->create();
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-settings.index'))
@@ -153,8 +132,6 @@ test('index exposes classification settings, provider keys and advanced tool ava
             ->where('settings.chat_routing_enabled', false)
             ->where('settings.reranking_provider', 'cohere')
             ->where('settings.reranking_model', null)
-            ->where('settings.sub_agent_model', null)
-            ->where('settings.price_updater_model', null)
             ->has('classificationProviders', 2)
             ->has('rerankingProviders', 3)
             ->where('providerKeys.typesafe', false)

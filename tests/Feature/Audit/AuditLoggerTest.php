@@ -152,14 +152,14 @@ test('a settings snapshot captures only its own group and escapes like wildcards
     $appSettings = resolve(AppSettings::class);
     $appSettings->set('decision_agent.enabled', true);
     $appSettings->set('decisionXagent.enabled', true);
-    $appSettings->set('ai.model', 'gpt-5-mini');
+    $appSettings->set('ai.chat_timeout', 300);
     $appSettings->set('ai.media_replacement', ['enabled' => true]);
     $appSettings->set('ai.budget.soft_notified_at', '2026-09-01');
 
     $settingsSnapshot = resolve(SettingsSnapshot::class);
 
     expect($settingsSnapshot->capture(SettingsGroup::DecisionAgent))->toBe(['decision_agent.enabled' => true])
-        ->and($settingsSnapshot->capture(SettingsGroup::Ai))->toBe(['ai.model' => 'gpt-5-mini'])
+        ->and($settingsSnapshot->capture(SettingsGroup::Ai))->toBe(['ai.chat_timeout' => 300])
         ->and($settingsSnapshot->capture(SettingsGroup::MediaReplacement))->toBe(['ai.media_replacement' => ['enabled' => true]])
         ->and($settingsSnapshot->capture(SettingsGroup::NotificationDestinations))->toBe([]);
 });

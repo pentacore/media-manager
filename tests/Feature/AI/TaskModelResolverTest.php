@@ -118,10 +118,70 @@ test('the price updater follows the chat default when unset', function (): void 
     expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-5.6-luna');
 });
 
-test('a row with a model and no provider runs on the default provider', function (): void {
-    AiTaskModel::factory()->task(AiTask::Title)->state(['model' => 'gpt-5-nano'])->create();
+test('the price updater falls back to its config model before the chat model', function (): void {
+    config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
 
-    expect(resolver()->resolve(AiTask::Title)->provider)->toBe('openai');
+    expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-config-updater');
+});
+
+test('a price updater row wins over its config model and clears back to it', function (): void {
+    config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
+    $priceUpdater = AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-saved-updater')->create();
+
+    expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-saved-updater');
+
+    $priceUpdater->delete();
+
+    expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-config-updater');
+});
+
+test('a row with a model and no provider runs on the default provider, not the chat provider', function (AiTask $aiTask): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'x-ai/grok-4')->create();
+    AiTaskModel::factory()->task($aiTask)->state(['model' => 'gpt-5-nano'])->create();
+
+    $modelSelection = resolver()->resolve($aiTask)->modelSelection();
+
+    expect([$modelSelection->provider, $modelSelection->model])->toBe(['openai', 'gpt-5-nano']);
+})->with([AiTask::Title, AiTask::Decision, AiTask::FileInspector, AiTask::StuckDownloadInvestigator, AiTask::PriceUpdater]);
+
+test('a chat row with a model and no provider runs on the default provider', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->state(['model' => 'gpt-5-mini'])->create();
+
+    $modelSelection = resolver()->resolve(AiTask::Chat)->modelSelection();
+
+    expect($modelSelection->toArray())->toBe(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+});
+
+test('tasks that follow the chat model inherit the whole chat pair when unset', function (AiTask $aiTask): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'x-ai/grok-4')->create();
+
+    $modelSelection = resolver()->resolve($aiTask)->modelSelection();
+
+    expect([$modelSelection->provider, $modelSelection->model])->toBe(['openrouter', 'x-ai/grok-4']);
+})->with([AiTask::Decision, AiTask::FileInspector, AiTask::StuckDownloadInvestigator, AiTask::PriceUpdater]);
+
+test('a task row with its own provider and model runs on that pair', function (AiTask $aiTask, string $provider, string $model): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    AiTaskModel::factory()->task($aiTask)->selecting($provider, $model)->create();
+
+    $modelSelection = resolver()->resolve($aiTask)->modelSelection();
+
+    expect([$modelSelection->provider, $modelSelection->model])->toBe([$provider, $model]);
+})->with([
+    [AiTask::Decision, 'anthropic', 'claude-haiku-4-5'],
+    [AiTask::FileInspector, 'openrouter', 'anthropic/claude-haiku-4.5'],
+    [AiTask::StuckDownloadInvestigator, 'openrouter', 'anthropic/claude-haiku-4.5'],
+    [AiTask::PriceUpdater, 'anthropic', 'claude-haiku-4-5'],
+]);
+
+test('the auto title model resolves to the title provider cheapest model', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'auto')->create();
+
+    $modelSelection = resolver()->resolve(AiTask::Title)->modelSelection();
+
+    expect([$modelSelection->provider, $modelSelection->model])->toBe(['openrouter', 'anthropic/claude-haiku-4.5']);
 });
 
 test('failover is off without a provider and carries an optional model', function (): void {
@@ -130,6 +190,16 @@ test('failover is off without a provider and carries an optional model', functio
     AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'openrouter'])->create();
 
     expect(resolver()->failover())->toBe(['provider' => 'openrouter', 'model' => null]);
+});
+
+test('a failover row carries its model, and a blank model means the provider default', function (): void {
+    $failover = AiTaskModel::factory()->task(AiTask::Failover)->selecting('anthropic', 'claude-haiku-4-5')->create();
+
+    expect(resolver()->failover())->toBe(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']);
+
+    $failover->update(['model' => '']);
+
+    expect(resolver()->failover())->toBe(['provider' => 'anthropic', 'model' => null]);
 });
 
 test('saving a row flushes the memoised rows', function (): void {

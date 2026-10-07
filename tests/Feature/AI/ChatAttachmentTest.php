@@ -3,10 +3,11 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\ChatAttachment;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
-use App\Settings\AiSettings;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files;
@@ -74,9 +75,7 @@ test('raster images are served inline and everything else as a hardened download
 
 test("a single-provider OpenRouter chat selection uploads the attachment to OpenRouter's Files API", function (): void {
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModelProvider('openrouter');
-    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
     Files::fake();
 
     $attachment = ChatAttachment::factory()->create();

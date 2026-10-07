@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Ai\ModelCatalog;
-use App\Concerns\ModelSelectionValidationRules;
 use App\Concerns\OpenRouterRoutingValidationRules;
 use App\Enums\AiMode;
-use App\Enums\AiReasoningLevel;
 use App\Enums\OpenRouterSort;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -18,7 +16,6 @@ use Override;
 
 class UpdateAiSettingsRequest extends FormRequest
 {
-    use ModelSelectionValidationRules;
     use OpenRouterRoutingValidationRules;
 
     /**
@@ -28,16 +25,12 @@ class UpdateAiSettingsRequest extends FormRequest
     {
         return [
             'mode' => ['required', 'string', AiMode::validationRule()],
-            'model' => ['required', 'string', 'max:100'],
-            'title_model' => ['required', 'string', 'max:100'],
             'soft_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'hard_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000', 'gte:soft_budget_usd'],
-            'advisor_reasoning_level' => ['required', AiReasoningLevel::validationRule()],
             // Bounded well above a single provider round-trip (a tool-using
             // turn chains many) but below the PHP/proxy request ceiling that
             // would cut the response off before the timeout could fire.
             'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
-            'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral,openrouter'],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
             'openrouter_pricing_enabled' => ['nullable', 'boolean'],
             'litellm_pricing_enabled' => ['nullable', 'boolean'],
@@ -58,13 +51,6 @@ class UpdateAiSettingsRequest extends FormRequest
             'reranking_model' => ['nullable', 'string', 'max:100'],
             'embeddings_provider' => ['sometimes', 'string', Rule::in(resolve(ModelCatalog::class)->embeddingProviders())],
             'embeddings_model' => ['nullable', 'string', 'max:100'],
-            'sub_agent_model' => ['nullable', 'string', 'max:100'],
-            'price_updater_model' => ['nullable', 'string', 'max:100'],
-            'model_provider' => ['sometimes', ...$this->modelProviderRules()],
-            'title_model_provider' => ['sometimes', ...$this->modelProviderRules()],
-            'sub_agent_model_provider' => ['nullable', ...$this->modelProviderRules()],
-            'price_updater_model_provider' => ['nullable', ...$this->modelProviderRules()],
-            'failover_model' => ['nullable', 'string', 'max:100'],
             // The select's "OpenRouter default" option posts the `default`
             // sentinel alongside the enum values, so the controller can
             // tell it apart from an absent field (leaves the setting
@@ -78,19 +64,12 @@ class UpdateAiSettingsRequest extends FormRequest
     }
 
     /**
-     * Normalize the "None" failover choice (sent as an empty string or the
-     * `none` sentinel by the select), a blank `chat_timeout` and blank model
-     * overrides to null so the nullable rules apply.
+     * Normalize a blank `chat_timeout` and blank model overrides to null so
+     * the nullable rules apply.
      */
     #[Override]
     protected function prepareForValidation(): void
     {
-        $failover = $this->input('failover_provider');
-
-        if ($failover === '' || $failover === 'none') {
-            $this->merge(['failover_provider' => null]);
-        }
-
         // A cleared number input posts an empty string, which would fail the
         // integer rule; null instead clears the setting back to the default.
         if ($this->input('chat_timeout') === '') {
@@ -99,7 +78,7 @@ class UpdateAiSettingsRequest extends FormRequest
 
         // A blank model field means "use the default", which the nullable rules
         // store as a cleared setting.
-        foreach (['classification_model', 'reranking_model', 'embeddings_model', 'sub_agent_model', 'price_updater_model', 'sub_agent_model_provider', 'price_updater_model_provider', 'failover_model'] as $field) {
+        foreach (['classification_model', 'reranking_model', 'embeddings_model'] as $field) {
             if ($this->has($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }

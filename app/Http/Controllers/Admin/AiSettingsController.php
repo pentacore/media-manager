@@ -6,15 +6,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Ai\ModelCatalog;
 use App\Ai\ProviderCapabilities;
+use App\Ai\TaskModelResolver;
 use App\Enums\AiMode;
-use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
 use App\Enums\OpenRouterSort;
 use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Jobs\ReembedLibrary;
 use App\Services\AiBudget\AiBudgetGuard;
-use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\Audit\AuditLogger;
 use App\Services\Audit\SettingsSnapshot;
 use App\Settings\AiSettings;
@@ -27,7 +27,6 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Providers\SupportsToolSearch;
-use Laravel\Ai\Enums\Lab;
 
 class AiSettingsController extends Controller
 {
@@ -35,20 +34,16 @@ class AiSettingsController extends Controller
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
         ProviderCapabilities $providerCapabilities,
-        UnpricedModelDetector $unpricedModelDetector,
+        TaskModelResolver $taskModelResolver,
         ModelCatalog $modelCatalog,
         OpenRouterSettings $openRouterSettings,
     ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
-                'model' => $aiSettings->model(),
-                'title_model' => $aiSettings->rawTitleModel(),
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
-                'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
                 'chat_timeout' => $aiSettings->chatTimeout(),
-                'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
                 'openrouter_pricing_enabled' => $aiSettings->openRouterPricingEnabled(),
                 'litellm_pricing_enabled' => $aiSettings->liteLlmPricingEnabled(),
@@ -68,16 +63,6 @@ class AiSettingsController extends Controller
                 'reranking_model' => $aiSettings->rerankingModel(),
                 'embeddings_provider' => $aiSettings->embeddingsProvider(),
                 'embeddings_model' => $aiSettings->embeddingsModel(),
-                'sub_agent_model' => $aiSettings->rawSubAgentModel(),
-                'price_updater_model' => $aiSettings->rawPriceUpdaterModel(),
-                'model_provider' => $aiSettings->modelProvider(),
-                'title_model_provider' => $aiSettings->titleModelProvider(),
-                // Null while the setting follows the chat selection; otherwise
-                // the effective provider (a legacy row without one resolves to
-                // ai.default), so the form never guesses it.
-                'sub_agent_model_provider' => $aiSettings->rawSubAgentModel() === null ? null : $aiSettings->subAgentSelection()->provider,
-                'price_updater_model_provider' => $aiSettings->rawPriceUpdaterModel() === null ? null : $aiSettings->priceUpdaterSelection()->provider,
-                'failover_model' => $aiSettings->failoverModel(),
                 'openrouter' => [
                     'sort' => $openRouterSettings->sort()?->value,
                     'deny_data_collection' => $openRouterSettings->denyDataCollection(),
@@ -92,19 +77,7 @@ class AiSettingsController extends Controller
                 'hard' => $aiSettings->hardBudgetUsd(),
                 'soft_notified_at' => $aiSettings->softBudgetNotifiedAt(),
             ],
-            'unpricedModels' => $unpricedModelDetector->forHardCap(),
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
-            'models' => $modelCatalog->modelsByConfiguredProvider(),
-            'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
-            'failoverProviders' => [
-                ['value' => 'none', 'label' => 'None'],
-                ['value' => Lab::Anthropic->value, 'label' => 'Anthropic'],
-                ['value' => Lab::OpenAI->value, 'label' => 'OpenAI'],
-                ['value' => Lab::Gemini->value, 'label' => 'Gemini'],
-                ['value' => Lab::Groq->value, 'label' => 'Groq'],
-                ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
-                ['value' => Lab::OpenRouter->value, 'label' => 'OpenRouter'],
-            ],
             'openRouterSorts' => array_map(
                 static fn (OpenRouterSort $openRouterSort): array => ['value' => $openRouterSort->value, 'label' => $openRouterSort->label()],
                 OpenRouterSort::cases(),
@@ -133,8 +106,8 @@ class AiSettingsController extends Controller
                 ->mapWithKeys(fn (string $provider): array => [$provider => filled(config(sprintf('ai.providers.%s.key', $provider)))])
                 ->all(),
             'advancedTools' => [
-                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $aiSettings->chatSelection()),
-                'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class, $aiSettings->priceUpdaterSelection()),
+                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $taskModelResolver->resolve(AiTask::Chat)->modelSelection()),
+                'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class, $taskModelResolver->resolve(AiTask::PriceUpdater)->modelSelection()),
             ],
         ]);
     }
@@ -221,35 +194,15 @@ class AiSettingsController extends Controller
         // Every setter write and the audit row commit together.
         DB::transaction(function () use ($aiSettings, $openRouterSettings, $settingsSnapshot, $auditLogger, $before, $validated): void {
             $aiSettings->setMode(AiMode::from($validated['mode']));
-            $aiSettings->setModel($validated['model']);
-            $aiSettings->setTitleModel($validated['title_model']);
             $aiSettings->setSoftBudgetUsd(
                 isset($validated['soft_budget_usd']) ? (float) $validated['soft_budget_usd'] : null,
             );
             $aiSettings->setHardBudgetUsd(
                 isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
             );
-            $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
             $aiSettings->setChatTimeout(
                 isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
             );
-            $currentFailoverProvider = $aiSettings->failoverProvider();
-            $newFailoverProvider = empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']);
-
-            $aiSettings->setFailoverProvider($newFailoverProvider);
-
-            // A stale model id must never survive a failover provider change: it
-            // was validated against the old provider's catalog, not the new
-            // one's. Clear it unless the same request submits a fresh one, and
-            // always clear it when failover is turned off.
-            if ($newFailoverProvider === null) {
-                $aiSettings->setFailoverModel(null);
-            } elseif (array_key_exists('failover_model', $validated)) {
-                $aiSettings->setFailoverModel($validated['failover_model']);
-            } elseif ($currentFailoverProvider?->value !== $newFailoverProvider->value) {
-                $aiSettings->setFailoverModel(null);
-            }
-
             $aiSettings->setModelsDevPricingEnabled(
                 array_key_exists('models_dev_pricing_enabled', $validated)
                     ? (bool) $validated['models_dev_pricing_enabled']
@@ -279,7 +232,6 @@ class AiSettingsController extends Controller
             );
 
             $this->updateClassificationSettings($aiSettings, $validated);
-            $this->updateModelProviders($aiSettings, $validated);
             $this->updateOpenRouterSettings($openRouterSettings, $validated);
 
             if (array_key_exists('embeddings_provider', $validated)) {
@@ -316,7 +268,7 @@ class AiSettingsController extends Controller
     }
 
     /**
-     * Persist the classification, reranking and sub-agent fields that were
+     * Persist the classification and reranking fields that were
      * submitted. An absent field leaves its saved setting untouched; a blank
      * model (normalized to null by the request) clears it back to the default.
      *
@@ -358,39 +310,6 @@ class AiSettingsController extends Controller
 
         if (array_key_exists('reranking_model', $validated)) {
             $aiSettings->setRerankingModel($validated['reranking_model']);
-        }
-
-        if (array_key_exists('sub_agent_model', $validated)) {
-            $aiSettings->setSubAgentModel($validated['sub_agent_model']);
-        }
-
-        if (array_key_exists('price_updater_model', $validated)) {
-            $aiSettings->setPriceUpdaterModel($validated['price_updater_model']);
-        }
-    }
-
-    /**
-     * Persist the provider half of each submitted model selection. An absent
-     * field leaves its saved provider untouched; a blank one clears it.
-     *
-     * @param  array<string, mixed>  $validated
-     */
-    private function updateModelProviders(AiSettings $aiSettings, array $validated): void
-    {
-        if (array_key_exists('model_provider', $validated)) {
-            $aiSettings->setModelProvider($validated['model_provider']);
-        }
-
-        if (array_key_exists('title_model_provider', $validated)) {
-            $aiSettings->setTitleModelProvider($validated['title_model_provider']);
-        }
-
-        if (array_key_exists('sub_agent_model_provider', $validated)) {
-            $aiSettings->setSubAgentModelProvider($validated['sub_agent_model_provider']);
-        }
-
-        if (array_key_exists('price_updater_model_provider', $validated)) {
-            $aiSettings->setPriceUpdaterModelProvider($validated['price_updater_model_provider']);
         }
     }
 

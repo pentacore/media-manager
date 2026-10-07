@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Settings\AiSettings;
+use Laravel\Ai\Ai;
 
 beforeEach(function (): void {
     config()->set('ai.default', 'openai');
@@ -59,17 +62,40 @@ test('classification and reranking models are not in use when their provider has
 });
 
 test('the configured agent models count as in use under their own selection provider', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModel('gpt-chat');
-    $aiSettings->setTitleModel('gpt-title');
-    $aiSettings->setSubAgentModel('gpt-sub-agent');
-    $aiSettings->setPriceUpdaterModel('gpt-updater');
+    config()->set('mediamanager.ai.sub_agent_model', '');
+    config()->set('mediamanager.ai.pricing.updater_model', '');
+    config()->set('mediamanager.decision_agent.model', '');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-title')->create();
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'gpt-sub-agent')->create();
+    AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-updater')->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('anthropic', 'claude-decision')->create();
     // Keep the default embeddings selection (also openai) out of this
     // provider's bucket so it doesn't confound the assertion below.
-    $aiSettings->setEmbeddingsProvider('openrouter');
+    resolve(AiSettings::class)->setEmbeddingsProvider('openrouter');
 
-    expect(resolve(InUsePricingModels::class)->forProvider('openai'))
-        ->toBe(['gpt-title', 'gpt-chat', 'gpt-sub-agent', 'gpt-updater']);
+    $inUsePricingModels = resolve(InUsePricingModels::class);
+
+    expect($inUsePricingModels->forProvider('openai'))->toBe(['gpt-chat', 'gpt-title', 'gpt-sub-agent', 'gpt-updater'])
+        ->and($inUsePricingModels->forProvider('anthropic'))->toBe(['claude-decision']);
+});
+
+test('per-event decision overrides and the failover model count as in use', function (): void {
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-event-override')->create();
+    AiTaskModel::factory()->event('radarr:Grab')->state(['model' => 'gpt-event-default-provider'])->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->selecting('anthropic', 'claude-failover')->create();
+
+    $inUsePricingModels = resolve(InUsePricingModels::class);
+
+    expect($inUsePricingModels->contains('anthropic', 'claude-event-override'))->toBeTrue()
+        ->and($inUsePricingModels->contains('openai', 'gpt-event-default-provider'))->toBeTrue()
+        ->and($inUsePricingModels->contains('anthropic', 'claude-failover'))->toBeTrue();
+});
+
+test('a failover without a model adds nothing to the in-use list', function (): void {
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'anthropic'])->create();
+
+    expect(resolve(InUsePricingModels::class)->forProvider('anthropic'))->toBe([]);
 });
 
 test('a blank embeddings model counts the provider default embeddings model as in use', function (): void {
@@ -78,10 +104,12 @@ test('a blank embeddings model counts the provider default embeddings model as i
     expect(resolve(InUsePricingModels::class)->contains('openrouter', 'google/gemini-embedding-001'))->toBeTrue();
 });
 
-test('the auto title model sentinel is never counted as a model name', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModel('gpt-chat');
-    $aiSettings->setTitleModel(AiSettings::AUTO_MODEL);
+test('the auto title model counts its resolved cheapest model, never the sentinel', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', AiSettings::AUTO_MODEL)->create();
 
-    expect(resolve(InUsePricingModels::class)->contains('openai', AiSettings::AUTO_MODEL))->toBeFalse();
+    $inUsePricingModels = resolve(InUsePricingModels::class);
+
+    expect($inUsePricingModels->contains('openai', AiSettings::AUTO_MODEL))->toBeFalse()
+        ->and($inUsePricingModels->contains('openai', Ai::textProvider('openai')->cheapestTextModel()))->toBeTrue();
 });

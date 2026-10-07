@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage\Pricing;
 
+use App\Ai\TaskModelResolver;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Settings\AiSettings;
-use App\Settings\DecisionAgentSettings;
 use InvalidArgumentException;
 use Laravel\Ai\Ai;
 use LogicException;
@@ -24,8 +26,8 @@ use LogicException;
  * - the classification and reranking models (the provider's default model when
  *   none is set), only while that provider has an API key, since the callers
  *   skip a keyless provider;
- * - the chat, title, sub-agent, decision-agent and price updater selections,
- *   each under its own provider.
+ * - every AI task's resolved selection (AI Models), each per-event decision
+ *   override and the failover provider's model, each under its own provider.
  *
  * The map is built once per instance; bound scoped so a long-running worker
  * rebuilds it for every request or job.
@@ -39,10 +41,7 @@ final class InUsePricingModels
      */
     private ?array $providerModels = null;
 
-    public function __construct(
-        private readonly AiSettings $aiSettings,
-        private readonly DecisionAgentSettings $decisionAgentSettings,
-    ) {}
+    public function __construct(private readonly AiSettings $aiSettings) {}
 
     /**
      * Whether the given provider/model pair is in use.
@@ -99,16 +98,25 @@ final class InUsePricingModels
             $pairs[] = [$rerankingProvider, $this->aiSettings->rerankingModel() ?? $this->defaultRerankingModel($rerankingProvider)];
         }
 
-        $titleModel = $this->aiSettings->rawTitleModel();
-        $pairs[] = [$this->aiSettings->titleModelProvider(), $titleModel === AiSettings::AUTO_MODEL ? null : $titleModel];
+        $taskModelResolver = resolve(TaskModelResolver::class);
 
-        foreach ([
-            $this->aiSettings->chatSelection(),
-            $this->aiSettings->subAgentSelection(),
-            $this->aiSettings->priceUpdaterSelection(),
-            $this->decisionAgentSettings->selection(),
-        ] as $modelSelection) {
-            $pairs[] = [$modelSelection->provider, $modelSelection->model];
+        foreach (AiTask::cases() as $aiTask) {
+            if ($aiTask !== AiTask::Failover) {
+                $modelSelection = $taskModelResolver->resolve($aiTask)->modelSelection();
+                $pairs[] = [$modelSelection->provider, $modelSelection->model];
+            }
+        }
+
+        foreach ($taskModelResolver->rows() as $aiTaskModel) {
+            if ($aiTaskModel->task === AiTask::Decision && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE && filled($aiTaskModel->model)) {
+                $pairs[] = [(string) ($aiTaskModel->provider ?? $this->aiSettings->defaultTextProvider()), (string) $aiTaskModel->model];
+            }
+        }
+
+        $failover = $taskModelResolver->failover();
+
+        if ($failover !== null) {
+            $pairs[] = [$failover['provider'], $failover['model']];
         }
 
         $embeddingsProvider = $this->aiSettings->embeddingsProvider();

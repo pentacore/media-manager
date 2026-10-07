@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\ActivityLog;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\User;
+use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Cache;
 
@@ -155,7 +157,6 @@ test('an override for an event that is not allowlisted survives saves and is fla
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), [
         'enabled' => true, 'event_allowlist' => [], 'allow_manual_import' => false,
         'notify_on_suggest' => false, 'notify_on_act' => false, 'max_actions_per_run' => 3,
-        'model' => 'gpt-5-nano', 'reasoning_level' => 'low',
     ])
         ->assertSessionHasNoErrors()
         ->assertRedirect();
@@ -210,3 +211,202 @@ test('malformed selections get a validation error instead of a server error', fu
         ->put(route('admin.ai-models.update'), aiModelsPayload(['event_overrides' => ['not-an-array']]))
         ->assertSessionHasErrors('event_overrides.0.event_key');
 });
+
+/**
+ * The provider + model a task resolves to after a save.
+ *
+ * @return array{0: string, 1: string}
+ */
+function aiModelsResolvedPair(AiTask $aiTask): array
+{
+    $modelSelection = resolve(TaskModelResolver::class)->resolve($aiTask)->modelSelection();
+
+    return [$modelSelection->provider, $modelSelection->model];
+}
+
+test('the index exposes each task saved provider, the resolved default provider and the failover', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.provider', 'openrouter')
+            ->where('tasks.0.model', 'anthropic/claude-sonnet-5')
+            ->where('tasks.1.provider', null)
+            ->where('tasks.1.resolved.provider', 'openai')
+            ->where('tasks.3.provider', null)
+            ->where('tasks.3.resolved.provider', 'openrouter')
+            ->where('failover', ['provider' => null, 'model' => null])
+            ->has('models.openrouter')
+            ->where('providers', fn ($providers): bool => collect($providers)->contains('openrouter')));
+});
+
+test('the title auto sentinel round-trips while the resolved model is concrete', function (): void {
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', AiSettings::AUTO_MODEL)->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.1.task', 'title')
+            ->where('tasks.1.model', AiSettings::AUTO_MODEL)
+            ->where('tasks.1.allow_auto', true)
+            ->where('tasks.1.resolved.model', fn (string $model): bool => $model !== AiSettings::AUTO_MODEL && $model !== ''));
+});
+
+test('the index lists selected models the hard cap cannot price', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(10.0);
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'mystery-model')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('unpricedModels', fn ($models): bool => collect($models)->contains(fn (array $model): bool => $model['role'] === 'File inspector' && $model['model'] === 'mystery-model')));
+});
+
+test('the index reports no unpriced models when no hard cap is set', function (): void {
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'mystery-model')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page->where('unpricedModels', []));
+});
+
+test('admin can route chat, titles, sub-agents and the price updater through OpenRouter', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']);
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5']);
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'x-ai/grok-4']);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload([
+            'tasks' => [
+                'chat' => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5'],
+                'title' => ['provider' => 'openrouter', 'model' => 'auto'],
+                'file_inspector' => ['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5'],
+                'stuck_download_investigator' => ['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5'],
+                'price_updater' => ['provider' => 'openrouter', 'model' => 'x-ai/grok-4'],
+            ],
+            'failover' => ['provider' => 'anthropic', 'model' => 'claude-haiku-4-5'],
+        ]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.ai-models.index'));
+
+    expect(aiModelsResolvedPair(AiTask::Chat))->toBe(['openrouter', 'anthropic/claude-sonnet-5'])
+        ->and(aiModelsResolvedPair(AiTask::Title))->toBe(['openrouter', 'anthropic/claude-haiku-4.5'])
+        ->and(aiModelsResolvedPair(AiTask::FileInspector))->toBe(['openrouter', 'anthropic/claude-haiku-4.5'])
+        ->and(aiModelsResolvedPair(AiTask::StuckDownloadInvestigator))->toBe(['openrouter', 'anthropic/claude-haiku-4.5'])
+        ->and(aiModelsResolvedPair(AiTask::PriceUpdater))->toBe(['openrouter', 'x-ai/grok-4'])
+        ->and(resolve(TaskModelResolver::class)->failover())->toBe(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']);
+});
+
+test('the decision task saves a provider with its model and reasoning', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'openai/gpt-5-mini']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload([
+            'tasks' => ['decision' => ['provider' => 'openrouter', 'model' => 'openai/gpt-5-mini', 'reasoning' => 'high']],
+        ]))
+        ->assertSessionHasNoErrors();
+
+    $resolved = resolve(TaskModelResolver::class)->resolve(AiTask::Decision);
+
+    expect([$resolved->provider, $resolved->model, $resolved->reasoning])
+        ->toBe(['openrouter', 'openai/gpt-5-mini', AiReasoningLevel::High]);
+});
+
+test('blank sub-agent and price updater selections clear back to the chat selection', function (): void {
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('anthropic', 'claude-sonnet-5-5')->create();
+    AiTaskModel::factory()->task(AiTask::StuckDownloadInvestigator)->selecting('anthropic', 'claude-sonnet-5-5')->create();
+    AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-5-nano')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload())
+        ->assertSessionHasNoErrors();
+
+    expect(AiTaskModel::query()->whereIn('task', ['file_inspector', 'stuck_download_investigator', 'price_updater'])->exists())->toBeFalse()
+        ->and(aiModelsResolvedPair(AiTask::FileInspector))->toBe(['openai', 'gpt-5.6-luna'])
+        ->and(aiModelsResolvedPair(AiTask::StuckDownloadInvestigator))->toBe(['openai', 'gpt-5.6-luna'])
+        ->and(aiModelsResolvedPair(AiTask::PriceUpdater))->toBe(['openai', 'gpt-5.6-luna']);
+});
+
+test('admin can set, change and clear the failover provider', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => 'anthropic', 'model' => null]]))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBe(['provider' => 'anthropic', 'model' => null]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => 'openrouter', 'model' => null]]))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBe(['provider' => 'openrouter', 'model' => null]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload())
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBeNull();
+});
+
+test('changing the failover provider with a submitted model keeps it', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']);
+    AiTaskModel::factory()->task(AiTask::Failover)->selecting('anthropic', 'claude-haiku-4-5')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']]))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBe(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']);
+});
+
+test('a stale failover model is never kept without a provider', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Failover)->selecting('anthropic', 'claude-haiku-4-5')->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => 'openrouter', 'model' => null]]))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBe(['provider' => 'openrouter', 'model' => null]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => null, 'model' => 'claude-haiku-4-5']]))
+        ->assertSessionHasErrors('failover.provider');
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['failover' => ['provider' => null, 'model' => null]]))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(TaskModelResolver::class)->failover())->toBeNull()
+        ->and(AiTaskModel::query()->forTask(AiTask::Failover)->exists())->toBeFalse();
+});
+
+test('a provider without an API key is rejected', function (string $prefix): void {
+    config()->set('ai.providers.mistral.key');
+    $payload = aiModelsPayload();
+    data_set($payload, $prefix.'.provider', 'mistral');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), $payload)
+        ->assertSessionHasErrors($prefix.'.provider');
+})->with(['tasks.chat', 'tasks.title', 'tasks.decision', 'tasks.file_inspector', 'tasks.price_updater', 'failover']);
+
+test('a provider that cannot serve text is rejected', function (string $prefix): void {
+    config()->set('ai.providers.cohere.key', 'cohere-test-key');
+    $payload = aiModelsPayload();
+    data_set($payload, $prefix.'.provider', 'cohere');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), $payload)
+        ->assertSessionHasErrors($prefix.'.provider');
+})->with(['tasks.chat', 'failover']);

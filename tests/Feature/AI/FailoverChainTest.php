@@ -9,12 +9,13 @@ use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Enums\AgentDecisionStatus;
+use App\Enums\AiTask;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Jobs\RunDecisionAgent;
 use App\Models\AgentDecision;
+use App\Models\AiTaskModel;
 use App\Models\User;
 use App\Models\WebhookEvent;
-use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Bus;
@@ -55,7 +56,7 @@ function failoverChainInvestigatorFake(array &$providersTried): void
 }
 
 test('every agent offers the failover chain for its own model', function (string $agentClass): void {
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     $agent = new $agentClass;
 
     expect($agent->provider())->toBe([
@@ -85,7 +86,7 @@ test('without a failover provider every agent sends an explicit single-provider 
 ]);
 
 test('a delegated sub-agent fails over when the primary provider errors', function (): void {
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     $providersTried = [];
     failoverChainInvestigatorFake($providersTried);
     MediaAgent::fake([
@@ -102,7 +103,7 @@ test('a delegated sub-agent fails over when the primary provider errors', functi
 });
 
 test('a sub-agent delegated from a streamed turn fails over too', function (): void {
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     $providersTried = [];
     failoverChainInvestigatorFake($providersTried);
     MediaAgent::fake([
@@ -121,7 +122,7 @@ test('a sub-agent delegated from a streamed turn fails over too', function (): v
 
 test('a chat turn fails over without the controller passing a provider', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     MediaAgent::fake(fn (string $prompt, Collection $attachments, Provider $provider): string => $provider->name() === 'openai'
         ? throw ProviderOverloadedException::forProvider('openai')
         : 'Served by the failover provider.');
@@ -134,7 +135,7 @@ test('a chat turn fails over without the controller passing a provider', functio
 
 test('a decision run fails over without the job passing a provider', function (): void {
     resolve(DecisionAgentSettings::class)->setEnabled(true);
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     DecisionAgent::fake(fn (string $prompt, Collection $attachments, Provider $provider): string => $provider->name() === 'openai'
         ? throw ProviderOverloadedException::forProvider('openai')
         : 'Nothing to do; answered by the failover provider.');

@@ -11,8 +11,6 @@ use App\Ai\Agents\TitleAgent;
 use App\Enums\AiTask;
 use App\Models\AiTaskModel;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
-use App\Settings\AiSettings;
-use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -28,18 +26,9 @@ beforeEach(function (): void {
     config()->set('mediamanager.decision_agent.model', '');
 });
 
-function agentProviderSelectChat(string $provider, string $model): void
-{
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModelProvider($provider);
-    $aiSettings->setModel($model);
-}
-
 test('MediaAgent resolves the chat provider chain', function (): void {
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
     AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
-    // AiSettings::providerChainFor() still reads the failover from the old setting.
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
 
     expect((new MediaAgent)->provider())->toBe(['openrouter' => 'anthropic/claude-sonnet-5', 'anthropic' => null]);
 });
@@ -82,9 +71,8 @@ test('a title prompt without a provider argument is sent to the selected OpenRou
 });
 
 test('in-use pricing models are keyed by each selection provider', function (): void {
-    agentProviderSelectChat('openrouter', 'anthropic/claude-sonnet-5');
-    resolve(DecisionAgentSettings::class)->setModel('claude-haiku-4-5');
-    resolve(DecisionAgentSettings::class)->setModelProvider('anthropic');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('anthropic', 'claude-haiku-4-5')->create();
 
     $inUsePricingModels = resolve(InUsePricingModels::class);
 
