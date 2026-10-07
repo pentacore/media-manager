@@ -225,3 +225,36 @@ test('a failed poll keeps the selection; the next good poll still has it', funct
         ->click('[data-bulk-sab-action="pause"]')
         ->assertSee('2 paused');
 });
+
+test('a single queue delete asks first; Cancel keeps the job and Remove deletes it', function (): void {
+    fakeSabnzbdBrowser(fn (int $read): array => [sabnzbdBrowserSlot('SABnzbd_nzo_aaa', 'Show.S01E01.mkv')]);
+    $this->actingAs(User::factory()->admin()->create());
+    $delete = '[data-sab-slot="SABnzbd_nzo_aaa"] [data-sab-slot-delete]';
+    $isSlotDelete = fn (Request $request): bool => (sabnzbdBrowserQuery($request)['name'] ?? null) === 'delete'
+        && (sabnzbdBrowserQuery($request)['value'] ?? null) === 'SABnzbd_nzo_aaa';
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->click($delete)
+        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'Remove "Show.S01E01.mkv" from the queue?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (!document.querySelector('[data-confirm-dialog]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+    Http::assertNotSent($isSlotDelete);
+
+    $webpage->click($delete)
+        ->click('[data-confirm-accept]')
+        ->assertSee('Job deleted.')
+        ->assertNoSmoke();
+
+    Http::assertSent($isSlotDelete);
+});

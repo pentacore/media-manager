@@ -54,6 +54,8 @@ test('an admin pages Sonarr history and marks a grab as failed', function (): vo
         ->assertCount('[data-history-row="sonarr-56"] [data-history-mark-failed]', 0)
         ->assertSeeIn('[data-history-page]', 'Page 1 of 2')
         ->click('[data-history-row="sonarr-55"] [data-history-mark-failed]')
+        ->assertSeeIn('[data-confirm-dialog]', 'as failed?')
+        ->click('[data-confirm-accept]')
         ->assertSee("Marked as failed — Sonarr will blocklist the release and search again if 'Redownload failed' is on.")
         ->click('[data-history-next]')
         ->assertSeeIn('[data-history-row="sonarr-99"] [data-history-title]', 'Andor')
@@ -118,4 +120,32 @@ test('a history page past the end still shows the pager and leads back to the la
         ->click('[data-history-prev]')
         ->assertSeeIn('[data-history-row="sonarr-99"] [data-history-title]', 'Andor')
         ->assertMissing('[data-history-page]');
+});
+
+test('mark failed asks first, and cancelling sends nothing', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', ['history_service' => 'sonarr'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-history-row="sonarr-55"] [data-history-mark-failed]')
+        ->assertSeeIn('[data-confirm-dialog]', 'as failed?')
+        ->assertSeeIn('[data-confirm-dialog]', 'The release is blocklisted, and a new search runs if "Redownload failed" is on.')
+        ->assertScript("document.querySelector('[data-confirm-accept]').classList.contains('bg-destructive') === true")
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (!document.querySelector('[data-confirm-dialog]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+    $webpage->assertCount('[data-confirm-dialog]', 0)
+        ->assertEnabled('[data-history-row="sonarr-55"] [data-history-mark-failed]')
+        ->assertNoSmoke();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
 });

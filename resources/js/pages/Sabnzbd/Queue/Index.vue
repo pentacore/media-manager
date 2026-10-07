@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
+import { useConfirm } from '@/composables/useConfirm';
 import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
@@ -212,8 +213,19 @@ function resumeSlot(nzoId: string): void {
     router.visit(action.url, { method: action.method, preserveScroll: true });
 }
 
-function deleteSlot(nzoId: string, filename: string | null): void {
-    if (!confirm(`Remove "${filename ?? nzoId}" from the queue?`)) {
+const { confirm } = useConfirm();
+
+async function deleteSlot(
+    nzoId: string,
+    filename: string | null,
+): Promise<void> {
+    const confirmed = await confirm({
+        title: `Remove "${filename ?? nzoId}" from the queue?`,
+        confirmLabel: 'Remove',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -555,6 +567,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                             variant="ghost"
                                             size="sm"
                                             class="size-7 p-0 text-destructive hover:text-destructive"
+                                            data-sab-slot-delete
                                             @click="
                                                 deleteSlot(
                                                     slot.nzo_id,
