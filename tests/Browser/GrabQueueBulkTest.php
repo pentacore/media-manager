@@ -192,24 +192,6 @@ test('the remove confirm closes when the selection empties under it, and nothing
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
-/**
- * Waits until the shared confirm dialog has left the DOM (its exit
- * animation keeps it mounted briefly).
- */
-function grabQueueConfirmGoneScript(): string
-{
-    return <<<'JS'
-        (async () => {
-            for (let attempt = 0; attempt < 250; attempt++) {
-                if (!document.querySelector('[data-confirm-dialog]')) {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-        })()
-    JS;
-}
-
 test('an admin removes one queue item from its row menu', function (): void {
     fakeGrabQueueBrowser();
     $this->actingAs(User::factory()->admin()->create());
@@ -356,13 +338,13 @@ test('cancelling a blocklist removal or a force grab sends nothing', function ()
         ->assertSeeIn('[data-confirm-dialog]', 'blocklist the release?')
         ->assertSeeIn('[data-confirm-dialog]', 'A fresh search runs afterwards.')
         ->click('[data-confirm-cancel]');
-    $webpage->script(grabQueueConfirmGoneScript());
+    $webpage->script(confirmDialogGoneScript());
 
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-grab]')
         ->assertSeeIn('[data-confirm-dialog]', 'This bypasses the RSS sync delay.')
         ->click('[data-confirm-cancel]');
-    $webpage->script(grabQueueConfirmGoneScript());
+    $webpage->script(confirmDialogGoneScript());
     $webpage->assertCount('[data-confirm-dialog]', 0)
         ->assertNoSmoke();
 

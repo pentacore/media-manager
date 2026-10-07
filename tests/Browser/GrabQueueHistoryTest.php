@@ -133,16 +133,7 @@ test('mark failed asks first, and cancelling sends nothing', function (): void {
         ->assertScript("document.querySelector('[data-confirm-accept]').classList.contains('bg-destructive') === true")
         ->click('[data-confirm-cancel]');
 
-    $webpage->script(<<<'JS'
-        (async () => {
-            for (let attempt = 0; attempt < 250; attempt++) {
-                if (!document.querySelector('[data-confirm-dialog]')) {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-        })()
-    JS);
+    $webpage->script(confirmDialogGoneScript());
     $webpage->assertCount('[data-confirm-dialog]', 0)
         ->assertEnabled('[data-history-row="sonarr-55"] [data-history-mark-failed]')
         ->assertNoSmoke();

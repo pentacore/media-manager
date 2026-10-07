@@ -239,16 +239,7 @@ test('a single queue delete asks first; Cancel keeps the job and Remove deletes 
         ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'Remove "Show.S01E01.mkv" from the queue?')
         ->click('[data-confirm-cancel]');
 
-    $webpage->script(<<<'JS'
-        (async () => {
-            for (let attempt = 0; attempt < 250; attempt++) {
-                if (!document.querySelector('[data-confirm-dialog]')) {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-        })()
-    JS);
+    $webpage->script(confirmDialogGoneScript());
     Http::assertNotSent($isSlotDelete);
 
     $webpage->click($delete)

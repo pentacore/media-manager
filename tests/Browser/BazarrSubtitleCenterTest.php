@@ -107,16 +107,7 @@ test('member retries a review case with Media Advisor after confirmation', funct
         ->click('@investigate-subtitle-case-'.$subtitleCase->id)
         ->assertSeeIn('[data-confirm-dialog]', 'already been investigated')
         ->click('[data-confirm-cancel]');
-    $webpage->script(<<<'JS'
-        (async () => {
-            for (let attempt = 0; attempt < 250; attempt++) {
-                if (!document.querySelector('[data-confirm-dialog]')) {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-        })()
-    JS);
+    $webpage->script(confirmDialogGoneScript());
     expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
     Queue::assertNotPushed(RunSubtitleAdvisor::class);
 
