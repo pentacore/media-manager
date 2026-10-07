@@ -102,15 +102,28 @@ test('member retries a review case with Media Advisor after confirmation', funct
             ),
         );
 
-    $webpage->script(
-        'window.__advisorConfirmMessage = ""; window.confirm = (message) => { window.__advisorConfirmMessage = message; return true; };',
-    );
+    // Cancelling the retry queues nothing and leaves the case as it was.
+    $webpage
+        ->click('@investigate-subtitle-case-'.$subtitleCase->id)
+        ->assertSeeIn('[data-confirm-dialog]', 'already been investigated')
+        ->click('[data-confirm-cancel]');
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (!document.querySelector('[data-confirm-dialog]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
+    Queue::assertNotPushed(RunSubtitleAdvisor::class);
 
     $webpage
         ->click('@investigate-subtitle-case-'.$subtitleCase->id)
-        ->assertScript(
-            'window.__advisorConfirmMessage.includes("already been investigated")',
-        )
+        ->assertSeeIn('[data-confirm-dialog]', 'Retry it manually with Media Advisor?')
+        ->click('[data-confirm-accept]')
         ->assertSee('Media Advisor investigation queued.')
         ->assertSee('No safe replacement matched the required English subtitles.')
         ->assertNoSmoke();

@@ -26,3 +26,6 @@ Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, 
 
 ## JSON requests come from @/lib/http
 Ad-hoc JSON calls use `jsonRequest<T>()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.
+
+## Confirm with useConfirm(), never the browser dialog
+Ask before a destructive or costly action with `const { confirm } = useConfirm(); if (!(await confirm({ title, description?, confirmLabel, destructive }))) return;` — one `ConfirmDialog` is mounted in the app layout. Pass `destructive: true` for deletes, removals, unlinks, declines and blocklists. ESLint bans the global `confirm` and `window.confirm`. Browser tests click `[data-confirm-accept]` / `[data-confirm-cancel]` instead of stubbing `window.confirm`.

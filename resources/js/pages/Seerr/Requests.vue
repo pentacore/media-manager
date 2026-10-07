@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
+import { useConfirm } from '@/composables/useConfirm';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
@@ -282,16 +283,23 @@ function tvdbUrl(req: SeerrRequest): string | null {
     return `https://thetvdb.com/dereferrer/series/${req.tvdb_id}`;
 }
 
-function deleteRequest(req: SeerrRequest) {
-    if (
-        confirm(
-            `Delete request for "${req.media_title ?? 'this item'}"? This cannot be undone.`,
-        )
-    ) {
-        router.delete(RequestController.destroy.url(req.id), {
-            preserveScroll: true,
-        });
+const { confirm } = useConfirm();
+
+async function deleteRequest(req: SeerrRequest): Promise<void> {
+    const confirmed = await confirm({
+        title: `Delete request for "${req.media_title ?? 'this item'}"?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+    });
+
+    if (!confirmed) {
+        return;
     }
+
+    router.delete(RequestController.destroy.url(req.id), {
+        preserveScroll: true,
+    });
 }
 
 function approveRequest(req: SeerrRequest) {
@@ -301,13 +309,21 @@ function approveRequest(req: SeerrRequest) {
     });
 }
 
-function declineRequest(req: SeerrRequest) {
-    if (confirm(`Decline request for "${req.media_title ?? 'this item'}"?`)) {
-        router.visit(RequestController.decline.url(req.id), {
-            method: 'post',
-            preserveScroll: true,
-        });
+async function declineRequest(req: SeerrRequest): Promise<void> {
+    const confirmed = await confirm({
+        title: `Decline request for "${req.media_title ?? 'this item'}"?`,
+        confirmLabel: 'Decline',
+        destructive: true,
+    });
+
+    if (!confirmed) {
+        return;
     }
+
+    router.visit(RequestController.decline.url(req.id), {
+        method: 'post',
+        preserveScroll: true,
+    });
 }
 
 function retryRequest(req: SeerrRequest) {
@@ -441,16 +457,20 @@ const CLEAR_DESCRIPTIONS: Record<ClearableStatus, string> = {
 
 const clearing = ref(false);
 
-function clearByStatus(status: ClearableStatus): void {
+async function clearByStatus(status: ClearableStatus): Promise<void> {
     if (clearing.value) {
         return;
     }
 
-    if (
-        !confirm(
-            `Permanently delete every ${status} Seerr request (${CLEAR_DESCRIPTIONS[status]})? This cannot be undone.`,
-        )
-    ) {
+    const confirmed = await confirm({
+        title: `Permanently delete every ${status} Seerr request?`,
+        description: `This covers ${CLEAR_DESCRIPTIONS[status]}. This cannot be undone.`,
+        confirmLabel: CLEAR_LABELS[status],
+        destructive: true,
+    });
+
+    // Re-check the guard: another clear may have started while the dialog was open.
+    if (!confirmed || clearing.value) {
         return;
     }
 
@@ -563,6 +583,7 @@ const rangeText = computed(() => {
                             size="sm"
                             class="h-7 gap-1.5 text-xs"
                             :disabled="clearing"
+                            data-requests-clear-menu
                         >
                             <Trash2 class="size-3.5" />Clear
                             <ChevronsDown class="size-3" />
@@ -575,6 +596,7 @@ const rangeText = computed(() => {
                             v-for="status in CLEARABLE_STATUSES"
                             :key="status"
                             class="text-destructive focus:text-destructive"
+                            :data-requests-clear="status"
                             @select="clearByStatus(status)"
                         >
                             {{ CLEAR_LABELS[status] }}
@@ -620,6 +642,7 @@ const rangeText = computed(() => {
             <div
                 v-for="req in visible"
                 :key="req.id"
+                :data-request-card="req.id"
                 class="flex gap-3.5 rounded-xl border border-border bg-card p-3.5"
             >
                 <Poster
@@ -668,6 +691,7 @@ const rangeText = computed(() => {
                                 size="sm"
                                 variant="destructive"
                                 class="h-7 text-xs"
+                                data-request-decline
                                 @click="declineRequest(req)"
                             >
                                 <X class="size-3.5" />Decline
@@ -726,6 +750,7 @@ const rangeText = computed(() => {
                             type="button"
                             class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
                             title="Delete"
+                            data-request-delete
                             @click="deleteRequest(req)"
                         >
                             <Trash2 class="size-3.5" />

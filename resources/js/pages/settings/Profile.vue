@@ -11,6 +11,7 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { useConfirm } from '@/composables/useConfirm';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 
@@ -42,8 +43,16 @@ defineOptions({
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
-function unlinkEmby(link: EmbyLink) {
-    if (!confirm(`Unlink Emby account "${link.emby_username}"?`)) {
+const { confirm } = useConfirm();
+
+async function unlinkEmby(link: EmbyLink): Promise<void> {
+    const confirmed = await confirm({
+        title: `Unlink Emby account "${link.emby_username}"?`,
+        confirmLabel: 'Unlink',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -177,6 +186,7 @@ function unlinkEmby(link: EmbyLink) {
             <div
                 v-for="link in embyLinks"
                 :key="link.id"
+                :data-emby-link="link.id"
                 class="flex items-center justify-between gap-4"
             >
                 <div class="flex items-center gap-2.5">
@@ -205,6 +215,7 @@ function unlinkEmby(link: EmbyLink) {
                         variant="destructive"
                         size="sm"
                         class="h-8 text-xs"
+                        data-emby-unlink
                         @click="unlinkEmby(link)"
                     >
                         Unlink

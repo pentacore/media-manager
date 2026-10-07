@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Jobs\ClearSeerrRequests;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\ChatTemplate;
 use App\Models\EmbyUserLink;
 use App\Models\NotificationDestination;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
@@ -282,4 +285,151 @@ test('a model price removal asks first; Cancel keeps it and Remove deletes it', 
         ->assertNoSmoke();
 
     expect(AiModelPrice::query()->whereKey($price->id)->exists())->toBeFalse();
+});
+
+/**
+ * One pending Seerr movie request (id 1, "The Matrix"). The list pattern also
+ * answers the DELETE and the decline POST, so it is registered last.
+ */
+function confirmDialogFakeSeerr(): void
+{
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 1, 'tv' => 0]),
+        // posterPath keeps the card an <img> instead of Poster's text-hint
+        // fallback, which would otherwise duplicate the title in the same
+        // card and break strict-mode assertSeeIn (see DiscoverTest.php).
+        'seerr.local:5055/api/v1/movie/603' => Http::response(['id' => 603, 'title' => 'The Matrix', 'posterPath' => '/matrix.jpg']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1],
+            'results' => [[
+                'id' => 1,
+                'status' => 1,
+                'type' => 'movie',
+                'media' => ['mediaType' => 'movie', 'tmdbId' => 603],
+                'requestedBy' => ['displayName' => 'Alice'],
+                'createdAt' => '2026-10-01T00:00:00Z',
+            ]],
+        ]),
+    ]);
+}
+
+test('unlinking your own Emby account asks first; Cancel keeps the link and Unlink removes it', function (): void {
+    $member = User::factory()->member()->create();
+    $embyUserLink = EmbyUserLink::factory()->for($member)->create(['emby_username' => 'alice-emby']);
+    $this->actingAs($member);
+    $unlink = sprintf('[data-emby-link="%d"] [data-emby-unlink]', $embyUserLink->id);
+
+    $webpage = visit(route('profile.edit', absolute: false))
+        ->assertNoSmoke()
+        ->click($unlink)
+        ->assertSeeIn('[data-confirm-dialog]', 'Unlink Emby account "alice-emby"?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+
+    expect(EmbyUserLink::query()->whereKey($embyUserLink->id)->exists())->toBeTrue();
+
+    $webpage->click($unlink)
+        ->click('[data-confirm-accept]')
+        ->assertSee('Emby account unlinked.')
+        ->assertNoSmoke();
+
+    expect(EmbyUserLink::query()->whereKey($embyUserLink->id)->exists())->toBeFalse();
+});
+
+test('a template delete asks first; Cancel keeps it and Delete removes it', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Stuck downloads']);
+    $this->actingAs($admin);
+    $delete = sprintf('[data-template-row="%d"] [data-template-delete]', $chatTemplate->id);
+
+    $webpage = visit(route('ai.templates.index', absolute: false))
+        ->assertNoSmoke()
+        ->click($delete)
+        ->assertSeeIn('[data-confirm-dialog]', 'Delete "Stuck downloads"?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+
+    expect(ChatTemplate::query()->whereKey($chatTemplate->id)->exists())->toBeTrue();
+
+    $webpage->click($delete)
+        ->click('[data-confirm-accept]')
+        ->assertSee('Template deleted.')
+        ->assertNoSmoke();
+
+    expect(ChatTemplate::query()->whereKey($chatTemplate->id)->exists())->toBeFalse();
+});
+
+test('a Seerr request delete asks first; Cancel sends nothing and Delete removes it', function (): void {
+    confirmDialogFakeSeerr();
+    $this->actingAs(User::factory()->admin()->create());
+    $isDelete = fn (Request $request): bool => $request->method() === 'DELETE' && str_ends_with($request->url(), '/api/v1/request/1');
+
+    $webpage = visit(route('media.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-request-card="1"]', 'The Matrix')
+        ->click('[data-request-card="1"] [data-request-delete]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Delete request for "The Matrix"?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    Http::assertNotSent($isDelete);
+
+    $webpage->click('[data-request-card="1"] [data-request-delete]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Request deleted.')
+        ->assertNoSmoke();
+
+    Http::assertSent($isDelete);
+});
+
+test('a Seerr request decline asks first; Cancel sends nothing and Decline declines it', function (): void {
+    confirmDialogFakeSeerr();
+    $this->actingAs(User::factory()->admin()->create());
+    $isDecline = fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v1/request/1/decline');
+
+    $webpage = visit(route('media.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-request-card="1"] [data-request-decline]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Decline request for "The Matrix"?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    Http::assertNotSent($isDecline);
+
+    $webpage->click('[data-request-card="1"] [data-request-decline]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Request declined.')
+        ->assertNoSmoke();
+
+    Http::assertSent($isDecline);
+});
+
+test('clearing Seerr requests by status asks first; Cancel queues nothing and the confirm queues the clear', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    confirmDialogFakeSeerr();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-requests-clear-menu]')
+        ->click('[data-requests-clear="failed"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Permanently delete every failed Seerr request?')
+        ->assertSeeIn('[data-confirm-dialog]', 'This covers requests Seerr could not push to Sonarr/Radarr. This cannot be undone.')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    Queue::assertNotPushed(ClearSeerrRequests::class);
+
+    $webpage->click('[data-requests-clear-menu]')
+        ->click('[data-requests-clear="failed"]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('in the background')
+        ->assertNoSmoke();
+
+    Queue::assertPushed(ClearSeerrRequests::class);
 });
