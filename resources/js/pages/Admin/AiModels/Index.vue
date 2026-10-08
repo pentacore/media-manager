@@ -4,7 +4,8 @@ import { Plus, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
-import ReasoningSelect from '@/components/ai/ReasoningSelect.vue';
+import TierListEditor from '@/components/ai/TierListEditor.vue';
+import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill } from '@/components/mm';
@@ -26,6 +27,7 @@ type ResolvedSummary = {
     reasoning: AiReasoningLevel;
     reasoning_label: string;
     reasoning_hint: string | null;
+    tier: { position: number; count: number; reason: string | null } | null;
 };
 
 type TaskRow = {
@@ -34,28 +36,16 @@ type TaskRow = {
     inherits_chat: boolean;
     has_reasoning: boolean;
     allow_auto: boolean;
-    provider: string | null;
-    model: string | null;
-    reasoning: AiReasoningLevel | null;
+    tiers: TierForm[];
     resolved: ResolvedSummary;
 };
 
 type EventOverride = {
     event_key: string;
     enabled: boolean;
-    provider: string | null;
-    model: string | null;
-    reasoning: AiReasoningLevel | null;
+    tiers: TierForm[];
     resolved: ResolvedSummary;
 };
-
-type Selection = {
-    provider: string | null;
-    model: string | null;
-    reasoning: AiReasoningLevel | null;
-};
-
-type EventOverrideSelection = Selection & { event_key: string };
 
 const props = defineProps<{
     tasks: TaskRow[];
@@ -73,6 +63,7 @@ const props = defineProps<{
         }
     >;
     reasoningProviders: string[];
+    modelPools: Record<string, ModelPool>;
     unpricedModels: Array<{ role: string; provider: string; model: string }>;
 }>();
 
@@ -89,22 +80,14 @@ const form = useForm({
     tasks: Object.fromEntries(
         props.tasks.map((row) => [
             row.task,
-            {
-                provider: row.provider,
-                model: row.model,
-                reasoning: row.reasoning,
-            } satisfies Selection,
+            { tiers: row.tiers.map((tier) => ({ ...tier })) },
         ]),
-    ) as Record<string, Selection>,
+    ) as Record<string, { tiers: TierForm[] }>,
     failover: { ...props.failover },
-    event_overrides: props.eventOverrides.map(
-        (row): EventOverrideSelection => ({
-            event_key: row.event_key,
-            provider: row.provider,
-            model: row.model,
-            reasoning: row.reasoning,
-        }),
-    ),
+    event_overrides: props.eventOverrides.map((row) => ({
+        event_key: row.event_key,
+        tiers: row.tiers.map((tier) => ({ ...tier })),
+    })),
 });
 
 const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>
@@ -122,13 +105,6 @@ const addableEvents = computed<string[]>(() =>
 /**
  * ModelSelect speaks '' for "inherit"; the form stores null.
  */
-function setProvider(
-    selection: { provider: string | null },
-    value: string,
-): void {
-    selection.provider = value === '' ? null : value;
-}
-
 function setModel(selection: { model: string | null }, value: string): void {
     selection.model = value === '' ? null : value;
 }
@@ -139,52 +115,6 @@ function modelSelectInheritLabel(row: TaskRow): string | undefined {
     }
 
     return row.task === 'chat' ? undefined : 'Default';
-}
-
-/**
- * The provider and model a selection will run on: the edited selection when
- * it names a model, else the server's resolved summary.
- */
-function effectivePair(
-    selection: Selection,
-    resolved: ResolvedSummary,
-): { provider: string | null; model: string } {
-    return selection.model
-        ? { provider: selection.provider, model: selection.model }
-        : { provider: resolved.provider, model: resolved.model };
-}
-
-/**
- * Why reasoning can't be set for the model this selection will run on, or
- * null when it can.
- */
-function reasoningHint(
-    selection: Selection,
-    resolved: ResolvedSummary,
-): string | null {
-    const { provider, model } = effectivePair(selection, resolved);
-
-    if (provider === null || !props.reasoningProviders.includes(provider)) {
-        return 'Not supported by this provider';
-    }
-
-    if (
-        props.modelCapabilities[`${provider}|${model}`]?.supports_reasoning ===
-        false
-    ) {
-        return "Model doesn't reason";
-    }
-
-    return null;
-}
-
-function acceptedLevels(
-    selection: Selection,
-    resolved: ResolvedSummary,
-): AiReasoningLevel[] | null {
-    const { provider, model } = effectivePair(selection, resolved);
-
-    return props.modelCapabilities[`${provider}|${model}`]?.levels ?? null;
 }
 
 /**
@@ -201,9 +131,15 @@ function overrideResolved(
 function addOverride(eventKey: string): void {
     form.event_overrides.push({
         event_key: eventKey,
-        provider: null,
-        model: null,
-        reasoning: null,
+        tiers: [
+            {
+                provider: null,
+                model: null,
+                reasoning: null,
+                min_pool_percent: null,
+                min_pool_tokens: null,
+            },
+        ],
     });
 }
 
@@ -218,10 +154,12 @@ function setFailoverProvider(value: unknown): void {
     form.failover.model = null;
 }
 
-function errorFor(...keys: string[]): string | undefined {
-    const errors = form.errors as Record<string, string | undefined>;
+const formErrors = computed(
+    () => form.errors as Record<string, string | undefined>,
+);
 
-    return keys.map((key) => errors[key]).find(Boolean);
+function errorFor(...keys: string[]): string | undefined {
+    return keys.map((key) => formErrors.value[key]).find(Boolean);
 }
 
 function submit(): void {
@@ -245,6 +183,9 @@ function submit(): void {
                 The model and reasoning level each AI task runs on. Empty fields
                 inherit; the line under each task shows what it resolves to.
                 Conversations and chat templates can override the chat model.
+                Add tiers to spend free pools first: a tier runs only while its
+                model's pool has the share or tokens you set left; the last tier
+                always runs.
             </p>
         </div>
 
@@ -256,64 +197,44 @@ function submit(): void {
         >
             <template v-for="row in tasks" :key="row.task">
                 <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
+                    class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6"
                     :data-task="row.task"
                 >
                     <Field :label="row.label" />
                     <div class="flex min-w-0 flex-col gap-2">
-                        <div data-model-select>
-                            <ModelSelect
-                                :models="models"
-                                :allow-auto="row.allow_auto"
-                                :inherit-label="modelSelectInheritLabel(row)"
-                                :provider="form.tasks[row.task].provider ?? ''"
-                                :model="form.tasks[row.task].model ?? ''"
-                                @update:provider="
-                                    (value: string) =>
-                                        setProvider(form.tasks[row.task], value)
-                                "
-                                @update:model="
-                                    (value: string) =>
-                                        setModel(form.tasks[row.task], value)
-                                "
-                            />
+                        <TierListEditor
+                            v-model="form.tasks[row.task].tiers"
+                            :models="models"
+                            :reasoning-levels="reasoningLevels"
+                            :model-capabilities="modelCapabilities"
+                            :reasoning-providers="reasoningProviders"
+                            :model-pools="modelPools"
+                            :inherited-provider="row.resolved.provider"
+                            :inherited-model="row.resolved.model"
+                            :inherit-label="modelSelectInheritLabel(row)"
+                            :has-reasoning="row.has_reasoning"
+                            :allow-auto="row.allow_auto"
+                            :error-prefix="`tasks.${row.task}.tiers`"
+                            :errors="formErrors"
+                        />
+                        <div class="flex flex-wrap items-center gap-2">
+                            <p
+                                class="font-mono-tabular text-[12px] text-muted-foreground"
+                                data-resolved
+                            >
+                                → {{ row.resolved.provider }} ·
+                                {{ row.resolved.model }} ·
+                                {{ row.resolved.reasoning_label }}
+                            </p>
+                            <Pill
+                                v-if="row.resolved.tier"
+                                :title="row.resolved.tier.reason ?? undefined"
+                                data-tier-live
+                            >
+                                Live: tier {{ row.resolved.tier.position }} of
+                                {{ row.resolved.tier.count }}
+                            </Pill>
                         </div>
-                        <ReasoningSelect
-                            v-if="row.has_reasoning"
-                            v-model="form.tasks[row.task].reasoning"
-                            :levels="reasoningLevels"
-                            inherit-label="Default"
-                            :accepted="
-                                acceptedLevels(
-                                    form.tasks[row.task],
-                                    row.resolved,
-                                )
-                            "
-                            :disabled-hint="
-                                reasoningHint(
-                                    form.tasks[row.task],
-                                    row.resolved,
-                                )
-                            "
-                        />
-                        <p
-                            class="font-mono-tabular text-[12px] text-muted-foreground"
-                            data-resolved
-                        >
-                            → {{ row.resolved.provider }} ·
-                            {{ row.resolved.model }} ·
-                            {{ row.resolved.reasoning_label }}
-                        </p>
-                        <InputError
-                            :message="
-                                errorFor(
-                                    `tasks.${row.task}.model`,
-                                    `tasks.${row.task}.provider`,
-                                    `tasks.${row.task}.reasoning`,
-                                )
-                            "
-                        />
 
                         <!-- Decision event overrides -->
                         <div
@@ -361,52 +282,60 @@ function submit(): void {
                                         <Trash2 class="size-4" />
                                     </Button>
                                 </div>
-                                <div data-model-select>
-                                    <ModelSelect
-                                        :models="models"
-                                        inherit-label="Same as decision agent"
-                                        :provider="override.provider ?? ''"
-                                        :model="override.model ?? ''"
-                                        @update:provider="
-                                            (value: string) =>
-                                                setProvider(override, value)
-                                        "
-                                        @update:model="
-                                            (value: string) =>
-                                                setModel(override, value)
-                                        "
-                                    />
-                                </div>
-                                <ReasoningSelect
-                                    v-model="override.reasoning"
-                                    :levels="reasoningLevels"
+                                <TierListEditor
+                                    v-model="override.tiers"
+                                    :models="models"
+                                    :reasoning-levels="reasoningLevels"
+                                    :model-capabilities="modelCapabilities"
+                                    :reasoning-providers="reasoningProviders"
+                                    :model-pools="modelPools"
+                                    :inherited-provider="
+                                        overrideResolved(
+                                            override.event_key,
+                                            row,
+                                        ).provider
+                                    "
+                                    :inherited-model="
+                                        overrideResolved(
+                                            override.event_key,
+                                            row,
+                                        ).model
+                                    "
                                     inherit-label="Same as decision agent"
-                                    :accepted="
-                                        acceptedLevels(
-                                            override,
-                                            overrideResolved(
-                                                override.event_key,
-                                                row,
-                                            ),
-                                        )
-                                    "
-                                    :disabled-hint="
-                                        reasoningHint(
-                                            override,
-                                            overrideResolved(
-                                                override.event_key,
-                                                row,
-                                            ),
-                                        )
-                                    "
+                                    reasoning-inherit-label="Same as decision agent"
+                                    :error-prefix="`event_overrides.${index}.tiers`"
+                                    :errors="formErrors"
                                 />
+                                <div
+                                    v-if="
+                                        resolvedByEvent[override.event_key]
+                                            ?.tier
+                                    "
+                                    class="flex"
+                                >
+                                    <Pill
+                                        :title="
+                                            resolvedByEvent[override.event_key]
+                                                ?.tier?.reason ?? undefined
+                                        "
+                                        data-tier-live
+                                    >
+                                        Live: tier
+                                        {{
+                                            resolvedByEvent[override.event_key]
+                                                ?.tier?.position
+                                        }}
+                                        of
+                                        {{
+                                            resolvedByEvent[override.event_key]
+                                                ?.tier?.count
+                                        }}
+                                    </Pill>
+                                </div>
                                 <InputError
                                     :message="
                                         errorFor(
                                             `event_overrides.${index}.event_key`,
-                                            `event_overrides.${index}.model`,
-                                            `event_overrides.${index}.provider`,
-                                            `event_overrides.${index}.reasoning`,
                                         )
                                     "
                                 />
@@ -455,8 +384,7 @@ function submit(): void {
 
             <!-- Failover -->
             <div
-                class="grid items-start gap-6"
-                style="grid-template-columns: 200px 1fr"
+                class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6"
                 data-task="failover"
             >
                 <Field
