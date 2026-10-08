@@ -277,3 +277,15 @@ test('the inherited selection of an event scope is the Decision default list pic
 test('the failover task has no inherited selection', function (): void {
     tierResolver()->inheritedSelection(AiTask::Failover);
 })->throws(InvalidArgumentException::class);
+
+test('an explicit event tier with no reasoning resolves to the task config level, not the decision default list', function (): void {
+    tierPrice('gpt-5-nano');
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::High)->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('openai', 'gpt-5-nano')->create();
+
+    expect(tierResolver()->resolve(AiTask::Decision, 'sonarr:Download')->reasoning)->toBe(AiReasoningLevel::ProviderDefault);
+
+    config()->set('mediamanager.decision_agent.reasoning_level', 'low');
+
+    expect(tierResolver()->resolve(AiTask::Decision, 'sonarr:Download')->reasoning)->toBe(AiReasoningLevel::Low);
+});

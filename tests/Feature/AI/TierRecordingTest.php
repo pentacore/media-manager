@@ -72,3 +72,15 @@ test('runs without tiers record no tier', function (): void {
     expect($response->json('answered_by.tier'))->toBeNull()
         ->and(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->latest('id')->value('tier_position'))->toBeNull();
 });
+
+test('a failed run records the tier it fell through to', function (): void {
+    MediaAgent::fake(fn (): never => throw new RuntimeException('provider fell over'));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Hi']);
+
+    $usage = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->latest('id')->first();
+
+    expect($usage?->status)->toBe('failed')
+        ->and($usage?->tier_position)->toBe(2);
+});
