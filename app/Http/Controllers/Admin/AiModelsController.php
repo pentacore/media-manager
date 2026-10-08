@@ -16,12 +16,16 @@ use App\Http\Requests\Admin\UpdateAiModelsRequest;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Services\AiBudget\UnpricedModelDetector;
+use App\Services\AiUsage\PoolHeadroom;
+use App\Services\AiUsage\PoolHeadroomFigures;
 use App\Services\Audit\AuditLogger;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class AiModelsController extends Controller
 {
@@ -30,6 +34,7 @@ class AiModelsController extends Controller
         ModelCatalog $modelCatalog,
         DecisionAgentSettings $decisionAgentSettings,
         UnpricedModelDetector $unpricedModelDetector,
+        PoolHeadroom $poolHeadroom,
     ): Response {
         $allowlist = $decisionAgentSettings->eventAllowlist();
 
@@ -40,31 +45,29 @@ class AiModelsController extends Controller
                 continue;
             }
 
-            $row = $taskModelResolver->row($aiTask);
-
             $tasks[] = [
                 'task' => $aiTask->value,
                 'label' => $aiTask->label(),
                 'inherits_chat' => $aiTask->inheritsChatModel(),
                 'has_reasoning' => $aiTask->hasReasoning(),
                 'allow_auto' => $aiTask === AiTask::Title,
-                'provider' => $this->savedProvider($row),
-                'model' => $row?->model,
-                'reasoning' => $row?->reasoning?->value,
+                'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
                 'resolved' => $this->summary($taskModelResolver->resolve($aiTask)),
+                'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask)),
             ];
         }
 
         $eventOverrides = $taskModelResolver->rows()
             ->filter(fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === AiTask::Decision && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE)
-            ->sortBy('scope')
-            ->map(fn (AiTaskModel $aiTaskModel): array => [
-                'event_key' => $aiTaskModel->scope,
-                'enabled' => in_array($aiTaskModel->scope, $allowlist, true),
-                'provider' => $this->savedProvider($aiTaskModel),
-                'model' => $aiTaskModel->model,
-                'reasoning' => $aiTaskModel->reasoning?->value,
-                'resolved' => $this->summary($taskModelResolver->resolve(AiTask::Decision, $aiTaskModel->scope)),
+            ->pluck('scope')
+            ->unique()
+            ->sort()
+            ->map(fn (string $scope): array => [
+                'event_key' => $scope,
+                'enabled' => in_array($scope, $allowlist, true),
+                'tiers' => $this->tierRows($taskModelResolver->tiers(AiTask::Decision, $scope)),
+                'resolved' => $this->summary($taskModelResolver->resolve(AiTask::Decision, $scope)),
+                'inherited' => $this->summary($taskModelResolver->inheritedSelection(AiTask::Decision, $scope)),
             ])
             ->values()
             ->all();
@@ -75,6 +78,7 @@ class AiModelsController extends Controller
             'tasks' => $tasks,
             'failover' => ['provider' => $failover['provider'] ?? null, 'model' => $failover['model'] ?? null],
             'eventOverrides' => $eventOverrides,
+            'modelPools' => $this->modelPools($poolHeadroom),
             'allowlistedEvents' => $allowlist,
             'models' => $modelCatalog->modelsByConfiguredProvider(),
             'providers' => $modelCatalog->textProviders(),
@@ -93,15 +97,10 @@ class AiModelsController extends Controller
             $before = $this->snapshot();
 
             foreach ($validated['tasks'] as $task => $selection) {
-                $this->store(AiTask::from($task), AiTaskModel::DEFAULT_SCOPE, $selection);
+                $this->storeTiers(AiTask::from($task), AiTaskModel::DEFAULT_SCOPE, $selection['tiers']);
             }
 
-            $this->store(AiTask::Failover, AiTaskModel::DEFAULT_SCOPE, [
-                'provider' => $validated['failover']['provider'] ?? null,
-                // A model only makes sense next to a provider.
-                'model' => filled($validated['failover']['provider'] ?? null) ? ($validated['failover']['model'] ?? null) : null,
-                'reasoning' => null,
-            ]);
+            $this->storeFailover($validated['failover']);
 
             $keptScopes = array_column($validated['event_overrides'], 'event_key');
 
@@ -113,7 +112,7 @@ class AiModelsController extends Controller
                 ->each->delete();
 
             foreach ($validated['event_overrides'] as $override) {
-                $this->store(AiTask::Decision, $override['event_key'], $override);
+                $this->storeTiers(AiTask::Decision, $override['event_key'], $override['tiers']);
             }
 
             $auditLogger->settingsUpdated(SettingsGroup::AiModels, $before, $this->snapshot());
@@ -125,27 +124,102 @@ class AiModelsController extends Controller
     }
 
     /**
-     * Upsert one row, or delete it when every field inherits.
+     * A scope's tiers as the editor shows them; a scope without rows is one
+     * all-inherit tier.
      *
-     * @param  array{provider?: string|null, model?: string|null, reasoning?: string|null}  $selection
+     * @param  Collection<int, AiTaskModel>  $tiers
+     * @return list<array{provider: string|null, model: string|null, reasoning: string|null, min_pool_percent: int|null, min_pool_tokens: int|null}>
      */
-    private function store(AiTask $aiTask, string $scope, array $selection): void
+    private function tierRows(Collection $tiers): array
     {
-        $attributes = [
-            'provider' => filled($selection['model'] ?? null) || $aiTask === AiTask::Failover ? ($selection['provider'] ?? null) : null,
-            'model' => $selection['model'] ?? null,
-            'reasoning' => $selection['reasoning'] ?? null,
-        ];
+        if ($tiers->isEmpty()) {
+            return [['provider' => null, 'model' => null, 'reasoning' => null, 'min_pool_percent' => null, 'min_pool_tokens' => null]];
+        }
 
-        $existing = AiTaskModel::query()->forTask($aiTask)->where('scope', $scope)->first();
+        return $tiers->map(fn (AiTaskModel $aiTaskModel): array => [
+            'provider' => $this->savedProvider($aiTaskModel),
+            'model' => $aiTaskModel->model,
+            'reasoning' => $aiTaskModel->reasoning?->value,
+            'min_pool_percent' => $aiTaskModel->min_pool_percent,
+            'min_pool_tokens' => $aiTaskModel->min_pool_tokens,
+        ])->values()->all();
+    }
 
-        if (array_filter($attributes, filled(...)) === []) {
+    /**
+     * Live headroom per priced model linked to a pool that caps something,
+     * keyed `provider|model`, so the tier editor can show it for any pick.
+     *
+     * @return array<string, array{name: string, percent_left: float, tokens_left: int}>
+     */
+    private function modelPools(PoolHeadroom $poolHeadroom): array
+    {
+        $pools = [];
+
+        try {
+            foreach (AiModelPrice::query()->whereNotNull('free_usage_pool_id')->get(['provider', 'model', 'free_usage_pool_id']) as $aiModelPrice) {
+                $figures = $poolHeadroom->forPool((int) $aiModelPrice->free_usage_pool_id);
+
+                if ($figures instanceof PoolHeadroomFigures) {
+                    $pools[sprintf('%s|%s', $aiModelPrice->provider, $aiModelPrice->model)] = $figures->toArray();
+                }
+            }
+        } catch (Throwable $throwable) {
+            // Runtime resolution fails closed on the same error; keep the page up.
+            report($throwable);
+
+            return [];
+        }
+
+        return $pools;
+    }
+
+    /**
+     * Replace a task scope's tier list, renumbered from 0. A lone tier that
+     * inherits everything stores nothing.
+     *
+     * @param  list<array{provider?: string|null, model?: string|null, reasoning?: string|null, min_pool_percent?: int|null, min_pool_tokens?: int|null}>  $tiers
+     */
+    private function storeTiers(AiTask $aiTask, string $scope, array $tiers): void
+    {
+        AiTaskModel::query()->forTask($aiTask)->where('scope', $scope)->get()->each->delete();
+
+        $rows = array_map(static fn (array $tier): array => [
+            // A model only makes sense next to a provider.
+            'provider' => filled($tier['model'] ?? null) ? ($tier['provider'] ?? null) : null,
+            'model' => $tier['model'] ?? null,
+            'reasoning' => $tier['reasoning'] ?? null,
+            'min_pool_percent' => $tier['min_pool_percent'] ?? null,
+            'min_pool_tokens' => $tier['min_pool_tokens'] ?? null,
+        ], $tiers);
+
+        if (count($rows) === 1 && array_filter($rows[0], filled(...)) === []) {
+            return;
+        }
+
+        foreach ($rows as $position => $attributes) {
+            AiTaskModel::query()->create(['task' => $aiTask, 'scope' => $scope, 'position' => $position, ...$attributes]);
+        }
+    }
+
+    /**
+     * The failover row: a provider, plus a model only next to a provider.
+     *
+     * @param  array{provider?: string|null, model?: string|null}  $failover
+     */
+    private function storeFailover(array $failover): void
+    {
+        $provider = $failover['provider'] ?? null;
+        $existing = AiTaskModel::query()->forTask(AiTask::Failover)->where('scope', AiTaskModel::DEFAULT_SCOPE)->first();
+
+        if (blank($provider)) {
             $existing?->delete();
 
             return;
         }
 
-        ($existing ?? new AiTaskModel(['task' => $aiTask, 'scope' => $scope]))->fill($attributes)->save();
+        ($existing ?? new AiTaskModel(['task' => AiTask::Failover, 'scope' => AiTaskModel::DEFAULT_SCOPE]))
+            ->fill(['provider' => $provider, 'model' => $failover['model'] ?? null, 'reasoning' => null])
+            ->save();
     }
 
     /**
@@ -168,21 +242,23 @@ class AiModelsController extends Controller
     private function snapshot(): array
     {
         return AiTaskModel::query()
-            ->orderBy('task')->orderBy('scope')
+            ->orderBy('task')->orderBy('scope')->orderBy('position')
             ->get()
             ->mapWithKeys(fn (AiTaskModel $aiTaskModel): array => [
-                sprintf('%s:%s', $aiTaskModel->task->value, $aiTaskModel->scope) => sprintf(
-                    '%s/%s · %s',
+                sprintf('%s:%s#%d', $aiTaskModel->task->value, $aiTaskModel->scope, $aiTaskModel->position) => trim(sprintf(
+                    '%s/%s · %s%s%s',
                     $aiTaskModel->provider ?? 'inherit',
                     $aiTaskModel->model ?? 'inherit',
                     $aiTaskModel->reasoning->value ?? 'inherit',
-                ),
+                    $aiTaskModel->min_pool_percent === null ? '' : sprintf(' · ≥%d%%', $aiTaskModel->min_pool_percent),
+                    $aiTaskModel->min_pool_tokens === null ? '' : sprintf(' · ≥%d tokens', $aiTaskModel->min_pool_tokens),
+                )),
             ])
             ->all();
     }
 
     /**
-     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string, reasoning_hint: string|null}
+     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string, reasoning_hint: string|null, tier: array{position: int, count: int, reason: string|null}|null}
      */
     private function summary(ResolvedSelection $resolvedSelection): array
     {
@@ -196,6 +272,7 @@ class AiModelsController extends Controller
             'model' => $resolvedSelection->model,
             'reasoning' => $resolvedSelection->reasoning->value,
             'reasoning_label' => $resolvedSelection->reasoning->label(),
+            'tier' => $resolvedSelection->tier?->toArray(),
             'reasoning_hint' => match (true) {
                 ! ReasoningOptions::supportsProvider($resolvedSelection->provider) => __('Not supported by this provider'),
                 $supported === false => __("Model doesn't reason"),

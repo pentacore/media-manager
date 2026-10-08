@@ -77,3 +77,19 @@ test('the drill-down of a failed run shows its input without an output block', f
         ->assertSeeIn('[data-usage-io="input"]', 'Find severance in Sonarr.')
         ->assertMissing('[data-usage-io="output"]');
 });
+
+test('admin sees which runs fell through a tier and can filter them', function (): void {
+    $tierTwo = AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2]);
+    $noTier = AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-usage-tier]', 'Tier 2')
+        ->click('[data-usage-tier-filter] button')
+        ->click('[role="option"][aria-label="Fell through"]')
+        ->assertQueryStringHas('tier', 'fell_through')
+        ->assertSee('Tier filter applies to this list')
+        ->assertPresent("[data-usage-row=\"{$tierTwo->id}\"]")
+        ->assertMissing("[data-usage-row=\"{$noTier->id}\"]");
+});

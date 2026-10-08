@@ -277,7 +277,9 @@ onMounted(() => {
                         healthy
                     </Pill>
                     <span class="text-fg-subtle">·</span>
-                    <span>{{ pendingActions }} actions awaiting approval</span>
+                    <span data-dashboard-pending-count
+                        >{{ pendingActions }} actions awaiting approval</span
+                    >
                     <span class="text-fg-subtle">·</span>
                     <span
                         >{{ currentNowPlaying.length }}
@@ -294,6 +296,7 @@ onMounted(() => {
                 <button
                     type="button"
                     :disabled="refreshing"
+                    data-dashboard-refresh
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover disabled:cursor-wait disabled:opacity-60"
                     @click="refresh"
                 >

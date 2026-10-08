@@ -42,7 +42,7 @@ class MovieController extends BaseArrController
                 $connection,
                 fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
-            )),
+            ), 'qualityProfiles'),
         ]);
     }
 
@@ -116,7 +116,7 @@ class MovieController extends BaseArrController
                         'remote_poster' => $item['remotePoster'] ?? null,
                         'images' => $item['images'] ?? [],
                     ],
-                )),
+                ), 'searchResults'),
         ]);
     }
 

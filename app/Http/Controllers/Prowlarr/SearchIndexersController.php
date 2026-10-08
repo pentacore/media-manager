@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\IndexerReleaseCache;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Support\Abilities;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
@@ -58,11 +59,17 @@ class SearchIndexersController extends Controller
             ]);
         }
 
+        $releases = array_values(array_filter($results, is_array(...)));
+
         // IndexerReleaseCache keeps the guid server-side and returns only the
-        // display allowlist plus the release key and indexer id.
+        // display allowlist plus the release key and indexer id. Only admins
+        // can grab (prowlarr.grab is can:admin), so only their searches are
+        // remembered; everyone else gets the same rows with no key.
         return Inertia::render('Prowlarr/Search', [
             'query' => $query,
-            'results' => $indexerReleaseCache->remember($connection, array_values(array_filter($results, is_array(...)))),
+            'results' => $request->user()->can(Abilities::ADMIN)
+                ? $indexerReleaseCache->remember($connection, $releases)
+                : $indexerReleaseCache->present($releases),
             'hasConnection' => true,
             'error' => null,
         ]);

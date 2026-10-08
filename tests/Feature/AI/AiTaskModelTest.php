@@ -49,3 +49,29 @@ test('forTask scopes rows to one task', function (): void {
 
     expect(AiTaskModel::query()->forTask(AiTask::Title)->count())->toBe(1);
 });
+
+test('a task scope can hold several tiers ordered by position', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+
+    expect(AiTaskModel::query()->forTask(AiTask::Chat)->orderBy('position')->pluck('model')->all())
+        ->toBe(['gpt-5.6-luna', 'gpt-5-nano']);
+});
+
+test('two tiers cannot share a position', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->create();
+})->throws(UniqueConstraintViolationException::class);
+
+test('a tier has conditions when either minimum is set', function (?int $percent, ?int $tokens, bool $expected): void {
+    $aiTaskModel = AiTaskModel::factory()->conditions($percent, $tokens)->make();
+
+    expect($aiTaskModel->hasConditions())->toBe($expected)
+        ->and($aiTaskModel->min_pool_percent)->toBe($percent)
+        ->and($aiTaskModel->min_pool_tokens)->toBe($tokens);
+})->with([
+    'none' => [null, null, false],
+    'percent' => [20, null, true],
+    'tokens' => [null, 50_000, true],
+    'both' => [20, 50_000, true],
+]);

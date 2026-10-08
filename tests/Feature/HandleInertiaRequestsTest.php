@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\UserRole;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -11,6 +12,7 @@ use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use App\Support\AppVersion;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -299,4 +301,91 @@ test('integrations.whisparr is true only for admins with an active Whisparr conn
         ->assertInertia(fn ($page) => $page->where('integrations.whisparr', true));
     $this->actingAs($member)->get(route('dashboard'))
         ->assertInertia(fn ($page) => $page->where('integrations.whisparr', false));
+});
+
+/**
+ * Pre-seeds the three sidebar badge caches, so building `nav` reads caches
+ * only and never walks an upstream service (see .ai/rules/browser.md).
+ */
+function sharedPropsWarmBadgeCaches(): void
+{
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    Cache::put(WantedCounter::CACHE_KEY, 0, 600);
+}
+
+/**
+ * The tables, of the four only the shared `integrations` and `nav` props
+ * read, that the logged queries touched. The profile page itself reads
+ * none of them.
+ *
+ * @return list<string>
+ */
+function sharedPropsTablesQueried(): array
+{
+    $queries = collect(DB::getQueryLog())->pluck('query');
+    $tables = ['service_connections', 'action_requests', 'emby_activities', 'notifications'];
+
+    return array_values(array_filter(
+        $tables,
+        static fn (string $table): bool => $queries->contains(static fn (string $sql): bool => str_contains($sql, sprintf('"%s"', $table))),
+    ));
+}
+
+test('a full page visit builds the shared integrations, nav and version props', function (): void {
+    sharedPropsWarmBadgeCaches();
+    $member = User::factory()->member()->create();
+    DB::enableQueryLog();
+
+    $this->actingAs($member)
+        ->get(route('profile.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('integrations')->has('nav')->has('version'));
+
+    expect(sharedPropsTablesQueried())->toBe(['service_connections', 'action_requests', 'emby_activities', 'notifications']);
+});
+
+test('a partial reload skips the shared integrations, nav and version work', function (): void {
+    sharedPropsWarmBadgeCaches();
+    $member = User::factory()->member()->create();
+    DB::enableQueryLog();
+
+    $response = $this->actingAs($member)
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => (string) new HandleInertiaRequests()->version(request()),
+            'X-Inertia-Partial-Component' => 'settings/Profile',
+            'X-Inertia-Partial-Data' => 'status',
+        ])
+        ->get(route('profile.edit'))
+        ->assertOk();
+
+    expect($response->json('props'))
+        ->toHaveKey('status')
+        ->not->toHaveKey('integrations')
+        ->not->toHaveKey('nav')
+        ->not->toHaveKey('version')
+        ->and(sharedPropsTablesQueried())->toBe([]);
+});
+
+test('the shared integrations read every optional connection type in one query', function (): void {
+    sharedPropsWarmBadgeCaches();
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+    ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
+    $admin = User::factory()->admin()->create();
+    DB::enableQueryLog();
+
+    $this->actingAs($admin)
+        ->get(route('profile.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('integrations.seerr', true)
+            ->where('integrations.prowlarr', false)
+            ->where('integrations.whisparr', true));
+
+    $connectionQueries = collect(DB::getQueryLog())
+        ->pluck('query')
+        ->filter(static fn (string $sql): bool => str_contains($sql, '"service_connections"'));
+
+    expect($connectionQueries)->toHaveCount(1);
 });

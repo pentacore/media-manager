@@ -25,6 +25,9 @@ class AiTaskModelFactory extends Factory
             'provider' => null,
             'model' => null,
             'reasoning' => null,
+            'position' => 0,
+            'min_pool_percent' => null,
+            'min_pool_tokens' => null,
         ];
     }
 
@@ -46,5 +49,15 @@ class AiTaskModelFactory extends Factory
     public function reasoning(AiReasoningLevel $aiReasoningLevel): static
     {
         return $this->state(fn (array $attributes): array => ['reasoning' => $aiReasoningLevel]);
+    }
+
+    public function position(int $position): static
+    {
+        return $this->state(fn (array $attributes): array => ['position' => $position]);
+    }
+
+    public function conditions(?int $percent, ?int $tokens = null): static
+    {
+        return $this->state(fn (array $attributes): array => ['min_pool_percent' => $percent, 'min_pool_tokens' => $tokens]);
     }
 }

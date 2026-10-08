@@ -93,6 +93,7 @@ class ConversationController extends Controller
                     'provider' => $storedMessage->meta['provider'] ?? null,
                     'model' => $storedMessage->meta['model'] ?? null,
                     'reasoning_label' => AiReasoningLevel::tryFrom((string) ($storedMessage->meta['reasoning_level'] ?? ''))?->label(),
+                    'tier' => is_array($storedMessage->meta['tier'] ?? null) ? $storedMessage->meta['tier'] : null,
                 ] : null,
             ])
             ->values()
