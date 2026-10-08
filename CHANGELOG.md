@@ -1,3 +1,38 @@
+# [1.36.0](https://github.com/pentacore/media-manager/compare/v1.35.2...v1.36.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **admin:** let a removed event override be added again ([906f057](https://github.com/pentacore/media-manager/commit/906f057adbd343925dab0083d75668377670ee40))
+* **admin:** return 422 for malformed AI model selections ([2512575](https://github.com/pentacore/media-manager/commit/25125756224da9f8abcd7a5b579343a07c1bc7da))
+* **ai:** fall back to the config title model when auto cannot resolve ([480be80](https://github.com/pentacore/media-manager/commit/480be804a2853e2403c063219df05f96936513fe))
+* **ai:** forget scoped instances after each in-process browser request ([6c915d8](https://github.com/pentacore/media-manager/commit/6c915d8b6d5bcca89fb949c7f9ff4b61c41751a0))
+* **ai:** keep reasoning unchanged on upgrade for providers that never got it ([dbd0889](https://github.com/pentacore/media-manager/commit/dbd0889eee03b1569dfa2635136b2e9c573cf682))
+* **ai:** map failover reasoning for the provider default model ([bcd9be6](https://github.com/pentacore/media-manager/commit/bcd9be64105e1c30e573f06d45dd12fd8e2dc4d5))
+* **ai:** show the default provider for legacy rows without one ([be36a06](https://github.com/pentacore/media-manager/commit/be36a06f04373fb2d741ac1c3280ac4af0c8e6a0))
+* **bazarr:** name the case in the Media Advisor retry confirmation ([d0afe2e](https://github.com/pentacore/media-manager/commit/d0afe2e1b3b118e8724412bc31e9bce8ca14435b))
+* **chat:** lock the model picker until the conversation's override is known ([3d3705f](https://github.com/pentacore/media-manager/commit/3d3705fb007380f489271d68be1da14e21e0486e))
+* **frontend:** settle the confirm dialog on unmount and drop the duplicate description ([ba77a1c](https://github.com/pentacore/media-manager/commit/ba77a1c78d7b0a326ddc3f33d05abd5d1b5771fb))
+* **pricing:** clear stale reasoning levels when a feed marks a model unsupported ([b13a9a6](https://github.com/pentacore/media-manager/commit/b13a9a6b4de3e0f7c7c9fd1374b9219a80407df9))
+
+
+### Features
+
+* **admin:** add the AI Models page ([5703af1](https://github.com/pentacore/media-manager/commit/5703af1b0b2b50f590d91184e7ec903afe70521e))
+* **admin:** add the AI Models settings endpoint ([545a547](https://github.com/pentacore/media-manager/commit/545a5478a47ebccc01407fcb4a1074009f8659c9))
+* **ai:** add AI task model selections table ([4015b3c](https://github.com/pentacore/media-manager/commit/4015b3c79f75e9565c9df4dcef9fbdd5092e5653))
+* **ai:** migrate saved model settings to task selections ([6156a69](https://github.com/pentacore/media-manager/commit/6156a6924464b8e0d59e96b2cb6b3780eb850ec6))
+* **ai:** resolve task model and reasoning selections ([fc01e26](https://github.com/pentacore/media-manager/commit/fc01e26393a14dd6d87ca50557089bcd64207844))
+* **ai:** send per-task reasoning translated for each provider ([82c299c](https://github.com/pentacore/media-manager/commit/82c299c6e4e9b15166e20e8c1a6322b7168f5baa))
+* **chat:** let a conversation override its model and reasoning ([64e56ec](https://github.com/pentacore/media-manager/commit/64e56ec1f0efaf64b8eb748fe2ff4ed4328f33bb))
+* **chat:** let chat templates preset a model and reasoning level ([aa36194](https://github.com/pentacore/media-manager/commit/aa36194f81e53e0efdea7dcc2916dce58d679d41))
+* **chat:** pick a model and reasoning level per conversation ([7d13a04](https://github.com/pentacore/media-manager/commit/7d13a04f31013bc6c2b8b13a8f9bd08fa87d5e23))
+* **chat:** record the reasoning level behind each answer ([e0ab5b6](https://github.com/pentacore/media-manager/commit/e0ab5b6157f032e5cd3193dee99f376e822c5e69))
+* **frontend:** ask with a shared confirm dialog on the admin pages ([df9d1f1](https://github.com/pentacore/media-manager/commit/df9d1f1a10d6041c3c8b85f24154f2ca99dbdca1))
+* **frontend:** finish moving confirmations to the shared dialog and ban confirm() ([c345b4b](https://github.com/pentacore/media-manager/commit/c345b4b3c55b60b6c857a51b149f4157997777c0))
+* **library:** confirm grab-queue, history and SABnzbd actions in the app dialog ([a717505](https://github.com/pentacore/media-manager/commit/a717505677b7085798bca432ebbbda9b1cbf56e5))
+* **pricing:** record model reasoning capabilities from the feeds ([ab6e12f](https://github.com/pentacore/media-manager/commit/ab6e12f780b9b899f442f712a0f3868bc7f4a2df))
+
 ## [1.35.2](https://github.com/pentacore/media-manager/compare/v1.35.1...v1.35.2) (2026-10-06)
 
 
