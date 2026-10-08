@@ -53,8 +53,12 @@ test('a partial reload leaves the sidebar badge alone until the next page visit'
     ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
 
     // Refresh is a partial reload of the dashboard's own props. The body count
-    // reaching 4 proves the reload landed; the badge still reading 3 proves
-    // the lazy `nav` prop was neither rebuilt nor re-applied.
+    // reaching 4 proves the reload landed; the badge still reading 3 shows a
+    // partial reload leaves it alone. It does not prove `nav` was skipped
+    // server-side — the old eager version produced the same client-visible
+    // result here too, since the client always drops shared props a partial
+    // reload didn't ask for. That laziness is pinned by the query-count
+    // assertions in tests/Feature/HandleInertiaRequestsTest.php instead.
     $webpage->click('[data-dashboard-refresh]')
         ->assertSeeIn('[data-dashboard-pending-count]', '4 actions awaiting approval')
         ->assertSeeIn('[data-sidebar="menu-badge"]', '3');
