@@ -42,7 +42,7 @@ class SeriesController extends BaseArrController
                 $connection,
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
-            )),
+            ), 'qualityProfiles'),
         ]);
     }
 
@@ -130,7 +130,7 @@ class SeriesController extends BaseArrController
                         'remote_poster' => $item['remotePoster'] ?? null,
                         'images' => $item['images'] ?? [],
                     ],
-                )),
+                ), 'searchResults'),
         ]);
     }
 

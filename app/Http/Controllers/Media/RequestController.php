@@ -81,7 +81,7 @@ class RequestController extends Controller
             'connection' => ['url' => $connection->linkUrl()],
             'filters' => ['page' => $page, 'status' => $status],
             'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
-            'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection)),
+            'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection), 'summary'),
         ]);
     }
 
