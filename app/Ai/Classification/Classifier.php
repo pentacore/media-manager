@@ -38,6 +38,7 @@ final readonly class Classifier
     /**
      * @param  string|array<string, mixed>  $state
      * @param  array<string, Question>  $questions
+     * @param  int  $timeoutSeconds  Seconds before the call is abandoned and the gate fails open.
      * @return array<string, Answer>|null
      */
     public function classify(string $caller, string|array $state, array $questions, int $timeoutSeconds = self::BACKGROUND_TIMEOUT_SECONDS): ?array
@@ -72,6 +73,7 @@ final readonly class Classifier
 
     /**
      * @param  string|array<string, mixed>  $state
+     * @param  int  $timeoutSeconds  Seconds before the call is abandoned and the gate fails open.
      */
     public function probability(string $caller, string|array $state, string $question, int $timeoutSeconds = self::BACKGROUND_TIMEOUT_SECONDS): ?float
     {
