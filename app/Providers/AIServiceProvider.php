@@ -14,6 +14,7 @@ use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Services\AiUsage\BatchPricingContext;
+use App\Services\AiUsage\PoolHeadroom;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\RunUsageAccumulator;
@@ -39,6 +40,9 @@ class AIServiceProvider extends ServiceProvider
         ));
 
         $this->app->scoped(BatchPricingContext::class);
+
+        // Memoises pool headroom for one request or job.
+        $this->app->scoped(PoolHeadroom::class);
 
         // Holds the user who triggered the in-flight AI run; scoped so it
         // cannot leak into the next Octane request or queued job.

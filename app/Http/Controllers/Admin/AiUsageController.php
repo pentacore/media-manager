@@ -38,15 +38,21 @@ class AiUsageController extends Controller
         // Unknown kinds fall back to "all kinds" rather than erroring, like
         // an unknown window falls back to the default.
         $kind = AiUsageKind::tryFrom($request->string('kind')->value());
+        $fellThrough = $this->fellThrough($request);
 
         $page = [
             'window' => $timeWindow->value,
             'kind' => $kind?->value,
+            'tier' => match ($fellThrough) {
+                true => 'fell_through',
+                false => 'first',
+                null => null,
+            },
             'kinds' => AiUsageKind::mapForSelect(labelKey: 'label'),
             'totals' => $aiUsageReporting->totals($since, kind: $kind),
             'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind),
-            'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind),
+            'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind, fellThrough: $fellThrough),
             'tool_stats' => $aiUsageReporting->toolStats($since),
             'priced_models' => AiModelPrice::query()
                 ->orderBy('provider')
@@ -70,7 +76,7 @@ class AiUsageController extends Controller
             $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind);
             $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario, $kind);
             $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario, $kind);
-            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind);
+            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind, fellThrough: $fellThrough);
         }
 
         return Inertia::render('Admin/AiUsage/Index', $page);
@@ -138,6 +144,20 @@ class AiUsageController extends Controller
     }
 
     /**
+     * The Recent invocations tier filter: `first`, `fell_through`, or null
+     * for every row (unknown values too). Totals are never tier-filtered —
+     * the free-pool discount cannot be split by tier.
+     */
+    private function fellThrough(Request $request): ?bool
+    {
+        return match ($request->string('tier')->value()) {
+            'first' => false,
+            'fell_through' => true,
+            default => null,
+        };
+    }
+
+    /**
      * Stream the priced invocation rows for the active window as CSV.
      * Honours the same window, kind and optional scenario as index() so the
      * file mirrors the on-screen totals.
@@ -149,7 +169,7 @@ class AiUsageController extends Controller
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
         $kind = AiUsageKind::tryFrom($request->string('kind')->value());
 
-        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind);
+        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind, $this->fellThrough($request));
 
         $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
@@ -159,7 +179,7 @@ class AiUsageController extends Controller
             fputcsv($handle, [
                 'id', 'created_at', 'user', 'provider', 'model',
                 'prompt_tokens', 'completion_tokens', 'tool_calls',
-                'total_tokens', 'cost_usd', 'status',
+                'total_tokens', 'cost_usd', 'status', 'tier',
             ],
                 escape: '\\');
 
@@ -176,6 +196,7 @@ class AiUsageController extends Controller
                     $row->total_tokens,
                     number_format((float) $row->cost, 6, '.', ''),
                     $row->status,
+                    $row->tier_position ?? '',
                 ],
                     escape: '\\');
             }

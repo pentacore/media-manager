@@ -62,7 +62,7 @@ final readonly class ConversationModelOverride
     /**
      * The admin chat default, ignoring any conversation override.
      *
-     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string}
+     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string, tier: array{position: int, count: int, reason: string|null}|null}
      */
     public function chatDefaults(): array
     {
@@ -78,6 +78,7 @@ final readonly class ConversationModelOverride
             'model' => $resolvedSelection->model,
             'reasoning' => $resolvedSelection->reasoning->value,
             'reasoning_label' => $resolvedSelection->reasoning->label(),
+            'tier' => $resolvedSelection->tier?->toArray(),
         ];
     }
 }

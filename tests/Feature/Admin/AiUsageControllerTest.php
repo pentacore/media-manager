@@ -611,3 +611,37 @@ test('index reports no unpriced models when no hard cap is set', function (): vo
             ->component('Admin/AiUsage/Index')
             ->where('unpricedModels', []));
 });
+
+test('recent invocations carry their tier and can be filtered by it', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'fell_through']))
+        ->assertInertia(fn ($page) => $page
+            ->where('tier', 'fell_through')
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-tier-two')
+            ->where('recent.0.tier_position', 2));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'first']))
+        ->assertInertia(fn ($page) => $page->has('recent', 1)->where('recent.0.model', 'gpt-tier-one'));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'bogus']))
+        ->assertInertia(fn ($page) => $page->where('tier', null)->has('recent', 3));
+});
+
+test('the csv export has a tier column and honours the tier filter', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null]);
+
+    $csv = $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.export', ['tier' => 'fell_through']))
+        ->streamedContent();
+
+    expect($csv)->toContain(',tier')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
+});

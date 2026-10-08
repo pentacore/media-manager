@@ -95,6 +95,8 @@ class ChatController extends Controller
             dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
         }
 
+        $resolvedSelection = resolve(TaskModelResolver::class)->resolve(AiTask::Chat);
+
         return response()->json([
             'text' => $response->text,
             'conversation_id' => $newConversationId,
@@ -102,7 +104,8 @@ class ChatController extends Controller
             'answered_by' => [
                 'provider' => $response->meta->provider,
                 'model' => $response->meta->model,
-                'reasoning_label' => resolve(TaskModelResolver::class)->resolve(AiTask::Chat)->reasoning->label(),
+                'reasoning_label' => $resolvedSelection->reasoning->label(),
+                'tier' => $resolvedSelection->tier?->toArray(),
             ],
         ]);
     }

@@ -139,9 +139,10 @@ class AiUsageReporting
     }
 
     /**
+     * @param  bool|null  $fellThrough  null: every row; false: runs that used their task's first tier; true: runs that fell through to a lower tier
      * @return Collection<int, object>
      */
-    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null): Collection
+    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null, ?bool $fellThrough = null): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -159,10 +160,13 @@ class AiUsageReporting
                 ai_usage_records.status,
                 ai_usage_records.kind,
                 ai_usage_records.error_message,
+                ai_usage_records.tier_position,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
             ', $costBindings)
+            ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
+            ->when($fellThrough === false, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', 1))
             ->latest('ai_usage_records.created_at')
             ->limit($limit)
             ->get()
