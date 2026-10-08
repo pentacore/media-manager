@@ -109,6 +109,11 @@ function setPair(
     value: string,
 ): void {
     tier[field] = value === '' ? null : value;
+
+    if (!conditionsEnabled(tier)) {
+        tier.min_pool_percent = null;
+        tier.min_pool_tokens = null;
+    }
 }
 
 function setCondition(

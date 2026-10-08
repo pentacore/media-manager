@@ -37,6 +37,7 @@ type TaskRow = {
     has_reasoning: boolean;
     allow_auto: boolean;
     tiers: TierForm[];
+    inherited: ResolvedSummary;
     resolved: ResolvedSummary;
 };
 
@@ -44,6 +45,7 @@ type EventOverride = {
     event_key: string;
     enabled: boolean;
     tiers: TierForm[];
+    inherited: ResolvedSummary;
     resolved: ResolvedSummary;
 };
 
@@ -96,6 +98,12 @@ const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>
     ),
 );
 
+const inheritedByEvent = computed<Record<string, ResolvedSummary>>(() =>
+    Object.fromEntries(
+        props.eventOverrides.map((row) => [row.event_key, row.inherited]),
+    ),
+);
+
 const addableEvents = computed<string[]>(() =>
     props.allowlistedEvents.filter(
         (key) => !form.event_overrides.some((row) => row.event_key === key),
@@ -118,14 +126,14 @@ function modelSelectInheritLabel(row: TaskRow): string | undefined {
 }
 
 /**
- * A saved override's own resolved summary; a newly added one resolves like
- * the decision task until it is saved.
+ * What an override's inherit tier runs on: a saved override's own summary; a
+ * newly added one hands off to the Decision default list until it is saved.
  */
-function overrideResolved(
+function overrideInherited(
     eventKey: string,
     decisionRow: TaskRow,
 ): ResolvedSummary {
-    return resolvedByEvent.value[eventKey] ?? decisionRow.resolved;
+    return inheritedByEvent.value[eventKey] ?? decisionRow.resolved;
 }
 
 function addOverride(eventKey: string): void {
@@ -209,8 +217,8 @@ function submit(): void {
                             :model-capabilities="modelCapabilities"
                             :reasoning-providers="reasoningProviders"
                             :model-pools="modelPools"
-                            :inherited-provider="row.resolved.provider"
-                            :inherited-model="row.resolved.model"
+                            :inherited-provider="row.inherited.provider"
+                            :inherited-model="row.inherited.model"
                             :inherit-label="modelSelectInheritLabel(row)"
                             :has-reasoning="row.has_reasoning"
                             :allow-auto="row.allow_auto"
@@ -290,13 +298,13 @@ function submit(): void {
                                     :reasoning-providers="reasoningProviders"
                                     :model-pools="modelPools"
                                     :inherited-provider="
-                                        overrideResolved(
+                                        overrideInherited(
                                             override.event_key,
                                             row,
                                         ).provider
                                     "
                                     :inherited-model="
-                                        overrideResolved(
+                                        overrideInherited(
                                             override.event_key,
                                             row,
                                         ).model

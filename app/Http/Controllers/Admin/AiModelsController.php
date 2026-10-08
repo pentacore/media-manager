@@ -52,6 +52,7 @@ class AiModelsController extends Controller
                 'allow_auto' => $aiTask === AiTask::Title,
                 'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
                 'resolved' => $this->summary($taskModelResolver->resolve($aiTask)),
+                'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask)),
             ];
         }
 
@@ -65,6 +66,7 @@ class AiModelsController extends Controller
                 'enabled' => in_array($scope, $allowlist, true),
                 'tiers' => $this->tierRows($taskModelResolver->tiers(AiTask::Decision, $scope)),
                 'resolved' => $this->summary($taskModelResolver->resolve(AiTask::Decision, $scope)),
+                'inherited' => $this->summary($taskModelResolver->inheritedSelection(AiTask::Decision, $scope)),
             ])
             ->values()
             ->all();

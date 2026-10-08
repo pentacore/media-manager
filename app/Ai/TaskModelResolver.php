@@ -89,6 +89,25 @@ final class TaskModelResolver
     }
 
     /**
+     * What an inherit tier in this scope runs on, for the AI Models editor.
+     */
+    public function inheritedSelection(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ResolvedSelection
+    {
+        throw_if($aiTask === AiTask::Failover, InvalidArgumentException::class, 'Resolve the failover task with failover().');
+
+        $tierPick = $this->inherited($aiTask, $scope);
+
+        return new ResolvedSelection(
+            $tierPick->provider,
+            $tierPick->model,
+            $tierPick->reasoning
+                ?? $this->configLevel($aiTask)
+                ?? AiReasoningLevel::ProviderDefault,
+            $tierPick->tier,
+        );
+    }
+
+    /**
      * The failover provider and its optional model, or null when failover is off.
      *
      * @return array{provider: string, model: string|null}|null

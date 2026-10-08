@@ -133,3 +133,26 @@ test('an event override can hold tiers', function (): void {
             ['model' => null, 'min_pool_tokens' => null],
         ]);
 });
+
+test('switching to a model without a pool clears the conditions', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->click('[data-task="chat"] [data-tier-row="0"] [data-model-select] button')
+        ->click('[role="option"][aria-label="gpt-5.6-luna"]')
+        ->fill('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', '20')
+        ->click('[data-task="chat"] [data-tier-row="0"] [data-model-select] button')
+        ->click('[role="option"][aria-label="gpt-5-nano"]')
+        ->assertDisabled('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]')
+        ->assertValue('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', '')
+        ->click('Save models')
+        ->assertSee('AI models updated.');
+
+    expect(AiTaskModel::query()->forTask(AiTask::Chat)->orderBy('position')->get()->map->only(['model', 'min_pool_percent'])->all())
+        ->toBe([
+            ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
+            ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
+        ]);
+});

@@ -240,3 +240,40 @@ test('a tier whose pool link was removed stays eligible', function (): void {
 
     expect(tierResolver()->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
 });
+
+test('the inherited selection of the chat default scope is the config chat model', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierChatList(20);
+
+    $resolvedSelection = tierResolver()->inheritedSelection(AiTask::Chat);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model, $resolvedSelection->reasoning])
+        ->toBe(['openai', 'gpt-config-chat', AiReasoningLevel::ProviderDefault]);
+});
+
+test('the inherited selection of Decision follows the chat list pick with its own reasoning', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+    config()->set('mediamanager.decision_agent.reasoning_level', 'low');
+
+    $resolvedSelection = tierResolver()->inheritedSelection(AiTask::Decision);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model, $resolvedSelection->reasoning])
+        ->toBe(['openai', 'gpt-5-nano', AiReasoningLevel::Low]);
+});
+
+test('the inherited selection of an event scope is the Decision default list pick', function (): void {
+    tierPrice('gpt-5.6-luna');
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+
+    $resolvedSelection = tierResolver()->inheritedSelection(AiTask::Decision, 'sonarr:Download');
+
+    expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::High]);
+});
+
+test('the failover task has no inherited selection', function (): void {
+    tierResolver()->inheritedSelection(AiTask::Failover);
+})->throws(InvalidArgumentException::class);

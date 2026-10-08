@@ -93,6 +93,19 @@ test('the index shows each task with its resolved selection', function (): void 
             ->has('tasks', 6));
 });
 
+test('the index exposes what an inherit tier runs on beside the live resolution', function (): void {
+    config()->set('mediamanager.ai.model', 'gpt-config-chat');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.resolved.model', 'gpt-5.6-luna')
+            ->where('tasks.0.inherited.model', 'gpt-config-chat')
+            ->where('tasks.0.inherited.provider', 'openai'));
+});
+
 test('the index hints when the resolved model does not reason', function (): void {
     AiModelPrice::query()->where('model', 'gpt-5-nano')->update(['supports_reasoning' => false]);
     AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5-nano')->create();
