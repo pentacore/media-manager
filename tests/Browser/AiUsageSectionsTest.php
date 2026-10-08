@@ -175,3 +175,25 @@ test('with a scenario active the drill-down shows the scenario column', function
         ->click(sprintf('[data-usage-row="%d"]', $aiUsageRecord->id))
         ->assertSeeIn('[data-usage-breakdown]', 'Scenario');
 });
+
+test('a drill-down whose request never resolves shows the loading state', function (): void {
+    $aiUsageRecord = AiUsageRecord::factory()->create();
+
+    $webpage = visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent(sprintf('[data-usage-row="%d"]', $aiUsageRecord->id));
+
+    $webpage->script(<<<'JS'
+        const originalFetch = window.fetch;
+        window.fetch = (input, init) => {
+            const url = typeof input === 'string' ? input : input?.url;
+            if (typeof url === 'string' && /\/ai-usage\/\d+/.test(url)) {
+                return new Promise(() => {});
+            }
+            return originalFetch(input, init);
+        };
+        JS);
+
+    $webpage->click(sprintf('[data-usage-row="%d"]', $aiUsageRecord->id))
+        ->assertSeeIn('[data-usage-detail]', 'Loading…');
+});
