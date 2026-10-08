@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiReasoningLevel;
+use App\Http\Resources\ChatTemplateResource;
+use App\Models\AiModelPrice;
 use App\Models\ChatTemplate;
 use App\Models\User;
 
@@ -172,4 +175,41 @@ test('pinning toggles the flag both ways', function (): void {
     $this->actingAs($admin)->patch(route('ai.templates.pin', $chatTemplate))
         ->assertSessionHas('inertia.flash_data.toast.message', 'Template unpinned.');
     expect($chatTemplate->fresh()->pinned)->toBeFalse();
+});
+
+test('a template can carry a model and reasoning preset', function (): void {
+    config()->set('ai.providers.anthropic.key', 'sk-ant-test');
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-opus-5-5']);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'preset' => ['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'reasoning' => 'high'],
+    ]))->assertSessionHasNoErrors();
+
+    $template = ChatTemplate::query()->latest('id')->firstOrFail();
+
+    expect([$template->model_provider, $template->model, $template->reasoning])
+        ->toBe(['anthropic', 'claude-opus-5-5', AiReasoningLevel::High])
+        ->and(new ChatTemplateResource($template)->resolve()['preset'])
+        ->toBe(['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'reasoning' => 'high']);
+});
+
+test('a reasoning-only preset is allowed and an unpriced preset model is rejected', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'name' => 'Reasoning only',
+        'preset' => ['provider' => null, 'model' => null, 'reasoning' => 'low'],
+    ]))->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'name' => 'Bad model',
+        'preset' => ['provider' => 'openai', 'model' => 'not-a-priced-model', 'reasoning' => null],
+    ]))->assertSessionHasErrors('preset.model');
+});
+
+test('a template without a preset exposes null', function (): void {
+    $template = ChatTemplate::factory()->create();
+
+    expect(new ChatTemplateResource($template)->resolve()['preset'])->toBeNull();
 });

@@ -421,3 +421,20 @@ function chatTemplatesCaretScript(): string
 {
     return "(() => { const el = document.querySelector('[data-template-body]'); return { focused: document.activeElement === el, caret: el.selectionStart }; })()";
 }
+
+test('the editor offers a model preset and saves the chosen reasoning level', function (): void {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-template-preset]')
+        ->fill('[data-template-name]', 'Deep thinker')
+        ->fill('[data-template-body]', 'Think hard about this')
+        ->click('[data-template-preset] [data-reasoning-select] button')
+        ->click('[data-reasoning-option="high"]')
+        ->click('[data-template-save]')
+        ->assertSee('Template saved.');
+
+    expect($admin->chatTemplates()->sole()->reasoning?->value)->toBe('high');
+});
