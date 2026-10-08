@@ -82,3 +82,14 @@ test('the requests console loads its summary beside the request list', function 
         'summary' => ['summary'],
     ]);
 });
+
+test('the connection edit page gives each upstream read its own deferred group', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    expect(deferredPropGroups($this->get(route('admin.connections.edit', $connection))))->toBe([
+        'availableDiskPaths' => ['availableDiskPaths'],
+        'sonarrRootFolders' => ['sonarrRootFolders'],
+        'arrTags' => ['arrTags'],
+    ]);
+});

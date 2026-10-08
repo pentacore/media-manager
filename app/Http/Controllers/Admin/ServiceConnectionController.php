@@ -150,13 +150,13 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
                 : [],
             'availableDiskPaths' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
-                ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
+                ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection), 'availableDiskPaths')
                 : [],
             'sonarrRootFolders' => $serviceConnection->type === ServiceType::Sonarr
-                ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
+                ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection), 'sonarrRootFolders')
                 : [],
             'arrTags' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
-                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection, $arrConnections))
+                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection, $arrConnections), 'arrTags')
                 : null,
             'subtitleCheckTags' => $subtitleCheckTagSettings->forConnection($serviceConnection),
         ]);
