@@ -353,7 +353,10 @@ function confirmDelete() {
                             >
                                 Size on disk
                             </div>
-                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                            <div
+                                class="font-mono-tabular mt-0.5 text-[13px]"
+                                data-movie-size-on-disk
+                            >
                                 {{ formatBytes(movie.size_on_disk) }}
                             </div>
                         </div>
