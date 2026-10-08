@@ -91,13 +91,13 @@ trait RunsAsAiTask
             $options['output_config']['format'] = [
                 'type' => 'json_schema',
                 'schema' => AnthropicSchemaSanitizer::sanitize(
-                    (new ObjectSchema($this->schema(new JsonSchemaTypeFactory)))->toSchema()
+                    new ObjectSchema($this->schema(new JsonSchemaTypeFactory))->toSchema()
                 ),
             ];
         }
 
         if ($providerName === Lab::OpenRouter->value) {
-            $options = [...$options, ...resolve(OpenRouterRequestOptions::class)->routing()];
+            return [...$options, ...resolve(OpenRouterRequestOptions::class)->routing()];
         }
 
         return $options;
@@ -119,7 +119,7 @@ trait RunsAsAiTask
 
     private function declaredMaxTokens(): ?int
     {
-        $attribute = (new ReflectionClass($this))->getAttributes(MaxTokens::class)[0] ?? null;
+        $attribute = new ReflectionClass($this)->getAttributes(MaxTokens::class)[0] ?? null;
 
         return $attribute?->newInstance()->value;
     }

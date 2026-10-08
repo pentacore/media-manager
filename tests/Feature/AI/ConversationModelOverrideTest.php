@@ -56,8 +56,8 @@ function exhaustOverrideRateLimit(string $provider, string $model): void
 {
     resolve(AiSettings::class)->setRateLimitsEnforced(true);
 
-    $price = AiModelPrice::query()->where('provider', $provider)->where('model', $model)->firstOrFail();
-    $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
+    $aiModelPrice = AiModelPrice::query()->where('provider', $provider)->where('model', $model)->firstOrFail();
+    $aiModelPrice->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
 
     DB::table('ai_usage_records')->insert([
         'invocation_id' => 'inv-'.uniqid(),
@@ -245,10 +245,10 @@ test('the override is locked while tool approvals are pending', function (): voi
     $admin = User::factory()->admin()->create();
     $id = overrideConversation($admin);
 
-    $store = Mockery::mock(DatabaseConversationStore::class)->makePartial();
-    $store->shouldReceive('pendingApprovalsFor')->with($id)->andReturn([['id' => 'call_1']]);
-    $store->shouldReceive('conversationBelongsTo')->andReturnTrue();
-    app()->instance(ConversationStore::class, $store);
+    $mock = Mockery::mock(DatabaseConversationStore::class)->makePartial();
+    $mock->shouldReceive('pendingApprovalsFor')->with($id)->andReturn([['id' => 'call_1']]);
+    $mock->shouldReceive('conversationBelongsTo')->andReturnTrue();
+    app()->instance(ConversationStore::class, $mock);
 
     $this->actingAs($admin)
         ->patchJson(route('ai.conversations.model', $id), ['provider' => null, 'model' => null, 'reasoning' => 'low'])

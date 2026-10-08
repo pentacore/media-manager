@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -41,7 +42,7 @@ return new class extends Migration
     public function up(): void
     {
         $existingInstall = DB::table('app_settings')
-            ->where(fn ($query) => $query->where('key', 'like', 'ai.%')->orWhere('key', 'like', 'decision_agent.%'))
+            ->where(fn (Builder $query) => $query->where('key', 'like', 'ai.%')->orWhere('key', 'like', 'decision_agent.%'))
             ->exists();
 
         DB::transaction(function () use ($existingInstall): void {

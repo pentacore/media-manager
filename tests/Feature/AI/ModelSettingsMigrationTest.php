@@ -52,7 +52,7 @@ test('saved selections become task rows and the old keys are removed', function 
 });
 
 test('an existing install without saved reasoning keeps its old effective level', function (): void {
-    config()->set('mediamanager.ai.advisor_reasoning_level', null);
+    config()->set('mediamanager.ai.advisor_reasoning_level');
     config()->set('mediamanager.decision_agent.reasoning_level', '');
     modelMigrationSeedSetting('ai.mode', 'executive');
 

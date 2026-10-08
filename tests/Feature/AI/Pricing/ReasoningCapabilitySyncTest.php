@@ -92,11 +92,11 @@ test('the writer stores capabilities on create', function (): void {
         PricingSource::ModelsDev,
     );
 
-    $row = AiModelPrice::query()->where('model', 'gpt-cap-create')->firstOrFail();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-cap-create')->firstOrFail();
 
-    expect($row->supports_reasoning)->toBeTrue()
-        ->and($row->reasoning_levels)->toBe(['low', 'high'])
-        ->and($row->acceptedReasoningLevels())->toBe([AiReasoningLevel::Low, AiReasoningLevel::High]);
+    expect($aiModelPrice->supports_reasoning)->toBeTrue()
+        ->and($aiModelPrice->reasoning_levels)->toBe(['low', 'high'])
+        ->and($aiModelPrice->acceptedReasoningLevels())->toBe([AiReasoningLevel::Low, AiReasoningLevel::High]);
 });
 
 test('the writer refreshes capabilities on an unlocked row even when prices are unchanged', function (): void {
@@ -106,13 +106,13 @@ test('the writer refreshes capabilities on an unlocked row even when prices are 
         'supports_reasoning' => null,
     ]);
 
-    $outcome = resolve(AiModelPriceWriter::class)->write(
+    $writeOutcome = resolve(AiModelPriceWriter::class)->write(
         capabilityCandidate('gpt-cap-update', new ReasoningCapability(true, ['medium'], null)),
         RefreshScope::all(),
         PricingSource::ModelsDev,
     );
 
-    expect($outcome)->toBe(WriteOutcome::Unchanged)
+    expect($writeOutcome)->toBe(WriteOutcome::Unchanged)
         ->and(AiModelPrice::query()->where('model', 'gpt-cap-update')->value('supports_reasoning'))->toBeTrue();
 });
 
@@ -187,18 +187,18 @@ test('a price change and a capability change land together', function (): void {
         'supports_reasoning' => null,
     ]);
 
-    $outcome = resolve(AiModelPriceWriter::class)->write(
+    $writeOutcome = resolve(AiModelPriceWriter::class)->write(
         capabilityCandidate('gpt-cap-both', new ReasoningCapability(true, ['low'], null)),
         RefreshScope::all(),
         PricingSource::ModelsDev,
     );
 
-    $row = AiModelPrice::query()->where('model', 'gpt-cap-both')->firstOrFail();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-cap-both')->firstOrFail();
 
-    expect($outcome)->toBe(WriteOutcome::Updated)
-        ->and($row->input_per_mtok)->toBe('1.2500')
-        ->and($row->supports_reasoning)->toBeTrue()
-        ->and($row->reasoning_levels)->toBe(['low']);
+    expect($writeOutcome)->toBe(WriteOutcome::Updated)
+        ->and($aiModelPrice->input_per_mtok)->toBe('1.2500')
+        ->and($aiModelPrice->supports_reasoning)->toBeTrue()
+        ->and($aiModelPrice->reasoning_levels)->toBe(['low']);
 });
 
 test('a feed flipping a model to unsupported clears stale levels and style', function (): void {
@@ -214,9 +214,9 @@ test('a feed flipping a model to unsupported clears stale levels and style', fun
         PricingSource::ModelsDev,
     );
 
-    $row = AiModelPrice::query()->where('model', 'gpt-cap-flip')->firstOrFail();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-cap-flip')->firstOrFail();
 
-    expect($row->supports_reasoning)->toBeFalse()
-        ->and($row->reasoning_levels)->toBeNull()
-        ->and($row->reasoning_style)->toBeNull();
+    expect($aiModelPrice->supports_reasoning)->toBeFalse()
+        ->and($aiModelPrice->reasoning_levels)->toBeNull()
+        ->and($aiModelPrice->reasoning_style)->toBeNull();
 });

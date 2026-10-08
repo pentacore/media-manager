@@ -109,9 +109,9 @@ final class ReasoningOptions
 
         $best = $levels[0];
 
-        foreach ($levels as $candidate) {
-            if (abs($candidate->rank() - $aiReasoningLevel->rank()) < abs($best->rank() - $aiReasoningLevel->rank())) {
-                $best = $candidate;
+        foreach ($levels as $level) {
+            if (abs($level->rank() - $aiReasoningLevel->rank()) < abs($best->rank() - $aiReasoningLevel->rank())) {
+                $best = $level;
             }
         }
 

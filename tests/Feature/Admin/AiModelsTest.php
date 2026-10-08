@@ -312,9 +312,9 @@ test('the decision task saves a provider with its model and reasoning', function
         ]))
         ->assertSessionHasNoErrors();
 
-    $resolved = resolve(TaskModelResolver::class)->resolve(AiTask::Decision);
+    $resolvedSelection = resolve(TaskModelResolver::class)->resolve(AiTask::Decision);
 
-    expect([$resolved->provider, $resolved->model, $resolved->reasoning])
+    expect([$resolvedSelection->provider, $resolvedSelection->model, $resolvedSelection->reasoning])
         ->toBe(['openrouter', 'openai/gpt-5-mini', AiReasoningLevel::High]);
 });
 

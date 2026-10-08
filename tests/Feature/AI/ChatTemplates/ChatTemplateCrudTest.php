@@ -186,11 +186,11 @@ test('a template can carry a model and reasoning preset', function (): void {
         'preset' => ['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'reasoning' => 'high'],
     ]))->assertSessionHasNoErrors();
 
-    $template = ChatTemplate::query()->latest('id')->firstOrFail();
+    $chatTemplate = ChatTemplate::query()->latest('id')->firstOrFail();
 
-    expect([$template->model_provider, $template->model, $template->reasoning])
+    expect([$chatTemplate->model_provider, $chatTemplate->model, $chatTemplate->reasoning])
         ->toBe(['anthropic', 'claude-opus-5-5', AiReasoningLevel::High])
-        ->and(new ChatTemplateResource($template)->resolve()['preset'])
+        ->and(new ChatTemplateResource($chatTemplate)->resolve()['preset'])
         ->toBe(['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'reasoning' => 'high']);
 });
 

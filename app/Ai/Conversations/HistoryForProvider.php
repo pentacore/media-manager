@@ -24,7 +24,7 @@ final class HistoryForProvider
      */
     public static function adapt(iterable $messages, string $provider): array
     {
-        $messages = array_values([...$messages]);
+        $messages = [...$messages];
 
         return match ($provider) {
             'gemini' => array_map(self::withoutSignatures(...), $messages),

@@ -49,9 +49,7 @@ final class TaskModelResolver
 
     public function resolve(AiTask $aiTask, ?string $eventKey = null): ResolvedSelection
     {
-        if ($aiTask === AiTask::Failover) {
-            throw new InvalidArgumentException('Resolve the failover task with failover().');
-        }
+        throw_if($aiTask === AiTask::Failover, InvalidArgumentException::class, 'Resolve the failover task with failover().');
 
         [$provider, $model] = $this->pairFor($aiTask, $eventKey);
 
@@ -67,7 +65,7 @@ final class TaskModelResolver
     {
         $row = $this->row(AiTask::Failover);
 
-        if (! filled($row?->provider)) {
+        if (blank($row?->provider)) {
             return null;
         }
 
@@ -126,7 +124,7 @@ final class TaskModelResolver
 
         return $conversation
             ?? ($eventKey !== null ? $this->row($aiTask, $eventKey)?->reasoning : null)
-            ?? $this->row($aiTask)?->reasoning
+            ?? $this->row($aiTask)->reasoning
             ?? $this->configLevel($aiTask)
             ?? AiReasoningLevel::ProviderDefault;
     }
@@ -167,7 +165,7 @@ final class TaskModelResolver
     {
         $row = $this->row($aiTask, $scope);
 
-        if (! filled($row?->model)) {
+        if (blank($row?->model)) {
             return null;
         }
 

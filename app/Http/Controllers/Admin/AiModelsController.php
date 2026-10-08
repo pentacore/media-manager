@@ -161,7 +161,7 @@ class AiModelsController extends Controller
                     '%s/%s · %s',
                     $aiTaskModel->provider ?? 'inherit',
                     $aiTaskModel->model ?? 'inherit',
-                    $aiTaskModel->reasoning?->value ?? 'inherit',
+                    $aiTaskModel->reasoning->value ?? 'inherit',
                 ),
             ])
             ->all();

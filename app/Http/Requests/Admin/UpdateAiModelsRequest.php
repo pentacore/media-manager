@@ -84,9 +84,14 @@ class UpdateAiModelsRequest extends FormRequest
      */
     public static function defaultTasks(): array
     {
-        return array_values(array_map(
-            static fn (AiTask $aiTask): string => $aiTask->value,
-            array_filter(AiTask::cases(), static fn (AiTask $aiTask): bool => $aiTask !== AiTask::Failover),
-        ));
+        $tasks = [];
+
+        foreach (AiTask::cases() as $aiTask) {
+            if ($aiTask !== AiTask::Failover) {
+                $tasks[] = $aiTask->value;
+            }
+        }
+
+        return $tasks;
     }
 }

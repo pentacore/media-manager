@@ -18,7 +18,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\PaginatesConversations;
-use Laravel\Ai\Contracts\ResolvesPendingApprovals;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 use Laravel\Ai\Enums\MessageStatus;
 use Laravel\Ai\Storage\StoredMessage;
@@ -154,7 +153,7 @@ class ConversationController extends Controller
 
         $conversationStore = resolve(ConversationStore::class);
 
-        if ($conversationStore instanceof ResolvesPendingApprovals && $conversationStore->pendingApprovalsFor($conversation) !== []) {
+        if ($conversationStore->pendingApprovalsFor($conversation) !== []) {
             return response()->json([
                 'error' => 'pending_approval',
                 'message' => __('Answer the pending tool approval before changing the model.'),
