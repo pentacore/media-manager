@@ -61,6 +61,19 @@ function prefetchWaitForPathScript(string $path): string
     return confirmDialogWaitUntilScript(sprintf("window.location.pathname === '%s'", $path));
 }
 
+/**
+ * Rests inside the page for well over Inertia's 75 ms hover delay without
+ * any further Playwright pointer action, so a test can hover a link once and
+ * then prove its prefetch never started — rather than moving the pointer to
+ * a second, control link, which fires that element's native `mouseleave` and
+ * cancels the first link's pending hover timer before it ever reaches
+ * `router.prefetch()`.
+ */
+function prefetchRestPastHoverDelayScript(): string
+{
+    return '(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); })()';
+}
+
 test('hovering a sidebar link prefetches its page and the click reuses the prefetch', function (): void {
     $this->actingAs(User::factory()->member()->create());
     $actionQueuePath = route('actions.requests.index', absolute: false);
@@ -83,20 +96,20 @@ test('hovering a sidebar link prefetches its page and the click reuses the prefe
 test('hovering the link of the page already open prefetches nothing', function (): void {
     $this->actingAs(User::factory()->member()->create());
     $dashboardPath = route('dashboard', absolute: false);
-    $actionQueuePath = route('actions.requests.index', absolute: false);
 
     $webpage = visit($dashboardPath)->assertNoSmoke();
     $webpage->script(prefetchRecorderScript());
 
-    // The second hover is the control: once its prefetch has started, the
-    // first hover's 75 ms delay has long passed, so a missing dashboard
-    // prefetch is a real absence, not an early read.
+    // Rest on the open page's own link, past the 75 ms hover delay, without
+    // moving the pointer anywhere else. router.prefetch() in @inertiajs/core
+    // refuses a target equal to the current URL (node_modules/@inertiajs/core/
+    // dist/index.js:3412-3414), so this exercises that guard directly: a
+    // regression that dropped it would show up as a prefetch for this exact
+    // path, not as an early read before the timer fired.
     $webpage->hover('[data-nav-item="Dashboard"]');
-    $webpage->hover('[data-nav-item="Action Queue"]');
-    $webpage->script(prefetchWaitForScript($actionQueuePath));
+    $webpage->script(prefetchRestPastHoverDelayScript());
 
-    expect($webpage->script(prefetchCountScript($actionQueuePath, true)))->toBe(1)
-        ->and($webpage->script(prefetchCountScript($dashboardPath, true)))->toBe(0);
+    expect($webpage->script(prefetchCountScript($dashboardPath, true)))->toBe(0);
 });
 
 test('the Downloads link never prefetches because its page reads SABnzbd live', function (): void {

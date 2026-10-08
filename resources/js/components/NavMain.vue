@@ -87,10 +87,12 @@ function isActiveItem(item: NavItem): boolean {
 }
 
 /**
- * Hover prefetch for every leaf except items that opt out because their page
- * reads an uncached upstream before rendering. The open page's own link needs
- * no check here: Inertia's router never prefetches the current URL (a
- * prefetch landing on it would remount the page), and PrefetchTest pins that.
+ * Hover prefetch for every leaf except items that opt out (see `NavItem.prefetch`'s
+ * doc comment for why). The open page's own link needs no check here:
+ * `router.prefetch()` refuses a target equal to the current URL
+ * (`@inertiajs/core` `dist/index.js:3412-3414`), so a prefetch landing on it
+ * (which would remount the page) never happens; `PrefetchTest`'s "hovering
+ * the link of the page already open" case pins that guard directly.
  */
 function shouldPrefetch(item: NavItem): boolean {
     return item.prefetch !== false;
