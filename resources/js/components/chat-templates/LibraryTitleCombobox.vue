@@ -4,7 +4,7 @@ import { ref, watch } from 'vue';
 import ChatTemplateLibraryController from '@/actions/App/Http/Controllers/AI/ChatTemplateLibraryController';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 import type { LibraryHit } from './types';
 
 const props = defineProps<{

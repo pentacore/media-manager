@@ -13,12 +13,10 @@ beforeEach(function (): void {
 
 test('defaults come from config when nothing is persisted', function (): void {
     config()->set('mediamanager.ai.mode', 'executive');
-    config()->set('mediamanager.ai.model', 'gpt-5-mini');
 
     $aiSettings = resolve(AiSettings::class);
 
     expect($aiSettings->mode())->toBe(AiMode::Executive);
-    expect($aiSettings->model())->toBe('gpt-5-mini');
 });
 
 test('setMode persists and is read back', function (): void {
@@ -54,15 +52,6 @@ test('setChatTimeout with null clears the override back to the config default', 
     $aiSettings->setChatTimeout(null);
 
     expect($aiSettings->chatTimeout())->toBe(120);
-});
-
-test('setModel persists and is read back', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-
-    $aiSettings->setModel('claude-haiku-4-5');
-
-    expect($aiSettings->model())->toBe('claude-haiku-4-5');
-    $this->assertDatabaseHas('app_settings', ['key' => 'ai.model']);
 });
 
 test('invalid stored mode falls back to Executive', function (): void {

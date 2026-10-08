@@ -3,11 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\AiMode;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
-use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -22,9 +23,6 @@ function baseAiSettingsPayload(): array
 {
     return [
         'mode' => 'executive',
-        'model' => 'gpt-5-mini',
-        'title_model' => 'gpt-5.4-nano',
-        'advisor_reasoning_level' => 'none',
     ];
 }
 
@@ -43,33 +41,22 @@ test('non-admin cannot access AI settings', function (): void {
 
 test('admin sees current settings on index', function (): void {
     $admin = User::factory()->admin()->create();
-    resolve(AiSettings::class)->setModel('claude-haiku-4-5');
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
 
     $this->actingAs($admin)
         ->get(route('admin.ai-settings.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Admin/AiSettings/Index')
-            ->where('settings.model', 'claude-haiku-4-5')
+            ->where('settings.mode', 'advisory')
             ->has('modes')
+            ->missing('settings.model')
+            ->missing('settings.title_model')
+            ->missing('settings.advisor_reasoning_level')
+            ->missing('settings.failover_provider')
+            ->missing('unpricedModels')
+            ->missing('reasoningLevels')
         );
-});
-
-test('index shows the raw auto sentinel while the accessor resolves a concrete model', function (): void {
-    $admin = User::factory()->admin()->create();
-    resolve(AiSettings::class)->setTitleModel(AiSettings::AUTO_MODEL);
-
-    $this->actingAs($admin)
-        ->get(route('admin.ai-settings.index'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('Admin/AiSettings/Index')
-            ->where('settings.title_model', AiSettings::AUTO_MODEL)
-        );
-
-    $aiSettings = resolve(AiSettings::class);
-    expect($aiSettings->rawTitleModel())->toBe(AiSettings::AUTO_MODEL);
-    expect($aiSettings->titleModel())->not->toBe(AiSettings::AUTO_MODEL);
 });
 
 test('admin can update settings', function (): void {
@@ -78,17 +65,31 @@ test('admin can update settings', function (): void {
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [
             'mode' => 'advisory',
-            'model' => 'gemini-3-flash-preview',
-            'title_model' => 'gpt-5.4-nano',
-            'advisor_reasoning_level' => 'medium',
         ])
-        ->assertRedirect(route('admin.ai-settings.index'));
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
 
-    $aiSettings = resolve(AiSettings::class);
-    expect($aiSettings->mode())->toBe(AiMode::Advisory);
-    expect($aiSettings->model())->toBe('gemini-3-flash-preview');
-    expect($aiSettings->titleModel())->toBe('gpt-5.4-nano');
-    expect($aiSettings->advisorReasoningLevel())->toBe('medium');
+    expect(resolve(AiSettings::class)->mode())->toBe(AiMode::Advisory);
+});
+
+test('saving AI settings leaves the AI Models selections untouched', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'anthropic'])->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'model' => 'gpt-5-mini',
+            'model_provider' => 'openai',
+            'failover_provider' => 'none',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(AiTaskModel::query()->forTask(AiTask::Chat)->first()?->only(['provider', 'model']))
+        ->toBe(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5'])
+        ->and(AiTaskModel::query()->forTask(AiTask::Failover)->first()?->provider)->toBe('anthropic');
+    $this->assertDatabaseMissing('app_settings', ['key' => 'ai.model']);
 });
 
 test('admin can update the chat timeout', function (): void {
@@ -147,48 +148,6 @@ test('index exposes the chat timeout', function (): void {
             ->component('Admin/AiSettings/Index')
             ->where('settings.chat_timeout', 300)
         );
-});
-
-test('admin can set and clear the failover provider', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            'mode' => 'executive',
-            'model' => 'gpt-5-mini',
-            'title_model' => 'gpt-5.4-nano',
-            'advisor_reasoning_level' => 'none',
-            'failover_provider' => 'anthropic',
-        ])
-        ->assertRedirect(route('admin.ai-settings.index'));
-
-    expect(resolve(AiSettings::class)->failoverProvider())->toBe(Lab::Anthropic);
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            'mode' => 'executive',
-            'model' => 'gpt-5-mini',
-            'title_model' => 'gpt-5.4-nano',
-            'advisor_reasoning_level' => 'none',
-            'failover_provider' => 'none',
-        ])
-        ->assertRedirect(route('admin.ai-settings.index'));
-
-    expect(resolve(AiSettings::class)->failoverProvider())->toBeNull();
-});
-
-test('update rejects an unknown failover provider', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            'mode' => 'executive',
-            'model' => 'gpt-5-mini',
-            'title_model' => 'gpt-5.4-nano',
-            'advisor_reasoning_level' => 'none',
-            'failover_provider' => 'cohere',
-        ])
-        ->assertSessionHasErrors('failover_provider');
 });
 
 test('index exposes pricing sync settings and ignorable providers', function (): void {
@@ -255,18 +214,17 @@ test('update validates mode is a known value', function (): void {
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [
             'mode' => 'enthusiastic',
-            'model' => 'gpt-5-mini',
-            'title_model' => 'gpt-5.4-nano',
         ])
         ->assertSessionHasErrors('mode');
 });
 
-test('update requires mode, model, and title_model', function (): void {
+test('update requires mode', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [])
-        ->assertSessionHasErrors(['mode', 'model', 'title_model', 'advisor_reasoning_level']);
+        ->assertSessionHasErrors(['mode'])
+        ->assertSessionDoesntHaveErrors(['model', 'title_model', 'advisor_reasoning_level']);
 });
 
 test('ai settings update no longer accepts media_replacement fields', function (): void {
@@ -447,25 +405,4 @@ test('structured pricing source switches must be booleans', function (): void {
             'openrouter_pricing_enabled' => 'sometimes',
         ])
         ->assertSessionHasErrors('openrouter_pricing_enabled');
-});
-
-test('index lists selected models the hard cap cannot price', function (): void {
-    config()->set('ai.default', 'openai');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setHardBudgetUsd(10.0);
-    $aiSettings->setSubAgentModel('mystery-model');
-
-    $this->actingAs(User::factory()->admin()->create())
-        ->get(route('admin.ai-settings.index'))
-        ->assertInertia(fn ($page) => $page
-            ->component('Admin/AiSettings/Index')
-            ->where('unpricedModels', fn ($models): bool => collect($models)->contains(fn (array $model): bool => $model['role'] === 'Sub-agents' && $model['model'] === 'mystery-model')));
-});
-
-test('index reports no unpriced models when no hard cap is set', function (): void {
-    $this->actingAs(User::factory()->admin()->create())
-        ->get(route('admin.ai-settings.index'))
-        ->assertInertia(fn ($page) => $page
-            ->component('Admin/AiSettings/Index')
-            ->where('unpricedModels', []));
 });

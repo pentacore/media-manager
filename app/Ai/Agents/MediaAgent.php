@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\Conversations\HistoryForProvider;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenClientDisconnected;
-use App\Ai\ModelSelection;
-use App\Ai\OpenRouterRequestOptions;
+use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
@@ -49,10 +50,10 @@ use App\Ai\Tools\Trakt\TraktGetListTool;
 use App\Ai\Tools\Trakt\TraktGetPopularTool;
 use App\Ai\Tools\Trakt\TraktGetTrendingTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
+use App\Enums\AiTask;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
-use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Attributes\CacheInstructions;
 use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -64,7 +65,6 @@ use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -75,17 +75,30 @@ use Stringable;
 class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
-    use RemembersConversations;
+    use RemembersConversations {
+        messages as rememberedMessages;
+    }
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
-    public function model(): string
+    public function aiTask(): AiTask
     {
-        return resolve(AiSettings::class)->model();
+        return AiTask::Chat;
     }
 
-    public function modelSelection(): ModelSelection
+    /**
+     * Stored history adapted for the provider this turn runs on (see
+     * HistoryForProvider). Uses the turn's primary provider; a mid-turn
+     * failover replays the primary's adaptation.
+     *
+     * @return iterable<int, mixed>
+     */
+    public function messages(): iterable
     {
-        return resolve(AiSettings::class)->chatSelection();
+        return HistoryForProvider::adapt(
+            $this->rememberedMessages(),
+            resolve(TaskModelResolver::class)->resolve($this->aiTask())->provider,
+        );
     }
 
     /**
@@ -100,19 +113,12 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
         return resolve(AiSettings::class)->chatTimeout();
     }
 
-    public function providerOptions(Lab|string $provider): array
+    /**
+     * The chat streams OpenAI's reasoning summary to the user.
+     */
+    protected function summarizesReasoning(): bool
     {
-        $reasoningLevel = resolve(AiSettings::class)->advisorReasoningLevel();
-
-        $options = match ($provider) {
-            Lab::OpenAI => [
-                'reasoning' => ['effort' => $reasoningLevel, 'summary' => 'auto'],
-            ],
-            default => resolve(OpenRouterRequestOptions::class)->for($provider, $reasoningLevel),
-        };
-        Log::debug('MediaAgent provider options', ['provider' => $provider, 'options' => $options]);
-
-        return $options;
+        return true;
     }
 
     public function instructions(): Stringable|string

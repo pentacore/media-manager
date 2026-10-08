@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Concerns\SendsOpenRouterOptions;
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
-use App\Ai\ModelSelection;
-use App\Settings\AiSettings;
+use App\Enums\AiTask;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Attributes\MaxTokens;
@@ -20,17 +19,12 @@ use Laravel\Ai\Promptable;
 class TitleAgent implements Agent, HasProviderOptions, HasStructuredOutput
 {
     use Promptable;
-    use SendsOpenRouterOptions;
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
-    public function model(): string
+    public function aiTask(): AiTask
     {
-        return resolve(AiSettings::class)->titleModel();
-    }
-
-    public function modelSelection(): ModelSelection
-    {
-        return resolve(AiSettings::class)->titleSelection();
+        return AiTask::Title;
     }
 
     public function instructions(): string

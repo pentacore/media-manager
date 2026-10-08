@@ -7,6 +7,8 @@ use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Tools\BaseTool;
 use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
@@ -182,8 +184,8 @@ test('Trakt tools appear only when a client id is configured', function (): void
         ->toContain('TraktGetListTool');
 });
 
-test('model() reads from AiSettings', function (): void {
-    resolve(AiSettings::class)->setModel('gpt-4o-mini');
+test('model() reads the chat task selection', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-4o-mini')->create();
 
     expect((new MediaAgent)->model())->toBe('gpt-4o-mini');
 });
@@ -220,9 +222,8 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
 });
 
 test('MediaAgent asks OpenAI for a reasoning summary at the configured effort', function (): void {
-    resolve(AiSettings::class)->setAdvisorReasoningLevel(AiReasoningLevel::Medium);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5')->reasoning(AiReasoningLevel::Medium)->create();
 
     expect((new MediaAgent)->providerOptions(Lab::OpenAI))
-        ->toBe(['reasoning' => ['effort' => 'medium', 'summary' => 'auto']])
-        ->and((new MediaAgent)->providerOptions(Lab::Anthropic))->toBe([]);
+        ->toBe(['reasoning' => ['effort' => 'medium', 'summary' => 'auto']]);
 });

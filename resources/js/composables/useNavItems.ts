@@ -11,6 +11,7 @@ import {
     Clapperboard,
     Clock,
     Compass,
+    Cpu,
     DollarSign,
     Download,
     Film,
@@ -42,6 +43,7 @@ import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/A
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
@@ -84,12 +86,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
     const page = usePage();
     const { can } = useCan();
 
-    const aiEnabled = computed(() =>
-        Boolean(
-            (page.props as unknown as { ai?: { enabled?: boolean } }).ai
-                ?.enabled,
-        ),
-    );
+    const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 
     function visible(item: NavItem): boolean {
         if (item.requiresSeerr === true && !page.props.integrations?.seerr) {
@@ -348,6 +345,11 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'AI Settings',
                         href: AiSettingsController.index.url(),
                         icon: Brain,
+                    },
+                    {
+                        title: 'AI Models',
+                        href: AiModelsController.index.url(),
+                        icon: Cpu,
                     },
                     {
                         title: 'Decision Agent',

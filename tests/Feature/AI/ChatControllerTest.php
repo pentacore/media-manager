@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiTask;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -197,7 +199,7 @@ function exhaustChatModelRateLimit(?string $provider = null, ?string $model = nu
     resolve(AiSettings::class)->setRateLimitsEnforced(true);
 
     $provider ??= 'openai';
-    $model ??= resolve(AiSettings::class)->model();
+    $model ??= resolve(AiSettings::class)->chatSelection()->model;
 
     $price = AiModelPrice::factory()->create(['provider' => $provider, 'model' => $model]);
     $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
@@ -236,9 +238,7 @@ test('send refuses with 429 when the chat model has exhausted its rate limit and
 
 test('send refuses with 429 when the chat model is on OpenRouter and has exhausted its rate limit', function (): void {
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModelProvider('openrouter');
-    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
     exhaustChatModelRateLimit('openrouter', 'anthropic/claude-sonnet-5');
     MediaAgent::fake(['Should never run.']);
     $admin = User::factory()->admin()->create();
@@ -255,7 +255,7 @@ test('send refuses with 429 when the chat model is on OpenRouter and has exhaust
 
 test('send lets an exhausted primary through when a failover provider can take the turn', function (): void {
     exhaustChatModelRateLimit();
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     MediaAgent::fake(['Served by the failover.']);
     $admin = User::factory()->admin()->create();
 

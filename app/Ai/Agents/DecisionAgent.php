@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
-use App\Ai\ModelSelection;
-use App\Ai\OpenRouterRequestOptions;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -20,7 +20,9 @@ use App\Ai\Tools\Emby\WatchHistoryTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Enums\AiTask;
 use App\Settings\DecisionAgentSettings;
+use Illuminate\Support\Facades\App;
 use Laravel\Ai\Attributes\CacheInstructions;
 use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -30,7 +32,6 @@ use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -47,28 +48,29 @@ use Stringable;
 class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
-    public function model(): string
+    public function aiTask(): AiTask
     {
-        return resolve(DecisionAgentSettings::class)->model();
+        return AiTask::Decision;
     }
 
-    public function modelSelection(): ModelSelection
+    /**
+     * The run's webhook event key, so an event override picks the model and
+     * reasoning for this run.
+     */
+    protected function aiTaskEventKey(): ?string
     {
-        return resolve(DecisionAgentSettings::class)->selection();
-    }
+        if (! App::bound(DecisionRunContext::class)) {
+            return null;
+        }
 
-    public function providerOptions(Lab|string $provider): array
-    {
-        $reasoningLevel = resolve(DecisionAgentSettings::class)->reasoning();
+        $decisionRunContext = resolve(DecisionRunContext::class);
 
-        return match ($provider) {
-            Lab::OpenAI => [
-                'reasoning' => ['effort' => $reasoningLevel],
-            ],
-            default => resolve(OpenRouterRequestOptions::class)->for($provider, $reasoningLevel),
-        };
+        return $decisionRunContext->eventType === null
+            ? null
+            : DecisionAgentSettings::eventKey($decisionRunContext->sourceService, $decisionRunContext->eventType);
     }
 
     public function instructions(): Stringable|string

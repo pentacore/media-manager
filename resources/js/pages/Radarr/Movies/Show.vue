@@ -30,6 +30,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { useCan } from '@/composables/useCan';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { UpstreamList } from '@/types';
 
@@ -86,22 +87,6 @@ const deleting = ref(false);
 const deleteFiles = ref(false);
 const replaceDialogOpen = ref(false);
 const interactiveOpen = ref(false);
-
-function formatSize(bytes: number): string {
-    if (!bytes || bytes <= 0) {
-        return '0 GB';
-    }
-
-    const gb = bytes / (1024 * 1024 * 1024);
-
-    if (gb < 1) {
-        const mb = bytes / (1024 * 1024);
-
-        return `${mb.toFixed(0)} MB`;
-    }
-
-    return `${gb.toFixed(2)} GB`;
-}
 
 function posterUrl(): string | null {
     const poster = props.movie.images.find(
@@ -368,8 +353,11 @@ function confirmDelete() {
                             >
                                 Size on disk
                             </div>
-                            <div class="font-mono-tabular mt-0.5 text-[13px]">
-                                {{ formatSize(movie.size_on_disk) }}
+                            <div
+                                class="font-mono-tabular mt-0.5 text-[13px]"
+                                data-movie-size-on-disk
+                            >
+                                {{ formatBytes(movie.size_on_disk) }}
                             </div>
                         </div>
                         <div class="md:col-span-4">
@@ -418,7 +406,7 @@ function confirmDelete() {
                         Size
                     </div>
                     <div class="font-mono-tabular mt-0.5 text-[13px]">
-                        {{ formatSize(movie.movie_file.size) }}
+                        {{ formatBytes(movie.movie_file.size) }}
                     </div>
                 </div>
                 <div>

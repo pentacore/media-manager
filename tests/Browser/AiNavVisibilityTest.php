@@ -16,6 +16,7 @@ test('the AI admin sub-group is hidden when AI is disabled', function (): void {
         // the anchor has to be scoped to the same selector to be worth anything.
         ->assertSeeIn('[data-sidebar="content"]', 'Configuration')
         ->assertDontSeeIn('[data-sidebar="content"]', 'AI Settings')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'AI Models')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Decision Agent')
         ->assertDontSeeIn('[data-sidebar="content"]', 'AI Usage')
         ->assertDontSeeIn('[data-sidebar="content"]', 'AI Conversations')
@@ -41,6 +42,7 @@ test('the AI admin sub-group holds every AI page when AI is enabled', function (
         // shadows the button. `[data-sidebar="content"]` excludes the footer.
         ->click('[data-sidebar="content"] button:has-text("AI")')
         ->assertSeeIn('[data-sidebar="content"]', 'AI Settings')
+        ->assertSeeIn('[data-sidebar="content"]', 'AI Models')
         ->assertSeeIn('[data-sidebar="content"]', 'Decision Agent')
         ->assertSeeIn('[data-sidebar="content"]', 'AI Usage')
         ->assertSeeIn('[data-sidebar="content"]', 'AI Conversations')

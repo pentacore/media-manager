@@ -4,19 +4,18 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Concerns\SendsOpenRouterOptions;
+use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
-use App\Ai\ModelSelection;
 use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Enums\AiTask;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
-use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\CacheInstructions;
 use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -39,7 +38,7 @@ use Stringable;
 class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
-    use SendsOpenRouterOptions;
+    use RunsAsAiTask;
     use UsesFailoverChain;
 
     /**
@@ -125,16 +124,13 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
         return $this;
     }
 
-    public function model(): string
+    /**
+     * A task of its own so verification can run on a cheaper (or more
+     * capable) model than chat; it follows the chat model when unset.
+     */
+    public function aiTask(): AiTask
     {
-        // A dedicated setting so verification can run on a cheaper (or more
-        // capable) model than chat; it follows the chat model when unset.
-        return resolve(AiSettings::class)->priceUpdaterModel();
-    }
-
-    public function modelSelection(): ModelSelection
-    {
-        return resolve(AiSettings::class)->priceUpdaterSelection();
+        return AiTask::PriceUpdater;
     }
 
     public function instructions(): Stringable|string
@@ -260,7 +256,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
      */
     private function codeExecutionAvailable(): bool
     {
-        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class, resolve(AiSettings::class)->priceUpdaterSelection());
+        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class, $this->modelSelection());
     }
 
     /**

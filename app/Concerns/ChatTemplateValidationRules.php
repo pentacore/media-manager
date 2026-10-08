@@ -19,6 +19,8 @@ use Illuminate\Validation\Validator;
  */
 trait ChatTemplateValidationRules
 {
+    use AiModelSelectionValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -42,6 +44,8 @@ trait ChatTemplateValidationRules
             'variables.*.options.*' => ['nullable', 'string', 'max:100'],
             'auto_send' => ['required', 'boolean'],
             'pinned' => ['required', 'boolean'],
+            'preset' => ['nullable', 'array:provider,model,reasoning'],
+            ...$this->selectionRules('preset'),
         ];
     }
 
@@ -51,6 +55,9 @@ trait ChatTemplateValidationRules
     public function after(): array
     {
         return [
+            function (Validator $validator): void {
+                $this->validatePricedSelection($validator, 'preset', $this->input('preset.provider'), $this->input('preset.model'));
+            },
             function (Validator $validator): void {
                 if ($validator->errors()->hasAny(['body', 'variables', 'variables.*'])) {
                     return;

@@ -1,39 +1,26 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
-import ModelSelect from '@/components/ai/ModelSelect.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
-import type { AiReasoningLevel } from '@/typefinder';
 
 interface DecisionAgentState {
     enabled: boolean;
-    model: string;
-    model_provider: string;
     event_allowlist: string[];
     allow_manual_import: boolean;
     notify_on_suggest: boolean;
     notify_on_act: boolean;
     max_actions_per_run: number;
-    reasoning_level: AiReasoningLevel;
 }
 
 const props = defineProps<{
     settings: DecisionAgentState;
-    models: Record<string, string[]>;
     eventCatalog: Record<string, string[]>;
-    reasoningLevels: Record<string, { label: string; value: AiReasoningLevel }>;
 }>();
 
 defineOptions({
@@ -50,14 +37,11 @@ defineOptions({
 
 const form = useForm<DecisionAgentState>({
     enabled: props.settings.enabled,
-    model: props.settings.model,
-    model_provider: props.settings.model_provider,
     event_allowlist: [...props.settings.event_allowlist],
     allow_manual_import: props.settings.allow_manual_import,
     notify_on_suggest: props.settings.notify_on_suggest,
     notify_on_act: props.settings.notify_on_act,
     max_actions_per_run: props.settings.max_actions_per_run,
-    reasoning_level: props.settings.reasoning_level,
 });
 
 function eventKey(service: string, event: string): string {
@@ -105,6 +89,16 @@ function submit(): void {
                 <span class="font-mono-tabular">Approval Rules</span>; this page
                 controls which events wake it and what it may attempt.
             </p>
+            <p class="mt-2 text-[13px]">
+                Models and reasoning levels are configured on
+                <Link
+                    :href="AiModelsController.index.url()"
+                    class="underline underline-offset-2"
+                    data-ai-models-link
+                >
+                    AI Models →
+                </Link>
+            </p>
         </div>
 
         <form
@@ -133,66 +127,6 @@ function submit(): void {
                             :message="form.errors.enabled"
                             class="mt-1"
                         />
-                    </div>
-                </div>
-
-                <Separator />
-
-                <!-- Model -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Model"
-                        hint="Model used for background triage. Defaults to the chat model; pick a cheaper one here if you like. Manage entries via Admin → AI prices."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <ModelSelect
-                            :models="models"
-                            v-model:provider="form.model_provider"
-                            v-model:model="form.model"
-                        />
-                        <InputError
-                            :message="
-                                form.errors.model_provider ?? form.errors.model
-                            "
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-
-                <!-- Reasoning Level -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Reasoning Level"
-                        hint="Level of reasoning applied by the decision agent. Higher levels may result in more accurate decisions but can be more resource-intensive."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <Select v-model="form.reasoning_level">
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue
-                                    placeholder="Select a reasoning level"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="reasoningLevel in reasoningLevels"
-                                    :key="reasoningLevel.label"
-                                    :value="reasoningLevel.value"
-                                >
-                                    {{ reasoningLevel.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <InputError :message="form.errors.model" class="mt-1" />
                     </div>
                 </div>
 

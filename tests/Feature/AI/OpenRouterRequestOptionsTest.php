@@ -6,8 +6,9 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\OpenRouterRequestOptions;
 use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
 use App\Enums\OpenRouterSort;
-use App\Settings\AiSettings;
+use App\Models\AiTaskModel;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -23,19 +24,8 @@ beforeEach(function (): void {
 test('non-OpenRouter providers get no OpenRouter options', function (): void {
     resolve(OpenRouterSettings::class)->setSort(OpenRouterSort::Price);
 
-    expect(resolve(OpenRouterRequestOptions::class)->for(Lab::OpenAI, 'high'))->toBe([]);
+    expect(resolve(OpenRouterRequestOptions::class)->for(Lab::OpenAI))->toBe([]);
 });
-
-test('reasoning levels map onto OpenRouter effort', function (string $level, string $effort): void {
-    expect(resolve(OpenRouterRequestOptions::class)->reasoning($level))->toBe(['reasoning' => ['effort' => $effort]]);
-})->with([
-    ['none', 'none'],
-    ['low', 'low'],
-    ['medium', 'medium'],
-    ['high', 'high'],
-    ['xhigh', 'xhigh'],
-    ['max', 'xhigh'],
-]);
 
 test('routing is empty at OpenRouter defaults', function (): void {
     expect(resolve(OpenRouterRequestOptions::class)->routing())->toBe([])
@@ -50,8 +40,7 @@ test('routing sends only the preferences that differ from OpenRouter defaults', 
     $openRouterSettings->setOrder(['anthropic', 'amazon-bedrock']);
     $openRouterSettings->setIgnore(['deepinfra']);
 
-    expect(resolve(OpenRouterRequestOptions::class)->for('openrouter', 'max'))->toBe([
-        'reasoning' => ['effort' => 'xhigh'],
+    expect(resolve(OpenRouterRequestOptions::class)->for('openrouter'))->toBe([
         'provider' => [
             'sort' => 'throughput',
             'data_collection' => 'deny',
@@ -73,7 +62,7 @@ test('upstream slug lists are trimmed, lowercased, de-duplicated and emptied to 
 });
 
 test('MediaAgent sends reasoning and routing to OpenRouter', function (): void {
-    resolve(AiSettings::class)->setAdvisorReasoningLevel(AiReasoningLevel::High);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'openai/gpt-5')->reasoning(AiReasoningLevel::High)->create();
     resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
 
     expect((new MediaAgent)->providerOptions(Lab::OpenRouter))->toBe([
@@ -85,9 +74,7 @@ test('MediaAgent sends reasoning and routing to OpenRouter', function (): void {
 });
 
 test('an OpenRouter request body carries the routing preferences', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setTitleModelProvider('openrouter');
-    $aiSettings->setTitleModel('openai/gpt-5.4-nano');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'openai/gpt-5.4-nano')->create();
 
     resolve(OpenRouterSettings::class)->setSort(OpenRouterSort::Price);
 

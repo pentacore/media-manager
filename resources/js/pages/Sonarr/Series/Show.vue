@@ -45,6 +45,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useCan } from '@/composables/useCan';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { UpstreamList } from '@/types';
 
@@ -141,22 +142,6 @@ function posterUrl(): string | null {
     );
 
     return poster?.remoteUrl ?? poster?.url ?? null;
-}
-
-function formatSize(bytes: number): string {
-    if (!bytes || bytes <= 0) {
-        return '-';
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    if (gb >= 1) {
-        return `${gb.toFixed(1)} GB`;
-    }
-
-    const mb = bytes / 1024 ** 2;
-
-    return `${mb.toFixed(0)} MB`;
 }
 
 function episodesForSeason(seasonNumber: number): Episode[] {
@@ -464,7 +449,7 @@ function sonarrSeriesUrl(): string | null {
                                 Size on disk
                             </div>
                             <div class="font-mono-tabular mt-0.5 text-[13px]">
-                                {{ formatSize(series.size_on_disk) }}
+                                {{ formatBytes(series.size_on_disk) }}
                             </div>
                         </div>
                         <div class="md:col-span-2">
@@ -595,7 +580,7 @@ function sonarrSeriesUrl(): string | null {
                                         <HardDrive class="size-3.5" />
                                         <span class="font-mono-tabular">
                                             {{
-                                                formatSize(season.size_on_disk)
+                                                formatBytes(season.size_on_disk)
                                             }}
                                         </span>
                                     </span>

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiTask;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,8 @@ beforeEach(function (): void {
  */
 function exhaustChatModelLimit(): void
 {
-    $model = resolve(AiSettings::class)->model();
+    $model = 'gpt-5.6-luna';
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', $model)->create();
     $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => $model]);
     $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
 
@@ -39,9 +42,6 @@ function exhaustChatModelLimit(): void
 }
 
 test('admin can switch rate limit enforcement on from the AI settings page', function (): void {
-    // The model select is fed by the pricing catalog; the form is invalid
-    // without a row for the configured chat model.
-    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-settings.index', absolute: false))

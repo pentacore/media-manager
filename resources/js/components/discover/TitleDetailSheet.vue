@@ -22,7 +22,7 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 import { titleStatusPill } from '@/lib/seerr';
 import { tmdbBackdropUrl, tmdbPosterUrl } from '@/lib/tmdb';
 import type {

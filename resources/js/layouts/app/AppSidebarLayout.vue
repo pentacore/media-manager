@@ -6,6 +6,7 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { Toaster } from '@/components/ui/sonner';
 import { useNotifications } from '@/composables/useNotifications';
 import { usePresenceHeartbeat } from '@/composables/usePresenceHeartbeat';
@@ -35,6 +36,7 @@ onMounted(subscribeNotifications);
         </AppContent>
         <CommandPalette />
         <AiChatSheet />
+        <ConfirmDialog />
         <Toaster />
     </AppShell>
 </template>

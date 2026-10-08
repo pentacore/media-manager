@@ -5,14 +5,15 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Routing\ToolPayload;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\User;
-use App\Settings\AiSettings;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 
 test('an all-OpenAI/Anthropic chain defers non-core tools behind one ToolSearch', function (): void {
     config()->set('ai.default', 'openai');
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
 
     $tools = [...(new MediaAgent)->tools()];
     $payload = resolve(ToolPayload::class)->build($tools);
@@ -26,7 +27,7 @@ test('an all-OpenAI/Anthropic chain defers non-core tools behind one ToolSearch'
 
 test('a chain reaching a provider without tool search gets plain tools', function (): void {
     config()->set('ai.default', 'openai');
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Gemini->value])->create();
 
     $tools = [...(new MediaAgent)->tools()];
 
@@ -37,7 +38,7 @@ test('a streamed chat turn on a mixed chain never sends a ToolSearch wrapper', f
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
 
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Gemini->value])->create();
     MediaAgent::fake(['ok']);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -53,7 +54,7 @@ test('a streamed chat turn on a tool-search chain defers non-core tools', functi
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
 
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
     MediaAgent::fake(['ok']);
 
     $this->actingAs(User::factory()->admin()->create())

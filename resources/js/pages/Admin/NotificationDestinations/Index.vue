@@ -16,6 +16,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
 
 interface DestinationRow {
@@ -72,8 +73,17 @@ function sendTest(row: DestinationRow): void {
     );
 }
 
-function remove(row: DestinationRow): void {
-    if (!confirm(`Remove "${row.label}"? This cannot be undone.`)) {
+const { confirm } = useConfirm();
+
+async function remove(row: DestinationRow): Promise<void> {
+    const confirmed = await confirm({
+        title: `Remove "${row.label}"?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Remove',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -222,6 +232,7 @@ function remove(row: DestinationRow): void {
                                         variant="ghost"
                                         size="sm"
                                         class="h-7 gap-1 text-xs text-destructive"
+                                        data-destination-remove
                                         @click="remove(row)"
                                     >
                                         <Trash2 class="size-3.5" />Remove

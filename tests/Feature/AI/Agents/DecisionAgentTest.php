@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
-use App\Settings\DecisionAgentSettings;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
@@ -41,8 +42,8 @@ test('does not expose direct destructive tools — all mutations go through Prop
     expect($shortNames)->not->toContain('SetMediaQualityProfileTool');
 });
 
-test('model() reads from DecisionAgentSettings', function (): void {
-    resolve(DecisionAgentSettings::class)->setModel('gpt-triage');
+test('model() reads the decision task selection', function (): void {
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-triage')->create();
 
     expect((new DecisionAgent)->model())->toBe('gpt-triage');
 });

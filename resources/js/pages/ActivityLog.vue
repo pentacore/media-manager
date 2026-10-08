@@ -60,8 +60,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 type AuditChange = { from?: unknown; to?: unknown; changed?: boolean };
 

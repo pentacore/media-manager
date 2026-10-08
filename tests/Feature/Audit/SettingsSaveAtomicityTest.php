@@ -56,20 +56,15 @@ test('a settings save whose audit row cannot be written keeps every earlier sett
 })->with([
     'AI settings' => ['admin.ai-settings.update', fn (): array => [
         'mode' => 'executive',
-        'model' => 'gpt-5-mini',
-        'title_model' => 'gpt-5.4-nano',
-        'advisor_reasoning_level' => 'none',
         'soft_budget_usd' => 25,
     ]],
     'decision agent' => ['admin.decision-agent.update', fn (): array => [
         'enabled' => true,
-        'model' => 'gpt-5-mini',
         'event_allowlist' => ['sonarr:ManualInteractionRequired'],
         'allow_manual_import' => true,
         'notify_on_suggest' => false,
         'notify_on_act' => true,
         'max_actions_per_run' => 5,
-        'reasoning_level' => 'high',
     ]],
     'media replacement' => ['admin.media-replacement.update', fn (): array => ['media_replacement' => [
         'automatic_selection_enabled' => true,

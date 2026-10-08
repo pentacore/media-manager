@@ -26,8 +26,7 @@ const props = defineProps<{
     selectedConnectionId: number | null;
 }>();
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const tabs = computed(() => [
     {

@@ -39,8 +39,7 @@ const props = defineProps<{
     };
 }>();
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 defineOptions({
     layout: {

@@ -1030,3 +1030,45 @@ test('bulk delete rejects an empty or unknown selection', function (array $ids, 
     'unknown' => [[999999], 'ids.0'],
     'over the cap' => [range(1, 2001), 'ids'],
 ]);
+
+function reasoningPricePayload(array $overrides = []): array
+{
+    return [
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 2.00,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.20,
+        'reasoning_per_mtok' => 2.00,
+        ...$overrides,
+    ];
+}
+
+test('admin can set reasoning capabilities on a price row', function (): void {
+    $admin = User::factory()->admin()->create();
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-cap-manual']);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $price), reasoningPricePayload([
+            'supports_reasoning' => 'yes',
+            'reasoning_levels' => ['', 'high', 'low'],
+        ]))
+        ->assertRedirect();
+
+    expect($price->fresh()->supports_reasoning)->toBeTrue()
+        ->and($price->fresh()->reasoning_levels)->toBe(['low', 'high']);
+});
+
+test('unknown clears the reasoning flag and levels', function (): void {
+    $admin = User::factory()->admin()->create();
+    $price = AiModelPrice::factory()->create(['supports_reasoning' => true, 'reasoning_levels' => ['low']]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $price), reasoningPricePayload([
+            'supports_reasoning' => 'unknown',
+            'reasoning_levels' => [''],
+        ]))
+        ->assertRedirect();
+
+    expect($price->fresh()->supports_reasoning)->toBeNull()
+        ->and($price->fresh()->reasoning_levels)->toBeNull();
+});

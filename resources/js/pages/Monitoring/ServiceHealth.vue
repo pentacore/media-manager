@@ -21,6 +21,7 @@ import {
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth } from '@/composables/useServiceHealth';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 
@@ -186,22 +187,6 @@ const overallUptime = computed<number | null>(() => {
 
     return samples.reduce((acc, v) => acc + v, 0) / samples.length;
 });
-
-function formatSize(bytes: number | null): string {
-    if (bytes === null || bytes === undefined) {
-        return '—';
-    }
-
-    if (bytes === 0) {
-        return '0 B';
-    }
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const value = bytes / Math.pow(1024, i);
-
-    return `${value.toFixed(1)} ${units[i]}`;
-}
 
 function svcId(type: string): string {
     const t = type.toLowerCase();
@@ -524,7 +509,7 @@ function barHeight(bucket: MetricBucket): number {
                                 v-if="(disk.display ?? 'both') === 'free'"
                             >
                                 <span class="font-mono-tabular">{{
-                                    formatSize(disk.free_space)
+                                    formatBytes(disk.free_space)
                                 }}</span>
                                 <span>free</span>
                             </template>
@@ -532,17 +517,17 @@ function barHeight(bucket: MetricBucket): number {
                                 v-else-if="(disk.display ?? 'both') === 'used'"
                             >
                                 <span class="font-mono-tabular">{{
-                                    formatSize(diskUsed(disk))
+                                    formatBytes(diskUsed(disk))
                                 }}</span>
                                 <span>used</span>
                             </template>
                             <template v-else>
                                 <span class="font-mono-tabular">{{
-                                    formatSize(disk.free_space)
+                                    formatBytes(disk.free_space)
                                 }}</span>
                                 <span>free of</span>
                                 <span class="font-mono-tabular">{{
-                                    formatSize(disk.total_space)
+                                    formatBytes(disk.total_space)
                                 }}</span>
                             </template>
                         </div>

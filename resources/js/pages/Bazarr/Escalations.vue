@@ -8,6 +8,7 @@ import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewCo
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { StatusPill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
 
 interface EscalationCase {
@@ -155,12 +156,16 @@ function advisorButtonLabel(escalationCase: EscalationCase): string {
     return 'Investigate with Media Advisor';
 }
 
-function investigate(escalationCase: EscalationCase): void {
+const { confirm } = useConfirm();
+
+async function investigate(escalationCase: EscalationCase): Promise<void> {
     if (
         escalationCase.status === 'needs_review' &&
-        !confirm(
-            'This case has already been investigated. Retry it manually with Media Advisor?',
-        )
+        !(await confirm({
+            title: 'Retry this case with Media Advisor?',
+            description: 'This case has already been investigated.',
+            confirmLabel: 'Retry',
+        }))
     ) {
         return;
     }

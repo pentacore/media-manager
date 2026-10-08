@@ -29,6 +29,7 @@ final readonly class ModelPriceCandidate
         public ?string $sourceUrl = null,
         public ?string $sourceUpdatedAt = null,
         public bool $tiered = false,
+        public ?ReasoningCapability $reasoning = null,
     ) {}
 
     /**

@@ -15,15 +15,6 @@ export type NavCounts = {
     wantedMissing: Ref<number>;
 };
 
-type NavCountsPayload = {
-    pendingActions?: number;
-    activeSessions?: number;
-    libraryIntervention?: number;
-    sabnzbdDownloads?: { queued: number; completed: number };
-    replacementAttention?: number;
-    wantedMissing?: number;
-};
-
 type PlaybackPayload = {
     id: number;
     action: string;
@@ -53,8 +44,7 @@ const SESSION_EXPIRY_MS = 10 * 60 * 1000;
  */
 export function useNavCounts(): NavCounts {
     const page = usePage();
-    const initialNav = (page.props as unknown as { nav?: NavCountsPayload })
-        .nav;
+    const initialNav = page.props.nav;
 
     const pendingActions = ref(initialNav?.pendingActions ?? 0);
     const activeSessions = ref(initialNav?.activeSessions ?? 0);
@@ -103,7 +93,7 @@ export function useNavCounts(): NavCounts {
     // keeping them would double-count events already baked into the server
     // numbers.
     watchEffect(() => {
-        const nav = (page.props as unknown as { nav?: NavCountsPayload }).nav;
+        const nav = page.props.nav;
 
         if (nav) {
             pendingActions.value = nav.pendingActions ?? 0;

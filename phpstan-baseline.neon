@@ -31,7 +31,7 @@ parameters:
 			path: app/Ai/Decision/DecisionRunContext.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: app/Ai/Routing/ChatToolRouter.php
@@ -241,7 +241,7 @@ parameters:
 			path: app/Events/MediaReplacementAttemptChanged.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: app/Http/Controllers/AI/ChatController.php
@@ -253,13 +253,13 @@ parameters:
 			path: app/Http/Controllers/AI/ConversationController.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: app/Http/Controllers/AI/ConversationController.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: app/Http/Controllers/AI/ConversationController.php
@@ -271,7 +271,7 @@ parameters:
 			path: app/Http/Controllers/Admin/AiConversationController.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: app/Http/Controllers/Admin/AiConversationController.php
@@ -287,12 +287,6 @@ parameters:
 			identifier: parameterByRef.type
 			count: 1
 			path: app/Http/Controllers/Admin/AiModelPriceController.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: app/Http/Controllers/Admin/AiSettingsController.php
 
 		-
 			message: '#^Variable \$apiKey on left side of \?\? always exists and is not nullable\.$#'
@@ -1198,12 +1192,6 @@ parameters:
 			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
-			path: app/Settings/AiSettings.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
 			path: app/Settings/AppSettings.php
 
 		-
@@ -1255,7 +1243,7 @@ parameters:
 			path: database/migrations/2026_07_19_085141_classify_and_normalize_ai_model_prices.php
 
 		-
-			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1
 			path: routes/channels.php

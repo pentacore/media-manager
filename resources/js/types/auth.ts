@@ -1,4 +1,7 @@
+import type { Ability } from '@/typefinder';
 import type { UserPreferences } from './preferences';
+
+export type { Ability };
 
 export type User = {
     id: number;
@@ -12,13 +15,6 @@ export type User = {
     preferences?: UserPreferences;
     [key: string]: unknown;
 };
-
-export type Ability =
-    | 'view-library'
-    | 'request-media'
-    | 'manage-library'
-    | 'manage-requests'
-    | 'admin';
 
 export type Auth = {
     user: User;

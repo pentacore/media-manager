@@ -295,6 +295,29 @@ test('admin can set a rerank model search-unit rate from the edit dialog', funct
     expect($price->fresh()->search_unit_per_k)->toBe('2.0000');
 });
 
+test('admin can tick reasoning levels in the edit dialog and save them', function (): void {
+    $price = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-reasoning-edit',
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+        'supports_reasoning' => null,
+        'reasoning_levels' => null,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('Edit')
+        ->assertSee('Edit openai / gpt-reasoning-edit')
+        ->assertPresent('[data-price-supports-reasoning]')
+        ->click('[data-price-reasoning-level="low"]')
+        ->click('[data-price-reasoning-level="high"]')
+        ->click('Save')
+        ->assertSee('Model price updated.');
+
+    expect($price->fresh()->reasoning_levels)->toBe(['low', 'high']);
+});
+
 test('a succeeded broadcast shows the success toast and reloads prices', function (): void {
     AiModelPrice::factory()->create([
         'provider' => 'openai',
