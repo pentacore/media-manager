@@ -23,24 +23,13 @@ withDefaults(
 
 const palette = useCommandPalette();
 const page = usePage();
-const { can } = useCan();
+const { isAdmin } = useCan();
 
 const unreadNotifications = computed<number>(
-    () =>
-        (
-            page.props as unknown as {
-                nav?: { unreadNotifications?: number };
-            }
-        ).nav?.unreadNotifications ?? 0,
+    () => page.props.nav?.unreadNotifications ?? 0,
 );
 
-const aiEnabled = computed(() =>
-    Boolean(
-        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
-    ),
-);
-
-const isAdmin = computed(() => can('admin'));
+const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 </script>
 
 <template>
@@ -84,6 +73,7 @@ const isAdmin = computed(() => can('admin'));
                 <span
                     v-if="unreadNotifications > 0"
                     class="font-mono-tabular absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-foreground"
+                    data-unread-notifications
                 >
                     {{ unreadNotifications > 99 ? '99+' : unreadNotifications }}
                 </span>

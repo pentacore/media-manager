@@ -22,6 +22,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useConfirm } from '@/composables/useConfirm';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
@@ -141,12 +142,23 @@ function toggleConnection(connection: Connection) {
     });
 }
 
-function deleteConnection(connection: Connection) {
-    if (confirm(`Delete ${connection.name}? This cannot be undone.`)) {
-        router.visit(ServiceConnectionController.destroy.url(connection.id), {
-            method: 'delete',
-        });
+const { confirm } = useConfirm();
+
+async function deleteConnection(connection: Connection): Promise<void> {
+    const confirmed = await confirm({
+        title: `Delete ${connection.name}?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+    });
+
+    if (!confirmed) {
+        return;
     }
+
+    router.visit(ServiceConnectionController.destroy.url(connection.id), {
+        method: 'delete',
+    });
 }
 
 function checkHealth(connection: Connection) {
@@ -186,7 +198,10 @@ function checkVersion(connection: Connection) {
                     auto-generated; rotate by clearing the field on edit.
                 </p>
             </div>
-            <Link :href="ServiceConnectionController.create.url()">
+            <Link
+                :href="ServiceConnectionController.create.url()"
+                data-connection-add
+            >
                 <Button size="sm" class="h-7 gap-1.5 text-xs">
                     <Plus class="size-3.5" />Add connection
                 </Button>
@@ -219,6 +234,7 @@ function checkVersion(connection: Connection) {
                         <tr
                             v-for="connection in liveConnections"
                             :key="connection.id"
+                            :data-connection-row="connection.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
                             <td class="px-3 py-2.5">
@@ -301,6 +317,7 @@ function checkVersion(connection: Connection) {
                                                 variant="ghost"
                                                 size="sm"
                                                 class="size-7 p-0"
+                                                data-connection-menu
                                             >
                                                 <MoreHorizontal
                                                     class="size-3.5"
@@ -348,6 +365,7 @@ function checkVersion(connection: Connection) {
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 class="text-destructive focus:text-destructive"
+                                                data-connection-delete
                                                 @click="
                                                     deleteConnection(connection)
                                                 "

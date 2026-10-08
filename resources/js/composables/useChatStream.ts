@@ -1,6 +1,7 @@
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import type { ChatOverride } from '@/components/ai/types';
 import type { ChatToolCall } from '@/composables/useAiChat';
+import { csrfToken } from '@/lib/http';
 
 export type { ChatToolCall } from '@/composables/useAiChat';
 
@@ -48,13 +49,6 @@ export class ChatStreamError extends Error {
         this.name = 'ChatStreamError';
         this.conversationId = conversationId;
     }
-}
-
-function csrfToken(): string {
-    return (
-        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-            ?.content ?? ''
-    );
 }
 
 function isAbortError(error: unknown): boolean {

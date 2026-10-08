@@ -192,14 +192,6 @@ test('the remove confirm closes when the selection empties under it, and nothing
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
-/**
- * The row menu asks with a native confirm(); accept it.
- */
-function grabQueueAcceptConfirmScript(): string
-{
-    return '() => { window.confirm = () => true; }';
-}
-
 test('an admin removes one queue item from its row menu', function (): void {
     fakeGrabQueueBrowser();
     $this->actingAs(User::factory()->admin()->create());
@@ -208,9 +200,10 @@ test('an admin removes one queue item from its row menu', function (): void {
         ->assertNoSmoke()
         ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
 
-    $webpage->script(grabQueueAcceptConfirmScript());
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-remove="remove"]')
+        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the queue?')
+        ->click('[data-confirm-accept]')
         ->assertSee('Removed from queue.')
         ->assertNoSmoke();
 
@@ -228,9 +221,10 @@ test('a row removal whose connection was deactivated after the page loaded is re
     // Bypasses the observer on purpose: no health ping, just the state change.
     ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
 
-    $webpage->script(grabQueueAcceptConfirmScript());
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-remove="remove"]')
+        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the queue?')
+        ->click('[data-confirm-accept]')
         ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
@@ -264,9 +258,10 @@ test('an admin force-grabs one queue item from its row menu', function (): void 
         ->assertNoSmoke()
         ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
 
-    $webpage->script(grabQueueAcceptConfirmScript());
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-grab]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Force grab')
+        ->click('[data-confirm-accept]')
         ->assertSee('Grab triggered.')
         ->assertNoSmoke();
 
@@ -284,9 +279,10 @@ test('a force grab whose connection was deactivated after the page loaded is ref
     // Bypasses the observer on purpose: no health ping, just the state change.
     ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
 
-    $webpage->script(grabQueueAcceptConfirmScript());
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-grab]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Force grab')
+        ->click('[data-confirm-accept]')
         ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/queue/grab/'));
@@ -327,4 +323,51 @@ test('a manual import whose connection was deactivated after the page loaded sho
         ->assertMissing('[data-manual-import-candidate]');
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/manualimport'));
+});
+
+test('cancelling a blocklist removal or a force grab sends nothing', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="block"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'blocklist the release?')
+        ->assertSeeIn('[data-confirm-dialog]', 'A fresh search runs afterwards.')
+        ->click('[data-confirm-cancel]');
+    $webpage->script(confirmDialogGoneScript());
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-grab]')
+        ->assertSeeIn('[data-confirm-dialog]', 'This bypasses the RSS sync delay.')
+        ->click('[data-confirm-cancel]');
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertCount('[data-confirm-dialog]', 0)
+        ->assertNoSmoke();
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE' || str_contains($request->url(), '/api/v3/queue/grab/'));
+});
+
+test('an admin blocklists one queue item from its row menu', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="block"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'blocklist the release?')
+        ->assertSeeIn('[data-confirm-dialog]', 'A fresh search runs afterwards.')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Removed and blocklisted; a fresh search will run.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/41?')
+        && str_contains($request->url(), 'blocklist=true'));
 });

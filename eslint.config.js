@@ -62,6 +62,35 @@ export default defineConfigWithVueTs(
                 'error',
                 'prefer-top-level',
             ],
+            'no-restricted-globals': [
+                'error',
+                {
+                    name: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
+            ],
+            'no-restricted-properties': [
+                'error',
+                {
+                    object: 'window',
+                    property: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
+                {
+                    object: 'globalThis',
+                    property: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
+                {
+                    object: 'self',
+                    property: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
+            ],
         },
     },
     {

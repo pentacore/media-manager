@@ -16,6 +16,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
 interface AttemptDetail {
@@ -117,23 +118,6 @@ function text(value: unknown): string {
     }
 
     return String(value);
-}
-
-function bytes(value: unknown): string {
-    if (typeof value !== 'number' || value <= 0) {
-        return '—';
-    }
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let size = value;
-    let unit = 0;
-
-    while (size >= 1024 && unit < units.length - 1) {
-        size /= 1024;
-        unit += 1;
-    }
-
-    return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 function json(value: unknown): string {
@@ -418,7 +402,7 @@ onMounted(subscribe);
                         text(attempt.target['quality'])
                     }}</Field>
                     <Field label="Size">{{
-                        bytes(attempt.target['size'])
+                        formatBytes(attempt.target['size'])
                     }}</Field>
                     <Field label="Added">{{
                         text(attempt.target['date_added'])
@@ -459,7 +443,7 @@ onMounted(subscribe);
                         text(attempt.candidate['quality'])
                     }}</Field>
                     <Field label="Size">{{
-                        bytes(attempt.candidate['size'])
+                        formatBytes(attempt.candidate['size'])
                     }}</Field>
                     <Field label="Confidence">{{
                         typeof attempt.candidate['confidence'] === 'number'

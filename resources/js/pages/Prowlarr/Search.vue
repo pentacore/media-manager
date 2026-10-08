@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Antenna, Download, Loader2, Search } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import GrabReleaseController from '@/actions/App/Http/Controllers/Prowlarr/GrabReleaseController';
@@ -17,8 +17,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { jsonRequest } from '@/composables/useAiChat';
 import { useCan } from '@/composables/useCan';
+import { formatBytes } from '@/lib/format';
+import { jsonRequest } from '@/lib/http';
 import { dashboard } from '@/routes';
 
 interface IndexerRelease {
@@ -49,8 +50,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const queryInput = ref(props.query);
 const grabbing = ref<string | null>(null);
@@ -104,18 +104,6 @@ async function grab(release: IndexerRelease): Promise<void> {
     } finally {
         grabbing.value = null;
     }
-}
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1_000_000) {
-        return `${(bytes / 1_000).toFixed(0)} KB`;
-    }
-
-    if (bytes < 1_000_000_000) {
-        return `${(bytes / 1_000_000).toFixed(0)} MB`;
-    }
-
-    return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
 }
 
 function formatAge(days: number): string {

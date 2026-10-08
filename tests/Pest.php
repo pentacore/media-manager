@@ -160,3 +160,30 @@ function fakeServiceHttp(Closure $handler): void
         return $handler($request, $options);
     });
 }
+
+/**
+ * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
+ * so script() returns only once an async UI change has landed.
+ */
+function confirmDialogWaitUntilScript(string $condition): string
+{
+    return <<<JS
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if ({$condition}) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS;
+}
+
+/**
+ * Waits until the shared confirm dialog has left the DOM; its exit animation
+ * keeps it mounted briefly after it closes.
+ */
+function confirmDialogGoneScript(): string
+{
+    return confirmDialogWaitUntilScript("!document.querySelector('[data-confirm-dialog]')");
+}

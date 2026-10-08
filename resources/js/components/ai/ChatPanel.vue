@@ -19,12 +19,13 @@ import {
     ChatTemplateFillDialog,
 } from '@/components/chat-templates';
 import type { ChatTemplate, TemplateAction } from '@/components/chat-templates';
-import { jsonRequest, useAiChat } from '@/composables/useAiChat';
+import { useAiChat } from '@/composables/useAiChat';
 import type { AgentStep } from '@/composables/useAiChat';
 import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
 import { useChatTemplates } from '@/composables/useChatTemplates';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
+import { csrfToken, jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import ChatComposer from './ChatComposer.vue';
 import ChatHeader from './ChatHeader.vue';
@@ -386,12 +387,7 @@ async function sendBlockingTurn(
             'Content-Type': 'application/json',
             Accept: 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN':
-                (
-                    document.querySelector(
-                        'meta[name="csrf-token"]',
-                    ) as HTMLMetaElement | null
-                )?.content ?? '',
+            'X-CSRF-TOKEN': csrfToken(),
         },
         body: JSON.stringify({
             message: bodyMessage,

@@ -79,6 +79,8 @@ test('a member picks a release from the season interactive search and grabs it',
         ->click('[data-season-actions="1"] [data-interactive-search]')
         ->assertSeeIn("[data-release-row=\"{$releaseOneKey}\"]", 'Severance.S01.1080p.WEB')
         ->assertSeeIn("[data-release-row=\"{$releaseTwoKey}\"]", 'Not an upgrade')
+        ->assertSeeIn("[data-release-row=\"{$releaseOneKey}\"]", '8.4 GB')
+        ->assertSeeIn("[data-release-row=\"{$releaseTwoKey}\"]", '2.8 GB')
         ->assertSeeIn("[data-release-row=\"{$releaseTwoKey}\"] [data-release-grab]", 'Grab anyway')
         ->click("[data-release-row=\"{$releaseOneKey}\"] [data-release-grab]")
         ->assertSee('Release sent to the download client.')

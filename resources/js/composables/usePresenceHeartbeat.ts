@@ -1,4 +1,5 @@
 import { onMounted, onUnmounted } from 'vue';
+import { csrfToken } from '@/lib/http';
 import { heartbeat } from '@/routes';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -10,13 +11,6 @@ const INTERACTION_EVENTS = [
     'touchstart',
     'scroll',
 ] as const;
-
-function csrfToken(): string {
-    return (
-        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-            ?.content ?? ''
-    );
-}
 
 async function sendHeartbeat(): Promise<void> {
     try {
