@@ -8,6 +8,7 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AgentDecisionStatus;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
@@ -33,8 +34,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification\Boolean;
+use Laravel\Ai\Classification\Choice;
 use Laravel\Ai\Responses\Data\Answer;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Laravel\Ai\Responses\Data\ChoiceAnswer;
 use Throwable;
 
 /**
@@ -61,6 +64,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
     /** The yes/no question the classification gate asks about each event. */
     private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
+
+    /** The choice question that scopes the DecisionAgent's tools. */
+    private const string ACTION_KIND_QUESTION = 'If this media-server webhook event needs an operator action, which kind of action is it?';
+
+    /** Probability at or above which a classified action kind scopes the run. */
+    public const float SCOPE_AT = 0.5;
 
     /**
      * $payload and $serviceConnectionId snapshot the triggering event so the
@@ -143,6 +152,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $actionKind = $this->scopedActionKind($answers['action_kind'] ?? null, $classificationOutcomeRecorder);
+
         $decisionRunContext = new DecisionRunContext(
             webhookEventId: $webhookEventId,
             maxActions: $decisionAgentSettings->maxActionsPerRun(),
@@ -151,7 +162,14 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             originConnectionId: $this->serviceConnectionId
                 ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
             eventType: $this->eventType,
+            actionKind: $actionKind,
         );
+        // Left bound after the run (never forgotten): DecisionAgent::tools()
+        // and instructions() read it lazily, including from a test's
+        // assertPrompted() callback running after handle() has returned.
+        // The next run always rebinds a fresh instance before its own
+        // prompt(), so a stale binding here is never read as another run's
+        // state — only ever overwritten by it.
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
@@ -168,8 +186,6 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $this->record($webhookEventId, AgentDecisionStatus::Failed, sprintf('Agent run failed: %s', UpstreamErrorText::sanitize($throwable->getMessage(), 2000)), $decisionRunContext);
 
             return;
-        } finally {
-            app()->forgetInstance(DecisionRunContext::class);
         }
 
         if ($gateVerdict === ClassificationVerdict::AuditRun) {
@@ -179,6 +195,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->resolveGateOutcome($decisionRunContext, $classificationOutcomeRecorder);
+        $this->resolveActionKindOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
     }
 
@@ -254,6 +271,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $questions['decision'] = new Boolean(self::GATE_QUESTION);
         }
 
+        if ($aiSettings->decisionToolScopingEnabled()) {
+            $questions['action_kind'] = new Choice(self::ACTION_KIND_QUESTION, DecisionActionKind::choiceOptions());
+        }
+
         if ($questions === []) {
             return null;
         }
@@ -325,6 +346,54 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     private function outcomeSubjectKey(): string
     {
         return $this->uniqueId();
+    }
+
+    /**
+     * The action kind to scope this run to, or null for the full toolset.
+     * Below SCOPE_AT, or when classification failed, the run keeps every tool.
+     */
+    private function scopedActionKind(?Answer $answer, ClassificationOutcomeRecorder $classificationOutcomeRecorder): ?DecisionActionKind
+    {
+        if (! $answer instanceof ChoiceAnswer) {
+            return null;
+        }
+
+        $probability = $answer->probabilityOf($answer->choice);
+        $actionKind = DecisionActionKind::tryFrom($answer->choice);
+        $scoped = $actionKind instanceof DecisionActionKind && $probability >= self::SCOPE_AT;
+
+        $classificationOutcomeRecorder->record(
+            ClassificationGate::ActionKind,
+            $this->outcomeSubjectKey(),
+            'action_kind',
+            $probability,
+            $scoped ? ClassificationVerdict::Scoped : ClassificationVerdict::Unscoped,
+            self::SCOPE_AT,
+            $answer->choice,
+        );
+
+        return $scoped ? $actionKind : null;
+    }
+
+    /**
+     * The kind was right when every action the run queued belongs to it.
+     * A run that queued nothing leaves the outcome open.
+     */
+    private function resolveActionKindOutcome(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        if ($decisionRunContext->count() === 0) {
+            return;
+        }
+
+        $types = ActionRequest::query()->whereKey($decisionRunContext->actionRequestIds())->pluck('type')->all();
+        $kinds = array_map(static fn (string $type): ?string => DecisionActionKind::forActionType($type)?->value, $types);
+
+        $classificationOutcomeRecorder->resolveAgainst(
+            ClassificationGate::ActionKind,
+            $this->outcomeSubjectKey(),
+            count(array_unique($kinds)) === 1 ? (string) $kinds[0] : 'mixed',
+            [ClassificationVerdict::Scoped, ClassificationVerdict::Unscoped],
+        );
     }
 
     private function logCooldownSkip(?int $webhookEventId, string $subjectKey): void
