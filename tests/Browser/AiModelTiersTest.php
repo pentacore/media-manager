@@ -126,7 +126,8 @@ test('an event override can hold tiers', function (): void {
         ->fill('[data-event-override="sonarr:Download"] [data-tier-row="0"] [data-tier-min-tokens]', '50000')
         ->assertSeeIn('[data-event-override="sonarr:Download"] [data-tier-row="1"] [data-tier-always]', 'Always')
         ->click('Save models')
-        ->assertSee('AI models updated.');
+        ->assertSee('AI models updated.')
+        ->assertSeeIn('[data-event-override="sonarr:Download"] [data-override-resolved]', 'openai · gpt-5.6-luna');
 
     expect(AiTaskModel::query()->where('scope', 'sonarr:Download')->orderBy('position')->get()->map->only(['model', 'min_pool_tokens'])->all())
         ->toBe([
@@ -154,6 +155,28 @@ test('switching to a model without a pool clears the conditions', function (): v
     expect(AiTaskModel::query()->forTask(AiTask::Chat)->orderBy('position')->get()->map->only(['model', 'min_pool_percent'])->all())
         ->toBe([
             ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
+            ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
+        ]);
+});
+
+test('a condition left on a model whose pool was unlinked can be cleared and saved', function (): void {
+    AiTaskModel::query()->delete();
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => null]);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertEnabled('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]')
+        ->assertValue('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', '20')
+        ->fill('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', '')
+        ->click('Save models')
+        ->assertSee('AI models updated.');
+
+    expect(AiTaskModel::query()->forTask(AiTask::Chat)->orderBy('position')->get()->map->only(['model', 'min_pool_percent'])->all())
+        ->toBe([
+            ['model' => 'gpt-5.6-luna', 'min_pool_percent' => null],
             ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
         ]);
 });

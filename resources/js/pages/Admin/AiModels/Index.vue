@@ -98,6 +98,10 @@ const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>
     ),
 );
 
+function eventResolved(eventKey: string): ResolvedSummary | undefined {
+    return resolvedByEvent.value[eventKey];
+}
+
 const inheritedByEvent = computed<Record<string, ResolvedSummary>>(() =>
     Object.fromEntries(
         props.eventOverrides.map((row) => [row.event_key, row.inherited]),
@@ -315,27 +319,48 @@ function submit(): void {
                                     :errors="formErrors"
                                 />
                                 <div
-                                    v-if="
-                                        resolvedByEvent[override.event_key]
-                                            ?.tier
-                                    "
-                                    class="flex"
+                                    v-if="eventResolved(override.event_key)"
+                                    class="flex flex-wrap items-center gap-2"
                                 >
+                                    <p
+                                        class="font-mono-tabular text-[12px] text-muted-foreground"
+                                        data-override-resolved
+                                    >
+                                        →
+                                        {{
+                                            eventResolved(override.event_key)
+                                                ?.provider
+                                        }}
+                                        ·
+                                        {{
+                                            eventResolved(override.event_key)
+                                                ?.model
+                                        }}
+                                        ·
+                                        {{
+                                            eventResolved(override.event_key)
+                                                ?.reasoning_label
+                                        }}
+                                    </p>
                                     <Pill
+                                        v-if="
+                                            eventResolved(override.event_key)
+                                                ?.tier
+                                        "
                                         :title="
-                                            resolvedByEvent[override.event_key]
+                                            eventResolved(override.event_key)
                                                 ?.tier?.reason ?? undefined
                                         "
                                         data-tier-live
                                     >
                                         Live: tier
                                         {{
-                                            resolvedByEvent[override.event_key]
+                                            eventResolved(override.event_key)
                                                 ?.tier?.position
                                         }}
                                         of
                                         {{
-                                            resolvedByEvent[override.event_key]
+                                            eventResolved(override.event_key)
                                                 ?.tier?.count
                                         }}
                                     </Pill>

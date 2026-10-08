@@ -264,7 +264,7 @@ function errorFor(index: number): string | undefined {
                 v-if="hasReasoning"
                 v-model="tier.reasoning"
                 :levels="reasoningLevels"
-                :inherit-label="reasoningInheritLabel"
+                :inherit-label="tier.model ? 'Default' : reasoningInheritLabel"
                 :accepted="acceptedLevels(tier)"
                 :disabled-hint="reasoningHint(tier)"
             />
@@ -287,7 +287,10 @@ function errorFor(index: number): string | undefined {
                     class="h-8 w-20 text-sm"
                     placeholder="—"
                     :aria-label="`Tier ${index + 1} minimum percent left`"
-                    :disabled="!conditionsEnabled(tier)"
+                    :disabled="
+                        !conditionsEnabled(tier) &&
+                        tier.min_pool_percent === null
+                    "
                     :model-value="tier.min_pool_percent ?? ''"
                     data-tier-min-percent
                     @update:model-value="
@@ -301,7 +304,10 @@ function errorFor(index: number): string | undefined {
                     class="h-8 w-32 text-sm"
                     placeholder="—"
                     :aria-label="`Tier ${index + 1} minimum tokens left`"
-                    :disabled="!conditionsEnabled(tier)"
+                    :disabled="
+                        !conditionsEnabled(tier) &&
+                        tier.min_pool_tokens === null
+                    "
                     :model-value="tier.min_pool_tokens ?? ''"
                     data-tier-min-tokens
                     @update:model-value="
