@@ -14,48 +14,78 @@ use LogicException;
 
 /**
  * Resolves the provider, model and reasoning level each AI task runs on.
- * Null always means inherit; the provider and model resolve as a pair,
- * reasoning on its own.
  *
- * Inheritance (first match wins; the provider and model resolve as a pair):
+ * Every task scope (`default`, or a Decision webhook event key) holds an
+ * ordered tier list (ai_task_models rows by `position`). The first tier that
+ * may run wins: every tier but the last is skipped while its model is
+ * rate-limited or, when it has pool minimums, while its model's free pool has
+ * less left (TierEligibility). A tier with no model is an "inherit tier"
+ * (always last) and hands off to what the scope inherits:
  *
- * - Chat: model is the ChatTurnContext pair, then the chat row, then config
- *   `mediamanager.ai.model` on `config('ai.default')`. Reasoning is the
- *   ChatTurnContext, then the chat row, then config
- *   `mediamanager.ai.advisor_reasoning_level`, then ProviderDefault.
- * - FileInspector and StuckDownloadInvestigator: model is the own row, then
- *   config `mediamanager.ai.sub_agent_model`, then the admin chat default
- *   (row, then config; never the ChatTurnContext model). Reasoning is the
- *   ChatTurnContext, then the own row, then ProviderDefault.
- * - Decision: model is the event row, then the decision row, then config
- *   `mediamanager.decision_agent.model`, then the chat row/config pair.
- *   Reasoning is the event row, then the decision row, then config
- *   `mediamanager.decision_agent.reasoning_level`, then ProviderDefault.
- * - Title: model is the own row, then config `mediamanager.ai.title_model`
- *   (`auto` becomes `Ai::textProvider($provider)->cheapestTextModel()`, or
- *   the config title model when that provider cannot be resolved).
- *   Reasoning is the own row, then ProviderDefault.
- * - PriceUpdater: model is the own row, then config
- *   `mediamanager.ai.pricing.updater_model`, then the chat row/config pair.
- *   Reasoning is the own row, then ProviderDefault.
+ * - an event scope → the Decision default list;
+ * - Chat → config `mediamanager.ai.model` on `config('ai.default')`;
+ * - Title → config `mediamanager.ai.title_model` (`auto` becomes the
+ *   provider's cheapest text model);
+ * - Decision → config `mediamanager.decision_agent.model`, then the Chat list;
+ * - PriceUpdater → config `mediamanager.ai.pricing.updater_model`, then the
+ *   Chat list;
+ * - FileInspector, StuckDownloadInvestigator → config
+ *   `mediamanager.ai.sub_agent_model`, then the Chat list.
  *
- * Rows are memoised for the request (the class is scoped) and flushed by
- * AiTaskModelObserver whenever a row is saved or deleted.
+ * A scope without rows inherits the same way. Following another task's list
+ * takes only its provider/model pair (and tier outcome), never its reasoning.
+ *
+ * Reasoning: the conversation override (Chat and sub-agents), then the
+ * picked tier's level (an inherit tier without one keeps what its same-task
+ * parent picked), then the task's config level, then ProviderDefault. A
+ * conversation model override bypasses tiers; without a conversation
+ * reasoning it uses the Chat list's first tier's level.
+ *
+ * Rows and list walks are memoised for the request or job (the class is
+ * scoped) and flushed by AiTaskModelObserver whenever a row is saved or
+ * deleted. The memo holds the walk only; ChatTurnContext applies on top at
+ * every resolve().
  */
 final class TaskModelResolver
 {
     /** @var Collection<int, AiTaskModel>|null */
     private ?Collection $rows = null;
 
-    public function __construct(private readonly ChatTurnContext $chatTurnContext) {}
+    /** @var array<string, TierPick> */
+    private array $picks = [];
+
+    public function __construct(
+        private readonly ChatTurnContext $chatTurnContext,
+        private readonly TierEligibility $tierEligibility,
+    ) {}
 
     public function resolve(AiTask $aiTask, ?string $eventKey = null): ResolvedSelection
     {
         throw_if($aiTask === AiTask::Failover, InvalidArgumentException::class, 'Resolve the failover task with failover().');
 
-        [$provider, $model] = $this->pairFor($aiTask, $eventKey);
+        if ($aiTask === AiTask::Chat && $this->chatTurnContext->hasModel()) {
+            return new ResolvedSelection(
+                (string) $this->chatTurnContext->provider,
+                (string) $this->chatTurnContext->model,
+                $this->chatTurnContext->reasoning
+                    ?? $this->row(AiTask::Chat)?->reasoning
+                    ?? $this->configLevel(AiTask::Chat)
+                    ?? AiReasoningLevel::ProviderDefault,
+            );
+        }
 
-        return new ResolvedSelection($provider, $model, $this->reasoningFor($aiTask, $eventKey));
+        $scope = $aiTask === AiTask::Decision && $eventKey !== null ? $eventKey : AiTaskModel::DEFAULT_SCOPE;
+        $tierPick = $this->pick($aiTask, $scope);
+
+        return new ResolvedSelection(
+            $tierPick->provider,
+            $tierPick->model,
+            $this->conversationReasoning($aiTask)
+                ?? $tierPick->reasoning
+                ?? $this->configLevel($aiTask)
+                ?? AiReasoningLevel::ProviderDefault,
+            $tierPick->tier,
+        );
     }
 
     /**
@@ -74,11 +104,25 @@ final class TaskModelResolver
         return ['provider' => (string) $row->provider, 'model' => filled($row->model) ? $row->model : null];
     }
 
+    /**
+     * The scope's first tier.
+     */
     public function row(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ?AiTaskModel
     {
-        return $this->rows()->first(
-            static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask && $aiTaskModel->scope === $scope,
-        );
+        return $this->tiers($aiTask, $scope)->first();
+    }
+
+    /**
+     * The scope's tiers in position order.
+     *
+     * @return Collection<int, AiTaskModel>
+     */
+    public function tiers(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): Collection
+    {
+        return $this->rows()
+            ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask && $aiTaskModel->scope === $scope)
+            ->sortBy('position')
+            ->values();
     }
 
     /**
@@ -92,76 +136,107 @@ final class TaskModelResolver
     public function flush(): void
     {
         $this->rows = null;
+        $this->picks = [];
     }
 
     /**
-     * @return array{0: string, 1: string}
+     * The scope's own tier walk, or what it inherits when it has no rows.
      */
-    private function pairFor(AiTask $aiTask, ?string $eventKey): array
+    private function pick(AiTask $aiTask, string $scope): TierPick
     {
+        return $this->picks[sprintf('%s|%s', $aiTask->value, $scope)] ??= $this->walk($aiTask, $scope) ?? $this->inherited($aiTask, $scope);
+    }
+
+    private function walk(AiTask $aiTask, string $scope): ?TierPick
+    {
+        $tiers = $this->tiers($aiTask, $scope);
+        $count = $tiers->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $skipped = [];
+
+        foreach ($tiers as $index => $tier) {
+            if (blank($tier->model)) {
+                $parent = $this->inherited($aiTask, $scope);
+
+                return new TierPick(
+                    $parent->provider,
+                    $parent->model,
+                    $tier->reasoning ?? $parent->reasoning,
+                    $count > 1 ? new TierOutcome($index + 1, $count, [...$skipped, ...($parent->tier?->reasons ?? [])]) : $parent->tier,
+                );
+            }
+
+            [$provider, $model] = $this->tierPair($aiTask, $tier);
+
+            if ($index < $count - 1) {
+                $reason = $this->tierEligibility->skipReason($provider, $model, $tier->min_pool_percent, $tier->min_pool_tokens);
+
+                if ($reason !== null) {
+                    $skipped[] = sprintf('Tier %d: %s', $index + 1, $reason);
+
+                    continue;
+                }
+            }
+
+            return new TierPick($provider, $model, $tier->reasoning, $count > 1 ? new TierOutcome($index + 1, $count, $skipped) : null);
+        }
+
+        throw new LogicException('A tier list always ends in a tier that runs.');
+    }
+
+    /**
+     * What a scope runs on without tiers of its own (or from its inherit tier).
+     */
+    private function inherited(AiTask $aiTask, string $scope): TierPick
+    {
+        if ($scope !== AiTaskModel::DEFAULT_SCOPE) {
+            return $this->pick($aiTask, AiTaskModel::DEFAULT_SCOPE);
+        }
+
         return match ($aiTask) {
-            AiTask::Chat => $this->chatTurnContext->hasModel()
-                ? [(string) $this->chatTurnContext->provider, (string) $this->chatTurnContext->model]
-                : $this->chatDefaultPair(),
-            AiTask::Title => $this->titlePair(),
-            AiTask::Decision => ($eventKey !== null ? $this->rowPair(AiTask::Decision, $eventKey) : null)
-                ?? $this->rowPair(AiTask::Decision)
-                ?? $this->configPair('mediamanager.decision_agent.model')
-                ?? $this->chatDefaultPair(),
-            AiTask::PriceUpdater => $this->rowPair(AiTask::PriceUpdater)
-                ?? $this->configPair('mediamanager.ai.pricing.updater_model')
-                ?? $this->chatDefaultPair(),
-            AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->rowPair($aiTask)
-                ?? $this->configPair('mediamanager.ai.sub_agent_model')
-                ?? $this->chatDefaultPair(),
+            AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
+            AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
+            AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+            AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+            AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
+                ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
             AiTask::Failover => throw new InvalidArgumentException('Resolve the failover task with failover().'),
         };
     }
 
-    private function reasoningFor(AiTask $aiTask, ?string $eventKey): AiReasoningLevel
-    {
-        $conversation = in_array($aiTask, [AiTask::Chat, AiTask::FileInspector, AiTask::StuckDownloadInvestigator], true)
-            ? $this->chatTurnContext->reasoning
-            : null;
-
-        return $conversation
-            ?? ($eventKey !== null ? $this->row($aiTask, $eventKey)?->reasoning : null)
-            ?? $this->row($aiTask)->reasoning
-            ?? $this->configLevel($aiTask)
-            ?? AiReasoningLevel::ProviderDefault;
-    }
-
     /**
-     * The admin chat default (row, then config), ignoring any conversation
-     * override: tasks that follow "the chat model" follow the admin choice.
+     * A tier's pair: a model saved without a provider (settings from before
+     * 1.26.0) runs on `config('ai.default')`; `auto` resolves for titles.
      *
      * @return array{0: string, 1: string}
      */
-    private function chatDefaultPair(): array
+    private function tierPair(AiTask $aiTask, AiTaskModel $aiTaskModel): array
     {
-        return $this->rowPair(AiTask::Chat)
-            ?? $this->configPair('mediamanager.ai.model')
-            ?? [$this->defaultProvider(), 'gpt-5-mini'];
+        $provider = filled($aiTaskModel->provider) ? (string) $aiTaskModel->provider : $this->defaultProvider();
+
+        return $aiTask === AiTask::Title
+            ? $this->withAutoTitle($provider, (string) $aiTaskModel->model)
+            : [$provider, (string) $aiTaskModel->model];
     }
 
     /**
      * @return array{0: string, 1: string}
      */
-    private function titlePair(): array
+    private function withAutoTitle(string $provider, string $model): array
     {
-        [$provider, $model] = $this->rowPair(AiTask::Title)
-            ?? $this->configPair('mediamanager.ai.title_model')
-            ?? [$this->defaultProvider(), 'gpt-5.4-nano'];
-
-        if ($model === 'auto') {
-            try {
-                $model = Ai::textProvider($provider)->cheapestTextModel();
-            } catch (InvalidArgumentException|LogicException) {
-                $model = $this->configTitleModel();
-            }
+        if ($model !== 'auto') {
+            return [$provider, $model];
         }
 
-        return [$provider, $model];
+        try {
+            return [$provider, Ai::textProvider($provider)->cheapestTextModel()];
+        } catch (InvalidArgumentException|LogicException) {
+            return [$provider, $this->configTitleModel()];
+        }
     }
 
     /**
@@ -175,18 +250,18 @@ final class TaskModelResolver
         return $model === '' || $model === 'auto' ? 'gpt-5.4-nano' : $model;
     }
 
-    /**
-     * @return array{0: string, 1: string}|null
-     */
-    private function rowPair(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ?array
+    private function conversationReasoning(AiTask $aiTask): ?AiReasoningLevel
     {
-        $row = $this->row($aiTask, $scope);
+        return in_array($aiTask, [AiTask::Chat, AiTask::FileInspector, AiTask::StuckDownloadInvestigator], true)
+            ? $this->chatTurnContext->reasoning
+            : null;
+    }
 
-        if (blank($row?->model)) {
-            return null;
-        }
+    private function configPick(string $key): ?TierPick
+    {
+        $pair = $this->configPair($key);
 
-        return [filled($row->provider) ? (string) $row->provider : $this->defaultProvider(), (string) $row->model];
+        return $pair === null ? null : new TierPick(...$pair);
     }
 
     /**
