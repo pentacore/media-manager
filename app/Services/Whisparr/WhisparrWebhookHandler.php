@@ -12,6 +12,18 @@ use App\Services\Webhook\AbstractArrWebhookHandler;
 
 class WhisparrWebhookHandler extends AbstractArrWebhookHandler
 {
+    /**
+     * The events that change what WhisparrCache holds (v3 sends the movie
+     * events, v2 the series and episode ones): the library list, the item
+     * entity, its episodes and lookup results. Test, Grab (no cache holds
+     * the queue), Health, HealthRestored, ApplicationUpdate,
+     * ManualInteractionRequired and ignored types change none of it, so
+     * they clear nothing.
+     *
+     * @var list<string>
+     */
+    private const array CACHE_CLEARING_EVENTS = ['Download', 'Rename', 'MovieAdded', 'SeriesAdd', 'MovieDelete', 'SeriesDelete', 'MovieFileDelete', 'EpisodeFileDelete'];
+
     protected function serviceSlug(): string
     {
         return 'whisparr';
@@ -42,7 +54,7 @@ class WhisparrWebhookHandler extends AbstractArrWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        if ($webhookEvent->serviceConnection !== null) {
+        if ($webhookEvent->serviceConnection !== null && in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
             new WhisparrCache($webhookEvent->serviceConnection)->bustAll();
         }
 

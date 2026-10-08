@@ -13,6 +13,18 @@ use App\Services\Webhook\AbstractWebhookHandler;
 
 class SeerrWebhookHandler extends AbstractWebhookHandler
 {
+    /**
+     * The notifications that change what SeerrCache holds. Every cached
+     * Seerr read (request lists and count, title details, discover rows,
+     * search results) carries request or media status, so the request
+     * lifecycle clears the connection scope. TEST_NOTIFICATION, the ISSUE_*
+     * notifications (issues are never cached) and ignored types clear
+     * nothing.
+     *
+     * @var list<string>
+     */
+    private const array CACHE_CLEARING_EVENTS = ['MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED', 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED'];
+
     public function __construct(
         private readonly ActionDescriber $actionDescriber,
         private readonly EmbyLibraryScanScheduler $embyLibraryScanScheduler,
@@ -45,7 +57,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $notificationType),
         };
 
-        if ($webhookEvent->serviceConnection !== null) {
+        if ($webhookEvent->serviceConnection !== null && in_array($notificationType, self::CACHE_CLEARING_EVENTS, true)) {
             new SeerrCache($webhookEvent->serviceConnection)->bustAll();
         }
 
