@@ -122,14 +122,20 @@ test('a rate-limited tier is skipped only while enforcement is on', function ():
         ->and($resolvedSelection->tier?->reason())->toStartWith('Tier 1: rate-limited (1 of 1');
 });
 
-test('the last tier always runs, even when its own pool is drained', function (): void {
+test('the last tier always runs, even when it is rate-limited and its pool is drained', function (): void {
     $pool = tierPool();
     tierPrice('gpt-5.6-luna', $pool);
-    tierPrice('gpt-5-nano', $pool);
+    $nano = tierPrice('gpt-5-nano', $pool);
+    $nano->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
     tierUsage('gpt-5.6-luna', 1_000_000);
+    tierUsage('gpt-5-nano', 10);
     tierChatList(20);
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
 
-    expect(tierResolver()->resolve(AiTask::Chat)->model)->toBe('gpt-5-nano');
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->model)->toBe('gpt-5-nano')
+        ->and($resolvedSelection->tier?->position)->toBe(2);
 });
 
 test('an inherit tier in an event list hands off to the decision default list', function (): void {
