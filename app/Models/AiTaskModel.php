@@ -21,12 +21,17 @@ use Override;
  * the decision task, a webhook event key (`service:EventType`). Every null
  * field inherits (see TaskModelResolver).
  *
+ * Rows of one task scope form an ordered tier list (`position` 0 first); a tier with pool minimums runs only while its model's free pool has that much left (see TaskModelResolver).
+ *
  * @property int $id
  * @property AiTask $task
  * @property string $scope
+ * @property int $position
  * @property string|null $provider
  * @property string|null $model
  * @property AiReasoningLevel|null $reasoning
+ * @property int|null $min_pool_percent
+ * @property int|null $min_pool_tokens
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -37,7 +42,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['task', 'scope', 'provider', 'model', 'reasoning'])]
+#[Fillable(['task', 'scope', 'position', 'provider', 'model', 'reasoning', 'min_pool_percent', 'min_pool_tokens'])]
 #[ObservedBy(AiTaskModelObserver::class)]
 class AiTaskModel extends Model
 {
@@ -45,6 +50,14 @@ class AiTaskModel extends Model
     use HasFactory;
 
     public const string DEFAULT_SCOPE = 'default';
+
+    /**
+     * Whether this tier only runs while its model's free pool has enough left.
+     */
+    public function hasConditions(): bool
+    {
+        return $this->min_pool_percent !== null || $this->min_pool_tokens !== null;
+    }
 
     /**
      * @param  Builder<static>  $query
@@ -63,7 +76,10 @@ class AiTaskModel extends Model
     {
         return [
             'task' => AiTask::class,
+            'position' => 'integer',
             'reasoning' => AiReasoningLevel::class,
+            'min_pool_percent' => 'integer',
+            'min_pool_tokens' => 'integer',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];
