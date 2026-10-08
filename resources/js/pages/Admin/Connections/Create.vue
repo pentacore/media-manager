@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import type { FormDataConvertible } from '@inertiajs/core';
-import { Form, Head, Link, useHttp } from '@inertiajs/vue3';
-import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from '@lucide/vue';
+import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import {
+    BazarrConnectionMappings,
+    ConnectionTestButton,
+    NOT_CONNECTED_VALUE,
+    ServiceTypeSelect,
+    WebhookTokenField,
+    WhisparrVersionSelect,
+    withBazarrMappingIds,
+} from '@/components/connections';
+import type {
+    ArrConnectionOption,
+    ServiceTypeOption,
+} from '@/components/connections';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,33 +26,8 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { copyToClipboard } from '@/lib/clipboard';
 
-interface ServiceTypeOption {
-    value: string;
-    label: string;
-}
-
-interface ArrConnectionOption {
-    id: number;
-    type: 'sonarr' | 'radarr';
-    name: string;
-}
-
-const props = defineProps<{
+defineProps<{
     serviceTypes: ServiceTypeOption[];
     arrConnections: ArrConnectionOption[];
 }>();
@@ -62,69 +48,14 @@ defineOptions({
     },
 });
 
+// Page-level state: the Test Connection button reads the type, URL and key,
+// and the Bazarr mapping ids and Whisparr version must survive their selects
+// unmounting when the service type changes.
 const selectedType = ref('');
-const notConnectedValue = 'not-connected';
-const selectedSonarrConnectionId = ref(notConnectedValue);
-const selectedRadarrConnectionId = ref(notConnectedValue);
-const webhookToken = ref('');
+const selectedSonarrConnectionId = ref(NOT_CONNECTED_VALUE);
+const selectedRadarrConnectionId = ref(NOT_CONNECTED_VALUE);
 const serviceUrl = ref('');
 const apiKey = ref('');
-
-const copied = ref(false);
-const tokenVisible = ref(false);
-
-interface TestConnectionResponse {
-    success: boolean;
-    message: string;
-    version?: string;
-}
-
-const testResult = ref<TestConnectionResponse | null>(null);
-const testHttp = useHttp<
-    { type: string; url: string; api_key: string },
-    TestConnectionResponse
->({ type: '', url: '', api_key: '' });
-
-function testConnection() {
-    testResult.value = null;
-    testHttp.type = selectedType.value;
-    testHttp.url = serviceUrl.value;
-    testHttp.api_key = apiKey.value;
-    testHttp.post(ServiceConnectionController.test.url(), {
-        onSuccess: (response) => {
-            testResult.value = response;
-        },
-        onError: () => {
-            testResult.value = {
-                success: false,
-                message: 'Connection failed.',
-            };
-        },
-    });
-}
-
-function generateWebhookToken() {
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    webhookToken.value = Array.from(bytes, (b) =>
-        b.toString(16).padStart(2, '0'),
-    ).join('');
-    copied.value = false;
-}
-
-async function copyWebhookToken() {
-    if (!webhookToken.value) {
-        return;
-    }
-
-    const ok = await copyToClipboard(webhookToken.value);
-
-    if (!ok) {
-        return;
-    }
-
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 2000);
-}
 
 const servicePlaceholders = {
     sonarr: {
@@ -157,12 +88,6 @@ const servicePlaceholders = {
 const whisparrVersion = ref('v3');
 const showWhisparrVersion = computed(() => selectedType.value === 'whisparr');
 const showBazarrMappings = computed(() => selectedType.value === 'bazarr');
-const sonarrConnections = computed(() =>
-    props.arrConnections.filter((connection) => connection.type === 'sonarr'),
-);
-const radarrConnections = computed(() =>
-    props.arrConnections.filter((connection) => connection.type === 'radarr'),
-);
 
 const placeholders = computed(
     () =>
@@ -189,145 +114,32 @@ const placeholders = computed(
             <CardContent>
                 <Form
                     v-bind="ServiceConnectionController.store.form.post()"
-                    :transform="
-                        (data: Record<string, FormDataConvertible>) => ({
-                            ...data,
-                            sonarr_connection_id:
-                                data.sonarr_connection_id === notConnectedValue
-                                    ? null
-                                    : data.sonarr_connection_id,
-                            radarr_connection_id:
-                                data.radarr_connection_id === notConnectedValue
-                                    ? null
-                                    : data.radarr_connection_id,
-                        })
-                    "
+                    :transform="withBazarrMappingIds"
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
-                    <div class="space-y-2">
-                        <Label for="service_type">Service Type</Label>
-                        <Select name="type" v-model="selectedType">
-                            <SelectTrigger id="service_type" class="w-full">
-                                <SelectValue
-                                    placeholder="Select a service type"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="serviceType in serviceTypes"
-                                    :key="serviceType.value"
-                                    :value="serviceType.value"
-                                    :aria-label="serviceType.label"
-                                >
-                                    {{ serviceType.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <InputError :message="errors.type" />
-                    </div>
+                    <ServiceTypeSelect
+                        v-model="selectedType"
+                        :service-types="serviceTypes"
+                        :error="errors.type"
+                    />
 
-                    <div
+                    <BazarrConnectionMappings
                         v-if="showBazarrMappings"
-                        class="grid gap-4 sm:grid-cols-2"
-                        data-bazarr-mappings
-                    >
-                        <div class="space-y-2">
-                            <Label for="sonarr_connection_id"
-                                >Sonarr connection</Label
-                            >
-                            <Select
-                                name="sonarr_connection_id"
-                                v-model="selectedSonarrConnectionId"
-                            >
-                                <SelectTrigger
-                                    id="sonarr_connection_id"
-                                    class="w-full"
-                                >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        :value="notConnectedValue"
-                                        aria-label="No Sonarr connection"
-                                        >Not connected</SelectItem
-                                    >
-                                    <SelectItem
-                                        v-for="connection in sonarrConnections"
-                                        :key="connection.id"
-                                        :value="String(connection.id)"
-                                        :aria-label="`Use ${connection.name} as Sonarr connection`"
-                                    >
-                                        {{ connection.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <InputError
-                                :message="errors.sonarr_connection_id"
-                            />
-                        </div>
+                        v-model:sonarr-connection-id="
+                            selectedSonarrConnectionId
+                        "
+                        v-model:radarr-connection-id="
+                            selectedRadarrConnectionId
+                        "
+                        :arr-connections="arrConnections"
+                        :errors="errors"
+                    />
 
-                        <div class="space-y-2">
-                            <Label for="radarr_connection_id"
-                                >Radarr connection</Label
-                            >
-                            <Select
-                                name="radarr_connection_id"
-                                v-model="selectedRadarrConnectionId"
-                            >
-                                <SelectTrigger
-                                    id="radarr_connection_id"
-                                    class="w-full"
-                                >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        :value="notConnectedValue"
-                                        aria-label="No Radarr connection"
-                                        >Not connected</SelectItem
-                                    >
-                                    <SelectItem
-                                        v-for="connection in radarrConnections"
-                                        :key="connection.id"
-                                        :value="String(connection.id)"
-                                        :aria-label="`Use ${connection.name} as Radarr connection`"
-                                    >
-                                        {{ connection.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <InputError
-                                :message="errors.radarr_connection_id"
-                            />
-                        </div>
-                    </div>
-
-                    <div
+                    <WhisparrVersionSelect
                         v-if="showWhisparrVersion"
-                        class="space-y-2"
-                        data-whisparr-version
-                    >
-                        <Label for="whisparr_version">Whisparr Version</Label>
-                        <Select
-                            name="whisparr_version"
-                            v-model="whisparrVersion"
-                        >
-                            <SelectTrigger>
-                                <SelectValue
-                                    placeholder="Select Whisparr version"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="v3"
-                                    >v3 (movie-based)</SelectItem
-                                >
-                                <SelectItem value="v2"
-                                    >v2 (Eros / series-based)</SelectItem
-                                >
-                            </SelectContent>
-                        </Select>
-                    </div>
+                        v-model="whisparrVersion"
+                    />
 
                     <div class="space-y-2">
                         <Label for="name">Display Name</Label>
@@ -375,122 +187,21 @@ const placeholders = computed(
                         <InputError :message="errors.api_key" />
                     </div>
 
-                    <div class="space-y-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            :disabled="
-                                !selectedType ||
-                                !serviceUrl ||
-                                !apiKey ||
-                                testHttp.processing
-                            "
-                            data-connection-test
-                            @click="testConnection"
-                        >
-                            <Plug class="mr-2 size-4" />
-                            {{
-                                testHttp.processing
-                                    ? 'Testing...'
-                                    : 'Test Connection'
-                            }}
-                        </Button>
-                        <p
-                            v-if="testResult?.success"
-                            class="text-sm text-green-600 dark:text-green-400"
-                            data-connection-test-result
-                        >
-                            {{ testResult.message }}
-                            <span v-if="testResult.version">
-                                (v{{ testResult.version }})</span
-                            >
-                        </p>
-                        <p
-                            v-else-if="testResult && !testResult.success"
-                            class="text-sm text-destructive"
-                            data-connection-test-result
-                        >
-                            {{ testResult.message }}
-                        </p>
-                    </div>
+                    <ConnectionTestButton
+                        :type="selectedType"
+                        :url="serviceUrl"
+                        :api-key="apiKey"
+                    />
 
-                    <div class="space-y-2">
-                        <Label for="webhook_token">Webhook Token</Label>
-                        <div class="flex gap-2">
-                            <Input
-                                id="webhook_token"
-                                v-model="webhookToken"
-                                name="webhook_token"
-                                :type="tokenVisible ? 'text' : 'password'"
-                                placeholder="Token for webhook authentication"
-                            />
-                            <TooltipProvider :delay-duration="0">
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            :disabled="!webhookToken"
-                                            data-webhook-token-toggle
-                                            @click="
-                                                tokenVisible = !tokenVisible
-                                            "
-                                        >
-                                            <EyeOff
-                                                v-if="tokenVisible"
-                                                class="size-4"
-                                            />
-                                            <Eye v-else class="size-4" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{{
-                                        tokenVisible
-                                            ? 'Hide token'
-                                            : 'Show token'
-                                    }}</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            :disabled="!webhookToken"
-                                            data-webhook-token-copy
-                                            @click="copyWebhookToken"
-                                        >
-                                            <ClipboardCopy class="size-4" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{{
-                                        copied ? 'Copied!' : 'Copy to clipboard'
-                                    }}</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            data-webhook-token-generate
-                                            @click="generateWebhookToken"
-                                        >
-                                            <RefreshCw class="size-4" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                        >Generate token</TooltipContent
-                                    >
-                                </Tooltip>
-                            </TooltipProvider>
-                        </div>
+                    <WebhookTokenField
+                        placeholder="Token for webhook authentication"
+                        :error="errors.webhook_token"
+                    >
                         <p class="text-sm text-muted-foreground">
                             Configure this token in the service's webhook
                             settings as the X-Webhook-Token header.
                         </p>
-                        <InputError :message="errors.webhook_token" />
-                    </div>
+                    </WebhookTokenField>
 
                     <div class="flex gap-2 pt-4">
                         <Button type="submit" :disabled="processing"
