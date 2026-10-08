@@ -69,7 +69,7 @@ test('members can list requests with title enrichment and summary', function ():
             ->component('Seerr/Requests')
             ->has('connection.url')
             ->has('filters.page')
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps(['default', 'summary'], function ($page): void {
                 $page
                     ->has('requests.data', 1)
                     ->where('requests.data.0.media_title', 'The Matrix')
@@ -211,7 +211,7 @@ test('empty results render without errors', function (): void {
         ->get(route('media.requests.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps(['default', 'summary'], function ($page): void {
                 $page
                     ->has('requests.data', 0)
                     ->where('requests.meta.total', 0)
@@ -235,7 +235,7 @@ test('summary falls back to zeros when count endpoint fails', function (): void 
         ->get(route('media.requests.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('summary', function ($page): void {
                 $page
                     ->where('summary.total', 0)
                     ->where('summary.pending', 0)
@@ -270,7 +270,7 @@ test('summary exposes every status bucket reported by /request/count', function 
         ->get(route('media.requests.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('summary', function ($page): void {
                 $page
                     ->where('summary.total', 100)
                     ->where('summary.pending', 5)

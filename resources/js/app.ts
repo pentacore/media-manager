@@ -9,6 +9,14 @@ createInertiaApp({
     progress: {
         color: '#4B5563',
     },
+    // Inertia keeps a prefetched page 30 s by default and does not drop it
+    // after a write, so a page hovered before an approve or delete could be
+    // shown stale on click. 10 s still covers hover-then-click.
+    defaults: {
+        prefetch: {
+            cacheFor: '10s',
+        },
+    },
 });
 
 initializeTheme();

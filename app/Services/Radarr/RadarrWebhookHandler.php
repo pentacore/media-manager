@@ -18,6 +18,17 @@ use App\Services\Webhook\AbstractArrWebhookHandler;
 
 class RadarrWebhookHandler extends AbstractArrWebhookHandler
 {
+    /**
+     * The events that change what RadarrCache holds: movie statistics, the
+     * movie entity, the calendar ranges, root-folder free space and lookup
+     * results. Test, Grab (no cache holds the queue), Health,
+     * HealthRestored, ApplicationUpdate, ManualInteractionRequired and
+     * ignored types change none of it, so they clear nothing.
+     *
+     * @var list<string>
+     */
+    private const array CACHE_CLEARING_EVENTS = ['Download', 'Rename', 'MovieAdded', 'MovieDelete', 'MovieFileDelete'];
+
     public function __construct(
         private readonly MovieIndexer $movieIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
@@ -58,7 +69,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        if ($webhookEvent->serviceConnection !== null) {
+        if ($webhookEvent->serviceConnection !== null && in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
             new RadarrCache($webhookEvent->serviceConnection)->bustAll();
         }
 
