@@ -32,4 +32,4 @@ test('no SABnzbd event flushes the connection cache scope', function (string $ev
     ]));
 
     expect(Cache::store('array')->tags([$prefix])->get(sprintf('%s:list', $prefix)))->toBe(['warm' => true]);
-})->with(['complete', 'failed', 'startup', 'pause', 'resume', 'queue_done', 'warning', 'disk_full', 'something_new']);
+})->with(['complete', 'failed', 'startup', 'pause', 'resume', 'queue_done', 'warning', 'error', 'disk_full', 'something_new']);

@@ -17,13 +17,17 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
      * The notifications that change what SeerrCache holds. Every cached
      * Seerr read (request lists and count, title details, discover rows,
      * search results) carries request or media status, so the request
-     * lifecycle clears the connection scope. TEST_NOTIFICATION, the ISSUE_*
-     * notifications (issues are never cached) and ignored types clear
-     * nothing.
+     * lifecycle clears the connection scope. MEDIA_AUTO_REQUESTED (a
+     * watchlist sync creating a request) is not matched below — some Seerr
+     * builds send it alongside MEDIA_PENDING/MEDIA_AUTO_APPROVED, which
+     * already clear — but it still changes cached state, so it clears here
+     * too in case a build ever sends it alone. TEST_NOTIFICATION, the
+     * ISSUE_* notifications (issues are never cached) and ignored types
+     * clear nothing.
      *
      * @var list<string>
      */
-    private const array CACHE_CLEARING_EVENTS = ['MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED', 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED'];
+    private const array CACHE_CLEARING_EVENTS = ['MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED', 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED', 'MEDIA_AUTO_REQUESTED'];
 
     public function __construct(
         private readonly ActionDescriber $actionDescriber,

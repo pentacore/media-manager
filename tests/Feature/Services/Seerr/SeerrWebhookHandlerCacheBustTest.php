@@ -57,7 +57,7 @@ test('a request lifecycle notification clears the Seerr connection cache', funct
     resolve(SeerrWebhookHandler::class)->handle(seerrCacheBustEvent($serviceConnection, $notificationType));
 
     expect(seerrCacheBustCachedList($serviceConnection))->toBeNull();
-})->with(['MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED', 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED']);
+})->with(['MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED', 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED', 'MEDIA_AUTO_REQUESTED']);
 
 test('a Seerr notification that changes nothing cached keeps the connection cache', function (string $notificationType): void {
     $serviceConnection = ServiceConnection::factory()->seerr()->create();
