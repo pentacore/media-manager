@@ -9,6 +9,7 @@ import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTempla
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
 import ReasoningSelect from '@/components/ai/ReasoningSelect.vue';
+import type { ModelOptions } from '@/components/ai/types';
 import {
     buildToken,
     extractTokenNames,
@@ -42,11 +43,6 @@ const props = defineProps<{
     variableTypes: VariableTypeOption[];
     previewModes: PreviewModeOption[];
 }>();
-
-interface ModelOptions {
-    models: Record<string, string[]>;
-    reasoningLevels: Array<{ label: string; value: AiReasoningLevel }>;
-}
 
 defineOptions({
     layout: {

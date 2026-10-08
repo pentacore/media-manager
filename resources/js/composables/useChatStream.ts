@@ -1,4 +1,5 @@
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import type { ChatOverride } from '@/components/ai/types';
 import type { ChatToolCall } from '@/composables/useAiChat';
 
 export type { ChatToolCall } from '@/composables/useAiChat';
@@ -14,6 +15,8 @@ interface StreamChatOptions extends StreamCallbacks {
     conversationId: string | null;
     mode: 'advisory' | 'executive';
     attachments?: File[];
+    /** The model/reasoning a brand-new conversation starts with. */
+    override?: ChatOverride;
     /** Aborting it stops reading the stream and closes the request. */
     signal?: AbortSignal;
 }
@@ -66,12 +69,17 @@ function requestBody(options: StreamChatOptions): {
     body: BodyInit;
     headers: Record<string, string>;
 } {
+    // The server honours an override only on a conversation's first turn.
+    const override =
+        options.conversationId === null ? options.override : undefined;
+
     if (!options.attachments?.length) {
         return {
             body: JSON.stringify({
                 message: options.message,
                 conversation_id: options.conversationId,
                 mode: options.mode,
+                ...(override ? { override } : {}),
             }),
             headers: { 'Content-Type': 'application/json' },
         };
@@ -83,6 +91,14 @@ function requestBody(options: StreamChatOptions): {
 
     if (options.conversationId) {
         form.append('conversation_id', options.conversationId);
+    }
+
+    if (override) {
+        for (const [key, value] of Object.entries(override)) {
+            if (value !== null) {
+                form.append(`override[${key}]`, value);
+            }
+        }
     }
 
     options.attachments.forEach((file) => form.append('attachments[]', file));

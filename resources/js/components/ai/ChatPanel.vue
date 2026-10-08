@@ -4,6 +4,7 @@ import { Sparkles } from '@lucide/vue';
 import {
     computed,
     nextTick,
+    onMounted,
     onUnmounted,
     ref,
     useTemplateRef,
@@ -11,6 +12,8 @@ import {
 } from 'vue';
 import { toast } from 'vue-sonner';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import ChatModelOptionsController from '@/actions/App/Http/Controllers/AI/ChatModelOptionsController';
+import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
 import {
     ChatTemplateChips,
     ChatTemplateFillDialog,
@@ -28,9 +31,12 @@ import ChatHeader from './ChatHeader.vue';
 import ChatMessageBubble from './ChatMessageBubble.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
 import type {
+    AnsweredBy,
     ChatMessage,
     ChatMode,
+    ChatOverride,
     ComposerSubmission,
+    ModelOptions,
     WorkflowProposal,
 } from './types';
 
@@ -77,6 +83,114 @@ let lastScrollTop = 0;
 const mode = ref<ChatMode>('executive');
 const streamingIndex = ref<number | null>(null);
 
+function emptyOverride(): ChatOverride {
+    return { provider: null, model: null, reasoning: null };
+}
+
+/** The conversation's model/reasoning override, as the picker shows it. */
+const override = ref<ChatOverride>(emptyOverride());
+/** The override the server last confirmed, restored when a change fails. */
+let savedOverride: ChatOverride = emptyOverride();
+const savingOverride = ref(false);
+/** Only the newest override change may apply its response. */
+let overrideRequest = 0;
+const modelOptions = ref<ModelOptions | null>(null);
+
+/**
+ * The picker is locked while a conversation loads or a turn or an override
+ * change is in flight.
+ */
+const modelLocked = computed(
+    () => loading.value || sending.value || savingOverride.value,
+);
+
+function setOverride(value: ChatOverride): void {
+    savedOverride = { ...value };
+    override.value = { ...value };
+}
+
+/**
+ * Who answers the next turn: the override where it is set, the chat
+ * default otherwise. Shown under streamed replies, whose frames carry no
+ * model (blocking replies use the server's `answered_by`).
+ */
+const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
+    const options = modelOptions.value;
+
+    if (options === null) {
+        return null;
+    }
+
+    const reasoning = override.value.reasoning;
+
+    return {
+        provider: override.value.provider ?? options.defaults.provider,
+        model: override.value.model ?? options.defaults.model,
+        reasoning_label:
+            reasoning === null
+                ? options.defaults.reasoning_label
+                : (options.reasoningLevels.find(
+                      (level) => level.value === reasoning,
+                  )?.label ?? reasoning),
+    };
+});
+
+onMounted(async () => {
+    try {
+        modelOptions.value = await jsonRequest<ModelOptions>(
+            'GET',
+            ChatModelOptionsController.url(),
+        );
+    } catch {
+        // The chip stays disabled; turns still run on the chat default.
+    }
+});
+
+/**
+ * A new conversation carries the override with its first turn; an existing
+ * one saves it right away and falls back to the last saved value on failure.
+ */
+async function onOverrideChange(value: ChatOverride): Promise<void> {
+    const conversationId = activeConversationId.value;
+
+    if (conversationId === null) {
+        return;
+    }
+
+    const request = ++overrideRequest;
+    savingOverride.value = true;
+
+    try {
+        const response = await jsonRequest<{ override: ChatOverride }>(
+            'PATCH',
+            ConversationController.updateModel.url(conversationId),
+            value,
+        );
+
+        if (
+            request === overrideRequest &&
+            activeConversationId.value === conversationId
+        ) {
+            setOverride(response.override);
+        }
+    } catch (e) {
+        toast.error(
+            e instanceof Error ? e.message : 'The model could not be changed.',
+        );
+
+        if (
+            request === overrideRequest &&
+            activeConversationId.value === conversationId
+        ) {
+            override.value = { ...savedOverride };
+        }
+    } finally {
+        if (request === overrideRequest) {
+            savingOverride.value = false;
+        }
+    }
+}
+
 /** Aborts the in-flight streamed turn; null when no stream is running. */
 let streamAbortController: AbortController | null = null;
 
@@ -105,7 +219,7 @@ async function applyTemplate(template: ChatTemplate): Promise<void> {
 
     try {
         const text = await renderWithoutValues(template);
-        deliverTemplate(text, template.auto_send ? 'send' : 'insert');
+        deliverTemplate(text, template.auto_send ? 'send' : 'insert', template);
     } catch (cause) {
         toast.error(
             cause instanceof Error
@@ -115,9 +229,35 @@ async function applyTemplate(template: ChatTemplate): Promise<void> {
     }
 }
 
-/** Send rendered text, or put it in the composer while a turn is in flight. */
-function deliverTemplate(text: string, action: TemplateAction): void {
+/** The fill dialog rendered its template's text. */
+function onTemplateRendered(text: string, action: TemplateAction): void {
+    const template = fillTemplate.value;
+
+    if (template === null) {
+        return;
+    }
+
+    deliverTemplate(text, action, template);
+}
+
+/**
+ * Send rendered text, or put it in the composer while a turn is in flight.
+ * A template's model preset fills the picker when it starts a new chat.
+ */
+function deliverTemplate(
+    text: string,
+    action: TemplateAction,
+    template: ChatTemplate,
+): void {
     fillTemplate.value = null;
+
+    if (
+        template.preset !== null &&
+        activeConversationId.value === null &&
+        messages.value.length === 0
+    ) {
+        override.value = { ...template.preset };
+    }
 
     if (action === 'send' && !sending.value) {
         void sendUserMessage({ text, pendingFiles: [] });
@@ -178,6 +318,13 @@ watch(
         if (id !== prev && !id) {
             messages.value = [];
             olderCursor.value = null;
+            setOverride(emptyOverride());
+        }
+
+        // A first turn just created this conversation with the override
+        // it carried, so that is now the saved value to fall back to.
+        if (id && !prev) {
+            savedOverride = { ...override.value };
         }
     },
     { immediate: true },
@@ -224,6 +371,9 @@ async function sendBlockingTurn(
             message: bodyMessage,
             conversation_id: activeConversationId.value,
             mode: mode.value,
+            ...(activeConversationId.value === null
+                ? { override: override.value }
+                : {}),
             ...extraBody,
         }),
     });
@@ -248,6 +398,7 @@ async function sendBlockingTurn(
         text: string;
         conversation_id: string | null;
         workflow: WorkflowProposal | null;
+        answered_by?: AnsweredBy | null;
     };
 
     if (
@@ -264,6 +415,7 @@ async function sendBlockingTurn(
         uid: messageUid(),
         workflow: data.workflow,
         workflowResolved: null,
+        answered_by: data.answered_by ?? null,
     });
 
     if (data.conversation_id) {
@@ -297,6 +449,8 @@ async function sendStreamingTurn(
     streamingIndex.value = index;
 
     const knownConversationId = activeConversationId.value;
+    // The picker is locked for the turn, so this is who answers it.
+    const answeredBy = effectiveAnsweredBy.value;
 
     streamAbortController = new AbortController();
 
@@ -305,6 +459,7 @@ async function sendStreamingTurn(
         conversationId: knownConversationId,
         mode: mode.value,
         attachments: files,
+        override: override.value,
         signal: streamAbortController.signal,
         onText: (accumulated) => {
             assistantMessage.text = accumulated;
@@ -354,6 +509,8 @@ async function sendStreamingTurn(
 
         return;
     }
+
+    assistantMessage.answered_by = answeredBy;
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is
@@ -432,6 +589,7 @@ async function pickConversation(id: string): Promise<void> {
     setActiveConversation(id);
     messages.value = [];
     olderCursor.value = null;
+    setOverride(emptyOverride());
     error.value = null;
     loading.value = true;
 
@@ -442,6 +600,7 @@ async function pickConversation(id: string): Promise<void> {
             uid: messageUid(),
         }));
         olderCursor.value = data.next_cursor;
+        setOverride(data.override);
 
         // Persisted messages carry no workflow payload, so an unresolved
         // proposal would lose its approve/decline buttons on reload. Reattach
@@ -626,6 +785,7 @@ function newConversation(): void {
     messages.value = [];
     olderCursor.value = null;
     error.value = null;
+    setOverride(emptyOverride());
     composerRef.value?.focus();
 }
 </script>
@@ -641,10 +801,14 @@ function newConversation(): void {
     >
         <ChatHeader
             v-model:mode="mode"
+            v-model:override="override"
             :title="activeTitle"
             :is-sheet="isSheet"
+            :model-options="modelOptions"
+            :model-locked="modelLocked"
             @select="pickConversation"
             @new="newConversation"
+            @override-change="onOverrideChange"
         />
 
         <!-- Thread -->
@@ -730,7 +894,7 @@ function newConversation(): void {
             :template="fillTemplate"
             :sending="sending"
             @close="fillTemplate = null"
-            @rendered="deliverTemplate"
+            @rendered="onTemplateRendered"
         />
     </div>
 </template>

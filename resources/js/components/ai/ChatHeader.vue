@@ -6,19 +6,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAiChat } from '@/composables/useAiChat';
 import { cn } from '@/lib/utils';
+import ChatModelPicker from './ChatModelPicker.vue';
 import ConversationPicker from './ConversationPicker.vue';
-import type { ChatMode } from './types';
+import type { ChatMode, ChatOverride, ModelOptions } from './types';
 
 const props = defineProps<{
     title: string;
     isSheet: boolean;
+    modelOptions: ModelOptions | null;
+    /** The model can't change right now (a turn or a save is in flight). */
+    modelLocked: boolean;
 }>();
 
 const mode = defineModel<ChatMode>('mode', { required: true });
 
+const override = defineModel<ChatOverride>('override', { required: true });
+
 const emit = defineEmits<{
     (e: 'select', id: string): void;
     (e: 'new'): void;
+    (e: 'overrideChange', value: ChatOverride): void;
 }>();
 
 const { activeConversationId, renameConversation } = useAiChat();
@@ -132,11 +139,17 @@ function onRenameKey(event: KeyboardEvent): void {
                 <Pencil class="size-3.5" />
             </Button>
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="flex min-w-0 items-center gap-1.5">
             <ConversationPicker
                 @select="emit('select', $event)"
                 @new="emit('new')"
                 @rename="startRename"
+            />
+            <ChatModelPicker
+                v-model="override"
+                :options="modelOptions"
+                :disabled="modelLocked"
+                @change="emit('overrideChange', $event)"
             />
             <div
                 v-if="!isSheet"

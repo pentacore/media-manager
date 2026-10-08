@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
+import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
 
 export interface ConversationSummary {
     id: string;
@@ -29,12 +30,15 @@ export interface ConversationMessage {
     toolCalls?: ChatToolCall[];
     attachments?: ChatAttachmentRef[];
     failed?: boolean;
+    /** The model behind an assistant reply; null when it is not known. */
+    answered_by?: AnsweredBy | null;
 }
 
 export interface ConversationPage {
     id: string;
     title: string;
     updated_at: string;
+    override: ChatOverride;
     messages: ConversationMessage[];
     next_cursor: string | null;
 }
