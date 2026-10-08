@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\AiMode;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseStatus;
 use App\Enums\UserRole;
 use App\Jobs\RunSubtitleAdvisor;
+use App\Models\ClassificationOutcome;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
@@ -20,6 +23,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Lottery;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
@@ -45,10 +49,12 @@ beforeEach(function (): void {
         'status' => SubtitleCaseStatus::ReplacementEligible,
         'required_languages' => [['code' => 'eng']],
     ]);
+    Lottery::alwaysLose();
 });
 
 afterEach(function (): void {
     app()->forgetInstance(SubtitleAdvisorRunContext::class);
+    Lottery::determineResultsNormally();
 });
 
 function runTriageAdvisorJob(SubtitleCase $subtitleCase): void
@@ -109,4 +115,57 @@ test('disabled triage never classifies', function (): void {
     runTriageAdvisorJob($this->case);
 
     Classification::assertNothingClassified();
+});
+
+test('a case triaged above the threshold records a passed outcome', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.8)]]);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
+
+    runTriageAdvisorJob($this->case);
+
+    expect(ClassificationOutcome::sole())
+        ->gate->toBe(ClassificationGate::SubtitleTriage)
+        ->verdict->toBe(ClassificationVerdict::Passed)
+        ->threshold->toBe(0.3)
+        ->subject_key->toBe(ClassificationOutcome::subjectKey('subtitle_case', $this->case->id));
+});
+
+test('a passed case the advisor sends to review resolves the triage outcome as negative', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.8)]]);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
+
+    runTriageAdvisorJob($this->case);
+
+    expect(ClassificationOutcome::sole())->outcome_positive->toBeFalse()->outcome_detail->toBe('needs_review');
+});
+
+test('a sampled below-threshold case runs the advisor as an audit run', function (): void {
+    Lottery::alwaysWin();
+    Classification::fake([['decision' => new BooleanAnswer(0.05)]]);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
+
+    runTriageAdvisorJob($this->case);
+
+    expect(ClassificationOutcome::sole()->verdict)->toBe(ClassificationVerdict::AuditRun)
+        ->and(SubtitleCaseAttempt::query()->latest('id')->firstOrFail()->error_category)->not->toBe('triaged_out');
+});
+
+test('an unsampled below-threshold case is still triaged out and recorded as skipped', function (): void {
+    Lottery::alwaysLose();
+    Classification::fake([['decision' => new BooleanAnswer(0.05)]]);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
+
+    runTriageAdvisorJob($this->case);
+
+    expect(ClassificationOutcome::sole())->verdict->toBe(ClassificationVerdict::Skipped)->outcome_at->toBeNull()
+        ->and(SubtitleCaseAttempt::query()->latest('id')->firstOrFail()->error_category)->toBe('triaged_out');
 });

@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\ActionRequestStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Enums\QueueLane;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Jobs\Middleware\LimitSubtitleAdvisorConcurrency;
 use App\Models\ActionRequest;
+use App\Models\ClassificationOutcome;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Notifications\SubtitleCaseNeedsReview;
@@ -77,6 +81,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         AiSettings $aiSettings,
         Classifier $classifier,
         SubtitleAdvisorDecider $subtitleAdvisorDecider,
+        ClassificationOutcomeRecorder $classificationOutcomeRecorder,
     ): void {
         $subtitleCase = SubtitleCase::query()->find($this->subtitleCaseId);
 
@@ -130,17 +135,35 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
             ? $classifier->probability(self::class, $this->triageState($subtitleCase), 'Is downloading a different release of this media file likely to provide the missing required subtitles?')
             : null;
 
-        if ($probability !== null && $probability < $aiSettings->subtitleTriageThreshold()) {
-            $this->finishWithReview(
-                $subtitleCase,
-                $subtitleCaseAttempt,
-                $subtitleCaseLifecycle,
-                sprintf('Triaged out: %d%% likely that an automatic replacement would help.', (int) round($probability * 100)),
-                'triaged_out',
-                extra: ['triage_probability' => $probability],
+        if ($probability !== null) {
+            $threshold = $aiSettings->subtitleTriageThreshold();
+            $classificationVerdict = match (true) {
+                $probability >= $threshold => ClassificationVerdict::Passed,
+                $classificationOutcomeRecorder->shouldAudit() => ClassificationVerdict::AuditRun,
+                default => ClassificationVerdict::Skipped,
+            };
+
+            $classificationOutcomeRecorder->record(
+                ClassificationGate::SubtitleTriage,
+                ClassificationOutcome::subjectKey('subtitle_case', $subtitleCase->id),
+                'decision',
+                $probability,
+                $classificationVerdict,
+                $threshold,
             );
 
-            return;
+            if ($classificationVerdict === ClassificationVerdict::Skipped) {
+                $this->finishWithReview(
+                    $subtitleCase,
+                    $subtitleCaseAttempt,
+                    $subtitleCaseLifecycle,
+                    sprintf('Triaged out: %d%% likely that an automatic replacement would help.', (int) round($probability * 100)),
+                    'triaged_out',
+                    extra: ['triage_probability' => $probability],
+                );
+
+                return;
+            }
         }
 
         $subtitleAdvisorRunContext = new SubtitleAdvisorRunContext(caseId: $subtitleCase->id, maxActions: 1);

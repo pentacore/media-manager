@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Services\Bazarr;
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Enums\SubtitleCaseStatus;
 use App\Events\SubtitleCaseChanged;
+use App\Models\ClassificationOutcome;
 use App\Models\SubtitleCase;
 use Illuminate\Support\Str;
 use LogicException;
 
 final class SubtitleCaseLifecycle
 {
+    public function __construct(private readonly ClassificationOutcomeRecorder $classificationOutcomeRecorder) {}
+
     /** @var array<string, list<string>> */
     private const array TRANSITIONS = [
         'observing' => ['bazarr_searching', 'resolved', 'dismissed', 'superseded'],
@@ -74,6 +80,7 @@ final class SubtitleCaseLifecycle
 
         $subtitleCase->refresh();
         event(new SubtitleCaseChanged($subtitleCase, $from));
+        $this->resolveTriageOutcome($subtitleCase, $from, $subtitleCaseStatus);
 
         return true;
     }
@@ -126,5 +133,32 @@ final class SubtitleCaseLifecycle
             ->getAttributes();
 
         return array_intersect_key($preparedAttributes, $attributes);
+    }
+
+    /**
+     * Triage let the case through to the advisor. Resolving the case proves
+     * it right; landing in review or dismissed after the advisor proves it
+     * wrong. Other transitions say nothing about the triage call.
+     */
+    private function resolveTriageOutcome(SubtitleCase $subtitleCase, SubtitleCaseStatus $from, SubtitleCaseStatus $to): void
+    {
+        $positive = match (true) {
+            $to === SubtitleCaseStatus::Resolved => true,
+            in_array($from, [SubtitleCaseStatus::AdvisorRunning, SubtitleCaseStatus::ReplacementRequested], true)
+                && in_array($to, [SubtitleCaseStatus::NeedsReview, SubtitleCaseStatus::Dismissed], true) => false,
+            default => null,
+        };
+
+        if ($positive === null) {
+            return;
+        }
+
+        $this->classificationOutcomeRecorder->resolve(
+            ClassificationGate::SubtitleTriage,
+            ClassificationOutcome::subjectKey('subtitle_case', $subtitleCase->id),
+            $positive,
+            $to->value,
+            [ClassificationVerdict::Passed, ClassificationVerdict::AuditRun],
+        );
     }
 }
