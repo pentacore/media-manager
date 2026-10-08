@@ -402,6 +402,7 @@ function browserSmokeExcludedRouteNames(): array
         'activity-log.export',
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
+        'ai.chat.model-options',
         'ai.conversations.index',
         'ai.templates.options',
         'ai.templates.library',

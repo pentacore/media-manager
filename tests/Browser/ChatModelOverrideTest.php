@@ -34,6 +34,8 @@ test('the picker shows the defaults and an override sticks to the new conversati
         ->click('[data-reasoning-option="high"]')
         ->assertAttribute('[data-chat-model-chip]', 'data-overridden', 'true')
         ->assertSeeIn('[data-chat-model-chip]', 'gpt-5.6-luna · High')
+        // Escape only reaches the popover once the closing listbox has left the layer stack.
+        ->assertMissing('[data-slot="select-content"]')
         ->keys('[data-chat-model-picker] [data-reasoning-select] button', 'Escape')
         ->assertMissing('[data-chat-model-picker]')
         ->fill('[data-chat-input]', 'Hi')
@@ -53,6 +55,8 @@ test('reset returns the conversation to the defaults', function (): void {
         ->click('[data-chat-model-chip]')
         ->click('[data-chat-model-picker] [data-reasoning-select] button')
         ->click('[data-reasoning-option="low"]')
+        // Escape only reaches the popover once the closing listbox has left the layer stack.
+        ->assertMissing('[data-slot="select-content"]')
         ->keys('[data-chat-model-picker] [data-reasoning-select] button', 'Escape')
         ->assertMissing('[data-chat-model-picker]')
         ->fill('[data-chat-input]', 'Hi')
@@ -111,6 +115,8 @@ test('an existing conversation shows its saved override and a reasoning change k
         ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
         ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · High')
         ->assertAttribute('[data-chat-model-chip]', 'data-overridden', 'true')
+        // The closing menu hands focus back to its trigger, which would dismiss a popover opened before it unmounts.
+        ->assertMissing('[data-slot="dropdown-menu-content"]')
         ->click('[data-chat-model-chip]')
         ->click('[data-chat-model-picker] [data-reasoning-select] button')
         ->click('[data-reasoning-option="low"]')
