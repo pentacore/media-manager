@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
@@ -31,6 +32,7 @@ class RecordFailedAgentRun
             'invocation_id' => $invocationId,
             'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompt->agent::class,
+            'tier_position' => TierOutcome::positionFor($agentPrompt->agent),
             'provider' => $runUsageAccumulator->provider($invocationId) ?? (isset($agentPrompt->provider) ? $agentPrompt->provider->name() : null),
             'model' => $runUsageAccumulator->model($invocationId) ?? ($agentPrompt->model ?? null),
             ...UsageColumns::fromText($runUsageAccumulator->usage($invocationId) ?? new TextUsage),

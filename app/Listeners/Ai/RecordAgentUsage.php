@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
 use App\Services\AiUsage\RunUsageAccumulator;
@@ -29,6 +30,7 @@ class RecordAgentUsage
             'invocation_id' => $agentPrompted->invocationId,
             'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompted->prompt->agent::class,
+            'tier_position' => TierOutcome::positionFor($agentPrompted->prompt->agent),
             'provider' => $meta->provider,
             'model' => $meta->model,
             ...UsageColumns::fromText($response->usage),
