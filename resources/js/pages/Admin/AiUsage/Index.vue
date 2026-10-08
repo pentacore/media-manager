@@ -58,6 +58,7 @@ interface RecentRow {
     conversation_id: string | null;
     status: string;
     kind: string;
+    tier_position: number | null;
     error_message: string | null;
     user_name: string | null;
 }
@@ -199,6 +200,7 @@ const props = defineProps<{
     windows: WindowOption[];
     kind: string | null;
     kinds: KindOption[];
+    tier: 'first' | 'fell_through' | null;
     tool_stats: ToolStatRow[];
     totals: Totals;
     by_model: AggregateRow[];
@@ -278,6 +280,19 @@ function setKind(value: string) {
     );
 }
 
+function setTier(value: string) {
+    router.get(
+        AiUsageController.index.url({
+            query: buildQuery({
+                window: props.window,
+                tier: value === 'all' ? undefined : value,
+            }),
+        }),
+        {},
+        { preserveScroll: true },
+    );
+}
+
 const exportUrl = computed(() =>
     AiUsageController.exportMethod.url({
         query: buildQuery({ window: props.window }),
@@ -285,12 +300,13 @@ const exportUrl = computed(() =>
 );
 
 /**
- * Query for a visit that keeps the active kind filter and scenario. Pass
- * `kind: undefined` explicitly to drop the kind filter.
+ * Query for a visit that keeps the active kind and tier filters and the
+ * scenario. Pass `kind: undefined` or `tier: undefined` explicitly to drop one.
  */
 function buildQuery(extra: Record<string, string | undefined>): QueryParams {
     const merged: Record<string, string | undefined> = {
         kind: props.kind ?? undefined,
+        tier: props.tier ?? undefined,
         ...extra,
     };
     const query: QueryParams = {};
@@ -359,6 +375,7 @@ function applyScenario() {
             query: {
                 window: props.window,
                 ...(props.kind ? { kind: props.kind } : {}),
+                ...(props.tier ? { tier: props.tier } : {}),
                 scenario: {
                     input: form.value.input,
                     output: form.value.output,
@@ -378,6 +395,7 @@ function clearScenario() {
             query: {
                 window: props.window,
                 ...(props.kind ? { kind: props.kind } : {}),
+                ...(props.tier ? { tier: props.tier } : {}),
             },
         }),
         { preserveScroll: true },
@@ -619,6 +637,38 @@ function formatTimestamp(value: string): string {
                             >
                                 {{ option.label }}
                             </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div data-usage-tier-filter>
+                    <Select
+                        :model-value="props.tier ?? 'all'"
+                        @update:model-value="
+                            (value) =>
+                                setTier(
+                                    typeof value === 'string' ? value : 'all',
+                                )
+                        "
+                    >
+                        <SelectTrigger
+                            id="usage-tier"
+                            class="h-7 w-[150px] text-xs"
+                            aria-label="Model tier"
+                        >
+                            <SelectValue placeholder="All tiers" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all" aria-label="All tiers"
+                                >All tiers</SelectItem
+                            >
+                            <SelectItem value="first" aria-label="Tier 1"
+                                >Tier 1</SelectItem
+                            >
+                            <SelectItem
+                                value="fell_through"
+                                aria-label="Fell through"
+                                >Fell through</SelectItem
+                            >
                         </SelectContent>
                     </Select>
                 </div>
@@ -1206,6 +1256,12 @@ function formatTimestamp(value: string): string {
                 class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
             >
                 Recent invocations
+                <p
+                    v-if="props.tier"
+                    class="mt-1 text-[11.5px] font-normal tracking-normal text-muted-foreground normal-case"
+                >
+                    Tier filter applies to this list; totals include every run.
+                </p>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse text-[13px]">
@@ -1259,6 +1315,12 @@ function formatTimestamp(value: string): string {
                                         data-usage-kind
                                     >
                                         {{ kindLabel(row.kind) }}
+                                    </Pill>
+                                    <Pill
+                                        v-if="(row.tier_position ?? 1) > 1"
+                                        data-usage-tier
+                                    >
+                                        Tier {{ row.tier_position }}
                                     </Pill>
                                 </span>
                             </td>

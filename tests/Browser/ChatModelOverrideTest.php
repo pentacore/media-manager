@@ -5,8 +5,11 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
+use App\Enums\FreePoolOverflowBehavior;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
+use App\Models\AiUsageRecord;
 use App\Models\ChatTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -129,4 +132,23 @@ test('an existing conversation shows its saved override and a reasoning change k
     expect($conversation->model_provider)->toBe('openai')
         ->and($conversation->model)->toBe('gpt-5-nano')
         ->and($conversation->reasoning)->toBe('low');
+});
+
+test('an answer from a lower tier says so', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => $pool->id]);
+    AiTaskModel::query()->forTask(AiTask::Chat)->update(['min_pool_percent' => 20]);
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    MediaAgent::fake(['Hello there']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-chat-input]', 'Hi')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertSee('Hello there')
+        ->assertSeeIn('[data-answered-by]', 'gpt-5-nano')
+        ->assertSeeIn('[data-answered-by-tier]', 'tier 2')
+        ->assertAttributeContains('[data-answered-by-tier]', 'title', 'Luna free below 20%');
 });

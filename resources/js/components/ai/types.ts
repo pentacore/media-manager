@@ -10,11 +10,19 @@ export type ChatOverride = {
     reasoning: AiReasoningLevel | null;
 };
 
+/** Which tier of the chat's tier list answered (absent without tiers). */
+export type AnsweredTier = {
+    position: number;
+    count: number;
+    reason: string | null;
+};
+
 /** The model and reasoning level behind one assistant reply. */
 export type AnsweredBy = {
     provider: string | null;
     model: string | null;
     reasoning_label: string | null;
+    tier?: AnsweredTier | null;
 };
 
 /** What `GET ai/chat/model-options` returns for the model pickers. */
@@ -24,6 +32,7 @@ export type ModelOptions = {
         model: string;
         reasoning: AiReasoningLevel;
         reasoning_label: string;
+        tier: AnsweredTier | null;
     };
     models: Record<string, string[]>;
     reasoningLevels: Array<{ label: string; value: AiReasoningLevel }>;
