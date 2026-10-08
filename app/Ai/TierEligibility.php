@@ -6,6 +6,7 @@ namespace App\Ai;
 
 use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\AiUsage\PoolHeadroom;
+use App\Services\AiUsage\PoolHeadroomFigures;
 use Throwable;
 
 /**
@@ -44,7 +45,7 @@ final readonly class TierEligibility
             return 'free pool status unavailable';
         }
 
-        if ($figures === null) {
+        if (! $figures instanceof PoolHeadroomFigures) {
             return null;
         }
 

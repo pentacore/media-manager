@@ -46,7 +46,7 @@ final readonly class PoolHeadroomFigures
             return null;
         }
 
-        return new self($status['name'], (float) min($percents), min($remaining));
+        return new self($status['name'], min($percents), min($remaining));
     }
 
     /**

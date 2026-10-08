@@ -37,8 +37,8 @@ function headroom(): PoolHeadroom
 }
 
 test('a unified pool reports the share and tokens left of its total cap', function (): void {
-    $pool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000_000]);
-    headroomPrice('gemini-2.5-flash', $pool);
+    $aiFreeUsagePool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000_000]);
+    headroomPrice('gemini-2.5-flash', $aiFreeUsagePool);
     headroomUsage('gemini-2.5-flash', 600_000, 150_000);
 
     $figures = headroom()->forModel('gemini', 'gemini-2.5-flash');
@@ -47,8 +47,8 @@ test('a unified pool reports the share and tokens left of its total cap', functi
 });
 
 test('a split pool reports its tightest capped dimension', function (): void {
-    $pool = headroomPool(['free_input_tokens' => 1_000_000, 'free_output_tokens' => 100_000]);
-    headroomPrice('gemini-2.5-flash', $pool);
+    $aiFreeUsagePool = headroomPool(['free_input_tokens' => 1_000_000, 'free_output_tokens' => 100_000]);
+    headroomPrice('gemini-2.5-flash', $aiFreeUsagePool);
     headroomUsage('gemini-2.5-flash', 100_000, 80_000);
 
     $figures = headroom()->forModel('gemini', 'gemini-2.5-flash');
@@ -58,9 +58,9 @@ test('a split pool reports its tightest capped dimension', function (): void {
 });
 
 test('an uncapped dimension is ignored and a pool with no caps is always eligible', function (): void {
-    $outputOnly = headroomPool(['free_input_tokens' => null, 'free_output_tokens' => 100_000]);
+    $aiFreeUsagePool = headroomPool(['free_input_tokens' => null, 'free_output_tokens' => 100_000]);
     $uncapped = headroomPool(['name' => 'Open', 'free_input_tokens' => null, 'free_output_tokens' => null]);
-    headroomPrice('gemini-2.5-flash', $outputOnly);
+    headroomPrice('gemini-2.5-flash', $aiFreeUsagePool);
     headroomPrice('gemini-2.5-pro', $uncapped);
     headroomUsage('gemini-2.5-flash', 5_000_000, 50_000);
 
@@ -69,9 +69,9 @@ test('an uncapped dimension is ignored and a pool with no caps is always eligibl
 });
 
 test('usage above the cap and a zero cap floor at nothing left', function (): void {
-    $over = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 100]);
+    $aiFreeUsagePool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 100]);
     $zero = headroomPool(['name' => 'Zero', 'unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 0]);
-    headroomPrice('gemini-2.5-flash', $over);
+    headroomPrice('gemini-2.5-flash', $aiFreeUsagePool);
     headroomPrice('gemini-2.5-pro', $zero);
     headroomUsage('gemini-2.5-flash', 500);
 
@@ -87,25 +87,25 @@ test('a model without a price row or pool has no headroom figures', function ():
 });
 
 test('a dated model id matches its base price row', function (): void {
-    $pool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000]);
-    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'free_usage_pool_id' => $pool->id]);
+    $aiFreeUsagePool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000]);
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'free_usage_pool_id' => $aiFreeUsagePool->id]);
 
     expect(headroom()->forModel('openai', 'gpt-5-mini-2025-09-23')?->name)->toBe('Gemini free');
 });
 
 test('figures are cached until flushed and saving a pool flushes them', function (): void {
-    $pool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000]);
-    headroomPrice('gemini-2.5-flash', $pool);
+    $aiFreeUsagePool = headroomPool(['unified' => true, 'free_input_tokens' => null, 'free_output_tokens' => null, 'free_total_tokens' => 1_000]);
+    headroomPrice('gemini-2.5-flash', $aiFreeUsagePool);
 
     expect(headroom()->forModel('gemini', 'gemini-2.5-flash')?->tokensLeft)->toBe(1_000);
 
     headroomUsage('gemini-2.5-flash', 400);
     resolve(PoolHeadroom::class)->flush();
-    Cache::put(PoolHeadroom::cacheKey(), [$pool->id => ['name' => 'Gemini free', 'percent_left' => 100.0, 'tokens_left' => 1_000]], 60);
+    Cache::put(PoolHeadroom::cacheKey(), [$aiFreeUsagePool->id => ['name' => 'Gemini free', 'percent_left' => 100.0, 'tokens_left' => 1_000]], 60);
 
     expect(resolve(PoolHeadroom::class)->forModel('gemini', 'gemini-2.5-flash')?->tokensLeft)->toBe(1_000);
 
-    $pool->update(['free_total_tokens' => 2_000]);
+    $aiFreeUsagePool->update(['free_total_tokens' => 2_000]);
 
     expect(resolve(PoolHeadroom::class)->forModel('gemini', 'gemini-2.5-flash')?->tokensLeft)->toBe(1_600);
 });

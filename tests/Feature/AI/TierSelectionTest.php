@@ -107,8 +107,8 @@ test('conditions on a model without a pool never block it', function (): void {
 });
 
 test('a rate-limited tier is skipped only while enforcement is on', function (): void {
-    $luna = tierPrice('gpt-5.6-luna');
-    $luna->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
+    $aiModelPrice = tierPrice('gpt-5.6-luna');
+    $aiModelPrice->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
     tierPrice('gpt-5-nano');
     tierUsage('gpt-5.6-luna', 10);
     tierChatList(null);
@@ -123,10 +123,10 @@ test('a rate-limited tier is skipped only while enforcement is on', function ():
 });
 
 test('the last tier always runs, even when it is rate-limited and its pool is drained', function (): void {
-    $pool = tierPool();
-    tierPrice('gpt-5.6-luna', $pool);
-    $nano = tierPrice('gpt-5-nano', $pool);
-    $nano->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
+    $aiFreeUsagePool = tierPool();
+    tierPrice('gpt-5.6-luna', $aiFreeUsagePool);
+    $aiModelPrice = tierPrice('gpt-5-nano', $aiFreeUsagePool);
+    $aiModelPrice->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
     tierUsage('gpt-5.6-luna', 1_000_000);
     tierUsage('gpt-5-nano', 10);
     tierChatList(20);
@@ -148,11 +148,11 @@ test('an inherit tier in an event list hands off to the decision default list', 
     AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
     AiTaskModel::factory()->event('radarr:Grab')->position(1)->create();
 
-    $withReasoning = tierResolver()->resolve(AiTask::Decision, 'sonarr:Download');
+    $resolvedSelection = tierResolver()->resolve(AiTask::Decision, 'sonarr:Download');
     $inheritingReasoning = tierResolver()->resolve(AiTask::Decision, 'radarr:Grab');
 
-    expect([$withReasoning->model, $withReasoning->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
-        ->and($withReasoning->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)'])
+    expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)'])
         ->and([$inheritingReasoning->model, $inheritingReasoning->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::High]);
 });
 
@@ -232,11 +232,11 @@ test('a single-tier list reports no tier', function (): void {
 });
 
 test('a tier whose pool link was removed stays eligible', function (): void {
-    $luna = tierPrice('gpt-5.6-luna', tierPool());
+    $aiModelPrice = tierPrice('gpt-5.6-luna', tierPool());
     tierPrice('gpt-5-nano');
     tierUsage('gpt-5.6-luna', 1_000_000);
     tierChatList(20);
-    $luna->update(['free_usage_pool_id' => null]);
+    $aiModelPrice->update(['free_usage_pool_id' => null]);
 
     expect(tierResolver()->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
 });

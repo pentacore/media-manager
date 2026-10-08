@@ -34,9 +34,7 @@ class AiRateLimitGuard
     {
         $exceeded = $this->exceeded($provider, $model);
 
-        if ($exceeded instanceof AiModelRateLimitExceededException) {
-            throw $exceeded;
-        }
+        throw_if($exceeded instanceof AiModelRateLimitExceededException, $exceeded);
     }
 
     /**

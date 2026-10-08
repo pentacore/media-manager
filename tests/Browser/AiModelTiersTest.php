@@ -15,6 +15,7 @@ beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
     config()->set('ai.providers.openai.key', 'sk-test');
+
     $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'supports_reasoning' => true, 'free_usage_pool_id' => $pool->id]);
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-nano', 'supports_reasoning' => true]);

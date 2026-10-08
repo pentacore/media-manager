@@ -68,7 +68,7 @@ final class TaskModelResolver
                 (string) $this->chatTurnContext->provider,
                 (string) $this->chatTurnContext->model,
                 $this->chatTurnContext->reasoning
-                    ?? $this->row(AiTask::Chat)?->reasoning
+                    ?? $this->row(AiTask::Chat)->reasoning
                     ?? $this->configLevel(AiTask::Chat)
                     ?? AiReasoningLevel::ProviderDefault,
             );
@@ -185,7 +185,7 @@ final class TaskModelResolver
                     $parent->provider,
                     $parent->model,
                     $tier->reasoning ?? $parent->reasoning,
-                    $count > 1 ? new TierOutcome($index + 1, $count, [...$skipped, ...($parent->tier?->reasons ?? [])]) : $parent->tier,
+                    $count > 1 ? new TierOutcome($index + 1, $count, [...$skipped, ...($parent->tier->reasons ?? [])]) : $parent->tier,
                 );
             }
 

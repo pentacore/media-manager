@@ -182,7 +182,7 @@ class AiModelsController extends Controller
             'reasoning' => $tier['reasoning'] ?? null,
             'min_pool_percent' => $tier['min_pool_percent'] ?? null,
             'min_pool_tokens' => $tier['min_pool_tokens'] ?? null,
-        ], array_values($tiers));
+        ], $tiers);
 
         if (count($rows) === 1 && array_filter($rows[0], filled(...)) === []) {
             return;
