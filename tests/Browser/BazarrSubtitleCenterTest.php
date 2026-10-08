@@ -113,7 +113,7 @@ test('member retries a review case with Media Advisor after confirmation', funct
 
     $webpage
         ->click('@investigate-subtitle-case-'.$subtitleCase->id)
-        ->assertSeeIn('[data-confirm-dialog]', 'Retry it manually with Media Advisor?')
+        ->assertSeeIn('[data-confirm-dialog]', 'Retry this case with Media Advisor?')
         ->click('[data-confirm-accept]')
         ->assertSee('Media Advisor investigation queued.')
         ->assertSee('No safe replacement matched the required English subtitles.')

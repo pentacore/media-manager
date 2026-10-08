@@ -162,7 +162,7 @@ async function investigate(escalationCase: EscalationCase): Promise<void> {
     if (
         escalationCase.status === 'needs_review' &&
         !(await confirm({
-            title: 'Retry it manually with Media Advisor?',
+            title: 'Retry this case with Media Advisor?',
             description: 'This case has already been investigated.',
             confirmLabel: 'Retry',
         }))
