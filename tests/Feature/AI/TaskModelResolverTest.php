@@ -184,6 +184,19 @@ test('the auto title model resolves to the title provider cheapest model', funct
     expect([$modelSelection->provider, $modelSelection->model])->toBe(['openrouter', 'anthropic/claude-haiku-4.5']);
 });
 
+test('the auto title model on an unconfigured provider falls back to the config title model', function (?string $configTitleModel, string $expected): void {
+    config()->set('mediamanager.ai.title_model', $configTitleModel);
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('no-such-provider', 'auto')->create();
+
+    $modelSelection = resolver()->resolve(AiTask::Title)->modelSelection();
+
+    expect([$modelSelection->provider, $modelSelection->model])->toBe(['no-such-provider', $expected]);
+})->with([
+    'config title model' => ['gpt-config-title', 'gpt-config-title'],
+    'config auto' => ['auto', 'gpt-5.4-nano'],
+    'config blank' => [null, 'gpt-5.4-nano'],
+]);
+
 test('failover is off without a provider and carries an optional model', function (): void {
     expect(resolver()->failover())->toBeNull();
 

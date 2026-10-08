@@ -10,6 +10,7 @@ use App\Models\AiTaskModel;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Laravel\Ai\Ai;
+use LogicException;
 
 /**
  * Resolves the provider, model and reasoning level each AI task runs on.
@@ -31,7 +32,8 @@ use Laravel\Ai\Ai;
  *   Reasoning is the event row, then the decision row, then config
  *   `mediamanager.decision_agent.reasoning_level`, then ProviderDefault.
  * - Title: model is the own row, then config `mediamanager.ai.title_model`
- *   (`auto` becomes `Ai::textProvider($provider)->cheapestTextModel()`).
+ *   (`auto` becomes `Ai::textProvider($provider)->cheapestTextModel()`, or
+ *   the config title model when that provider cannot be resolved).
  *   Reasoning is the own row, then ProviderDefault.
  * - PriceUpdater: model is the own row, then config
  *   `mediamanager.ai.pricing.updater_model`, then the chat row/config pair.
@@ -152,10 +154,25 @@ final class TaskModelResolver
             ?? [$this->defaultProvider(), 'gpt-5.4-nano'];
 
         if ($model === 'auto') {
-            $model = Ai::textProvider($provider)->cheapestTextModel();
+            try {
+                $model = Ai::textProvider($provider)->cheapestTextModel();
+            } catch (InvalidArgumentException|LogicException) {
+                $model = $this->configTitleModel();
+            }
         }
 
         return [$provider, $model];
+    }
+
+    /**
+     * The configured title model, used when `auto` cannot be resolved on the
+     * title provider; never the `auto` sentinel itself.
+     */
+    private function configTitleModel(): string
+    {
+        $model = trim((string) config('mediamanager.ai.title_model', ''));
+
+        return $model === '' || $model === 'auto' ? 'gpt-5.4-nano' : $model;
     }
 
     /**
