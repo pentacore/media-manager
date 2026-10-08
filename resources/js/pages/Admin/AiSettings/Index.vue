@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { Form, Head, router } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
-import ModelSelect from '@/components/ai/ModelSelect.vue';
-import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -17,28 +16,17 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
-import type { AiReasoningLevel } from '@/typefinder';
-import type { SelectOptionGroup } from '@/types';
 
 interface ModeOption {
     value: string;
     label: string;
 }
 
-interface FailoverProviderOption {
-    value: string;
-    label: string;
-}
-
 interface AiSettingsState {
     mode: string;
-    model: string;
-    title_model: string;
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
-    advisor_reasoning_level: AiReasoningLevel;
     chat_timeout: number;
-    failover_provider: string;
     models_dev_pricing_enabled: boolean;
     openrouter_pricing_enabled: boolean;
     litellm_pricing_enabled: boolean;
@@ -58,13 +46,6 @@ interface AiSettingsState {
     reranking_model: string | null;
     embeddings_provider: string;
     embeddings_model: string | null;
-    sub_agent_model: string | null;
-    price_updater_model: string | null;
-    model_provider: string;
-    title_model_provider: string;
-    sub_agent_model_provider: string | null;
-    price_updater_model_provider: string | null;
-    failover_model: string | null;
     openrouter: {
         sort: string | null;
         deny_data_collection: boolean;
@@ -99,11 +80,7 @@ interface BudgetSnapshot {
 const props = defineProps<{
     settings: AiSettingsState;
     budget: BudgetSnapshot;
-    unpricedModels: { role: string; provider: string; model: string }[];
     modes: ModeOption[];
-    models: Record<string, string[]>;
-    reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
-    failoverProviders: FailoverProviderOption[];
     pricingProviders: PricingProviderOption[];
     classificationProviders: ProviderOption[];
     rerankingProviders: ProviderOption[];
@@ -129,8 +106,6 @@ defineOptions({
 });
 
 const selectedMode = ref(props.settings.mode);
-const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
-const selectedFailoverProvider = ref(props.settings.failover_provider);
 const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
 const openRouterPricingEnabled = ref(props.settings.openrouter_pricing_enabled);
 const liteLlmPricingEnabled = ref(props.settings.litellm_pricing_enabled);
@@ -161,16 +136,6 @@ function reembedLibrary(): void {
     );
 }
 
-const chatProvider = ref(props.settings.model_provider);
-const chatModel = ref(props.settings.model);
-const titleProvider = ref(props.settings.title_model_provider);
-const titleModel = ref(props.settings.title_model);
-const subAgentProvider = ref(props.settings.sub_agent_model_provider ?? '');
-const subAgentModel = ref(props.settings.sub_agent_model ?? '');
-const priceUpdaterProvider = ref(
-    props.settings.price_updater_model_provider ?? '',
-);
-const priceUpdaterModel = ref(props.settings.price_updater_model ?? '');
 const openRouterSort = ref(props.settings.openrouter.sort ?? 'default');
 const openRouterDenyDataCollection = ref(
     props.settings.openrouter.deny_data_collection,
@@ -226,13 +191,20 @@ const budgetState = computed<{
                 AI settings
             </h1>
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
-                Toggle the assistant, choose a model, set the execution mode.
-                Overrides
+                Toggle the assistant and set the execution mode. Overrides
                 <span class="font-mono-tabular">.env</span> at runtime.
             </p>
+            <p class="mt-2 text-[13px]">
+                Models and reasoning levels are configured on
+                <Link
+                    :href="AiModelsController.index.url()"
+                    class="underline underline-offset-2"
+                    data-ai-models-link
+                >
+                    AI Models →
+                </Link>
+            </p>
         </div>
-
-        <UnpricedModelWarning :models="props.unpricedModels" />
 
         <Form
             v-bind="AiSettingsController.update.form()"
@@ -275,69 +247,6 @@ const budgetState = computed<{
 
                 <Separator />
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Model"
-                        hint="Pick a provider and model from the pricing catalog. Add models via Admin → AI prices (including OpenRouter models)."
-                    >
-                        <span />
-                    </Field>
-                    <div data-chat-model>
-                        <ModelSelect
-                            :models="models"
-                            name="model"
-                            v-model:provider="chatProvider"
-                            v-model:model="chatModel"
-                        />
-                        <InputError
-                            :message="errors.model_provider ?? errors.model"
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-
-                <!-- Reasoning Level -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Reasoning Level"
-                        hint="Level of reasoning applied by the AI assistant. Higher levels may result in more accurate decisions but can be more resource-intensive."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <Select
-                            v-model="selectedReasoningLevel"
-                            name="advisor_reasoning_level"
-                            :default-value="settings.advisor_reasoning_level"
-                        >
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue
-                                    placeholder="Select a reasoning level"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="reasoningLevel in reasoningLevels"
-                                    :key="reasoningLevel.label"
-                                    :value="reasoningLevel.value"
-                                >
-                                    {{ reasoningLevel.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <InputError
-                            :message="errors.advisor_reasoning_level"
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-
                 <!-- Chat timeout -->
                 <div
                     class="grid items-start gap-6"
@@ -370,57 +279,6 @@ const budgetState = computed<{
                         </div>
                         <InputError
                             :message="errors.chat_timeout"
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-
-                <!-- Failover provider -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Failover provider"
-                        hint="If the model's provider errors, the request retries on this provider. Leave the model blank for the provider's default model. Leave as None to disable failover."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <Select
-                            v-model="selectedFailoverProvider"
-                            name="failover_provider"
-                            :default-value="settings.failover_provider"
-                        >
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue
-                                    placeholder="Select a failover provider"
-                                />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="provider in failoverProviders"
-                                    :key="provider.value"
-                                    :value="provider.value"
-                                >
-                                    {{ provider.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <InputError
-                            :message="errors.failover_provider"
-                            class="mt-1"
-                        />
-                        <Input
-                            id="failover_model"
-                            name="failover_model"
-                            type="text"
-                            class="mt-2 h-8 max-w-[320px] text-sm"
-                            :default-value="settings.failover_model ?? ''"
-                            placeholder="Failover model (blank = provider default)"
-                        />
-                        <InputError
-                            :message="errors.failover_model"
                             class="mt-1"
                         />
                     </div>
@@ -593,37 +451,6 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
-                </div>
-
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Title model"
-                        hint="Cheap model used to auto-summarize the first user message of a new conversation into a short chat title. Runs in the background queue."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <ModelSelect
-                            :models="models"
-                            name="title_model"
-                            allow-auto
-                            v-model:provider="titleProvider"
-                            v-model:model="titleModel"
-                        />
-                        <p class="mt-1 text-xs text-muted-foreground">
-                            auto = the provider's cheapest model
-                        </p>
-                        <InputError
-                            :message="
-                                errors.title_model_provider ??
-                                errors.title_model
-                            "
-                            class="mt-1"
-                        />
                     </div>
                 </div>
 
@@ -1091,36 +918,6 @@ const budgetState = computed<{
 
                 <Separator />
 
-                <!-- Sub-agent model -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                    data-sub-agent-model
-                >
-                    <Field
-                        label="Sub-agent model"
-                        hint="Model the investigation sub-agents run on. Pick a cheaper model than the chat model to keep investigations inexpensive."
-                    >
-                        <span />
-                    </Field>
-                    <div>
-                        <ModelSelect
-                            :models="models"
-                            name="sub_agent_model"
-                            inherit-label="Same as chat model"
-                            v-model:provider="subAgentProvider"
-                            v-model:model="subAgentModel"
-                        />
-                        <InputError
-                            :message="
-                                errors.sub_agent_model_provider ??
-                                errors.sub_agent_model
-                            "
-                            class="mt-1"
-                        />
-                    </div>
-                </div>
-
                 <!-- Advanced tools -->
                 <div
                     class="grid items-start gap-6"
@@ -1569,35 +1366,6 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.auto_create_pricing_providers"
-                                class="mt-1"
-                            />
-                        </div>
-                    </div>
-
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                        data-price-updater-model
-                    >
-                        <Field
-                            label="Price updater model"
-                            hint="Model the price verifier agent runs on when it re-reads provider pricing pages."
-                        >
-                            <span />
-                        </Field>
-                        <div>
-                            <ModelSelect
-                                :models="models"
-                                name="price_updater_model"
-                                inherit-label="Same as chat model"
-                                v-model:provider="priceUpdaterProvider"
-                                v-model:model="priceUpdaterModel"
-                            />
-                            <InputError
-                                :message="
-                                    errors.price_updater_model_provider ??
-                                    errors.price_updater_model
-                                "
                                 class="mt-1"
                             />
                         </div>

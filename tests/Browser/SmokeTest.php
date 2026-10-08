@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Enums\BazarrServiceRole;
-use App\Models\AiModelPrice;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -90,12 +89,6 @@ test('admin can save the pricing sync controls without browser errors', function
     // runtime setting was persisted rather than reading back the env default.
     config()->set('mediamanager.ai.pricing.models_dev.enabled', false);
     config()->set('mediamanager.ai.pricing.ignored_providers', []);
-    // The model <Select> submits from the pricing catalog; seed one row so the
-    // required `model` field posts a value.
-    AiModelPrice::factory()->create([
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-    ]);
 
     $this->actingAs(User::factory()->admin()->create());
 
@@ -127,10 +120,6 @@ test('admin can save the pricing sync controls without browser errors', function
 test('admin can choose which providers add new models during a price refresh', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('mediamanager.ai.pricing.ignored_providers', ['cohere']);
-    AiModelPrice::factory()->create([
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-    ]);
 
     $this->actingAs(User::factory()->admin()->create());
 
@@ -391,6 +380,7 @@ function browserSmokeAdminRouteNames(): array
         'admin.notification-destinations.index',
         'admin.ai-settings.index',
         'admin.decision-agent.index',
+        'admin.ai-models.index',
         'admin.ai-usage.index',
         'admin.ai-prices.index',
         'admin.ai-conversations.index',
@@ -412,6 +402,7 @@ function browserSmokeExcludedRouteNames(): array
         'activity-log.export',
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
+        'ai.chat.model-options',
         'ai.conversations.index',
         'ai.templates.options',
         'ai.templates.library',

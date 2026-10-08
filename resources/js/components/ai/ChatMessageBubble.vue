@@ -124,6 +124,23 @@ const MAX_TEMPLATE_BODY = 4000;
             >
                 Stopped.
             </p>
+            <p
+                v-if="
+                    message.role === 'assistant' && message.answered_by?.model
+                "
+                class="font-mono-tabular mt-1 text-[11px] text-fg-subtle"
+                data-answered-by
+            >
+                {{
+                    [
+                        message.answered_by.provider,
+                        message.answered_by.model,
+                        message.answered_by.reasoning_label,
+                    ]
+                        .filter(Boolean)
+                        .join(' · ')
+                }}
+            </p>
         </div>
     </div>
 </template>

@@ -2,9 +2,14 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
 import { nextTick, onMounted, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import ChatModelOptionsController from '@/actions/App/Http/Controllers/AI/ChatModelOptionsController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
+import ModelSelect from '@/components/ai/ModelSelect.vue';
+import ReasoningSelect from '@/components/ai/ReasoningSelect.vue';
+import type { ModelOptions } from '@/components/ai/types';
 import {
     buildToken,
     extractTokenNames,
@@ -30,7 +35,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/lib/http';
 import { dashboard } from '@/routes';
-import type { ChatTemplatePreviewMode } from '@/typefinder';
+import type { AiReasoningLevel, ChatTemplatePreviewMode } from '@/typefinder';
 
 const props = defineProps<{
     template: ChatTemplate | null;
@@ -55,7 +60,27 @@ const form = useForm({
     variables: [...(props.template?.variables ?? [])] as ChatTemplateVariable[],
     auto_send: props.template?.auto_send ?? false,
     pinned: props.template?.pinned ?? false,
+    preset: {
+        provider: props.template?.preset?.provider ?? null,
+        model: props.template?.preset?.model ?? null,
+        reasoning: props.template?.preset?.reasoning ?? null,
+    } as {
+        provider: string | null;
+        model: string | null;
+        reasoning: AiReasoningLevel | null;
+    },
 });
+
+const modelOptions = ref<ModelOptions | null>(null);
+
+/** ModelSelect speaks '' for "inherit"; the form stores null. */
+function setPresetProvider(value: string): void {
+    form.preset.provider = value === '' ? null : value;
+}
+
+function setPresetModel(value: string): void {
+    form.preset.model = value === '' ? null : value;
+}
 
 /** Settings for names whose token was removed, restored if it comes back. */
 const remembered = new Map<string, ChatTemplateVariable>();
@@ -208,6 +233,14 @@ onMounted(() => {
     }
 
     void refreshPreview();
+
+    void jsonRequest<ModelOptions>('GET', ChatModelOptionsController.url())
+        .then((options) => {
+            modelOptions.value = options;
+        })
+        .catch(() => {
+            toast.error('Could not load the model options.');
+        });
 });
 
 function save(): void {
@@ -307,6 +340,31 @@ function save(): void {
                 <Toggle v-model="form.pinned" aria-label="Show on new chats" />
             </Field>
         </div>
+
+        <Field
+            v-if="modelOptions"
+            label="Model preset"
+            hint="Applied when this template starts a new conversation. Leave both on Conversation default to use the chat defaults."
+            data-template-preset
+        >
+            <div class="grid gap-2 sm:max-w-md">
+                <ModelSelect
+                    :models="modelOptions.models"
+                    inherit-label="Conversation default"
+                    :provider="form.preset.provider ?? ''"
+                    :model="form.preset.model ?? ''"
+                    @update:provider="setPresetProvider"
+                    @update:model="setPresetModel"
+                />
+                <ReasoningSelect
+                    v-model="form.preset.reasoning"
+                    :levels="modelOptions.reasoningLevels"
+                    inherit-label="Conversation default"
+                />
+                <InputError :message="form.errors['preset.model']" />
+                <InputError :message="form.errors['preset.provider']" />
+            </div>
+        </Field>
 
         <div class="flex gap-2">
             <Button type="submit" :disabled="form.processing" data-template-save

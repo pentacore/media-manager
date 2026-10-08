@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\PriceFetcherAgent;
+use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
@@ -1439,9 +1441,13 @@ test('an update-only provider with in-use models but no stored rows still reache
 
 test('the verifier runs on the configured price updater model', function (?Lab $failover): void {
     config()->set('ai.default', 'openai');
-    resolve(AiSettings::class)->setFailoverProvider($failover);
-    resolve(AiSettings::class)->setModel('gpt-chat');
-    resolve(AiSettings::class)->setPriceUpdaterModel('gpt-updater');
+
+    if ($failover instanceof Lab) {
+        AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => $failover->value])->create();
+    }
+
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
+    AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-updater')->create();
     PriceFetcherAgent::fake(['done']);
     Http::fake();
 

@@ -8,9 +8,9 @@ use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Agents\TitleAgent;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
-use App\Settings\AiSettings;
-use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -26,38 +26,25 @@ beforeEach(function (): void {
     config()->set('mediamanager.decision_agent.model', '');
 });
 
-function agentProviderSelectChat(string $provider, string $model): void
-{
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModelProvider($provider);
-    $aiSettings->setModel($model);
-}
-
 test('MediaAgent resolves the chat provider chain', function (): void {
-    agentProviderSelectChat('openrouter', 'anthropic/claude-sonnet-5');
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
 
     expect((new MediaAgent)->provider())->toBe(['openrouter' => 'anthropic/claude-sonnet-5', 'anthropic' => null]);
 });
 
 test('sub-agents resolve the sub-agent selection instead of the default provider', function (string $agentClass): void {
-    agentProviderSelectChat('openai', 'gpt-5-mini');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setSubAgentModel('anthropic/claude-haiku-4.5');
-    $aiSettings->setSubAgentModelProvider('openrouter');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5-mini')->create();
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openrouter', 'anthropic/claude-haiku-4.5')->create();
+    AiTaskModel::factory()->task(AiTask::StuckDownloadInvestigator)->selecting('openrouter', 'anthropic/claude-haiku-4.5')->create();
 
     expect((new $agentClass)->provider())->toBe(['openrouter' => 'anthropic/claude-haiku-4.5']);
 })->with([MediaFileInspectorAgent::class, StuckDownloadInvestigatorAgent::class]);
 
 test('the title, decision and price agents resolve their own selections', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setTitleModelProvider('openrouter');
-    $aiSettings->setTitleModel('openai/gpt-5.4-nano');
-    $aiSettings->setPriceUpdaterModel('x-ai/grok-4');
-    $aiSettings->setPriceUpdaterModelProvider('openrouter');
-
-    resolve(DecisionAgentSettings::class)->setModel('claude-haiku-4-5');
-    resolve(DecisionAgentSettings::class)->setModelProvider('anthropic');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'openai/gpt-5.4-nano')->create();
+    AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openrouter', 'x-ai/grok-4')->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('anthropic', 'claude-haiku-4-5')->create();
 
     expect((new TitleAgent)->provider())->toBe(['openrouter' => 'openai/gpt-5.4-nano'])
         ->and((new DecisionAgent)->provider())->toBe(['anthropic' => 'claude-haiku-4-5'])
@@ -65,9 +52,7 @@ test('the title, decision and price agents resolve their own selections', functi
 });
 
 test('a title prompt without a provider argument is sent to the selected OpenRouter model', function (): void {
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setTitleModelProvider('openrouter');
-    $aiSettings->setTitleModel('openai/gpt-5.4-nano');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'openai/gpt-5.4-nano')->create();
 
     Http::fake([
         'openrouter.ai/api/v1/chat/completions' => Http::response([
@@ -86,9 +71,8 @@ test('a title prompt without a provider argument is sent to the selected OpenRou
 });
 
 test('in-use pricing models are keyed by each selection provider', function (): void {
-    agentProviderSelectChat('openrouter', 'anthropic/claude-sonnet-5');
-    resolve(DecisionAgentSettings::class)->setModel('claude-haiku-4-5');
-    resolve(DecisionAgentSettings::class)->setModelProvider('anthropic');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('anthropic', 'claude-haiku-4-5')->create();
 
     $inUsePricingModels = resolve(InUsePricingModels::class);
 

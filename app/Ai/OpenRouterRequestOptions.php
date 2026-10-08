@@ -4,48 +4,28 @@ declare(strict_types=1);
 
 namespace App\Ai;
 
-use App\Enums\AiReasoningLevel;
 use App\Settings\OpenRouterSettings;
 use Laravel\Ai\Enums\Lab;
 
 /**
- * Request body keys every agent adds when it talks to OpenRouter: the unified
- * `reasoning.effort` parameter and the `provider` routing object. OpenRouter
- * accepts efforts `none` through `xhigh`, so `max` maps to `xhigh`.
+ * Request body keys every OpenRouter call adds: the `provider` routing
+ * object. Reasoning is mapped per provider by ReasoningOptions.
  */
 final readonly class OpenRouterRequestOptions
 {
     public function __construct(private OpenRouterSettings $openRouterSettings) {}
 
     /**
-     * The OpenRouter options for an agent's providerOptions() call, or an
+     * The OpenRouter routing options for a providerOptions() callback, or an
      * empty array for any other provider.
      *
-     * @return array<string, mixed>
+     * @return array{provider?: array<string, mixed>}
      */
-    public function for(Lab|string $provider, ?string $reasoningLevel = null): array
+    public function for(Lab|string $provider): array
     {
         $value = $provider instanceof Lab ? $provider->value : $provider;
 
-        if ($value !== Lab::OpenRouter->value) {
-            return [];
-        }
-
-        return [...$this->reasoning($reasoningLevel), ...$this->routing()];
-    }
-
-    /**
-     * @return array{reasoning?: array{effort: string}}
-     */
-    public function reasoning(?string $reasoningLevel): array
-    {
-        if ($reasoningLevel === null || $reasoningLevel === '') {
-            return [];
-        }
-
-        $effort = $reasoningLevel === AiReasoningLevel::Max->value ? AiReasoningLevel::XHigh->value : $reasoningLevel;
-
-        return ['reasoning' => ['effort' => $effort]];
+        return $value === Lab::OpenRouter->value ? $this->routing() : [];
     }
 
     /**

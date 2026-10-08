@@ -2,16 +2,13 @@
 
 declare(strict_types=1);
 
-use App\Models\AiModelPrice;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Models\User;
 use App\Settings\AiSettings;
-use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
-    // The model select is fed by the pricing catalog; the form is invalid
-    // without a row for the configured chat model.
-    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
 });
 
 test('admin can enable the decision gate from AI settings', function (): void {
@@ -21,7 +18,6 @@ test('admin can enable the decision gate from AI settings', function (): void {
         ->assertNoSmoke()
         ->assertVisible('[data-classification-settings]')
         ->assertVisible('[data-reranking-settings]')
-        ->assertVisible('[data-sub-agent-model]')
         ->assertVisible('[data-advanced-tools]')
         ->assertSeeIn('[data-decision-gate-toggle]', 'Disabled')
         ->click('[data-decision-gate-toggle]')
@@ -36,7 +32,7 @@ test('admin can enable the decision gate from AI settings', function (): void {
         ->and($aiSettings->subtitleTriageEnabled())->toBeFalse()
         ->and($aiSettings->chatRoutingEnabled())->toBeFalse()
         ->and($aiSettings->decisionGateThreshold())->toBe(0.3)
-        ->and($aiSettings->rawSubAgentModel())->toBeNull();
+        ->and(AiTaskModel::query()->exists())->toBeFalse();
 });
 
 test('the AI settings page flags a classification provider without an API key', function (): void {
@@ -52,7 +48,7 @@ test('the AI settings page flags a classification provider without an API key', 
 
 test('the AI settings page shows which advanced tools the provider chain allows', function (): void {
     config()->set('ai.default', 'openai');
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'gemini'])->create();
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-settings.index', absolute: false))
@@ -79,21 +75,4 @@ test('admin can switch the reranking provider and model', function (): void {
 
     expect($aiSettings->rerankingProvider())->toBe('jina')
         ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3');
-});
-
-test('admin can pick a dedicated price updater model', function (): void {
-    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-updater']);
-    $this->actingAs(User::factory()->admin()->create());
-
-    visit(route('admin.ai-settings.index', absolute: false))
-        ->assertNoSmoke()
-        ->assertSeeIn('[data-price-updater-model]', 'Same as chat model')
-        ->click('#price_updater_model')
-        ->click('[role="option"][aria-label="gpt-updater"]')
-        ->assertSeeIn('[data-price-updater-model]', 'gpt-updater')
-        ->click('Save settings')
-        ->assertSee('AI settings updated.')
-        ->assertSeeIn('[data-price-updater-model]', 'gpt-updater');
-
-    expect(resolve(AiSettings::class)->rawPriceUpdaterModel())->toBe('gpt-updater');
 });

@@ -79,6 +79,8 @@ interface PriceRow {
     pricing_synced_at: string | null;
     pricing_verified_at: string | null;
     is_price_locked: boolean;
+    supports_reasoning: boolean | null;
+    reasoning_levels: string[] | null;
     automatic_updates_enabled: boolean;
     rate_limits: {
         id: number;
@@ -143,6 +145,18 @@ const editingPool = ref<PoolRow | null>(null);
 const editRateLimits = ref<RateLimitDraft[]>([]);
 
 const editPoolId = ref('none');
+
+const REASONING_LEVEL_OPTIONS = [
+    'none',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+] as const;
+
+const editSupportsReasoning = ref<'yes' | 'no' | 'unknown'>('unknown');
+const editReasoningLevels = ref<string[]>([]);
 
 // Whether a manually managed row opts into online refreshes. Edit mirrors
 // the row's state.
@@ -377,6 +391,13 @@ function startEdit(price: PriceRow) {
         price.free_usage_pool_id === null
             ? 'none'
             : String(price.free_usage_pool_id);
+    editSupportsReasoning.value =
+        price.supports_reasoning === null
+            ? 'unknown'
+            : price.supports_reasoning
+              ? 'yes'
+              : 'no';
+    editReasoningLevels.value = [...(price.reasoning_levels ?? [])];
     editRateLimits.value = price.rate_limits.map((limit) => ({
         metric: limit.metric,
         period: limit.period,
@@ -1295,6 +1316,70 @@ const priciest = ref(
                                 </SelectContent>
                             </Select>
                             <InputError :message="errors.free_usage_pool_id" />
+                        </div>
+                        <div class="col-span-2 space-y-2">
+                            <Label for="edit_supports_reasoning"
+                                >Supports reasoning</Label
+                            >
+                            <input
+                                type="hidden"
+                                name="supports_reasoning"
+                                :value="editSupportsReasoning"
+                            />
+                            <Select
+                                id="edit_supports_reasoning"
+                                v-model="editSupportsReasoning"
+                            >
+                                <SelectTrigger
+                                    class="h-9 w-full text-sm"
+                                    data-price-supports-reasoning
+                                >
+                                    <SelectValue placeholder="Unknown" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="yes">Yes</SelectItem>
+                                    <SelectItem value="no">No</SelectItem>
+                                    <SelectItem value="unknown">
+                                        Unknown
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError :message="errors.supports_reasoning" />
+                            <Label>Accepted reasoning levels</Label>
+                            <div class="flex flex-wrap gap-x-4 gap-y-2">
+                                <label
+                                    v-for="level in REASONING_LEVEL_OPTIONS"
+                                    :key="level"
+                                    class="flex cursor-pointer items-center gap-2 text-[13px]"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        :value="level"
+                                        v-model="editReasoningLevels"
+                                        :data-price-reasoning-level="level"
+                                        class="size-4 rounded border-border accent-accent"
+                                    />
+                                    {{ level }}
+                                </label>
+                            </div>
+                            <!-- Blank placeholder so an all-unchecked group still submits. -->
+                            <input
+                                type="hidden"
+                                name="reasoning_levels[]"
+                                value=""
+                            />
+                            <input
+                                v-for="level in editReasoningLevels"
+                                :key="level"
+                                type="hidden"
+                                name="reasoning_levels[]"
+                                :value="level"
+                            />
+                            <p class="text-[11px] text-fg-subtle">
+                                Filled by the pricing feeds. Feed syncs
+                                overwrite it unless automatic updates are off.
+                            </p>
+                            <InputError :message="errors.reasoning_levels" />
                         </div>
                         <div class="col-span-2 space-y-2">
                             <Label>Automatic pricing updates</Label>

@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
-use App\Ai\ModelSelection;
-use App\Enums\AiReasoningLevel;
-
 /**
  * Configuration for the autonomous DecisionAgent — the background agent
  * that reasons over inbound webhook events and either suggests or takes
@@ -20,10 +17,6 @@ class DecisionAgentSettings
 {
     public const string ENABLED_KEY = 'decision_agent.enabled';
 
-    public const string MODEL_KEY = 'decision_agent.model';
-
-    public const string MODEL_PROVIDER_KEY = 'decision_agent.model_provider';
-
     public const string ALLOWLIST_KEY = 'decision_agent.event_allowlist';
 
     public const string ALLOW_MANUAL_IMPORT_KEY = 'decision_agent.allow_manual_import';
@@ -34,12 +27,7 @@ class DecisionAgentSettings
 
     public const string MAX_ACTIONS_KEY = 'decision_agent.max_actions_per_run';
 
-    public const string REASONING_LEVEL_KEY = 'decision_agent.reasoning_level';
-
-    public function __construct(
-        private readonly AppSettings $appSettings,
-        private readonly AiSettings $aiSettings,
-    ) {}
+    public function __construct(private readonly AppSettings $appSettings) {}
 
     public function enabled(): bool
     {
@@ -52,58 +40,6 @@ class DecisionAgentSettings
     public function setEnabled(bool $enabled): void
     {
         $this->appSettings->set(self::ENABLED_KEY, $enabled);
-    }
-
-    /**
-     * Model identifier for the DecisionAgent. Falls back to the chat model
-     * when unset so a fresh install works without extra config.
-     */
-    public function model(): string
-    {
-        return $this->selection()->model;
-    }
-
-    /**
-     * The provider + model the DecisionAgent runs on. Without a saved (or
-     * configured) model the whole chat selection is inherited; a model saved
-     * before per-model providers existed keeps `ai.default`.
-     */
-    public function selection(): ModelSelection
-    {
-        $model = (string) $this->appSettings->get(self::MODEL_KEY, '');
-
-        if ($model === '') {
-            $model = (string) config('mediamanager.decision_agent.model', '');
-        }
-
-        if ($model === '') {
-            return $this->aiSettings->chatSelection();
-        }
-
-        return new ModelSelection($this->rawModelProvider() ?? $this->aiSettings->defaultTextProvider(), $model);
-    }
-
-    /**
-     * The decision-agent provider as saved, or null when none is saved.
-     */
-    public function rawModelProvider(): ?string
-    {
-        $value = trim((string) $this->appSettings->get(self::MODEL_PROVIDER_KEY, ''));
-
-        return $value !== '' ? $value : null;
-    }
-
-    /**
-     * Persist the decision-agent provider; null clears it.
-     */
-    public function setModelProvider(?string $provider): void
-    {
-        $this->appSettings->set(self::MODEL_PROVIDER_KEY, $provider);
-    }
-
-    public function setModel(string $model): void
-    {
-        $this->appSettings->set(self::MODEL_KEY, $model);
     }
 
     /**
@@ -256,23 +192,5 @@ class DecisionAgentSettings
     public function setMaxActionsPerRun(int $max): void
     {
         $this->appSettings->set(self::MAX_ACTIONS_KEY, max(1, $max));
-    }
-
-    public function setReasoning(AiReasoningLevel $aiReasoningLevel): void
-    {
-        $this->appSettings->set(self::REASONING_LEVEL_KEY, $aiReasoningLevel->value);
-    }
-
-    public function reasoning(): string
-    {
-        $value = (string) $this->appSettings->get(self::REASONING_LEVEL_KEY, '');
-
-        if ($value !== '') {
-            return $value;
-        }
-
-        $configured = (string) config('mediamanager.decision_agent.reasoning_level', '');
-
-        return $configured ?: AiReasoningLevel::None->value;
     }
 }

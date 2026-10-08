@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AI\ChatAttachmentController;
 use App\Http\Controllers\AI\ChatController;
+use App\Http\Controllers\AI\ChatModelOptionsController;
 use App\Http\Controllers\AI\ChatTemplateController;
 use App\Http\Controllers\AI\ChatTemplateLibraryController;
 use App\Http\Controllers\AI\ChatTemplateOptionsController;
@@ -21,6 +22,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::post('chat/stream', [ChatController::class, 'stream'])->name('chat.stream');
         Route::get('chat/pending-workflow', [ChatController::class, 'pendingWorkflow'])->name('chat.pending-workflow');
         Route::get('chat/attachments/{chatAttachment}', ChatAttachmentController::class)->name('chat.attachments.show');
+        Route::get('chat/model-options', ChatModelOptionsController::class)->name('chat.model-options');
 
         Route::get('conversations', [ConversationController::class, 'index'])
             ->name('conversations.index');
@@ -30,6 +32,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::patch('conversations/{conversation}', [ConversationController::class, 'rename'])
             ->whereUuid('conversation')
             ->name('conversations.rename');
+        Route::patch('conversations/{conversation}/model', [ConversationController::class, 'updateModel'])
+            ->whereUuid('conversation')
+            ->name('conversations.model');
 
         Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
         Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
+import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
 import { jsonRequest } from '@/lib/http';
 
 export interface ConversationSummary {
@@ -30,12 +31,15 @@ export interface ConversationMessage {
     toolCalls?: ChatToolCall[];
     attachments?: ChatAttachmentRef[];
     failed?: boolean;
+    /** The model behind an assistant reply; null when it is not known. */
+    answered_by?: AnsweredBy | null;
 }
 
 export interface ConversationPage {
     id: string;
     title: string;
     updated_at: string;
+    override: ChatOverride;
     messages: ConversationMessage[];
     next_cursor: string | null;
 }
@@ -189,7 +193,8 @@ export function useAiChat() {
             return data;
         }
 
-        activeConversationId.value = data.id;
+        // The caller makes the conversation active before loading it; a late
+        // response must not switch back to a conversation the user left.
         upsertConversation({
             id: data.id,
             title: data.title,

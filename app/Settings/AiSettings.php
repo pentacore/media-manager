@@ -5,19 +5,15 @@ declare(strict_types=1);
 namespace App\Settings;
 
 use App\Ai\ModelSelection;
+use App\Ai\TaskModelResolver;
 use App\Enums\AiMode;
-use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
 use Laravel\Ai\Ai;
-use Laravel\Ai\Enums\Lab;
 use Throwable;
 
 class AiSettings
 {
     public const MODE_KEY = 'ai.mode';
-
-    public const MODEL_KEY = 'ai.model';
-
-    public const TITLE_MODEL_KEY = 'ai.title_model';
 
     /**
      * Sentinel that resolves to the default provider's cheapest text model
@@ -25,15 +21,11 @@ class AiSettings
      */
     public const AUTO_MODEL = 'auto';
 
-    public const string FAILOVER_PROVIDER_KEY = 'ai.failover_provider';
-
     public const SOFT_BUDGET_KEY = 'ai.budget.soft_monthly_usd';
 
     public const HARD_BUDGET_KEY = 'ai.budget.hard_monthly_usd';
 
     public const SOFT_BUDGET_NOTIFIED_AT_KEY = 'ai.budget.soft_notified_at';
-
-    public const MEDIA_ADVISOR_REASONING_LEVEL_KEY = 'ai.advisor_reasoning_level';
 
     public const string CHAT_TIMEOUT_KEY = 'ai.chat_timeout';
 
@@ -55,8 +47,6 @@ class AiSettings
     public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
 
     public const string AUTO_CREATE_PRICING_PROVIDERS_KEY = 'ai.pricing.auto_create_providers';
-
-    public const string PRICE_UPDATER_MODEL_KEY = 'ai.pricing.updater_model';
 
     public const string RATE_LIMITS_ENFORCED_KEY = 'ai.rate_limits.enforce';
 
@@ -83,18 +73,6 @@ class AiSettings
     public const string EMBEDDINGS_MODEL_KEY = 'ai.embeddings.model';
 
     public const string EMBEDDINGS_INDEXED_WITH_KEY = 'ai.embeddings.indexed_with';
-
-    public const string SUB_AGENT_MODEL_KEY = 'ai.sub_agent_model';
-
-    public const string MODEL_PROVIDER_KEY = 'ai.model_provider';
-
-    public const string TITLE_MODEL_PROVIDER_KEY = 'ai.title_model_provider';
-
-    public const string SUB_AGENT_MODEL_PROVIDER_KEY = 'ai.sub_agent_model_provider';
-
-    public const string PRICE_UPDATER_MODEL_PROVIDER_KEY = 'ai.pricing.updater_model_provider';
-
-    public const string FAILOVER_MODEL_KEY = 'ai.failover_model';
 
     /**
      * Providers that can serve classification calls.
@@ -144,129 +122,18 @@ class AiSettings
         $this->aiMode = $aiMode;
     }
 
-    public function model(): string
-    {
-        $value = (string) $this->appSettings->get(
-            self::MODEL_KEY,
-            config('mediamanager.ai.model', 'gpt-5-mini'),
-        );
-
-        return $value !== '' ? $value : 'gpt-5-mini';
-    }
-
     public function setMode(AiMode $aiMode): void
     {
         $this->appSettings->set(self::MODE_KEY, $aiMode->value);
     }
 
-    public function setModel(string $model): void
-    {
-        $this->appSettings->set(self::MODEL_KEY, $model);
-    }
-
     /**
-     * The provider the chat model runs on. Nothing saved (every install from
-     * before per-model providers) follows `ai.default`.
-     */
-    public function modelProvider(): string
-    {
-        return $this->optionalString($this->appSettings->get(self::MODEL_PROVIDER_KEY)) ?? $this->defaultTextProvider();
-    }
-
-    /**
-     * Persist the chat provider. A null value clears the setting so the
-     * provider falls back to `ai.default` again.
-     */
-    public function setModelProvider(?string $provider): void
-    {
-        $this->appSettings->set(self::MODEL_PROVIDER_KEY, $provider);
-    }
-
-    /**
-     * The provider + model MediaAgent and the Subtitle Advisor run on.
+     * The provider + model the chat runs on for the turn in flight (the
+     * conversation override when one is set, else the AI Models chat row).
      */
     public function chatSelection(): ModelSelection
     {
-        return new ModelSelection($this->modelProvider(), $this->model());
-    }
-
-    /**
-     * The provider conversation titles are generated on.
-     */
-    public function titleModelProvider(): string
-    {
-        return $this->optionalString($this->appSettings->get(self::TITLE_MODEL_PROVIDER_KEY)) ?? $this->defaultTextProvider();
-    }
-
-    /**
-     * Persist the title provider; null falls back to `ai.default`.
-     */
-    public function setTitleModelProvider(?string $provider): void
-    {
-        $this->appSettings->set(self::TITLE_MODEL_PROVIDER_KEY, $provider);
-    }
-
-    /**
-     * The provider + model TitleAgent runs on. The `auto` sentinel resolves to
-     * the title provider's cheapest text model so every caller sends a
-     * concrete model name.
-     */
-    public function titleSelection(): ModelSelection
-    {
-        $provider = $this->titleModelProvider();
-        $model = $this->rawTitleModel();
-
-        if ($model === self::AUTO_MODEL) {
-            $model = Ai::textProvider($provider)->cheapestTextModel();
-        }
-
-        return new ModelSelection($provider, $model);
-    }
-
-    /**
-     * The model used to generate conversation titles: the title provider's
-     * cheapest text model.
-     *
-     * The persisted `auto` sentinel is translated to the title provider's
-     * cheapest text model here, so every caller — including the queued job
-     * that passes this value as an explicit `model:` argument — sends a
-     * concrete model name rather than the literal `auto` string.
-     */
-    public function titleModel(): string
-    {
-        return $this->titleSelection()->model;
-    }
-
-    /**
-     * The persisted title-model value as stored, without the `auto`
-     * translation applied by {@see titleModel()}.
-     *
-     * Runtime consumers want the resolved concrete model, but the admin
-     * form must show the raw value so the `auto` sentinel round-trips
-     * through the UI instead of being silently replaced by the cheapest
-     * concrete model on reload.
-     */
-    public function rawTitleModel(): string
-    {
-        $value = (string) $this->appSettings->get(
-            self::TITLE_MODEL_KEY,
-            config('mediamanager.ai.title_model', 'gpt-5.4-nano'),
-        );
-
-        return $value !== '' ? $value : 'gpt-5.4-nano';
-    }
-
-    public function setAdvisorReasoningLevel(AiReasoningLevel $aiReasoningLevel): void
-    {
-        $this->appSettings->set(self::MEDIA_ADVISOR_REASONING_LEVEL_KEY, $aiReasoningLevel->value);
-    }
-
-    public function advisorReasoningLevel(): string
-    {
-        return (string) $this->appSettings->get(
-            self::MEDIA_ADVISOR_REASONING_LEVEL_KEY,
-            config('mediamanager.ai.advisor_reasoning_level', AiReasoningLevel::None->value),
-        );
+        return resolve(TaskModelResolver::class)->resolve(AiTask::Chat)->modelSelection();
     }
 
     /**
@@ -299,44 +166,6 @@ class AiSettings
         $this->appSettings->set(self::CHAT_TIMEOUT_KEY, $seconds);
     }
 
-    public function setTitleModel(string $model): void
-    {
-        $this->appSettings->set(self::TITLE_MODEL_KEY, $model);
-    }
-
-    /**
-     * The provider text requests fall back to when the primary provider
-     * raises a failoverable error. Null = no failover (SDK default only).
-     */
-    public function failoverProvider(): ?Lab
-    {
-        $value = (string) $this->appSettings->get(self::FAILOVER_PROVIDER_KEY, '');
-
-        return $value !== '' ? Lab::tryFrom($value) : null;
-    }
-
-    public function setFailoverProvider(?Lab $lab): void
-    {
-        $this->appSettings->set(self::FAILOVER_PROVIDER_KEY, $lab?->value ?? '');
-    }
-
-    /**
-     * The model the failover provider runs, or null for that provider's
-     * default model.
-     */
-    public function failoverModel(): ?string
-    {
-        return $this->optionalString($this->appSettings->get(self::FAILOVER_MODEL_KEY));
-    }
-
-    /**
-     * Persist the failover model; null falls back to the provider default.
-     */
-    public function setFailoverModel(?string $model): void
-    {
-        $this->appSettings->set(self::FAILOVER_MODEL_KEY, $model);
-    }
-
     /**
      * The explicit provider => model map an agent passes to laravel/ai: the
      * selection first, then the failover provider (with its optional model)
@@ -347,10 +176,10 @@ class AiSettings
     public function providerChainFor(ModelSelection $modelSelection): array
     {
         $chain = [$modelSelection->provider => $modelSelection->model];
-        $failover = $this->failoverProvider();
+        $failover = resolve(TaskModelResolver::class)->failover();
 
-        if ($failover instanceof Lab && $failover->value !== $modelSelection->provider) {
-            $chain[$failover->value] = $this->failoverModel();
+        if ($failover !== null && $failover['provider'] !== $modelSelection->provider) {
+            $chain[$failover['provider']] = $failover['model'];
         }
 
         return $chain;
@@ -738,131 +567,6 @@ class AiSettings
         }
 
         return sprintf('%s|%s', $provider, $model);
-    }
-
-    /**
-     * The model investigation sub-agents run on. Empty (nothing saved and no
-     * `mediamanager.ai.sub_agent_model` default) follows the chat model.
-     */
-    public function subAgentModel(): string
-    {
-        return $this->rawSubAgentModel() ?? $this->model();
-    }
-
-    /**
-     * The sub-agent model as configured, or null when it follows the chat
-     * model. The admin form shows this so "Same as chat model" round-trips.
-     */
-    public function rawSubAgentModel(): ?string
-    {
-        return $this->optionalString(
-            $this->appSettings->get(self::SUB_AGENT_MODEL_KEY)
-                ?? config('mediamanager.ai.sub_agent_model', ''),
-        );
-    }
-
-    /**
-     * Persist the sub-agent model. A null value clears the setting so the
-     * model falls back to the config default (or the chat model) again.
-     */
-    public function setSubAgentModel(?string $model): void
-    {
-        $this->appSettings->set(self::SUB_AGENT_MODEL_KEY, $model);
-    }
-
-    /**
-     * The sub-agent provider as saved, or null when none is saved.
-     */
-    public function rawSubAgentModelProvider(): ?string
-    {
-        return $this->optionalString($this->appSettings->get(self::SUB_AGENT_MODEL_PROVIDER_KEY));
-    }
-
-    /**
-     * Persist the sub-agent provider; null clears it.
-     */
-    public function setSubAgentModelProvider(?string $provider): void
-    {
-        $this->appSettings->set(self::SUB_AGENT_MODEL_PROVIDER_KEY, $provider);
-    }
-
-    /**
-     * The provider + model investigation sub-agents run on. Without a saved
-     * sub-agent model the whole chat selection is inherited.
-     */
-    public function subAgentSelection(): ModelSelection
-    {
-        return $this->inheritingSelection($this->rawSubAgentModel(), $this->rawSubAgentModelProvider());
-    }
-
-    /**
-     * The model the price updater (PriceFetcherAgent) runs on. Empty (nothing
-     * saved and no `mediamanager.ai.pricing.updater_model` default) follows the
-     * chat model.
-     */
-    public function priceUpdaterModel(): string
-    {
-        return $this->rawPriceUpdaterModel() ?? $this->model();
-    }
-
-    /**
-     * The price updater model as configured, or null when it follows the chat
-     * model. The admin form shows this so "Same as chat model" round-trips.
-     */
-    public function rawPriceUpdaterModel(): ?string
-    {
-        return $this->optionalString(
-            $this->appSettings->get(self::PRICE_UPDATER_MODEL_KEY)
-                ?? config('mediamanager.ai.pricing.updater_model', ''),
-        );
-    }
-
-    /**
-     * Persist the price updater model. A null value clears the setting so the
-     * model falls back to the config default (or the chat model) again.
-     */
-    public function setPriceUpdaterModel(?string $model): void
-    {
-        $this->appSettings->set(self::PRICE_UPDATER_MODEL_KEY, $model);
-    }
-
-    /**
-     * The price updater provider as saved, or null when none is saved.
-     */
-    public function rawPriceUpdaterModelProvider(): ?string
-    {
-        return $this->optionalString($this->appSettings->get(self::PRICE_UPDATER_MODEL_PROVIDER_KEY));
-    }
-
-    /**
-     * Persist the price updater provider; null clears it.
-     */
-    public function setPriceUpdaterModelProvider(?string $provider): void
-    {
-        $this->appSettings->set(self::PRICE_UPDATER_MODEL_PROVIDER_KEY, $provider);
-    }
-
-    /**
-     * The provider + model PriceFetcherAgent runs on. Without a saved price
-     * updater model the whole chat selection is inherited.
-     */
-    public function priceUpdaterSelection(): ModelSelection
-    {
-        return $this->inheritingSelection($this->rawPriceUpdaterModel(), $this->rawPriceUpdaterModelProvider());
-    }
-
-    /**
-     * A selection for a setting that follows the chat selection when its own
-     * model is unset. A model saved before per-model providers existed keeps
-     * `ai.default` as its provider.
-     */
-    private function inheritingSelection(?string $model, ?string $provider): ModelSelection
-    {
-        if ($model === null) {
-            return $this->chatSelection();
-        }
-
-        return new ModelSelection($provider ?? $this->defaultTextProvider(), $model);
     }
 
     /**

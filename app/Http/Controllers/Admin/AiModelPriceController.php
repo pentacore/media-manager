@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AiReasoningLevel;
 use App\Enums\PricingSource;
 use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
@@ -134,6 +135,7 @@ class AiModelPriceController extends Controller
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
         $this->zeroBlankSearchUnitRate($validated);
+        $this->normalizeReasoningCapability($validated);
 
         $priceChanged = $this->pricingFieldsChanged($aiModelPrice, $validated);
 
@@ -300,6 +302,33 @@ class AiModelPriceController extends Controller
         }
 
         return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Translate the edit form's reasoning fields into column values: the
+     * yes/no/unknown select becomes a nullable boolean, and an empty level set
+     * means unknown (null), otherwise the levels are stored in scale order.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function normalizeReasoningCapability(array &$validated): void
+    {
+        if (array_key_exists('supports_reasoning', $validated)) {
+            $validated['supports_reasoning'] = match ($validated['supports_reasoning']) {
+                'yes' => true,
+                'no' => false,
+                default => null,
+            };
+        }
+
+        if (array_key_exists('reasoning_levels', $validated)) {
+            $levels = array_map(AiReasoningLevel::from(...), $validated['reasoning_levels']);
+            usort($levels, static fn (AiReasoningLevel $a, AiReasoningLevel $b): int => $a->rank() <=> $b->rank());
+
+            $validated['reasoning_levels'] = $levels === []
+                ? null
+                : array_values(array_unique(array_map(static fn (AiReasoningLevel $level): string => $level->value, $levels)));
+        }
     }
 
     /**
