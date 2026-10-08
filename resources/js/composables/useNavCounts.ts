@@ -1,4 +1,4 @@
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import type { Ref } from 'vue';
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useCan } from '@/composables/useCan';
@@ -89,34 +89,76 @@ export function useNavCounts(): NavCounts {
         }
     }
 
-    // Re-sync all counters when a fresh `nav` snapshot arrives. Watch the
-    // reference, not every page update: a partial reload keeps the previous
-    // `nav` object, and re-applying that older snapshot would undo the live
-    // deltas the channels below added since. The local ID sets only track
-    // deltas observed since the previous snapshot, so they are cleared here —
-    // keeping them would double-count events already baked into the server
-    // numbers.
-    watch(
-        () => page.props.nav,
-        (nav) => {
-            if (!nav) {
-                return;
-            }
+    /**
+     * Re-sync every counter from a `nav` snapshot, server truth. The local ID
+     * sets only track deltas observed since the previous snapshot, so they
+     * are cleared here — keeping them would double-count events already
+     * baked into the server numbers.
+     */
+    function applyNav(nav: typeof page.props.nav | undefined): void {
+        if (!nav) {
+            return;
+        }
 
-            pendingActions.value = nav.pendingActions ?? 0;
-            activeSessions.value = nav.activeSessions ?? 0;
-            libraryIntervention.value = nav.libraryIntervention ?? 0;
-            sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
-            sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
-            replacementAttention.value = nav.replacementAttention ?? 0;
-            wantedMissing.value = nav.wantedMissing ?? 0;
-            recentSessionIds.clear();
-            sessionTimestamps.clear();
-            pendingIds.clear();
-        },
-    );
+        pendingActions.value = nav.pendingActions ?? 0;
+        activeSessions.value = nav.activeSessions ?? 0;
+        libraryIntervention.value = nav.libraryIntervention ?? 0;
+        sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
+        sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
+        replacementAttention.value = nav.replacementAttention ?? 0;
+        wantedMissing.value = nav.wantedMissing ?? 0;
+        recentSessionIds.clear();
+        sessionTimestamps.clear();
+        pendingIds.clear();
+    }
+
+    // Re-sync when a fresh `nav` snapshot arrives. Watch the reference, not
+    // every page update: a partial reload keeps the previous `nav` object,
+    // and re-applying that older snapshot would undo the live deltas the
+    // channels below added since.
+    watch(() => page.props.nav, applyNav);
+
+    // The reference watch above misses one case: a full visit back to the
+    // same component whose `nav` payload is byte-identical to the previous
+    // one. Inertia's preserveEqualProps then reuses the old object
+    // (@inertiajs/core dist/index.js:2797-2806), so the watch never fires,
+    // and locally-drifted counts (a websocket delta applied after the old
+    // snapshot, now rolled back by the full visit) are left stale. Track
+    // every visit's `only`/`except` at 'start' and force a re-sync from
+    // `page.props.nav` on 'success' for the ones that were full, non-prefetch
+    // visits — regardless of whether the reference changed.
+    const pendingFullVisitIds = new Set<string>();
+    let stopStartListener: VoidFunction | null = null;
+    let stopSuccessListener: VoidFunction | null = null;
+    let stopFinishListener: VoidFunction | null = null;
 
     onMounted(() => {
+        stopStartListener = router.on('start', (event) => {
+            const visit = event.detail.visit;
+
+            if (
+                visit.only.length === 0 &&
+                visit.except.length === 0 &&
+                !visit.prefetch
+            ) {
+                pendingFullVisitIds.add(visit.id);
+            }
+        });
+
+        stopSuccessListener = router.on('success', (event) => {
+            const visitId = event.detail.visitId;
+
+            if (visitId !== undefined && pendingFullVisitIds.delete(visitId)) {
+                applyNav(page.props.nav);
+            }
+        });
+
+        // Visits that never reach 'success' (cancelled, errored) would
+        // otherwise leak their id.
+        stopFinishListener = router.on('finish', (event) => {
+            pendingFullVisitIds.delete(event.detail.visit.id);
+        });
+
         channelLeases.push(
             acquirePrivateChannel('emby.activity').listen(
                 '.EmbyPlaybackUpdated',
@@ -219,6 +261,10 @@ export function useNavCounts(): NavCounts {
             clearInterval(activitySessionTimer);
             activitySessionTimer = null;
         }
+
+        stopStartListener?.();
+        stopSuccessListener?.();
+        stopFinishListener?.();
     });
 
     return {
