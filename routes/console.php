@@ -30,6 +30,7 @@ use App\Models\AgentDecision;
 use App\Models\AiPriceRefreshRun;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Models\ClassificationOutcome;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
 use App\Models\SubtitleCase;
@@ -157,6 +158,7 @@ Schedule::command('model:prune', [
         AiUsageRecord::class,
         AiToolInvocation::class,
         AgentDecision::class,
+        ClassificationOutcome::class,
         AiPriceRefreshRun::class,
         MediaReplacementAttempt::class,
         // Cases (with their attempts and uploads) before action requests: a

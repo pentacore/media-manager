@@ -376,6 +376,7 @@ return [
         'ai_usage_records_days' => (int) env('MEDIAMANAGER_RETENTION_AI_USAGE_RECORDS_DAYS', 400),
         'ai_tool_invocations_days' => (int) env('MEDIAMANAGER_RETENTION_AI_TOOL_INVOCATIONS_DAYS', 90),
         'agent_decisions_days' => (int) env('MEDIAMANAGER_RETENTION_AGENT_DECISIONS_DAYS', 180),
+        'classification_outcomes_days' => (int) env('MEDIAMANAGER_RETENTION_CLASSIFICATION_OUTCOMES_DAYS', 90),
         'media_replacement_attempts_days' => (int) env('MEDIAMANAGER_RETENTION_MEDIA_REPLACEMENT_ATTEMPTS_DAYS', 90),
         'action_requests_days' => (int) env('MEDIAMANAGER_RETENTION_ACTION_REQUESTS_DAYS', 180),
         'subtitle_cases_days' => (int) env('MEDIAMANAGER_RETENTION_SUBTITLE_CASES_DAYS', 180),
