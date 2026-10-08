@@ -115,6 +115,57 @@ test('the Downloads link never prefetches because its page reads SABnzbd live', 
         ->and($webpage->script(prefetchCountScript($downloadsPath, true)))->toBe(0);
 });
 
+test('the Subtitles link never prefetches because its overview reads Bazarr live, uncached on failure', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $subtitlesPath = route('bazarr.overview', absolute: false);
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    $webpage->script(prefetchRecorderScript());
+
+    $webpage->hover('[data-nav-item="Subtitles"]');
+    $webpage->hover('[data-nav-item="Action Queue"]');
+    $webpage->script(prefetchWaitForScript($actionQueuePath));
+
+    expect($webpage->script(prefetchCountScript($actionQueuePath, true)))->toBe(1)
+        ->and($webpage->script(prefetchCountScript($subtitlesPath, true)))->toBe(0);
+});
+
+test('the Seasonal Anime link never prefetches because index() can dispatch a bootstrap job on GET', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $animePath = route('media.anime.index', absolute: false);
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    $webpage->script(prefetchRecorderScript());
+
+    $webpage->hover('[data-nav-item="Seasonal Anime"]');
+    $webpage->hover('[data-nav-item="Action Queue"]');
+    $webpage->script(prefetchWaitForScript($actionQueuePath));
+
+    expect($webpage->script(prefetchCountScript($actionQueuePath, true)))->toBe(1)
+        ->and($webpage->script(prefetchCountScript($animePath, true)))->toBe(0);
+});
+
+test('the AI Usage link never prefetches because index() builds its aggregates eagerly', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsagePath = route('admin.ai-usage.index', absolute: false);
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    // The link lives in the collapsed "AI" admin sub-group.
+    $webpage->click('[data-sidebar="content"] button:has-text("AI")');
+    $webpage->script(prefetchRecorderScript());
+
+    $webpage->hover('[data-nav-item="AI Usage"]');
+    $webpage->hover('[data-nav-item="Action Queue"]');
+    $webpage->script(prefetchWaitForScript($actionQueuePath));
+
+    expect($webpage->script(prefetchCountScript($actionQueuePath, true)))->toBe(1)
+        ->and($webpage->script(prefetchCountScript($aiUsagePath, true)))->toBe(0);
+});
+
 test('hovering a series card prefetches the series page and the click reuses it', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     $series = [

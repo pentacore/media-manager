@@ -218,12 +218,22 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: AnimeController.index.url(),
                         icon: Sprout,
                         ability: 'manage-requests',
+                        // On a fresh deployment (or once after the tvdb_season
+                        // column arrives) index() dispatches a bootstrap sync
+                        // job on every GET until it completes, so a passing
+                        // hover alone can trigger it.
+                        prefetch: false,
                     },
                     {
                         title: 'Subtitles',
                         href: BazarrOverviewController.url(),
                         icon: Captions,
                         ability: 'manage-library',
+                        // The overview reads three Bazarr endpoints live in a
+                        // non-deferred prop, cached on success but NOT on
+                        // failure, so a hover against a down/slow Bazarr holds
+                        // a worker for the full retry budget every 10 s.
+                        prefetch: false,
                     },
                     {
                         title: 'Indexer search',
@@ -364,6 +374,10 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'AI Usage',
                         href: AiUsageController.index.url(),
                         icon: ChartLine,
+                        // index() builds nine-plus DB aggregates as
+                        // non-deferred props, so a hover would eagerly pay
+                        // for the full report instead of a cheap shell.
+                        prefetch: false,
                     },
                     {
                         title: 'AI Conversations',
