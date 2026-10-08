@@ -415,6 +415,7 @@ function testIndexer(indexerId: number): void {
                     <div
                         v-if="showBazarrMappings"
                         class="grid gap-4 sm:grid-cols-2"
+                        data-bazarr-mappings
                     >
                         <div class="space-y-2">
                             <Label for="sonarr_connection_id"
@@ -487,7 +488,11 @@ function testIndexer(indexerId: number): void {
                         </div>
                     </div>
 
-                    <div v-if="showWhisparrVersion" class="space-y-2">
+                    <div
+                        v-if="showWhisparrVersion"
+                        class="space-y-2"
+                        data-whisparr-version
+                    >
                         <Label for="whisparr_version">Whisparr Version</Label>
                         <Select
                             name="whisparr_version"
@@ -575,6 +580,7 @@ function testIndexer(indexerId: number): void {
                                 !apiKey ||
                                 testHttp.processing
                             "
+                            data-connection-test
                             @click="testConnection"
                         >
                             <Plug class="mr-2 size-4" />
@@ -593,6 +599,7 @@ function testIndexer(indexerId: number): void {
                         <p
                             v-if="testResult?.success"
                             class="text-sm text-green-600 dark:text-green-400"
+                            data-connection-test-result
                         >
                             {{ testResult.message }}
                             <span v-if="testResult.version">
@@ -602,6 +609,7 @@ function testIndexer(indexerId: number): void {
                         <p
                             v-else-if="testResult && !testResult.success"
                             class="text-sm text-destructive"
+                            data-connection-test-result
                         >
                             {{ testResult.message }}
                         </p>
@@ -630,6 +638,7 @@ function testIndexer(indexerId: number): void {
                                             variant="outline"
                                             size="icon"
                                             :disabled="!webhookToken"
+                                            data-webhook-token-toggle
                                             @click="
                                                 tokenVisible = !tokenVisible
                                             "
@@ -654,6 +663,7 @@ function testIndexer(indexerId: number): void {
                                             variant="outline"
                                             size="icon"
                                             :disabled="!webhookToken"
+                                            data-webhook-token-copy
                                             @click="copyWebhookToken"
                                         >
                                             <ClipboardCopy class="size-4" />
@@ -669,6 +679,7 @@ function testIndexer(indexerId: number): void {
                                             type="button"
                                             variant="outline"
                                             size="icon"
+                                            data-webhook-token-generate
                                             @click="generateWebhookToken"
                                         >
                                             <RefreshCw class="size-4" />
@@ -698,6 +709,7 @@ function testIndexer(indexerId: number): void {
                                 :default-value="connection.webhook_url"
                                 :model-value="connection.webhook_url"
                                 class="font-mono-tabular text-xs"
+                                data-webhook-url
                                 @click="
                                     (e: Event) =>
                                         (e.target as HTMLInputElement).select()
@@ -710,6 +722,7 @@ function testIndexer(indexerId: number): void {
                                             type="button"
                                             variant="outline"
                                             size="icon"
+                                            data-webhook-url-copy
                                             @click="copyWebhookUrl"
                                         >
                                             <ClipboardCopy class="size-4" />
@@ -732,6 +745,7 @@ function testIndexer(indexerId: number): void {
                                             variant="outline"
                                             size="icon"
                                             :disabled="configuringWebhook"
+                                            data-webhook-configure
                                             @click="configureWebhookOnService"
                                         >
                                             <Wand2 class="size-4" />
@@ -754,7 +768,11 @@ function testIndexer(indexerId: number): void {
                         </p>
                     </div>
 
-                    <div v-if="supportsDiskPicker" class="space-y-3 pt-2">
+                    <div
+                        v-if="supportsDiskPicker"
+                        class="space-y-3 pt-2"
+                        data-disk-display
+                    >
                         <div>
                             <Label>Service Health · disk display</Label>
                             <p class="text-sm text-muted-foreground">
@@ -811,6 +829,7 @@ function testIndexer(indexerId: number): void {
                                     v-for="entry in availableDiskPaths"
                                     :key="entry.path"
                                     class="flex flex-wrap items-center gap-3 text-sm"
+                                    :data-disk-path="entry.path"
                                 >
                                     <label
                                         class="flex cursor-pointer items-center gap-2"
@@ -859,6 +878,7 @@ function testIndexer(indexerId: number): void {
                                                     ? 'bg-accent text-accent-foreground'
                                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground'
                                             "
+                                            :data-disk-metric="metric"
                                             @click="
                                                 setDiskDisplay(
                                                     entry.path,
@@ -894,6 +914,7 @@ function testIndexer(indexerId: number): void {
                                                 ? 'bg-accent text-accent-foreground'
                                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground'
                                         "
+                                        :data-disk-sum-metric="metric"
                                         @click="setDiskDisplay('sum', metric)"
                                     >
                                         {{ metric }}
@@ -926,6 +947,7 @@ function testIndexer(indexerId: number): void {
                     <div
                         v-if="supportsSonarrLibraryTypes"
                         class="space-y-3 pt-2"
+                        data-sonarr-library-types
                     >
                         <div>
                             <Label>Sonarr library types</Label>
@@ -998,6 +1020,7 @@ function testIndexer(indexerId: number): void {
                     <div
                         v-if="supportsSubtitleCheckTags"
                         class="space-y-3 pt-2"
+                        data-subtitle-check-tags
                     >
                         <div>
                             <Label>Automatic subtitle check</Label>
@@ -1073,7 +1096,11 @@ function testIndexer(indexerId: number): void {
                         </div>
                     </div>
 
-                    <div v-if="supportsHiddenCategories" class="space-y-3 pt-2">
+                    <div
+                        v-if="supportsHiddenCategories"
+                        class="space-y-3 pt-2"
+                        data-hidden-categories
+                    >
                         <div>
                             <Label for="hidden_categories">
                                 Hidden categories
@@ -1102,6 +1129,7 @@ function testIndexer(indexerId: number): void {
                     <div
                         v-if="connection.sabnzbd_webhook_script"
                         class="space-y-3 pt-2"
+                        data-sab-script
                     >
                         <div class="flex items-end justify-between gap-2">
                             <div>
@@ -1145,7 +1173,11 @@ function testIndexer(indexerId: number): void {
             </CardContent>
         </Card>
 
-        <Card v-if="typeValue === 'prowlarr'" class="mt-6">
+        <Card
+            v-if="typeValue === 'prowlarr'"
+            class="mt-6"
+            data-prowlarr-indexers
+        >
             <CardHeader>
                 <CardTitle class="flex items-center gap-2">
                     <Antenna class="size-5" />
@@ -1208,6 +1240,7 @@ function testIndexer(indexerId: number): void {
                                     size="sm"
                                     variant="outline"
                                     :disabled="testing[indexer.id]"
+                                    :data-prowlarr-indexer-test="indexer.id"
                                     @click="testIndexer(indexer.id)"
                                 >
                                     {{

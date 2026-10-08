@@ -230,6 +230,7 @@ const placeholders = computed(
                     <div
                         v-if="showBazarrMappings"
                         class="grid gap-4 sm:grid-cols-2"
+                        data-bazarr-mappings
                     >
                         <div class="space-y-2">
                             <Label for="sonarr_connection_id"
@@ -302,7 +303,11 @@ const placeholders = computed(
                         </div>
                     </div>
 
-                    <div v-if="showWhisparrVersion" class="space-y-2">
+                    <div
+                        v-if="showWhisparrVersion"
+                        class="space-y-2"
+                        data-whisparr-version
+                    >
                         <Label for="whisparr_version">Whisparr Version</Label>
                         <Select
                             name="whisparr_version"
@@ -380,6 +385,7 @@ const placeholders = computed(
                                 !apiKey ||
                                 testHttp.processing
                             "
+                            data-connection-test
                             @click="testConnection"
                         >
                             <Plug class="mr-2 size-4" />
@@ -392,6 +398,7 @@ const placeholders = computed(
                         <p
                             v-if="testResult?.success"
                             class="text-sm text-green-600 dark:text-green-400"
+                            data-connection-test-result
                         >
                             {{ testResult.message }}
                             <span v-if="testResult.version">
@@ -401,6 +408,7 @@ const placeholders = computed(
                         <p
                             v-else-if="testResult && !testResult.success"
                             class="text-sm text-destructive"
+                            data-connection-test-result
                         >
                             {{ testResult.message }}
                         </p>
@@ -424,6 +432,7 @@ const placeholders = computed(
                                             variant="outline"
                                             size="icon"
                                             :disabled="!webhookToken"
+                                            data-webhook-token-toggle
                                             @click="
                                                 tokenVisible = !tokenVisible
                                             "
@@ -448,6 +457,7 @@ const placeholders = computed(
                                             variant="outline"
                                             size="icon"
                                             :disabled="!webhookToken"
+                                            data-webhook-token-copy
                                             @click="copyWebhookToken"
                                         >
                                             <ClipboardCopy class="size-4" />
@@ -463,6 +473,7 @@ const placeholders = computed(
                                             type="button"
                                             variant="outline"
                                             size="icon"
+                                            data-webhook-token-generate
                                             @click="generateWebhookToken"
                                         >
                                             <RefreshCw class="size-4" />
