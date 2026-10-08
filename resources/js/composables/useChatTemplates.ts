@@ -3,7 +3,7 @@ import type { ComputedRef, Ref } from 'vue';
 import ChatTemplateOptionsController from '@/actions/App/Http/Controllers/AI/ChatTemplateOptionsController';
 import ChatTemplateRenderController from '@/actions/App/Http/Controllers/AI/ChatTemplateRenderController';
 import type { ChatTemplate } from '@/components/chat-templates';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 
 /** How many pinned templates the empty chat shows. */
 const MAX_CHIPS = 6;

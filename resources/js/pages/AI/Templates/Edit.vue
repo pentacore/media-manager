@@ -28,7 +28,7 @@ import InputError from '@/components/InputError.vue';
 import { Field, SegmentedControl, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 import { dashboard } from '@/routes';
 import type { ChatTemplatePreviewMode } from '@/typefinder';
 

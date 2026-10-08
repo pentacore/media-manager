@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
+import { jsonRequest } from '@/lib/http';
 
 export interface ConversationSummary {
     id: string;
@@ -54,45 +55,6 @@ const recentLoading = ref(false);
 const pendingStep = ref<AgentStep | null>(null);
 
 let keyboardInitialized = false;
-
-function csrfToken(): string {
-    return (
-        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-            ?.content ?? ''
-    );
-}
-
-export async function jsonRequest<T>(
-    method: string,
-    url: string,
-    body?: unknown,
-): Promise<T> {
-    const response = await fetch(url, {
-        method,
-        credentials: 'same-origin',
-        headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': csrfToken(),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-        const data = await response
-            .json()
-            .catch(() => ({}) as Record<string, unknown>);
-        const message =
-            typeof data.message === 'string'
-                ? data.message
-                : `Request failed (${response.status})`;
-
-        throw new Error(message);
-    }
-
-    return (await response.json()) as T;
-}
 
 function ensureKeyboardShortcut(): void {
     if (keyboardInitialized) {

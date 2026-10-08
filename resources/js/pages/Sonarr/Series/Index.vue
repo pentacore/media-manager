@@ -32,6 +32,7 @@ import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
+import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { BulkSummary, UpstreamList } from '@/types';
@@ -195,30 +196,8 @@ const totalSize = computed(() => {
         0,
     );
 
-    return formatSize(sum);
+    return formatBytes(sum);
 });
-
-function formatSize(bytes: number): string {
-    if (!bytes || bytes <= 0) {
-        return '0 B';
-    }
-
-    const tb = bytes / 1024 ** 4;
-
-    if (tb >= 1) {
-        return `${tb.toFixed(1)} TB`;
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    if (gb >= 1) {
-        return `${gb.toFixed(1)} GB`;
-    }
-
-    const mb = bytes / 1024 ** 2;
-
-    return `${mb.toFixed(0)} MB`;
-}
 
 function qualityName(id: number | null): string {
     if (id === null || !props.qualityProfiles) {
@@ -268,7 +247,11 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     <template v-if="series && !series.error">
                         {{ counts.all }} series ·
-                        <span class="font-mono-tabular">{{ totalSize }}</span>
+                        <span
+                            class="font-mono-tabular"
+                            data-library-total-size
+                            >{{ totalSize }}</span
+                        >
                         on disk · {{ counts.monitored }} monitored
                     </template>
                     <template v-else-if="series">Library unavailable</template>
@@ -585,7 +568,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                                 {{ item.episode_count }}
                             </td>
                             <td class="font-mono-tabular px-3 py-2.5">
-                                {{ formatSize(item.size_on_disk) }}
+                                {{ formatBytes(item.size_on_disk) }}
                             </td>
                             <td class="px-3 py-2.5 text-right">
                                 <a

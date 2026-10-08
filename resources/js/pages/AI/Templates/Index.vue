@@ -10,6 +10,7 @@ import {
 import type { ChatTemplate } from '@/components/chat-templates';
 import { Pill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
 
 defineProps<{
@@ -38,8 +39,17 @@ function togglePin(template: ChatTemplate): void {
     );
 }
 
-function remove(template: ChatTemplate): void {
-    if (!confirm(`Delete "${template.name}"? This cannot be undone.`)) {
+const { confirm } = useConfirm();
+
+async function remove(template: ChatTemplate): Promise<void> {
+    const confirmed = await confirm({
+        title: `Delete "${template.name}"?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 

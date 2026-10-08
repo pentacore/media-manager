@@ -41,6 +41,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useConfirm } from '@/composables/useConfirm';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
@@ -213,12 +214,17 @@ function cancelPoolEdit() {
     editingPool.value = null;
 }
 
-function destroyPool(pool: PoolRow) {
-    if (
-        !confirm(
-            `Remove pool "${pool.name}"? Member models keep their pricing but lose the free tier.`,
-        )
-    ) {
+const { confirm } = useConfirm();
+
+async function destroyPool(pool: PoolRow): Promise<void> {
+    const confirmed = await confirm({
+        title: `Remove pool "${pool.name}"?`,
+        description: 'Member models keep their pricing but lose the free tier.',
+        confirmLabel: 'Remove',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -384,8 +390,14 @@ function cancelEdit() {
     editing.value = null;
 }
 
-function destroy(price: PriceRow) {
-    if (!confirm(`Remove pricing for ${price.provider}/${price.model}?`)) {
+async function destroy(price: PriceRow): Promise<void> {
+    const confirmed = await confirm({
+        title: `Remove pricing for ${price.provider}/${price.model}?`,
+        confirmLabel: 'Remove',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -664,6 +676,7 @@ const priciest = ref(
                         <tr
                             v-for="pool in pools"
                             :key="pool.id"
+                            :data-pool-row="pool.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
                             <td class="px-3 py-2.5 font-medium">
@@ -712,6 +725,7 @@ const priciest = ref(
                                         variant="ghost"
                                         size="sm"
                                         class="size-7 p-0 text-destructive hover:text-destructive"
+                                        data-pool-delete
                                         @click="destroyPool(pool)"
                                     >
                                         <Trash2 class="size-3.5" />
@@ -1107,6 +1121,7 @@ const priciest = ref(
                                         variant="ghost"
                                         size="sm"
                                         class="size-7 p-0 text-destructive hover:text-destructive"
+                                        data-price-delete
                                         @click="destroy(price)"
                                     >
                                         <Trash2 class="size-3.5" />

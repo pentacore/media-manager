@@ -1,6 +1,6 @@
 import { nextTick } from 'vue';
 import { toast } from 'vue-sonner';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 import type { BulkSummary } from '@/types';
 
 /**

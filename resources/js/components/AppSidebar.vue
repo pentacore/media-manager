@@ -25,7 +25,7 @@ import { dashboard } from '@/routes';
 import type { NavGroup, NavItem } from '@/types';
 
 const page = usePage();
-const { can } = useCan();
+const { isAdmin } = useCan();
 const { isMobile } = useSidebar();
 const { openChat } = useAiChat();
 
@@ -48,13 +48,7 @@ const visibleGroups = computed<NavGroup[]>(() =>
     })),
 );
 
-const isAdmin = computed(() => can('admin'));
-
-const aiEnabled = computed(() =>
-    Boolean(
-        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
-    ),
-);
+const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 
 const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
 </script>

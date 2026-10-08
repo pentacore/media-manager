@@ -25,6 +25,7 @@ import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { BulkSummary, UpstreamList } from '@/types';
 
@@ -209,30 +210,8 @@ const totalSize = computed(() => {
         0,
     );
 
-    return formatSize(sum);
+    return formatBytes(sum);
 });
-
-function formatSize(bytes: number): string {
-    if (!bytes || bytes <= 0) {
-        return '0 B';
-    }
-
-    const tb = bytes / 1024 ** 4;
-
-    if (tb >= 1) {
-        return `${tb.toFixed(2)} TB`;
-    }
-
-    const gb = bytes / 1024 ** 3;
-
-    if (gb >= 1) {
-        return `${gb.toFixed(1)} GB`;
-    }
-
-    const mb = bytes / 1024 ** 2;
-
-    return `${mb.toFixed(0)} MB`;
-}
 
 function qualityName(id: number | null): string {
     if (id === null) {
@@ -273,8 +252,10 @@ function is4k(movie: Movie): boolean {
                     class="mt-1 text-[13px] text-muted-foreground"
                 >
                     {{ movies.items.length }} titles ·
-                    <span class="font-mono-tabular">{{ totalSize }}</span> on
-                    disk
+                    <span class="font-mono-tabular" data-library-total-size>{{
+                        totalSize
+                    }}</span>
+                    on disk
                 </p>
                 <p
                     v-else-if="movies"
@@ -466,7 +447,7 @@ function is4k(movie: Movie): boolean {
                         class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
                     >
                         <span>{{ movie.year ?? '—' }}</span>
-                        <span>{{ formatSize(movie.size_on_disk) }}</span>
+                        <span>{{ formatBytes(movie.size_on_disk) }}</span>
                     </div>
                 </div>
             </Link>

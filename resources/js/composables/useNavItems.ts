@@ -84,12 +84,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
     const page = usePage();
     const { can } = useCan();
 
-    const aiEnabled = computed(() =>
-        Boolean(
-            (page.props as unknown as { ai?: { enabled?: boolean } }).ai
-                ?.enabled,
-        ),
-    );
+    const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
 
     function visible(item: NavItem): boolean {
         if (item.requiresSeerr === true && !page.props.integrations?.seerr) {

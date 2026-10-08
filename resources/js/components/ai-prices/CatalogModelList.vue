@@ -9,7 +9,7 @@ import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { jsonRequest } from '@/composables/useAiChat';
+import { jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import { SOURCE_LABELS } from './pricingSources';
 import type { CatalogModelOption } from './types';
