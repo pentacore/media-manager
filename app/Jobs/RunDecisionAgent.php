@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Enums\QueueLane;
 use App\Models\ActionRequest;
 use App\Models\AgentDecision;
@@ -29,6 +32,9 @@ use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Laravel\Ai\Classification\Boolean;
+use Laravel\Ai\Responses\Data\Answer;
+use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Throwable;
 
 /**
@@ -84,6 +90,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         AiBudgetGuard $aiBudgetGuard,
         AiSettings $aiSettings,
         Classifier $classifier,
+        ClassificationOutcomeRecorder $classificationOutcomeRecorder,
     ): void {
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
@@ -123,7 +130,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if ($this->skippedByGate($webhookEventId, $aiSettings, $classifier)) {
+        $answers = $this->classifyEvent($aiSettings, $classifier);
+        $gateVerdict = $this->gateVerdict($webhookEventId, $answers['decision'] ?? null, $aiSettings, $classificationOutcomeRecorder);
+
+        if ($gateVerdict === ClassificationVerdict::Skipped) {
             return;
         }
 
@@ -162,8 +172,13 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             app()->forgetInstance(DecisionRunContext::class);
         }
 
+        if ($gateVerdict === ClassificationVerdict::AuditRun) {
+            $summary = sprintf('Audit run (the classification gate would have skipped this event). %s', $summary);
+        }
+
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
+        $this->resolveGateOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
     }
 
@@ -221,36 +236,95 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Cheap classification before a paid 16-step run. Stuck imports always
-     * run — a wrong skip there leaves a download stuck — and any classifier
-     * failure falls through to the agent.
+     * One classification call per event, asking every enabled question about
+     * it. Stuck imports are never gated: a wrong skip leaves a download stuck.
+     * Null when nothing is asked or classification fails (fail open).
+     *
+     * @return array<string, Answer>|null
      */
-    private function skippedByGate(?int $webhookEventId, AiSettings $aiSettings, Classifier $classifier): bool
+    private function classifyEvent(AiSettings $aiSettings, Classifier $classifier): ?array
     {
-        if (! $aiSettings->decisionGateEnabled() || $this->eventType === 'ManualInteractionRequired') {
-            return false;
+        if ($this->eventType === 'ManualInteractionRequired') {
+            return null;
         }
 
-        $probability = $classifier->probability(
-            self::class,
-            ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)],
-            self::GATE_QUESTION,
-        );
+        $questions = [];
 
+        if ($aiSettings->decisionGateEnabled()) {
+            $questions['decision'] = new Boolean(self::GATE_QUESTION);
+        }
+
+        if ($questions === []) {
+            return null;
+        }
+
+        return $classifier->classify(self::class, $this->classificationState(), $questions);
+    }
+
+    /**
+     * @return array{service: string, event_type: string, payload: string}
+     */
+    private function classificationState(): array
+    {
+        return ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)];
+    }
+
+    /**
+     * Cheap classification before a paid 16-step run. Below the threshold
+     * the event is skipped, unless the audit sample picks it to run anyway.
+     * Null when the gate did not run or classification failed.
+     */
+    private function gateVerdict(?int $webhookEventId, ?Answer $answer, AiSettings $aiSettings, ClassificationOutcomeRecorder $classificationOutcomeRecorder): ?ClassificationVerdict
+    {
+        if (! $answer instanceof BooleanAnswer) {
+            return null;
+        }
+
+        $probability = $answer->probability;
         $threshold = $aiSettings->decisionGateThreshold();
 
-        if ($probability === null || $probability >= $threshold) {
-            return false;
+        $classificationVerdict = match (true) {
+            $probability >= $threshold => ClassificationVerdict::Passed,
+            $classificationOutcomeRecorder->shouldAudit() => ClassificationVerdict::AuditRun,
+            default => ClassificationVerdict::Skipped,
+        };
+
+        $classificationOutcomeRecorder->record(ClassificationGate::DecisionGate, $this->outcomeSubjectKey(), 'decision', $probability, $classificationVerdict, $threshold);
+
+        if ($classificationVerdict === ClassificationVerdict::Skipped) {
+            $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
+                'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
+                (int) round($probability * 100),
+                (int) round($threshold * 100),
+                self::GATE_QUESTION,
+            ), null);
         }
 
-        $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
-            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
-            (int) round($probability * 100),
-            (int) round($threshold * 100),
-            self::GATE_QUESTION,
-        ), null);
+        return $classificationVerdict;
+    }
 
-        return true;
+    /**
+     * The gate was right to pass the event when the agent queued an action.
+     */
+    private function resolveGateOutcome(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        $count = $decisionRunContext->count();
+
+        $classificationOutcomeRecorder->resolve(
+            ClassificationGate::DecisionGate,
+            $this->outcomeSubjectKey(),
+            $count > 0,
+            $count > 0 ? sprintf('%d action(s) proposed', $count) : 'no action',
+            [ClassificationVerdict::Passed, ClassificationVerdict::AuditRun],
+        );
+    }
+
+    /**
+     * The key this run's classification outcome rows share.
+     */
+    private function outcomeSubjectKey(): string
+    {
+        return $this->uniqueId();
     }
 
     private function logCooldownSkip(?int $webhookEventId, string $subjectKey): void
