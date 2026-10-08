@@ -17,18 +17,25 @@ use Illuminate\Support\Facades\Queue;
  * Scoped Http::fake patterns only, never a '*' catch-all: the catch-all also
  * answers Inertia's SSR POST with an empty body, which renders the page blank.
  */
-function connectionFormFakeSonarr(int $statusCode = 200): void
-{
+/**
+ * @param  array<int, array<string, mixed>>  $rootFolders
+ * @param  array<int, array<string, mixed>>  $diskSpace
+ */
+function connectionFormFakeSonarr(
+    int $statusCode = 200,
+    array $rootFolders = [
+        ['id' => 1, 'path' => '/tv'],
+        ['id' => 2, 'path' => '/anime'],
+    ],
+    array $diskSpace = [
+        ['path' => '/tv', 'label' => 'TV', 'freeSpace' => 100, 'totalSpace' => 200],
+        ['path' => '/anime', 'label' => null, 'freeSpace' => 100, 'totalSpace' => 200],
+    ],
+): void {
     Http::fake([
         'sonarr.local:8989/api/v3/tag' => Http::response([['id' => 1, 'label' => 'sub-check']]),
-        'sonarr.local:8989/api/v3/rootfolder' => Http::response([
-            ['id' => 1, 'path' => '/tv'],
-            ['id' => 2, 'path' => '/anime'],
-        ]),
-        'sonarr.local:8989/api/v3/diskspace' => Http::response([
-            ['path' => '/tv', 'label' => 'TV', 'freeSpace' => 100, 'totalSpace' => 200],
-            ['path' => '/anime', 'label' => null, 'freeSpace' => 100, 'totalSpace' => 200],
-        ]),
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response($rootFolders),
+        'sonarr.local:8989/api/v3/diskspace' => Http::response($diskSpace),
         'sonarr.local:8989/api/v3/system/status' => $statusCode === 200
             ? Http::response(['version' => '4.0.1'])
             : Http::response(['message' => 'Upstream exploded.'], $statusCode),
@@ -205,6 +212,69 @@ test('a whisparr connection shows its version select', function (): void {
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-version]', 'Whisparr Version')
         ->assertSeeIn('[data-whisparr-version] [data-slot="select-value"]', 'v3 (movie-based)');
+});
+
+/*
+ * Loading is the disk picker's, the Sonarr root folders' and the Prowlarr
+ * indexers' actual first paint: all three are Inertia::defer()'d, and like
+ * the subtitle-check tag picker (ConnectionSubtitleCheckTagsTest), a visit()
+ * always lands after the deferred partial reload resolves — Pest waits for
+ * network idle, so delaying the faked upstream response only delays visit()
+ * with it. The server-rendered HTML is that same first paint without the
+ * race, so these assert on it directly via a plain GET. No Http::fake is set
+ * up on purpose: nothing resolves a deferred prop during a synchronous GET,
+ * so these requests reach no arr/Prowlarr instance at all.
+ */
+test("the sonarr edit form's server-rendered first paint shows the disk and root-folder sections loading, not failed", function (): void {
+    $serviceConnection = connectionFormSonarr(['disk' => ['mode' => 'selected', 'paths' => [], 'display' => []]]);
+
+    $html = (string) $this->get(route('admin.connections.edit', $serviceConnection))->getContent();
+
+    expect($html)->toContain('data-server-rendered')
+        ->and($html)->toContain('Loading disk paths from the service')
+        ->and($html)->toContain('Loading root folders from Sonarr')
+        ->and($html)->not->toContain('No disk paths reported.')
+        ->and($html)->not->toContain('No root folders could be imported.');
+});
+
+test("the prowlarr edit form's server-rendered first paint shows the indexer table loading, not failed", function (): void {
+    $serviceConnection = ServiceConnection::factory()->prowlarr()->create(['url' => 'http://prowlarr.local:9696']);
+
+    $html = (string) $this->get(route('admin.connections.edit', $serviceConnection))->getContent();
+
+    expect($html)->toContain('data-server-rendered')
+        ->and($html)->toContain('Loading indexers')
+        ->and($html)->not->toContain('No indexers loaded.');
+});
+
+test('a disk display picker with no reported paths says so instead of hanging on loading', function (): void {
+    $serviceConnection = connectionFormSonarr(['disk' => ['mode' => 'selected', 'paths' => [], 'display' => []]]);
+    connectionFormFakeSonarr(diskSpace: []);
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-disk-display]', 'No disk paths reported.')
+        ->assertMissing('[data-disk-path="/tv"]');
+});
+
+test('a sonarr connection with no importable root folders says so instead of hanging on loading', function (): void {
+    $serviceConnection = connectionFormSonarr();
+    connectionFormFakeSonarr(rootFolders: []);
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sonarr-library-types]', 'No root folders could be imported.');
+});
+
+test('a prowlarr connection with no indexers says so instead of hanging on loading', function (): void {
+    $serviceConnection = ServiceConnection::factory()->prowlarr()->create(['url' => 'http://prowlarr.local:9696']);
+    Http::fake([
+        'prowlarr.local:9696/api/v1/indexer' => Http::response([]),
+    ]);
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-prowlarr-indexers]', 'No indexers loaded.');
 });
 
 test('the create form takes its placeholders from the picked service type', function (): void {
