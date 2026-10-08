@@ -78,6 +78,18 @@ export default defineConfigWithVueTs(
                     message:
                         'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
                 },
+                {
+                    object: 'globalThis',
+                    property: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
+                {
+                    object: 'self',
+                    property: 'confirm',
+                    message:
+                        'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.',
+                },
             ],
         },
     },
