@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
 use App\Ai\ChatTurnContext;
+use App\Ai\Conversations\ConversationStore;
 use App\Ai\ReasoningOptions;
 use App\Ai\TaskModelResolver;
 use App\Http\Streaming\ClientConnection;
@@ -19,6 +20,7 @@ use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\ConversationStore as ConversationStoreContract;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StreamingAgent;
 use Override;
@@ -29,6 +31,12 @@ class AIServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
+
+        // The SDK store plus meta.reasoning_level, on the SDK binding's
+        // connection. Stateless, so a singleton is Octane-safe.
+        $this->app->singleton(ConversationStoreContract::class, fn (): ConversationStore => new ConversationStore(
+            config('ai.conversations.connection'),
+        ));
 
         $this->app->scoped(BatchPricingContext::class);
 

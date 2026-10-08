@@ -6,9 +6,11 @@ namespace App\Ai\Agents;
 
 use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\Conversations\HistoryForProvider;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
@@ -73,13 +75,30 @@ use Stringable;
 class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
-    use RemembersConversations;
+    use RemembersConversations {
+        messages as rememberedMessages;
+    }
     use RunsAsAiTask;
     use UsesFailoverChain;
 
     public function aiTask(): AiTask
     {
         return AiTask::Chat;
+    }
+
+    /**
+     * Stored history adapted for the provider this turn runs on (see
+     * HistoryForProvider). Uses the turn's primary provider; a mid-turn
+     * failover replays the primary's adaptation.
+     *
+     * @return iterable<int, mixed>
+     */
+    public function messages(): iterable
+    {
+        return HistoryForProvider::adapt(
+            $this->rememberedMessages(),
+            resolve(TaskModelResolver::class)->resolve($this->aiTask())->provider,
+        );
     }
 
     /**

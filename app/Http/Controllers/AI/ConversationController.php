@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\TaskModelResolver;
+use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\RenameConversationRequest;
@@ -89,6 +90,11 @@ class ConversationController extends Controller
                 'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
                 'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                 'failed' => $storedMessage->status === MessageStatus::Failed,
+                'answered_by' => $storedMessage->role === 'assistant' ? [
+                    'provider' => $storedMessage->meta['provider'] ?? null,
+                    'model' => $storedMessage->meta['model'] ?? null,
+                    'reasoning_label' => AiReasoningLevel::tryFrom((string) ($storedMessage->meta['reasoning_level'] ?? ''))?->label(),
+                ] : null,
             ])
             ->values()
             ->all();
