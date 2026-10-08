@@ -12,9 +12,11 @@ use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use App\Services\AiUsage\FreePoolAccounting;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -651,4 +653,20 @@ test('the audit snapshot lists every tier with its conditions', function (): voi
     $after = ActivityLog::query()->latest('id')->first()?->metadata;
 
     expect(json_encode($after, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))->toContain('chat:default#0')->toContain('openai/gpt-5.6-luna · inherit · ≥20%')->toContain('chat:default#1');
+});
+
+test('the index still renders without model pools when pool status fails', function (): void {
+    Exceptions::fake();
+    aiModelsPooledLuna();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+    $this->mock(FreePoolAccounting::class, fn ($mock) => $mock->shouldReceive('status')->andThrow(new RuntimeException('accounting down')));
+    app()->forgetScopedInstances();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('modelPools', []));
+
+    Exceptions::assertReported(RuntimeException::class);
 });

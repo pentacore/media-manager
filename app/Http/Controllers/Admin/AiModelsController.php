@@ -25,6 +25,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class AiModelsController extends Controller
 {
@@ -154,12 +155,19 @@ class AiModelsController extends Controller
     {
         $pools = [];
 
-        foreach (AiModelPrice::query()->whereNotNull('free_usage_pool_id')->get(['provider', 'model', 'free_usage_pool_id']) as $aiModelPrice) {
-            $figures = $poolHeadroom->forPool((int) $aiModelPrice->free_usage_pool_id);
+        try {
+            foreach (AiModelPrice::query()->whereNotNull('free_usage_pool_id')->get(['provider', 'model', 'free_usage_pool_id']) as $aiModelPrice) {
+                $figures = $poolHeadroom->forPool((int) $aiModelPrice->free_usage_pool_id);
 
-            if ($figures instanceof PoolHeadroomFigures) {
-                $pools[sprintf('%s|%s', $aiModelPrice->provider, $aiModelPrice->model)] = $figures->toArray();
+                if ($figures instanceof PoolHeadroomFigures) {
+                    $pools[sprintf('%s|%s', $aiModelPrice->provider, $aiModelPrice->model)] = $figures->toArray();
+                }
             }
+        } catch (Throwable $throwable) {
+            // Runtime resolution fails closed on the same error; keep the page up.
+            report($throwable);
+
+            return [];
         }
 
         return $pools;
