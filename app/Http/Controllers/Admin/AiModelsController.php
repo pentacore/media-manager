@@ -48,7 +48,7 @@ class AiModelsController extends Controller
                 'inherits_chat' => $aiTask->inheritsChatModel(),
                 'has_reasoning' => $aiTask->hasReasoning(),
                 'allow_auto' => $aiTask === AiTask::Title,
-                'provider' => $row?->provider,
+                'provider' => $this->savedProvider($row),
                 'model' => $row?->model,
                 'reasoning' => $row?->reasoning?->value,
                 'resolved' => $this->summary($taskModelResolver->resolve($aiTask)),
@@ -61,7 +61,7 @@ class AiModelsController extends Controller
             ->map(fn (AiTaskModel $aiTaskModel): array => [
                 'event_key' => $aiTaskModel->scope,
                 'enabled' => in_array($aiTaskModel->scope, $allowlist, true),
-                'provider' => $aiTaskModel->provider,
+                'provider' => $this->savedProvider($aiTaskModel),
                 'model' => $aiTaskModel->model,
                 'reasoning' => $aiTaskModel->reasoning?->value,
                 'resolved' => $this->summary($taskModelResolver->resolve(AiTask::Decision, $aiTaskModel->scope)),
@@ -146,6 +146,20 @@ class AiModelsController extends Controller
         }
 
         ($existing ?? new AiTaskModel(['task' => $aiTask, 'scope' => $scope]))->fill($attributes)->save();
+    }
+
+    /**
+     * The row's provider as the picker shows it. A model saved without a
+     * provider (settings from before 1.26.0) runs on `config('ai.default')`,
+     * so that is the provider shown and submitted back.
+     */
+    private function savedProvider(?AiTaskModel $aiTaskModel): ?string
+    {
+        if (filled($aiTaskModel?->model) && blank($aiTaskModel->provider)) {
+            return (string) config('ai.default', 'openai');
+        }
+
+        return $aiTaskModel?->provider;
     }
 
     /**

@@ -255,6 +255,43 @@ test('the title auto sentinel round-trips while the resolved model is concrete',
             ->where('tasks.1.resolved.model', fn (string $model): bool => $model !== AiSettings::AUTO_MODEL && $model !== ''));
 });
 
+test('a migrated auto title row on the default provider round-trips through the index and a save', function (): void {
+    AiTaskModel::factory()->task(AiTask::Title)->selecting((string) config('ai.default'), AiSettings::AUTO_MODEL)->create();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.1.task', 'title')
+            ->where('tasks.1.provider', 'openai')
+            ->where('tasks.1.model', AiSettings::AUTO_MODEL));
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload([
+            'tasks' => ['title' => ['provider' => 'openai', 'model' => AiSettings::AUTO_MODEL]],
+        ]))
+        ->assertSessionHasNoErrors();
+
+    expect(AiTaskModel::query()->forTask(AiTask::Title)->first())
+        ->provider->toBe('openai')
+        ->model->toBe(AiSettings::AUTO_MODEL);
+});
+
+test('a legacy row with a model and no provider shows the default provider', function (): void {
+    AiTaskModel::factory()->task(AiTask::FileInspector)->state(['model' => 'gpt-5-nano'])->create();
+    AiTaskModel::factory()->event('radarr:Grab')->state(['model' => 'gpt-5-nano'])->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.3.task', 'file_inspector')
+            ->where('tasks.3.provider', 'openai')
+            ->where('tasks.3.model', 'gpt-5-nano')
+            ->where('tasks.3.resolved.provider', 'openai')
+            ->where('tasks.4.provider', null)
+            ->where('eventOverrides.0.provider', 'openai'));
+});
+
 test('the index lists selected models the hard cap cannot price', function (): void {
     resolve(AiSettings::class)->setHardBudgetUsd(10.0);
     AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'mystery-model')->create();
