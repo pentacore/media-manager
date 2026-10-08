@@ -266,6 +266,10 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                                   counts.sabnzbdCompleted.value
                             : undefined,
                         ability: 'manage-library',
+                        // The queue page reads SABnzbd's queue and history
+                        // live (uncached) before it renders, so a passing
+                        // hover would call SABnzbd twice; it polls anyway.
+                        prefetch: false,
                     },
                     {
                         title: 'Grab queue',

@@ -391,6 +391,7 @@ function is4k(movie: Movie): boolean {
                 :key="movie.id"
                 :href="MovieController.show.url(movie.id)"
                 :data-movie-card="movie.id"
+                prefetch
                 class="group flex flex-col gap-2"
             >
                 <div class="relative">

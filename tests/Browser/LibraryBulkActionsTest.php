@@ -88,6 +88,21 @@ beforeEach(function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     Queue::fake([ExecuteActionRequest::class]);
     $this->sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+
+    // Ticking a card's checkbox rests the pointer on the card link, whose
+    // hover prefetch loads that title's page. Answer those detail reads here
+    // (each test fakes only the library endpoints), so a prefetch never
+    // reaches the unreachable factory host. `series/*` and `movie/*` never
+    // match the list endpoints the tests fake below.
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/*' => Http::response([
+            'id' => 1, 'title' => 'Series 001', 'titleSlug' => 'series-1', 'year' => 2020, 'status' => 'continuing', 'monitored' => false,
+            'qualityProfileId' => 1, 'images' => [], 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0],
+        ]),
+        'radarr.local:7878/api/v3/movie/*' => Http::response([
+            'id' => 10, 'title' => 'Dune', 'titleSlug' => 'dune', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => [],
+        ]),
+    ]);
 });
 
 test('a member ticks two series, monitors them in bulk and sees the summary', function (): void {

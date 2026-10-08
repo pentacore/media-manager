@@ -86,6 +86,16 @@ function isActiveItem(item: NavItem): boolean {
     return item.href !== undefined && isCurrentOrParentUrl(item.href);
 }
 
+/**
+ * Hover prefetch for every leaf except items that opt out because their page
+ * reads an uncached upstream before rendering. The open page's own link needs
+ * no check here: Inertia's router never prefetches the current URL (a
+ * prefetch landing on it would remount the page), and PrefetchTest pins that.
+ */
+function shouldPrefetch(item: NavItem): boolean {
+    return item.prefetch !== false;
+}
+
 function hasActiveChild(item: NavItem): boolean {
     return (item.children ?? []).some(isActiveItem);
 }
@@ -188,6 +198,7 @@ function rollupBadge(item: NavItem): number {
                                     >
                                         <Link
                                             :href="resolveHref(child)"
+                                            :prefetch="shouldPrefetch(child)"
                                             :data-nav-item="child.title"
                                         >
                                             <component :is="child.icon" />
@@ -208,6 +219,7 @@ function rollupBadge(item: NavItem): number {
                     >
                         <Link
                             :href="resolveHref(item)"
+                            :prefetch="shouldPrefetch(item)"
                             :data-nav-item="item.title"
                         >
                             <component :is="item.icon" />
