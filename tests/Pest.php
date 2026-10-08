@@ -87,6 +87,14 @@ pest()->extend(TestCase::class)
     ->beforeEach(function (): void {
         Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
 
+        // The browser plugin serves every page request from this test's own
+        // container, so scoped instances would outlive the request that made
+        // them: Inertia's scoped SsrState then replays the first SSR response
+        // on every later full page load, and memos like TaskModelResolver go
+        // stale. Octane forgets scoped instances once each request terminates
+        // (FlushTemporaryContainerInstances); do the same here.
+        $this->app->terminating(fn () => $this->app->forgetScopedInstances());
+
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
 
