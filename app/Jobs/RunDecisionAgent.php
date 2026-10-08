@@ -164,12 +164,6 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             eventType: $this->eventType,
             actionKind: $actionKind,
         );
-        // Left bound after the run (never forgotten): DecisionAgent::tools()
-        // and instructions() read it lazily, including from a test's
-        // assertPrompted() callback running after handle() has returned.
-        // The next run always rebinds a fresh instance before its own
-        // prompt(), so a stale binding here is never read as another run's
-        // state — only ever overwritten by it.
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
@@ -186,6 +180,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $this->record($webhookEventId, AgentDecisionStatus::Failed, sprintf('Agent run failed: %s', UpstreamErrorText::sanitize($throwable->getMessage(), 2000)), $decisionRunContext);
 
             return;
+        } finally {
+            app()->forgetInstance(DecisionRunContext::class);
         }
 
         if ($gateVerdict === ClassificationVerdict::AuditRun) {

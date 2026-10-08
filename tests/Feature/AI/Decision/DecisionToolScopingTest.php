@@ -18,8 +18,8 @@ use App\Models\ClassificationOutcome;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Classification;
-use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Prompts\ClassificationPrompt;
+use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Laravel\Ai\Responses\Data\ChoiceAnswer;
 
@@ -35,11 +35,31 @@ function runScopedJob(string $eventType = 'Grab'): void
 }
 
 /**
- * @return list<class-string>
+ * Fake the DecisionAgent and capture what a prompted agent would carry,
+ * while the run context is still bound. The context is unbound again once
+ * the job's try/finally runs, so tools()/instructions() must be read from
+ * inside the fake's response closure, not from a later assertion.
+ *
+ * @return object{tools: list<class-string>, instructions: string}
  */
-function scopedToolClasses(AgentPrompt $agentPrompt): array
+function captureDecisionAgentRun(): object
 {
-    return array_values(array_map(static fn (object $tool): string => $tool::class, iterator_to_array($agentPrompt->agent->tools())));
+    $captured = (object) ['tools' => [], 'instructions' => ''];
+
+    DecisionAgent::fake(function () use ($captured): string {
+        $agent = new DecisionAgent;
+
+        $captured->tools = collect(iterator_to_array($agent->tools()))
+            ->flatMap(fn (object $tool): array => $tool instanceof ToolSearch ? $tool->tools : [$tool])
+            ->map(fn (object $tool): string => $tool::class)
+            ->values()
+            ->all();
+        $captured->instructions = (string) $agent->instructions();
+
+        return 'ok';
+    });
+
+    return $captured;
 }
 
 function kindAnswer(string $choice, float $probability): ChoiceAnswer
@@ -48,39 +68,36 @@ function kindAnswer(string $choice, float $probability): ChoiceAnswer
 }
 
 test('a confident library-change kind loads only the core and library tools', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('library_change', 0.8)]]);
 
     runScopedJob();
 
-    DecisionAgent::assertPrompted(function (AgentPrompt $agentPrompt): bool {
-        $classes = scopedToolClasses($agentPrompt);
-
-        return in_array(SearchMediaTool::class, $classes, true)
-            && in_array(ProposeActionTool::class, $classes, true)
-            && ! in_array(NowPlayingTool::class, $classes, true)
-            && ! in_array(ListPendingRequestsTool::class, $classes, true)
-            && ! in_array(InspectStuckImportTool::class, $classes, true);
-    });
+    expect($captured->tools)
+        ->toContain(SearchMediaTool::class)
+        ->toContain(ProposeActionTool::class)
+        ->not->toContain(NowPlayingTool::class)
+        ->not->toContain(ListPendingRequestsTool::class)
+        ->not->toContain(InspectStuckImportTool::class);
 });
 
 test('a scoped run leaves the stuck-import section out of the instructions', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('seerr_request', 0.9)]]);
 
     runScopedJob();
 
-    DecisionAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => ! str_contains((string) $agentPrompt->agent->instructions(), 'STUCK IMPORTS'));
+    expect($captured->instructions)->not->toContain('STUCK IMPORTS');
 });
 
 test('a kind below the scope threshold keeps every tool', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('media_server', 0.49)]]);
 
     runScopedJob();
 
-    DecisionAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(InspectStuckImportTool::class, scopedToolClasses($agentPrompt), true)
-        && str_contains((string) $agentPrompt->agent->instructions(), 'STUCK IMPORTS'));
+    expect($captured->tools)->toContain(InspectStuckImportTool::class);
+    expect($captured->instructions)->toContain('STUCK IMPORTS');
     expect(ClassificationOutcome::sole()->verdict)->toBe(ClassificationVerdict::Unscoped);
 });
 
@@ -94,31 +111,31 @@ test('a kind exactly at the scope threshold scopes the run', function (): void {
 });
 
 test('the other kind keeps every tool', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('other', 0.95)]]);
 
     runScopedJob();
 
-    DecisionAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(NowPlayingTool::class, scopedToolClasses($agentPrompt), true));
+    expect($captured->tools)->toContain(NowPlayingTool::class);
 });
 
 test('a classifier failure keeps every tool', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake(fn () => throw new RuntimeException('down'));
 
     runScopedJob();
 
-    DecisionAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(NowPlayingTool::class, scopedToolClasses($agentPrompt), true));
+    expect($captured->tools)->toContain(NowPlayingTool::class);
 });
 
 test('stuck-import events are never scoped or classified', function (): void {
-    DecisionAgent::fake(['ok']);
+    $captured = captureDecisionAgentRun();
     Classification::fake([]);
 
     runScopedJob('ManualInteractionRequired');
 
     Classification::assertNothingClassified();
-    DecisionAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(InspectStuckImportTool::class, scopedToolClasses($agentPrompt), true));
+    expect($captured->tools)->toContain(InspectStuckImportTool::class);
 });
 
 test('the gate and the kind are asked in one classification call', function (): void {
