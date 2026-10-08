@@ -56,6 +56,7 @@ test('members find the indexer search in the sidebar but get no grab button', fu
         ->assertNoSmoke()
         ->assertSeeIn('[data-sidebar="content"]', 'Indexer search')
         ->assertSeeIn('[data-prowlarr-results]', 'NZBgeek')
+        ->assertSeeIn('[data-prowlarr-results]', '2.3 GB')
         ->assertMissing('[data-prowlarr-grab]');
 });
 

@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\ChatTurnContext;
+use App\Ai\Conversations\ConversationStore;
+use App\Ai\ReasoningOptions;
+use App\Ai\TaskModelResolver;
 use App\Http\Streaming\ClientConnection;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
@@ -16,6 +20,7 @@ use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\ConversationStore as ConversationStoreContract;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StreamingAgent;
 use Override;
@@ -27,11 +32,28 @@ class AIServiceProvider extends ServiceProvider
     {
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
 
+        // The SDK store plus meta.reasoning_level, on the SDK binding's
+        // connection. Stateless, so a singleton is Octane-safe.
+        $this->app->singleton(ConversationStoreContract::class, fn (): ConversationStore => new ConversationStore(
+            config('ai.conversations.connection'),
+        ));
+
         $this->app->scoped(BatchPricingContext::class);
 
         // Holds the user who triggered the in-flight AI run; scoped so it
         // cannot leak into the next Octane request or queued job.
         $this->app->scoped(AiRunAttribution::class);
+
+        // The conversation override for the chat turn in flight; scoped so it
+        // never applies to the next Octane request or queued job.
+        $this->app->scoped(ChatTurnContext::class);
+
+        // Memoises ai_task_models for the request; scoped for the same reason.
+        $this->app->scoped(TaskModelResolver::class);
+
+        // Memoises the price rows it reads reasoning capabilities from; scoped
+        // so a long-running worker never maps against stale capabilities.
+        $this->app->scoped(ReasoningOptions::class);
 
         // Per-run step usage keyed by invocation id; scoped so partial runs
         // never bleed into the next Octane request or queued job.

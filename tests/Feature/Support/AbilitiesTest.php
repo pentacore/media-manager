@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Ability;
 use App\Models\User;
 use App\Support\Abilities;
 use Illuminate\Support\Facades\Gate;
@@ -45,4 +46,9 @@ test('the gates follow the role hierarchy', function (): void {
         ->and(abilitiesTestUser('member')->can(Abilities::MANAGE_LIBRARY))->toBeTrue()
         ->and(abilitiesTestUser('member')->can(Abilities::ADMIN))->toBeFalse()
         ->and(abilitiesTestUser('admin')->can(Abilities::ADMIN))->toBeTrue();
+});
+
+test('the ability names come from the Ability enum, in its order', function (): void {
+    expect(array_keys(Abilities::MINIMUM_ROLES))->toBe(Ability::values())
+        ->and([Abilities::VIEW_LIBRARY, Abilities::REQUEST_MEDIA, Abilities::MANAGE_LIBRARY, Abilities::MANAGE_REQUESTS, Abilities::ADMIN])->toBe(Ability::values());
 });

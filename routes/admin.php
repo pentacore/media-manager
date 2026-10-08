@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AiConversationController;
 use App\Http\Controllers\Admin\AiFreeUsagePoolController;
 use App\Http\Controllers\Admin\AiModelCatalogController;
 use App\Http\Controllers\Admin\AiModelPriceController;
+use App\Http\Controllers\Admin\AiModelsController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
@@ -68,6 +69,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
         Route::get('decision-agent', [DecisionAgentSettingsController::class, 'index'])->name('decision-agent.index');
         Route::put('decision-agent', [DecisionAgentSettingsController::class, 'update'])->name('decision-agent.update');
+        Route::get('ai-models', [AiModelsController::class, 'index'])->name('ai-models.index');
+        Route::put('ai-models', [AiModelsController::class, 'update'])->name('ai-models.update');
 
         Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
         Route::get('ai-usage/export', [AiUsageController::class, 'export'])->name('ai-usage.export');

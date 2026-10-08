@@ -10,6 +10,7 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 
 /**
  * Pure translation of OpenRouter's models list into `openrouter` pricing
@@ -156,6 +157,7 @@ final class OpenRouterPricingAdapter
             source: PricingSource::OpenRouter,
             sourceUrl: $this->sourceUrl(),
             tiered: $tiered,
+            reasoning: ReasoningCapability::fromOpenRouter($modelData),
         );
 
         $warning = $tiered

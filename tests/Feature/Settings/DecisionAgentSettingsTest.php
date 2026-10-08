@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 
 test('defaults are off and opt-in', function (): void {
@@ -12,19 +11,6 @@ test('defaults are off and opt-in', function (): void {
     expect($decisionAgentSettings->eventAllowlist())->toBe([]);
     expect($decisionAgentSettings->allowManualImport())->toBeFalse();
     expect($decisionAgentSettings->maxActionsPerRun())->toBe(3);
-});
-
-test('model falls back to the chat model when unset', function (): void {
-    resolve(AiSettings::class)->setModel('gpt-chat-model');
-
-    expect(resolve(DecisionAgentSettings::class)->model())->toBe('gpt-chat-model');
-});
-
-test('explicit model overrides the chat model', function (): void {
-    resolve(AiSettings::class)->setModel('gpt-chat-model');
-    resolve(DecisionAgentSettings::class)->setModel('gpt-cheap-triage');
-
-    expect(resolve(DecisionAgentSettings::class)->model())->toBe('gpt-cheap-triage');
 });
 
 test('event allowlist round-trips and gates by service:event key', function (): void {

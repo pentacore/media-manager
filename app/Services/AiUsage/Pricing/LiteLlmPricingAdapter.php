@@ -10,6 +10,7 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 
 /**
  * Pure translation of the LiteLLM price map into provider-scoped candidates
@@ -245,6 +246,7 @@ final class LiteLlmPricingAdapter
             source: PricingSource::LiteLlm,
             sourceUrl: $this->sourceUrl(),
             tiered: $tierKeys !== [],
+            reasoning: ReasoningCapability::fromLiteLlm($entry),
         );
 
         $warning = $tierKeys !== []

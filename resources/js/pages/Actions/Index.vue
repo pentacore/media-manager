@@ -77,9 +77,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const hasFilter = computed(() => props.filters.status !== '');
 const onFirstPage = computed(() => props.requests.meta.current_page === 1);

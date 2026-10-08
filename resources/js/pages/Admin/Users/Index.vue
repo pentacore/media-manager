@@ -27,6 +27,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
 
 interface RoleOption {
@@ -108,28 +109,43 @@ function updateRole(user: UserItem, newRole: string) {
     });
 }
 
-function deleteUser(user: UserItem) {
-    if (confirm(`Delete ${user.name}? This cannot be undone.`)) {
-        router.visit(UserController.destroy.url(user.id), {
-            method: 'delete',
-        });
+const { confirm } = useConfirm();
+
+async function deleteUser(user: UserItem): Promise<void> {
+    const confirmed = await confirm({
+        title: `Delete ${user.name}?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+    });
+
+    if (!confirmed) {
+        return;
     }
+
+    router.visit(UserController.destroy.url(user.id), {
+        method: 'delete',
+    });
 }
 
-function unlinkEmby(user: UserItem) {
-    if (user.emby_link_id === null) {
+async function unlinkEmby(user: UserItem): Promise<void> {
+    const linkId = user.emby_link_id;
+
+    if (linkId === null) {
         return;
     }
 
-    if (
-        !confirm(
-            `Unlink Emby account "${user.emby_username}" from ${user.name}?`,
-        )
-    ) {
+    const confirmed = await confirm({
+        title: `Unlink Emby account "${user.emby_username}" from ${user.name}?`,
+        confirmLabel: 'Unlink',
+        destructive: true,
+    });
+
+    if (!confirmed) {
         return;
     }
 
-    router.visit(UserLinkController.destroy.url(user.emby_link_id), {
+    router.visit(UserLinkController.destroy.url(linkId), {
         method: 'delete',
         preserveScroll: true,
     });
@@ -153,16 +169,19 @@ function closeLinkDialog() {
 
 const importing = ref(false);
 
-function importFromEmby() {
+async function importFromEmby(): Promise<void> {
     if (importing.value) {
         return;
     }
 
-    if (
-        !confirm(
-            'Import every Emby user as a viewer account here? Existing accounts and links are skipped.',
-        )
-    ) {
+    const confirmed = await confirm({
+        title: 'Import every Emby user as a viewer account here?',
+        description: 'Existing accounts and links are skipped.',
+        confirmLabel: 'Import',
+    });
+
+    // Re-check the guard: another import may have started while the dialog was open.
+    if (!confirmed || importing.value) {
         return;
     }
 
@@ -206,6 +225,7 @@ function importFromEmby() {
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
                     :disabled="importing"
+                    data-users-import-emby
                     @click="importFromEmby"
                 >
                     <Upload class="size-3.5" />Import from Emby
@@ -371,6 +391,7 @@ function importFromEmby() {
                         <tr
                             v-for="user in users"
                             :key="user.id"
+                            :data-user-row="user.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
                             <td class="px-3 py-2.5">
@@ -439,6 +460,7 @@ function importFromEmby() {
                                     <button
                                         type="button"
                                         class="text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                                        data-user-unlink-emby
                                         @click="unlinkEmby(user)"
                                     >
                                         unlink
@@ -464,6 +486,7 @@ function importFromEmby() {
                                     variant="ghost"
                                     size="sm"
                                     class="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                    data-user-delete
                                     @click="deleteUser(user)"
                                 >
                                     Delete

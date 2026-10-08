@@ -71,8 +71,7 @@ function manualRefresh(): void {
     });
 }
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 const refreshingLibrary = ref(false);
 
 function refreshLibrary(): void {

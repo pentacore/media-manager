@@ -77,6 +77,26 @@ final readonly class ModelCatalog
     }
 
     /**
+     * Reasoning capabilities of the priced models of configured providers,
+     * keyed "provider|model", for the model pickers.
+     *
+     * @return array<string, array{supports_reasoning: bool|null, levels: list<string>|null}>
+     */
+    public function reasoningCapabilities(): array
+    {
+        return AiModelPrice::query()
+            ->whereIn('provider', $this->textProviders())
+            ->get(['provider', 'model', 'supports_reasoning', 'reasoning_levels'])
+            ->mapWithKeys(fn (AiModelPrice $aiModelPrice): array => [
+                sprintf('%s|%s', $aiModelPrice->provider, $aiModelPrice->model) => [
+                    'supports_reasoning' => $aiModelPrice->supports_reasoning,
+                    'levels' => $aiModelPrice->reasoning_levels,
+                ],
+            ])
+            ->all();
+    }
+
+    /**
      * @return list<string>
      */
     private function configuredProviders(): array

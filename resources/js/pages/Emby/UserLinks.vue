@@ -68,9 +68,7 @@ defineOptions({
 });
 
 const page = usePage();
-const { can } = useCan();
-
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const currentUserId = computed(() => page.props.auth.user?.id ?? null);
 

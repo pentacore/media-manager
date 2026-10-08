@@ -1,5 +1,7 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
+import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
+import { jsonRequest } from '@/lib/http';
 
 export interface ConversationSummary {
     id: string;
@@ -29,12 +31,15 @@ export interface ConversationMessage {
     toolCalls?: ChatToolCall[];
     attachments?: ChatAttachmentRef[];
     failed?: boolean;
+    /** The model behind an assistant reply; null when it is not known. */
+    answered_by?: AnsweredBy | null;
 }
 
 export interface ConversationPage {
     id: string;
     title: string;
     updated_at: string;
+    override: ChatOverride;
     messages: ConversationMessage[];
     next_cursor: string | null;
 }
@@ -54,45 +59,6 @@ const recentLoading = ref(false);
 const pendingStep = ref<AgentStep | null>(null);
 
 let keyboardInitialized = false;
-
-function csrfToken(): string {
-    return (
-        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-            ?.content ?? ''
-    );
-}
-
-export async function jsonRequest<T>(
-    method: string,
-    url: string,
-    body?: unknown,
-): Promise<T> {
-    const response = await fetch(url, {
-        method,
-        credentials: 'same-origin',
-        headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': csrfToken(),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-        const data = await response
-            .json()
-            .catch(() => ({}) as Record<string, unknown>);
-        const message =
-            typeof data.message === 'string'
-                ? data.message
-                : `Request failed (${response.status})`;
-
-        throw new Error(message);
-    }
-
-    return (await response.json()) as T;
-}
 
 function ensureKeyboardShortcut(): void {
     if (keyboardInitialized) {
@@ -227,7 +193,8 @@ export function useAiChat() {
             return data;
         }
 
-        activeConversationId.value = data.id;
+        // The caller makes the conversation active before loading it; a late
+        // response must not switch back to a conversation the user left.
         upsertConversation({
             id: data.id,
             title: data.title,

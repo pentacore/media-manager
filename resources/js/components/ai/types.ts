@@ -1,6 +1,41 @@
 import type { ConversationMessage } from '@/composables/useAiChat';
+import type { AiReasoningLevel } from '@/typefinder';
 
 export type ChatMode = 'advisory' | 'executive';
+
+/** A conversation's model/reasoning override; null fields use the chat default. */
+export type ChatOverride = {
+    provider: string | null;
+    model: string | null;
+    reasoning: AiReasoningLevel | null;
+};
+
+/** The model and reasoning level behind one assistant reply. */
+export type AnsweredBy = {
+    provider: string | null;
+    model: string | null;
+    reasoning_label: string | null;
+};
+
+/** What `GET ai/chat/model-options` returns for the model pickers. */
+export type ModelOptions = {
+    defaults: {
+        provider: string;
+        model: string;
+        reasoning: AiReasoningLevel;
+        reasoning_label: string;
+    };
+    models: Record<string, string[]>;
+    reasoningLevels: Array<{ label: string; value: AiReasoningLevel }>;
+    modelCapabilities: Record<
+        string,
+        {
+            supports_reasoning: boolean | null;
+            levels: AiReasoningLevel[] | null;
+        }
+    >;
+    reasoningProviders: string[];
+};
 
 export interface WorkflowProposal {
     id: string;

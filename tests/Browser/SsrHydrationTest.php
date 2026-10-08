@@ -32,3 +32,28 @@ test('server-rendered dashboard hydrates and remains interactive', function (): 
     fn (): bool => Artisan::call('inertia:check-ssr') !== 0,
     'The Inertia SSR server is not running; run composer test:browser.',
 );
+
+/**
+ * The browser server answers every request from the test's own container, and
+ * Inertia memoises the SSR response in a scoped SsrState. If scoped instances
+ * outlive a request, the second full page load replays the first one's HTML
+ * and page props, so the page shows data from before the change.
+ */
+test('a second full page load server-renders the latest props', function (): void {
+    $user = User::factory()->member()->create(['name' => 'Before Rename']);
+    $this->actingAs($user);
+
+    visit('/dashboard')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-test="sidebar-menu-button"]', 'Before Rename');
+
+    $user->update(['name' => 'After Rename']);
+
+    visit('/dashboard')
+        ->assertAttribute('#app', 'data-server-rendered', 'true')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-test="sidebar-menu-button"]', 'After Rename');
+})->skip(
+    fn (): bool => Artisan::call('inertia:check-ssr') !== 0,
+    'The Inertia SSR server is not running; run composer test:browser.',
+);

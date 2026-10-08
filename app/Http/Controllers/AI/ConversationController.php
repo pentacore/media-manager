@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Ai\TaskModelResolver;
+use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\RenameConversationRequest;
+use App\Http\Requests\AI\UpdateConversationModelRequest;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ConversationModelOverride;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +53,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -84,6 +89,11 @@ class ConversationController extends Controller
                 'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
                 'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                 'failed' => $storedMessage->status === MessageStatus::Failed,
+                'answered_by' => $storedMessage->role === 'assistant' ? [
+                    'provider' => $storedMessage->meta['provider'] ?? null,
+                    'model' => $storedMessage->meta['model'] ?? null,
+                    'reasoning_label' => AiReasoningLevel::tryFrom((string) ($storedMessage->meta['reasoning_level'] ?? ''))?->label(),
+                ] : null,
             ])
             ->values()
             ->all();
@@ -92,6 +102,7 @@ class ConversationController extends Controller
             'id' => $row->id,
             'title' => (string) $row->title,
             'updated_at' => $row->updated_at,
+            'override' => $conversationModelOverride->forConversation($conversation),
             'messages' => $messages,
             'next_cursor' => $cursorPaginator->nextCursor()?->encode(),
         ]);
@@ -122,6 +133,54 @@ class ConversationController extends Controller
             'id' => $row->id,
             'title' => $title,
             'updated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Change the conversation's model/reasoning override; null fields fall
+     * back to the admin chat default. Refused while the SDK waits on a tool
+     * approval, since resuming must run on the model that paused.
+     */
+    public function updateModel(
+        UpdateConversationModelRequest $updateConversationModelRequest,
+        ConversationModelOverride $conversationModelOverride,
+        TaskModelResolver $taskModelResolver,
+        string $conversation,
+    ): JsonResponse {
+        if (! $this->conversationBelongsTo($conversation, $updateConversationModelRequest->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $conversationStore = resolve(ConversationStore::class);
+
+        if ($conversationStore->pendingApprovalsFor($conversation) !== []) {
+            return response()->json([
+                'error' => 'pending_approval',
+                'message' => __('Answer the pending tool approval before changing the model.'),
+            ], 409);
+        }
+
+        $validated = $updateConversationModelRequest->validated();
+        $hasPair = filled($validated['provider'] ?? null) && filled($validated['model'] ?? null);
+
+        DB::table('agent_conversations')->where('id', $conversation)->update([
+            'model_provider' => $hasPair ? $validated['provider'] : null,
+            'model' => $hasPair ? $validated['model'] : null,
+            'reasoning' => $validated['reasoning'] ?? null,
+            'updated_at' => now(),
+        ]);
+
+        $conversationModelOverride->applyToTurn($conversation, []);
+        $resolvedSelection = $taskModelResolver->resolve(AiTask::Chat);
+
+        return response()->json([
+            'override' => $conversationModelOverride->forConversation($conversation),
+            'resolved' => [
+                'provider' => $resolvedSelection->provider,
+                'model' => $resolvedSelection->model,
+                'reasoning' => $resolvedSelection->reasoning->value,
+                'reasoning_label' => $resolvedSelection->reasoning->label(),
+            ],
         ]);
     }
 

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Settings\AiSettings;
+use App\Ai\TaskModelResolver;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Enums\Lab;
 
@@ -12,20 +14,20 @@ beforeEach(function (): void {
     config()->set('ai.default', 'openai');
 });
 
-test('failover provider persists and reads back', function (): void {
-    $aiSettings = resolve(AiSettings::class);
+test('the failover provider reads back from its AI Models row', function (): void {
+    $taskModelResolver = resolve(TaskModelResolver::class);
 
-    expect($aiSettings->failoverProvider())->toBeNull();
+    expect($taskModelResolver->failover())->toBeNull();
 
-    $aiSettings->setFailoverProvider(Lab::Anthropic);
-    expect($aiSettings->failoverProvider())->toBe(Lab::Anthropic);
+    $failover = AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
+    expect($taskModelResolver->failover())->toBe(['provider' => Lab::Anthropic->value, 'model' => null]);
 
-    $aiSettings->setFailoverProvider(null);
-    expect($aiSettings->failoverProvider())->toBeNull();
+    $failover->delete();
+    expect($taskModelResolver->failover())->toBeNull();
 });
 
 test('an agent on the failover path resolves without exception', function (): void {
-    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
 
     MediaAgent::fake(['ok']);
 

@@ -20,3 +20,12 @@ User feedback comes from the server via `Inertia::flash('toast', ...)`, rendered
 
 ## useHttp onError only covers 422s
 Inertia's `useHttp` calls `onError` only for a 422 validation response. A 500 goes to `onHttpException`, a dropped connection to `onNetworkError`, and in both cases the returned promise rejects. Handle all three callbacks and `.catch()` the promise for every request whose failure must be visible. Otherwise state stays stuck (e.g. SubtitleItemDrawer left every operation disabled), nothing tells the user, and the rejection goes unhandled. Pest browser tests won't catch this: they record only window errors and console.* calls, not unhandled rejections or failed-resource messages.
+
+## Byte sizes render through formatBytes()
+Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, whole numbers to MB, one decimal from GB, `"0 B"` for zero, `"—"` for a missing, negative or non-finite value). Never add a local size formatter; `tests/Browser/ByteFormatTest.php` pins the output.
+
+## JSON requests come from @/lib/http
+Ad-hoc JSON calls use `jsonRequest&lt;T&gt;()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.
+
+## Confirm with useConfirm(), never the browser dialog
+Ask before a destructive or costly action with `const { confirm } = useConfirm(); if (!(await confirm({ title, description?, confirmLabel, destructive }))) return;` — one `ConfirmDialog` is mounted in the app layout. Pass `destructive: true` for deletes, removals, unlinks, declines and blocklists. ESLint bans the global `confirm` and `window.confirm`. Browser tests click `[data-confirm-accept]` / `[data-confirm-cancel]` instead of stubbing `window.confirm`.

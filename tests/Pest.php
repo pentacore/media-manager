@@ -87,6 +87,14 @@ pest()->extend(TestCase::class)
     ->beforeEach(function (): void {
         Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
 
+        // The browser plugin serves every page request from this test's own
+        // container, so scoped instances would outlive the request that made
+        // them: Inertia's scoped SsrState then replays the first SSR response
+        // on every later full page load, and memos like TaskModelResolver go
+        // stale. Octane forgets scoped instances once each request terminates
+        // (FlushTemporaryContainerInstances); do the same here.
+        $this->app->terminating(fn () => $this->app->forgetScopedInstances());
+
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
 
@@ -159,4 +167,31 @@ function fakeServiceHttp(Closure $handler): void
 
         return $handler($request, $options);
     });
+}
+
+/**
+ * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
+ * so script() returns only once an async UI change has landed.
+ */
+function confirmDialogWaitUntilScript(string $condition): string
+{
+    return <<<JS
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if ({$condition}) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS;
+}
+
+/**
+ * Waits until the shared confirm dialog has left the DOM; its exit animation
+ * keeps it mounted briefly after it closes.
+ */
+function confirmDialogGoneScript(): string
+{
+    return confirmDialogWaitUntilScript("!document.querySelector('[data-confirm-dialog]')");
 }

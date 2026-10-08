@@ -31,7 +31,9 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
+import { useConfirm } from '@/composables/useConfirm';
 import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
@@ -139,8 +141,7 @@ defineOptions({
     },
 });
 
-const { can } = useCan();
-const isAdmin = computed(() => can('admin'));
+const { isAdmin } = useCan();
 
 const refreshing = ref(false);
 const serviceFilter = ref<'all' | 'sonarr' | 'radarr'>('all');
@@ -171,12 +172,26 @@ function showHistory(service: ArrService, page = 1): void {
     );
 }
 
+const { confirm } = useConfirm();
 const markingFailed = ref<number | null>(null);
 
-function markFailed(row: HistoryRow): void {
+async function markFailed(row: HistoryRow): Promise<void> {
     const connectionId = props.history?.connection_id ?? null;
 
     if (connectionId === null || markingFailed.value !== null) {
+        return;
+    }
+
+    const confirmed = await confirm({
+        title: `Mark "${row.title ?? 'this grab'}" as failed?`,
+        description:
+            'The release is blocklisted, and a new search runs if "Redownload failed" is on.',
+        confirmLabel: 'Mark failed',
+        destructive: true,
+    });
+
+    // Re-check the guard: another mark may have started while the dialog was open.
+    if (!confirmed || markingFailed.value !== null) {
         return;
     }
 
@@ -265,12 +280,14 @@ function actionKey(row: QueueRow, verb: string): string {
     return `${row.service}-${row.id}-${verb}`;
 }
 
-function forceGrab(row: QueueRow): void {
-    if (
-        !confirm(
-            `Force grab "${row.title ?? 'this item'}" now? This bypasses the RSS sync delay.`,
-        )
-    ) {
+async function forceGrab(row: QueueRow): Promise<void> {
+    const confirmed = await confirm({
+        title: `Force grab "${row.title ?? 'this item'}" now?`,
+        description: 'This bypasses the RSS sync delay.',
+        confirmLabel: 'Grab now',
+    });
+
+    if (!confirmed) {
         return;
     }
 
@@ -294,13 +311,27 @@ function forceGrab(row: QueueRow): void {
     );
 }
 
-function removeQueueItem(row: QueueRow, verb: 'remove' | 'block'): void {
-    const promptCopy =
+async function removeQueueItem(
+    row: QueueRow,
+    verb: 'remove' | 'block',
+): Promise<void> {
+    const title = row.title ?? 'this item';
+    const confirmed = await confirm(
         verb === 'block'
-            ? `Remove "${row.title ?? 'this item'}" and blocklist the release so a fresh search runs?`
-            : `Remove "${row.title ?? 'this item'}" from the queue?`;
+            ? {
+                  title: `Remove "${title}" and blocklist the release?`,
+                  description: 'A fresh search runs afterwards.',
+                  confirmLabel: 'Blocklist & retry',
+                  destructive: true,
+              }
+            : {
+                  title: `Remove "${title}" from the queue?`,
+                  confirmLabel: 'Remove',
+                  destructive: true,
+              },
+    );
 
-    if (!confirm(promptCopy)) {
+    if (!confirmed) {
         return;
     }
 
@@ -453,23 +484,6 @@ function refresh(): void {
             refreshing.value = false;
         },
     });
-}
-
-function formatBytes(bytes: number | null): string {
-    if (bytes === null || bytes <= 0) {
-        return '—';
-    }
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = bytes;
-    let unitIndex = 0;
-
-    while (value >= 1024 && unitIndex < units.length - 1) {
-        value /= 1024;
-        unitIndex++;
-    }
-
-    return `${value.toFixed(value >= 100 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function progress(row: QueueRow): number {

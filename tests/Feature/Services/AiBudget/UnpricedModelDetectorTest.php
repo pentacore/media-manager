@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiTask;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Settings\AiSettings;
-use App\Settings\DecisionAgentSettings;
 
 beforeEach(function (): void {
     config()->set('ai.default', 'openai');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setModel('chat-model');
-    $aiSettings->setTitleModel('title-model');
-    $aiSettings->setSubAgentModel('sub-agent-model');
-
-    resolve(DecisionAgentSettings::class)->setModel('decision-model');
+    config()->set('mediamanager.ai.model', 'chat-model');
+    config()->set('mediamanager.ai.title_model', 'title-model');
+    config()->set('mediamanager.ai.sub_agent_model', 'sub-agent-model');
+    config()->set('mediamanager.ai.pricing.updater_model', '');
+    config()->set('mediamanager.decision_agent.model', 'decision-model');
 });
 
 function priceModels(string ...$models): void
@@ -41,7 +41,8 @@ test('each unpriced selected model is reported with its role', function (): void
 
     expect(resolve(UnpricedModelDetector::class)->forHardCap())->toBe([
         ['role' => 'Decision agent', 'provider' => 'openai', 'model' => 'decision-model'],
-        ['role' => 'Sub-agents', 'provider' => 'openai', 'model' => 'sub-agent-model'],
+        ['role' => 'File inspector', 'provider' => 'openai', 'model' => 'sub-agent-model'],
+        ['role' => 'Stuck download investigator', 'provider' => 'openai', 'model' => 'sub-agent-model'],
     ]);
 });
 
@@ -50,24 +51,30 @@ test('a model shared by several roles is reported for each role', function (): v
     config()->set('mediamanager.ai.sub_agent_model', '');
 
     resolve(AiSettings::class)->setHardBudgetUsd(25.0);
-    resolve(AiSettings::class)->setSubAgentModel(null);
-    resolve(DecisionAgentSettings::class)->setModel('');
     priceModels('title-model');
 
     expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
-        ->toBe(['Chat', 'Decision agent', 'Sub-agents', 'Price updater']);
+        ->toBe(['Chat', 'Decision agent', 'File inspector', 'Stuck download investigator', 'Price updater']);
 });
 
 test('each selected model is looked up under its own provider', function (): void {
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
-    $aiSettings = resolve(AiSettings::class);
-    $aiSettings->setHardBudgetUsd(25.0);
-    $aiSettings->setModelProvider('openrouter');
-    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
     priceModels('title-model', 'sub-agent-model', 'decision-model');
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'anthropic/claude-sonnet-5']);
 
     expect(resolve(UnpricedModelDetector::class)->forHardCap())->toContain(
         ['role' => 'Chat', 'provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5'],
     );
+});
+
+test('a decision event override with its own model is reported under its event', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('chat-model', 'title-model', 'sub-agent-model', 'decision-model');
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'event-model')->create();
+
+    expect(resolve(UnpricedModelDetector::class)->forHardCap())->toBe([
+        ['role' => 'Decision agent (radarr:Grab)', 'provider' => 'openai', 'model' => 'event-model'],
+    ]);
 });

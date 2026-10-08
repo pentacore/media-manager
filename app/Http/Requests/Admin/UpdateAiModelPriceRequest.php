@@ -5,12 +5,30 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Concerns\RateLimitValidationRules;
+use App\Enums\AiReasoningLevel;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateAiModelPriceRequest extends FormRequest
 {
     use RateLimitValidationRules;
+
+    /**
+     * The form posts a blank placeholder so an all-unchecked level group still
+     * reaches the server; drop it before validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (is_array($this->input('reasoning_levels'))) {
+            $this->merge([
+                'reasoning_levels' => array_values(array_filter(
+                    $this->input('reasoning_levels'),
+                    static fn (mixed $level): bool => $level !== '' && $level !== null,
+                )),
+            ]);
+        }
+    }
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -32,6 +50,12 @@ class UpdateAiModelPriceRequest extends FormRequest
             'batch_search_unit_per_k' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'free_usage_pool_id' => ['nullable', 'integer', 'exists:ai_free_usage_pools,id'],
             'automatic_updates_enabled' => ['nullable', 'boolean'],
+            'supports_reasoning' => ['sometimes', 'string', 'in:yes,no,unknown'],
+            'reasoning_levels' => ['sometimes', 'array'],
+            'reasoning_levels.*' => ['string', Rule::in(array_map(
+                static fn (AiReasoningLevel $aiReasoningLevel): string => $aiReasoningLevel->value,
+                AiReasoningLevel::sendable(),
+            ))],
             ...$this->rateLimitRules(),
         ];
     }

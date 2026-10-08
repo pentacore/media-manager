@@ -15,6 +15,7 @@ import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
+import { formatBytes } from '@/lib/format';
 import { titleStatusPill } from '@/lib/seerr';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
@@ -230,22 +231,6 @@ const showRequests = computed(
     () => scope.value === 'all' || scope.value === 'requests',
 );
 const showIndexers = computed(() => scope.value === 'indexers');
-
-function formatSize(bytes: number | null): string {
-    if (bytes === null || bytes === undefined) {
-        return '—';
-    }
-
-    if (bytes === 0) {
-        return '0 B';
-    }
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const value = bytes / Math.pow(1024, i);
-
-    return `${value.toFixed(1)} ${units[i]}`;
-}
 
 const sheetOpen = ref(false);
 const selectedTitle = ref<DiscoverTitle | null>(null);
@@ -709,7 +694,7 @@ function openTitle(item: DiscoverTitle): void {
                             <td
                                 class="font-mono-tabular px-3 py-2.5 text-[12px]"
                             >
-                                {{ formatSize(hit.size_bytes) }}
+                                {{ formatBytes(hit.size_bytes) }}
                             </td>
                             <td
                                 class="font-mono-tabular px-3 py-2.5 text-[12px]"

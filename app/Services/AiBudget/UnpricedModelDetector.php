@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\AiBudget;
 
+use App\Ai\TaskModelResolver;
+use App\Enums\AiTask;
+use App\Models\AiTaskModel;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Settings\AiSettings;
-use App\Settings\DecisionAgentSettings;
 
 /**
  * The hard budget sums catalog prices; a model without a price row costs 0,
@@ -17,7 +19,7 @@ final readonly class UnpricedModelDetector
 {
     public function __construct(
         private AiSettings $aiSettings,
-        private DecisionAgentSettings $decisionAgentSettings,
+        private TaskModelResolver $taskModelResolver,
         private ModelPriceLookup $modelPriceLookup,
     ) {}
 
@@ -30,13 +32,19 @@ final readonly class UnpricedModelDetector
             return [];
         }
 
-        $selections = [
-            'Chat' => $this->aiSettings->chatSelection(),
-            'Decision agent' => $this->decisionAgentSettings->selection(),
-            'Sub-agents' => $this->aiSettings->subAgentSelection(),
-            'Chat titles' => $this->aiSettings->titleSelection(),
-            'Price updater' => $this->aiSettings->priceUpdaterSelection(),
-        ];
+        $selections = [];
+
+        foreach (AiTask::cases() as $aiTask) {
+            if ($aiTask !== AiTask::Failover) {
+                $selections[$aiTask->label()] = $this->taskModelResolver->resolve($aiTask)->modelSelection();
+            }
+        }
+
+        foreach ($this->taskModelResolver->rows() as $aiTaskModel) {
+            if ($aiTaskModel->task === AiTask::Decision && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE && filled($aiTaskModel->model)) {
+                $selections[sprintf('%s (%s)', AiTask::Decision->label(), $aiTaskModel->scope)] = $this->taskModelResolver->resolve(AiTask::Decision, $aiTaskModel->scope)->modelSelection();
+            }
+        }
 
         $unpriced = [];
 

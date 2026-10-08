@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\AiReasoningLevel;
 use Carbon\CarbonImmutable;
 use Database\Factories\ChatTemplateFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -25,6 +26,9 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property list<array{name: string, label: string, type: string, default: string|null, options: list<string>|null}> $variables
  * @property bool $auto_send
  * @property bool $pinned
+ * @property string|null $model_provider
+ * @property string|null $model
+ * @property AiReasoningLevel|null $reasoning
  * @property CarbonImmutable|null $last_used_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -44,6 +48,9 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
     'variables',
     'auto_send',
     'pinned',
+    'model_provider',
+    'model',
+    'reasoning',
 ])]
 #[TypefinderOverrides([
     'variables' => "Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>",
@@ -63,6 +70,7 @@ class ChatTemplate extends Model
             'variables' => 'array',
             'auto_send' => 'boolean',
             'pinned' => 'boolean',
+            'reasoning' => AiReasoningLevel::class,
             'last_used_at' => 'immutable_datetime',
         ];
     }

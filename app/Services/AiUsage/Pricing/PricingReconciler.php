@@ -10,6 +10,7 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 
 /**
  * Pure merge of one provider's models.dev and LiteLLM slices.
@@ -102,6 +103,7 @@ final class PricingReconciler
                 sourceUrl: $first->sourceUrl,
                 sourceUpdatedAt: $first->sourceUpdatedAt,
                 tiered: $first->tiered || $second->tiered,
+                reasoning: ReasoningCapability::preferring($first->reasoning, $second->reasoning),
             );
         }
 

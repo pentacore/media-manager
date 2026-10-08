@@ -2,19 +2,9 @@
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-type VersionInfo = {
-    current: string;
-    latest: string | null;
-    updateAvailable: boolean;
-};
-
 const page = usePage();
 
-const version = computed(
-    () =>
-        (page.props as unknown as { version?: VersionInfo | null }).version ??
-        null,
-);
+const version = computed(() => page.props.version ?? null);
 
 const label = computed(() =>
     version.value?.current === 'dev' ? 'dev' : `v${version.value?.current}`,
@@ -24,6 +14,7 @@ const label = computed(() =>
 <template>
     <div
         v-if="version"
+        data-app-version
         class="px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
     >
         <a
