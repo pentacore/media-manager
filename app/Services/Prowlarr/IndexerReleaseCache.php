@@ -24,7 +24,8 @@ final readonly class IndexerReleaseCache
 
     /**
      * Remembers every release from one search in a single `Cache::putMany()`
-     * call rather than one round-trip per row.
+     * call rather than one round-trip per row. Only for a user who can grab
+     * (admins): the cached guid is what a grab sends to Prowlarr.
      *
      * @param  list<array<string, mixed>>  $releases
      * @return list<array{key: string|null, indexer_id: int|null, title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}>
@@ -35,15 +36,7 @@ final readonly class IndexerReleaseCache
         $cacheEntries = [];
 
         foreach ($releases as $release) {
-            $row = [
-                'title' => $release['title'] ?? null,
-                'indexer' => $release['indexer'] ?? null,
-                'size' => $release['size'] ?? null,
-                'seeders' => $release['seeders'] ?? null,
-                'age' => $release['age'] ?? null,
-                'publishDate' => $release['publishDate'] ?? null,
-            ];
-
+            $row = $this->displayRow($release);
             $guid = $release['guid'] ?? null;
             $indexerId = (int) ($release['indexerId'] ?? 0);
 
@@ -70,6 +63,40 @@ final readonly class IndexerReleaseCache
         }
 
         return $rows;
+    }
+
+    /**
+     * The same display rows without remembering anything, for a user who
+     * cannot grab: their searches never fill the cache, and the null key
+     * hides the Grab button.
+     *
+     * @param  list<array<string, mixed>>  $releases
+     * @return list<array{key: null, indexer_id: null, title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}>
+     */
+    public function present(array $releases): array
+    {
+        return array_map(
+            fn (array $release): array => ['key' => null, 'indexer_id' => null, ...$this->displayRow($release)],
+            $releases,
+        );
+    }
+
+    /**
+     * The #236 display allowlist: everything a search row may show.
+     *
+     * @param  array<string, mixed>  $release
+     * @return array{title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}
+     */
+    private function displayRow(array $release): array
+    {
+        return [
+            'title' => $release['title'] ?? null,
+            'indexer' => $release['indexer'] ?? null,
+            'size' => $release['size'] ?? null,
+            'seeders' => $release['seeders'] ?? null,
+            'age' => $release['age'] ?? null,
+            'publishDate' => $release['publishDate'] ?? null,
+        ];
     }
 
     /**

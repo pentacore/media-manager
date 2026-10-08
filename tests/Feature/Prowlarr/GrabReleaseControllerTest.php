@@ -182,10 +182,10 @@ test('grab is admin-only and validates the key shape', function (): void {
     Http::assertNothingSent();
 });
 
-test('search results carry the release key and indexer id but no release secrets', function (): void {
+test('admin search results carry the release key and indexer id but no release secrets', function (): void {
     Http::fake(['prowlarr.local:9696/api/v1/search*' => Http::response([prowlarrGrabRelease()])]);
 
-    $response = $this->actingAs(User::factory()->member()->create())->get(route('prowlarr.search', ['q' => 'severance']));
+    $response = $this->actingAs($this->admin)->get(route('prowlarr.search', ['q' => 'severance']));
 
     $response->assertOk()->assertInertia(fn ($page) => $page
         ->where('results.0.key', hash('sha256', prowlarrGrabRelease()['guid']))
@@ -198,4 +198,34 @@ test('search results carry the release key and indexer id but no release secrets
     expect($response->getContent())
         ->not->toContain('prowlarr-secret-key')
         ->not->toContain('tracker-passkey');
+});
+
+test('a member search leaves nothing grabbable in the release cache', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/search*' => Http::response([prowlarrGrabRelease()])]);
+
+    $response = $this->actingAs(User::factory()->member()->create())->get(route('prowlarr.search', ['q' => 'severance']));
+
+    $response->assertOk()->assertInertia(fn ($page) => $page
+        ->where('results.0.key', null)
+        ->where('results.0.indexer_id', null)
+        ->where('results.0.title', 'Severance.S02E07.1080p.WEB-DL')
+        ->where('results.0.indexer', 'NZBgeek')
+        ->where('results.0.size', 2_500_000_000)
+        ->missing('results.0.guid'));
+
+    expect(resolve(IndexerReleaseCache::class)->find($this->prowlarr, 3, hash('sha256', prowlarrGrabRelease()['guid'])))->toBeNull();
+});
+
+test('an admin search remembers each release for the grab', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/search*' => Http::response([prowlarrGrabRelease()])]);
+
+    $this->actingAs($this->admin)->get(route('prowlarr.search', ['q' => 'severance']))->assertOk();
+
+    expect(resolve(IndexerReleaseCache::class)->find($this->prowlarr, 3, hash('sha256', prowlarrGrabRelease()['guid'])))
+        ->toBe([
+            'guid' => prowlarrGrabRelease()['guid'],
+            'indexer_id' => 3,
+            'title' => 'Severance.S02E07.1080p.WEB-DL',
+            'indexer' => 'NZBgeek',
+        ]);
 });

@@ -42,6 +42,7 @@ use Override;
  * @property AiUsageKind $kind
  * @property string|null $error_message
  * @property string|null $parent_invocation_id
+ * @property int|null $tier_position
  * @property string $search_units
  * @property string|null $search_unit_per_k
  * @property CarbonImmutable|null $created_at
@@ -66,6 +67,7 @@ use Override;
     'prompt_text',
     'response_text',
     'tool_calls_count',
+    'tier_position',
     'input_per_mtok',
     'output_per_mtok',
     'cache_read_per_mtok',
@@ -102,6 +104,7 @@ class AiUsageRecord extends Model
             'cache_write_per_mtok' => 'decimal:4',
             'reasoning_per_mtok' => 'decimal:4',
             'is_batch' => 'boolean',
+            'tier_position' => 'integer',
             'kind' => AiUsageKind::class,
             'search_units' => 'decimal:3',
             'search_unit_per_k' => 'decimal:4',

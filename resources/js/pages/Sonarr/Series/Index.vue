@@ -422,6 +422,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 :key="item.id"
                 :href="SeriesController.show.url(item.id)"
                 :data-series-card="item.id"
+                prefetch
                 class="group flex flex-col gap-2"
             >
                 <div class="relative">

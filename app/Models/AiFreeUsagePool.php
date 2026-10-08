@@ -6,8 +6,10 @@ namespace App\Models;
 
 use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
+use App\Observers\AiFreeUsagePoolObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -43,6 +45,7 @@ use Override;
     'overflow_behavior',
     'documentation_url',
 ])]
+#[ObservedBy(AiFreeUsagePoolObserver::class)]
 class AiFreeUsagePool extends Model
 {
     use HasFactory;

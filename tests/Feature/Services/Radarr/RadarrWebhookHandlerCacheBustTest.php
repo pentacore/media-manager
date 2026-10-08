@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 use App\Cache\Services\RadarrCache;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Services\Library\InterventionCounter;
 use App\Services\Radarr\RadarrWebhookHandler;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('mediamanager.cache.store', 'array');
@@ -14,55 +18,63 @@ beforeEach(function (): void {
     config()->set('mediamanager.cache.ttl.entity', 300);
     config()->set('mediamanager.cache.ttl.metadata', 600);
     Cache::store('array')->flush();
+    Queue::fake();
+    Notification::fake();
+    $this->mock(InterventionCounter::class)->shouldReceive('recompute')->andReturn(0);
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => true]);
 });
 
-test('handle() busts Radarr cache for the connection after processing', function (): void {
-    $connection = ServiceConnection::factory()->radarr()->create();
-    $cache = new RadarrCache($connection);
-
-    // Warm
-    $cache->rememberList('list', fn (): array => ['warm' => true]);
-
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'test',
-        'payload' => ['eventType' => 'Test'],
+function radarrCacheBustEvent(ServiceConnection $serviceConnection, string $eventType): WebhookEvent
+{
+    return WebhookEvent::factory()->create([
+        'service_connection_id' => $serviceConnection->id,
+        'event_type' => $eventType,
+        'payload' => [
+            'eventType' => $eventType,
+            'movie' => ['id' => 42, 'title' => 'My Movie'],
+        ],
     ]);
+}
 
-    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+function radarrCacheBustWarm(ServiceConnection $serviceConnection): void
+{
+    new RadarrCache($serviceConnection)->rememberList('list', fn (): array => ['warm' => true]);
+}
 
-    // Cold — closure should run again
-    $hits = 0;
-    $cache->rememberList('list', function () use (&$hits): array {
-        $hits++;
+/**
+ * The connection's cached movie list, read without populating it.
+ */
+function radarrCacheBustCachedList(ServiceConnection $serviceConnection): mixed
+{
+    $prefix = sprintf('radarr:%d', $serviceConnection->id);
 
-        return ['fresh' => true];
-    });
+    return Cache::store('array')->tags([$prefix])->get(sprintf('%s:list', $prefix));
+}
 
-    expect($hits)->toBe(1);
-});
+test('a library-changing Radarr event clears the connection cache', function (string $eventType): void {
+    $serviceConnection = ServiceConnection::factory()->radarr()->create();
+    radarrCacheBustWarm($serviceConnection);
 
-test('handle() does not bust other connections cache', function (): void {
-    $connection = ServiceConnection::factory()->radarr()->create();
-    $other = ServiceConnection::factory()->radarr()->create();
+    resolve(RadarrWebhookHandler::class)->handle(radarrCacheBustEvent($serviceConnection, $eventType));
 
-    $otherCache = new RadarrCache($other);
-    $otherCache->rememberList('list', fn (): array => ['warm' => true]);
+    expect(radarrCacheBustCachedList($serviceConnection))->toBeNull();
+})->with(['Download', 'Rename', 'MovieAdded', 'MovieDelete', 'MovieFileDelete']);
 
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'test',
-        'payload' => ['eventType' => 'Test'],
-    ]);
+test('a Radarr event that changes nothing cached keeps the connection cache', function (string $eventType): void {
+    $serviceConnection = ServiceConnection::factory()->radarr()->create();
+    radarrCacheBustWarm($serviceConnection);
 
-    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+    resolve(RadarrWebhookHandler::class)->handle(radarrCacheBustEvent($serviceConnection, $eventType));
 
-    $hits = 0;
-    $otherCache->rememberList('list', function () use (&$hits): array {
-        $hits++;
+    expect(radarrCacheBustCachedList($serviceConnection))->toBe(['warm' => true]);
+})->with(['Test', 'Grab', 'Health', 'HealthRestored', 'ApplicationUpdate', 'ManualInteractionRequired', 'SomethingNew']);
 
-        return ['fresh' => true];
-    });
+test('a library-changing Radarr event leaves other connections caches alone', function (): void {
+    $serviceConnection = ServiceConnection::factory()->radarr()->create();
+    $otherConnection = ServiceConnection::factory()->radarr()->create();
+    radarrCacheBustWarm($otherConnection);
 
-    expect($hits)->toBe(0);
+    resolve(RadarrWebhookHandler::class)->handle(radarrCacheBustEvent($serviceConnection, 'Download'));
+
+    expect(radarrCacheBustCachedList($otherConnection))->toBe(['warm' => true]);
 });

@@ -8,11 +8,12 @@ use App\Models\ServiceConnection;
 
 /**
  * Base for the caches scoped to one ServiceConnection that use the shared
- * `mediamanager.cache.ttl` buckets (Sonarr, Radarr, SABnzbd, Seerr,
- * Prowlarr, Whisparr). Entries are keyed and tagged `{service}:{connection
- * id}`, so a subclass declares only its service slug. BazarrCache (its own
- * connection checks and TTLs) and the household caches (Anime, Tmdb, Trakt)
- * extend BaseServiceCache directly.
+ * `mediamanager.cache.ttl` buckets (Sonarr, Radarr, Seerr, Prowlarr,
+ * Whisparr; SabnzbdCache exists but nothing reads or writes it yet).
+ * Entries are keyed and tagged `{service}:{connection id}`, so a subclass
+ * declares only its service slug. BazarrCache (its own connection checks
+ * and TTLs) and the household caches (Anime, Tmdb, Trakt) extend
+ * BaseServiceCache directly.
  */
 abstract class ConnectionScopedCache extends BaseServiceCache
 {

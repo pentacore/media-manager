@@ -14,10 +14,13 @@ use Illuminate\Validation\Validator;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
- * `tasks` is overridden because typefinder cannot render the per-task
- * `tasks.{task}.{field}` rules as a nested object.
+ * `tasks` and `event_overrides` are overridden because typefinder cannot render
+ * the nested per-task tier lists.
  */
-#[TypefinderOverrides(['tasks' => 'Record<string, { provider: string | null; model: string | null; reasoning: string | null }>'])]
+#[TypefinderOverrides([
+    'tasks' => 'Record<string, { tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>',
+    'event_overrides' => 'Array<{ event_key: string; tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>',
+])]
 class UpdateAiModelsRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;
@@ -37,13 +40,16 @@ class UpdateAiModelsRequest extends FormRequest
             'failover' => ['present', 'array:provider,model'],
             ...$this->selectionRules('failover', withReasoning: false),
             'event_overrides' => ['present', 'array'],
+            'event_overrides.*' => ['array:event_key,tiers'],
             'event_overrides.*.event_key' => ['required', 'string', 'distinct', Rule::in(DecisionAgentSettings::availableEventKeys())],
-            ...$this->selectionRules('event_overrides.*'),
+            'event_overrides.*.tiers' => ['required', 'array', 'list', 'min:1'],
+            ...$this->tierRules('event_overrides.*.tiers.*'),
         ];
 
         foreach (self::defaultTasks() as $task) {
-            $rules[sprintf('tasks.%s', $task)] = ['required', 'array:provider,model,reasoning'];
-            $rules = [...$rules, ...$this->selectionRules(sprintf('tasks.%s', $task))];
+            $rules[sprintf('tasks.%s', $task)] = ['required', 'array:tiers'];
+            $rules[sprintf('tasks.%s.tiers', $task)] = ['required', 'array', 'list', 'min:1'];
+            $rules = [...$rules, ...$this->tierRules(sprintf('tasks.%s.tiers.*', $task))];
         }
 
         return $rules;
@@ -56,23 +62,15 @@ class UpdateAiModelsRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             foreach (self::defaultTasks() as $task) {
-                $selection = $this->input(sprintf('tasks.%s', $task));
-
-                if (! is_array($selection)) {
-                    continue;
-                }
-
-                $this->validatePricedSelection($validator, sprintf('tasks.%s', $task), $selection['provider'] ?? null, $selection['model'] ?? null, allowAuto: $task === AiTask::Title->value);
+                $this->validateTierList($validator, sprintf('tasks.%s.tiers', $task), $this->input(sprintf('tasks.%s.tiers', $task)), allowAuto: $task === AiTask::Title->value);
             }
 
             $this->validatePricedSelection($validator, 'failover', $this->input('failover.provider'), $this->input('failover.model'));
 
             foreach ((array) $this->input('event_overrides', []) as $index => $override) {
-                if (! is_array($override)) {
-                    continue;
+                if (is_array($override)) {
+                    $this->validateTierList($validator, sprintf('event_overrides.%d.tiers', $index), $override['tiers'] ?? null);
                 }
-
-                $this->validatePricedSelection($validator, sprintf('event_overrides.%d', $index), $override['provider'] ?? null, $override['model'] ?? null);
             }
         }];
     }

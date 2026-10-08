@@ -86,6 +86,18 @@ function isActiveItem(item: NavItem): boolean {
     return item.href !== undefined && isCurrentOrParentUrl(item.href);
 }
 
+/**
+ * Hover prefetch for every leaf except items that opt out (see `NavItem.prefetch`'s
+ * doc comment for why). The open page's own link needs no check here:
+ * `router.prefetch()` refuses a target equal to the current URL
+ * (`@inertiajs/core` `dist/index.js:3412-3414`), so a prefetch landing on it
+ * (which would remount the page) never happens; `PrefetchTest`'s "hovering
+ * the link of the page already open" case pins that guard directly.
+ */
+function shouldPrefetch(item: NavItem): boolean {
+    return item.prefetch !== false;
+}
+
 function hasActiveChild(item: NavItem): boolean {
     return (item.children ?? []).some(isActiveItem);
 }
@@ -186,7 +198,11 @@ function rollupBadge(item: NavItem): number {
                                         as-child
                                         :is-active="isActiveItem(child)"
                                     >
-                                        <Link :href="resolveHref(child)">
+                                        <Link
+                                            :href="resolveHref(child)"
+                                            :prefetch="shouldPrefetch(child)"
+                                            :data-nav-item="child.title"
+                                        >
                                             <component :is="child.icon" />
                                             <span>{{ child.title }}</span>
                                         </Link>
@@ -203,7 +219,11 @@ function rollupBadge(item: NavItem): number {
                         :tooltip="item.title"
                         class="text-[13px] font-medium data-[active=true]:bg-accent/15 data-[active=true]:text-accent"
                     >
-                        <Link :href="resolveHref(item)">
+                        <Link
+                            :href="resolveHref(item)"
+                            :prefetch="shouldPrefetch(item)"
+                            :data-nav-item="item.title"
+                        >
                             <component :is="item.icon" />
                             <span>{{ item.title }}</span>
                         </Link>

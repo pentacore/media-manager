@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Sabnzbd;
 
-use App\Cache\Services\SabnzbdCache;
 use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
@@ -25,6 +24,7 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
 
         $status = WebhookHandlingStatus::Handled;
 
+        // SABnzbd keeps nothing in SabnzbdCache, so no event clears a cache.
         match ($eventType) {
             'complete' => $this->handleComplete($webhookEvent, $payload),
             'failed' => $this->handleFailed($webhookEvent, $payload),
@@ -37,10 +37,6 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
             'disk_full' => $this->handleAlert($webhookEvent, $payload, 'disk_full'),
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
-
-        if ($webhookEvent->serviceConnection !== null) {
-            new SabnzbdCache($webhookEvent->serviceConnection)->bustAll();
-        }
 
         // Counts shift on the events that move things in/out of the
         // queue or finish a download. Other events (alerts, pause,

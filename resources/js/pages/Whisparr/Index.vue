@@ -331,6 +331,7 @@ function sync(): void {
                     v-for="item in visible"
                     :key="item.id"
                     :href="WhisparrController.show.url(item.id)"
+                    prefetch
                     class="group flex flex-col gap-2"
                     :data-whisparr-card="item.id"
                     @focusin="focusedCard = item.id"
