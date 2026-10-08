@@ -10,6 +10,7 @@ use App\Models\AiTaskModel;
 use App\Models\ChatTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -86,4 +87,40 @@ test('a template preset fills the picker for a new conversation', function (): v
         ->assertValue('[data-chat-input]', 'Check everything')
         ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · High')
         ->assertAttribute('[data-chat-model-chip]', 'data-overridden', 'true');
+});
+
+test('an existing conversation shows its saved override and a reasoning change keeps its model', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'Nano chat',
+        'model_provider' => 'openai',
+        'model' => 'gpt-5-nano',
+        'reasoning' => 'high',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · High')
+        ->assertAttribute('[data-chat-model-chip]', 'data-overridden', 'true')
+        ->click('[data-chat-model-chip]')
+        ->click('[data-chat-model-picker] [data-reasoning-select] button')
+        ->click('[data-reasoning-option="low"]')
+        ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · Low')
+        // The chip stays disabled until the PATCH has been answered.
+        ->assertEnabled('[data-chat-model-chip]');
+
+    $conversation = DB::table('agent_conversations')->where('id', $conversationId)->first();
+
+    expect($conversation->model_provider)->toBe('openai')
+        ->and($conversation->model)->toBe('gpt-5-nano')
+        ->and($conversation->reasoning)->toBe('low');
 });

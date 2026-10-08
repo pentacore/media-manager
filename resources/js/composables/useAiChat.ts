@@ -231,7 +231,8 @@ export function useAiChat() {
             return data;
         }
 
-        activeConversationId.value = data.id;
+        // The caller makes the conversation active before loading it; a late
+        // response must not switch back to a conversation the user left.
         upsertConversation({
             id: data.id,
             title: data.title,

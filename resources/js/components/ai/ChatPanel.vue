@@ -92,6 +92,12 @@ const override = ref<ChatOverride>(emptyOverride());
 /** The override the server last confirmed, restored when a change fails. */
 let savedOverride: ChatOverride = emptyOverride();
 const savingOverride = ref(false);
+/**
+ * Whether `override` holds the active conversation's saved override. A new
+ * chat's is known (empty); an existing one's is unknown until its load
+ * lands, and editing it then would overwrite fields the user never saw.
+ */
+const overrideLoaded = ref(activeConversationId.value === null);
 /** Only the newest override change may apply its response. */
 let overrideRequest = 0;
 const modelOptions = ref<ModelOptions | null>(null);
@@ -101,12 +107,24 @@ const modelOptions = ref<ModelOptions | null>(null);
  * change is in flight.
  */
 const modelLocked = computed(
-    () => loading.value || sending.value || savingOverride.value,
+    () =>
+        !overrideLoaded.value ||
+        loading.value ||
+        sending.value ||
+        savingOverride.value,
 );
 
 function setOverride(value: ChatOverride): void {
     savedOverride = { ...value };
     override.value = { ...value };
+    overrideLoaded.value = true;
+}
+
+/** Forget the override until the conversation being opened has loaded. */
+function clearOverrideUntilLoaded(): void {
+    savedOverride = emptyOverride();
+    override.value = emptyOverride();
+    overrideLoaded.value = false;
 }
 
 /**
@@ -136,6 +154,14 @@ const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
 });
 
 onMounted(async () => {
+    // The active conversation outlives this panel (the sheet unmounts on
+    // close), so a remount reopens it to learn its messages and override.
+    const id = activeConversationId.value;
+
+    if (id !== null) {
+        void openConversation(id);
+    }
+
     try {
         modelOptions.value = await jsonRequest<ModelOptions>(
             'GET',
@@ -153,7 +179,7 @@ onMounted(async () => {
 async function onOverrideChange(value: ChatOverride): Promise<void> {
     const conversationId = activeConversationId.value;
 
-    if (conversationId === null) {
+    if (conversationId === null || !overrideLoaded.value) {
         return;
     }
 
@@ -582,19 +608,41 @@ function stopStreaming(): void {
 }
 
 async function pickConversation(id: string): Promise<void> {
-    if (id === activeConversationId.value) {
+    // Re-picking the open conversation retries a load that failed.
+    if (id === activeConversationId.value && overrideLoaded.value) {
         return;
     }
 
     setActiveConversation(id);
+    await openConversation(id);
+}
+
+/** Bumped per conversation load, so only the newest one applies its result. */
+let conversationLoad = 0;
+
+/**
+ * Load the (already active) conversation's newest messages and override.
+ * A load the user has since moved away from is dropped; a failed one keeps
+ * the model picker locked rather than editable over an unknown override.
+ */
+async function openConversation(id: string): Promise<void> {
+    const load = ++conversationLoad;
+    const isCurrent = (): boolean =>
+        load === conversationLoad && activeConversationId.value === id;
+
     messages.value = [];
     olderCursor.value = null;
-    setOverride(emptyOverride());
+    clearOverrideUntilLoaded();
     error.value = null;
     loading.value = true;
 
     try {
         const data = await loadConversation(id);
+
+        if (!isCurrent()) {
+            return;
+        }
+
         messages.value = data.messages.map((m) => ({
             ...m,
             uid: messageUid(),
@@ -614,7 +662,7 @@ async function pickConversation(id: string): Promise<void> {
             }),
         );
 
-        if (pending.workflow) {
+        if (pending.workflow && isCurrent()) {
             const lastAssistant = [...messages.value]
                 .reverse()
                 .find((m) => m.role === 'assistant');
@@ -625,10 +673,14 @@ async function pickConversation(id: string): Promise<void> {
             }
         }
     } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Failed to load.';
+        if (isCurrent()) {
+            error.value = e instanceof Error ? e.message : 'Failed to load.';
+        }
     } finally {
-        loading.value = false;
-        await scrollToBottom();
+        if (load === conversationLoad) {
+            loading.value = false;
+            await scrollToBottom();
+        }
     }
 }
 
