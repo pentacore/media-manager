@@ -350,3 +350,24 @@ test('cancelling a blocklist removal or a force grab sends nothing', function ()
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE' || str_contains($request->url(), '/api/v3/queue/grab/'));
 });
+
+test('an admin blocklists one queue item from its row menu', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="block"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'blocklist the release?')
+        ->assertSeeIn('[data-confirm-dialog]', 'A fresh search runs afterwards.')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Removed and blocklisted; a fresh search will run.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/41?')
+        && str_contains($request->url(), 'blocklist=true'));
+});
