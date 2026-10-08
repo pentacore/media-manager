@@ -23,6 +23,7 @@ beforeEach(function (): void {
     // RefreshDatabase already ran the migration on an empty app_settings;
     // start each case from a clean table.
     DB::table('ai_task_models')->delete();
+    config()->set('ai.default', 'openai');
 });
 
 test('saved selections become task rows and the old keys are removed', function (): void {
@@ -42,11 +43,11 @@ test('saved selections become task rows and the old keys are removed', function 
     modelMigrationInstance()->up();
 
     expect(modelMigrationTaskRow('chat'))->toMatchObject(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium'])
-        ->and(modelMigrationTaskRow('title'))->toMatchObject(['provider' => null, 'model' => 'auto'])
+        ->and(modelMigrationTaskRow('title'))->toMatchObject(['provider' => 'openai', 'model' => 'auto'])
         ->and(modelMigrationTaskRow('file_inspector'))->toMatchObject(['provider' => 'openai', 'model' => 'gpt-5-nano'])
         ->and(modelMigrationTaskRow('stuck_download_investigator'))->toMatchObject(['provider' => 'openai', 'model' => 'gpt-5-nano'])
-        ->and(modelMigrationTaskRow('price_updater'))->toMatchObject(['model' => 'gpt-5.6-luna'])
-        ->and(modelMigrationTaskRow('decision'))->toMatchObject(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5', 'reasoning' => 'high'])
+        ->and(modelMigrationTaskRow('price_updater'))->toMatchObject(['provider' => 'openai', 'model' => 'gpt-5.6-luna'])
+        ->and(modelMigrationTaskRow('decision'))->toMatchObject(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5', 'reasoning' => 'provider_default'])
         ->and(modelMigrationTaskRow('failover'))->toMatchObject(['provider' => 'openrouter', 'model' => null])
         ->and(DB::table('app_settings')->whereIn('key', ['ai.model', 'ai.sub_agent_model', 'decision_agent.reasoning_level', 'ai.failover_provider'])->count())->toBe(0);
 });
@@ -60,6 +61,82 @@ test('an existing install without saved reasoning keeps its old effective level'
 
     expect(modelMigrationTaskRow('chat')?->reasoning)->toBe('none')
         ->and(modelMigrationTaskRow('decision')?->reasoning)->toBe('none');
+});
+
+test('a model saved without a provider gets the default provider written out', function (): void {
+    config()->set('ai.default', 'anthropic');
+    modelMigrationSeedSetting('ai.model', 'claude-sonnet-5-5');
+    modelMigrationSeedSetting('ai.sub_agent_model', 'claude-haiku-4-5');
+    modelMigrationSeedSetting('ai.failover_model', 'gpt-5-mini');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('chat'))->toMatchObject(['provider' => 'anthropic', 'model' => 'claude-sonnet-5-5', 'reasoning' => 'provider_default'])
+        ->and(modelMigrationTaskRow('file_inspector'))->toMatchObject(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5'])
+        ->and(modelMigrationTaskRow('failover'))->toMatchObject(['provider' => null, 'model' => 'gpt-5-mini']);
+});
+
+test('an install on a provider that never got reasoning keeps provider default', function (): void {
+    config()->set('mediamanager.ai.advisor_reasoning_level', 'high');
+    config()->set('mediamanager.decision_agent.reasoning_level', 'high');
+    modelMigrationSeedSetting('ai.model_provider', 'anthropic');
+    modelMigrationSeedSetting('ai.model', 'claude-sonnet-5-5');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('chat')?->reasoning)->toBe('provider_default')
+        ->and(modelMigrationTaskRow('decision')?->reasoning)->toBe('provider_default');
+});
+
+test('a saved reasoning level becomes provider default on a provider that never got it', function (): void {
+    modelMigrationSeedSetting('ai.model_provider', 'gemini');
+    modelMigrationSeedSetting('ai.model', 'gemini-3-pro');
+    modelMigrationSeedSetting('ai.advisor_reasoning_level', 'high');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('chat'))->toMatchObject(['provider' => 'gemini', 'model' => 'gemini-3-pro', 'reasoning' => 'provider_default']);
+});
+
+test('an openai or openrouter install keeps the config reasoning level, else none', function (string $provider, ?string $configured, string $expected): void {
+    config()->set('mediamanager.ai.advisor_reasoning_level', $configured);
+    config()->set('mediamanager.decision_agent.reasoning_level', $configured);
+    modelMigrationSeedSetting('ai.model_provider', $provider);
+    modelMigrationSeedSetting('ai.model', 'gpt-5.6-luna');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('chat')?->reasoning)->toBe($expected)
+        ->and(modelMigrationTaskRow('decision')?->reasoning)->toBe($expected);
+})->with([
+    'openai, config high' => ['openai', 'high', 'high'],
+    'openai, config blank' => ['openai', null, 'none'],
+    'openrouter, config high' => ['openrouter', 'high', 'high'],
+]);
+
+test('a decision row without its own model follows the chat provider for reasoning', function (string $chatProvider, string $expected): void {
+    modelMigrationSeedSetting('ai.model_provider', $chatProvider);
+    modelMigrationSeedSetting('ai.model', 'some-chat-model');
+    modelMigrationSeedSetting('decision_agent.reasoning_level', 'high');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('decision'))->toMatchObject(['provider' => null, 'model' => null, 'reasoning' => $expected]);
+})->with([
+    'chat on anthropic' => ['anthropic', 'provider_default'],
+    'chat on openrouter' => ['openrouter', 'high'],
+]);
+
+test('a decision row with its own model uses its own provider for reasoning', function (): void {
+    modelMigrationSeedSetting('ai.model_provider', 'anthropic');
+    modelMigrationSeedSetting('ai.model', 'claude-sonnet-5-5');
+    modelMigrationSeedSetting('decision_agent.model', 'gpt-5.6-luna');
+    modelMigrationSeedSetting('decision_agent.reasoning_level', 'high');
+
+    modelMigrationInstance()->up();
+
+    expect(modelMigrationTaskRow('decision'))->toMatchObject(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'high'])
+        ->and(modelMigrationTaskRow('chat')?->reasoning)->toBe('provider_default');
 });
 
 test('a fresh install gets no rows', function (): void {
@@ -83,4 +160,22 @@ test('down restores the keys from the rows', function (): void {
         ->and($value('ai.sub_agent_model'))->toBe('gpt-5-nano')
         ->and($value('decision_agent.reasoning_level'))->toBe('high')
         ->and(DB::table('ai_task_models')->count())->toBe(0);
+});
+
+test('down writes no reasoning key for provider default', function (): void {
+    modelMigrationSeedSetting('ai.model_provider', 'gemini');
+    modelMigrationSeedSetting('ai.model', 'gemini-3-pro');
+    modelMigrationSeedSetting('ai.advisor_reasoning_level', 'high');
+    modelMigrationSeedSetting('decision_agent.reasoning_level', 'low');
+
+    $migration = modelMigrationInstance();
+    $migration->up();
+
+    expect(modelMigrationTaskRow('chat')?->reasoning)->toBe('provider_default')
+        ->and(modelMigrationTaskRow('decision')?->reasoning)->toBe('provider_default');
+
+    $migration->down();
+
+    expect(DB::table('app_settings')->whereIn('key', ['ai.advisor_reasoning_level', 'decision_agent.reasoning_level'])->count())->toBe(0)
+        ->and(json_decode((string) DB::table('app_settings')->where('key', 'ai.model')->value('value'), true))->toBe('gemini-3-pro');
 });

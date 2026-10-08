@@ -11,6 +11,19 @@ use Illuminate\Support\Facades\DB;
  * (one default row per task). Self-contained on purpose: it reads and
  * writes app_settings with the same JSON encoding AppSettings uses and
  * never touches the settings classes, which stop knowing these keys.
+ *
+ * It preserves what each task actually ran on before the upgrade:
+ *
+ * - A model saved without a provider (settings last saved before 1.26.0)
+ *   ran on `config('ai.default')`, so its row gets that provider written
+ *   out. Failover is the exception: its provider key is the provider.
+ * - The chat and decision agents only ever sent reasoning to OpenAI and
+ *   OpenRouter. When a row's effective provider (its own pair; decision
+ *   without a model follows the chat pair; chat without a model runs on
+ *   `config('ai.default')`) is one of those two, the saved level is kept,
+ *   or on an existing install backfilled from config, else `none`. Any
+ *   other provider never received a reasoning parameter, so the row gets
+ *   `provider_default`, saved level or not.
  */
 return new class extends Migration
 {
@@ -39,6 +52,13 @@ return new class extends Migration
         'decision' => 'mediamanager.decision_agent.reasoning_level',
     ];
 
+    /**
+     * Providers the old chat and decision agents sent reasoning to.
+     *
+     * @var list<string>
+     */
+    private const array REASONING_PROVIDERS = ['openai', 'openrouter'];
+
     public function up(): void
     {
         $existingInstall = DB::table('app_settings')
@@ -46,18 +66,33 @@ return new class extends Migration
             ->exists();
 
         DB::transaction(function () use ($existingInstall): void {
-            foreach (self::MAP as $task => [$providerKey, $modelKey, $reasoningKey]) {
-                $provider = $this->read($providerKey);
-                $model = $this->read($modelKey);
-                $reasoning = $reasoningKey === null ? null : $this->read($reasoningKey);
+            $saved = [];
 
-                if ($reasoning === null && $existingInstall && isset(self::REASONING_CONFIG[$task])) {
-                    $configured = trim((string) config(self::REASONING_CONFIG[$task], ''));
-                    $reasoning = $configured !== '' ? $configured : 'none';
+            foreach (self::MAP as $task => [$providerKey, $modelKey, $reasoningKey]) {
+                $saved[$task] = [
+                    $this->read($providerKey),
+                    $this->read($modelKey),
+                    $reasoningKey === null ? null : $this->read($reasoningKey),
+                ];
+            }
+
+            $chatProvider = $this->effectiveProvider($saved['chat'][0], $saved['chat'][1]) ?? $this->defaultProvider();
+            $effectiveProviders = [
+                'chat' => $chatProvider,
+                'decision' => $this->effectiveProvider($saved['decision'][0], $saved['decision'][1]) ?? $chatProvider,
+            ];
+
+            foreach ($saved as $task => [$provider, $model, $reasoning]) {
+                if (isset($effectiveProviders[$task])) {
+                    $reasoning = $this->reasoningFor($task, $reasoning, $effectiveProviders[$task], $existingInstall);
                 }
 
                 if ($provider === null && $model === null && $reasoning === null) {
                     continue;
+                }
+
+                if ($provider === null && $model !== null && $task !== 'failover') {
+                    $provider = $this->defaultProvider();
                 }
 
                 DB::table('ai_task_models')->insert([
@@ -75,6 +110,10 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Restores the old keys from the default rows. A provider_default level
+     * writes no reasoning key: the old agents would send it as an effort.
+     */
     public function down(): void
     {
         DB::transaction(function (): void {
@@ -92,13 +131,51 @@ return new class extends Migration
                 $this->write($providerKey, $row->provider);
                 $this->write($modelKey, $row->model);
 
-                if ($reasoningKey !== null) {
+                if ($reasoningKey !== null && $row->reasoning !== 'provider_default') {
                     $this->write($reasoningKey, $row->reasoning);
                 }
             }
 
             DB::table('ai_task_models')->delete();
         });
+    }
+
+    /**
+     * The provider a saved pair ran on, or null when no model was saved.
+     */
+    private function effectiveProvider(?string $provider, ?string $model): ?string
+    {
+        if ($model === null) {
+            return null;
+        }
+
+        return $provider ?? $this->defaultProvider();
+    }
+
+    /**
+     * The level that keeps the old behaviour: the old agents only sent
+     * reasoning to OpenAI and OpenRouter, so every other provider gets
+     * provider_default; for those two the saved level wins, then (on an
+     * existing install) the config level, then none.
+     */
+    private function reasoningFor(string $task, ?string $saved, string $effectiveProvider, bool $existingInstall): ?string
+    {
+        if (! in_array($effectiveProvider, self::REASONING_PROVIDERS, true)) {
+            return $saved !== null || $existingInstall ? 'provider_default' : null;
+        }
+
+        if ($saved !== null || ! $existingInstall) {
+            return $saved;
+        }
+
+        $configured = trim((string) config(self::REASONING_CONFIG[$task], ''));
+
+        return $configured !== '' ? $configured : 'none';
+    }
+
+    private function defaultProvider(): string
+    {
+        return (string) config('ai.default', 'openai');
     }
 
     private function read(string $key): ?string
