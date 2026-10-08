@@ -785,3 +785,141 @@ test('admin bulk deletes the selected models after confirming', function (): voi
 
     expect(AiModelPrice::query()->pluck('id')->all())->toBe([$kept->id]);
 });
+
+test('the stat cards count the catalog and name the cheapest and priciest model', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'cheap-model', 'input_per_mtok' => 0.10, 'output_per_mtok' => 0.20]);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'pricey-model', 'input_per_mtok' => 15.00, 'output_per_mtok' => 60.00]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-price-stats]', 'Models priced')
+        ->assertSeeIn('[data-price-stats]', 'rows in this catalog')
+        ->assertSeeIn('[data-price-stats]', 'cheap-model')
+        ->assertSeeIn('[data-price-stats]', '$0.10 in /')
+        ->assertSeeIn('[data-price-stats]', '$0.20 out')
+        ->assertSeeIn('[data-price-stats]', 'pricey-model')
+        ->assertSeeIn('[data-price-stats]', '$15.00 in /')
+        ->assertSeeIn('[data-price-stats]', '$60.00 out');
+});
+
+test('an empty catalog says how to add the first price', function (): void {
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-price-stats] > div:nth-child(2)', 'No data')
+        ->assertSeeIn('[data-price-stats] > div:nth-child(3)', 'No data')
+        ->assertSeeIn('[data-prices-table]', 'No models priced yet. Click "Add model price".')
+        ->assertScript("document.querySelector('[data-select-all]').disabled", true);
+});
+
+test('the batch tier shows batch rates and flags rows without them', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'batch-model',
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 4.00,
+        'batch_input_per_mtok' => 0.50,
+        'batch_output_per_mtok' => 2.00,
+    ]);
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'no-batch-model',
+        'input_per_mtok' => 3.00,
+        'output_per_mtok' => 6.00,
+        'batch_input_per_mtok' => null,
+        'batch_output_per_mtok' => null,
+        'batch_cache_read_per_mtok' => null,
+        'batch_cache_write_per_mtok' => null,
+        'batch_reasoning_per_mtok' => null,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-price-row="batch-model"]', '$1.00')
+        ->click('button:has-text("Batch (50%)")')
+        ->assertSeeIn('[data-price-row="batch-model"]', '$0.50')
+        ->assertSeeIn('[data-price-row="batch-model"]', '$2.00')
+        ->assertSeeIn('[data-price-row="no-batch-model"]', 'no batch — showing standard')
+        ->assertSeeIn('[data-price-row="no-batch-model"]', '$3.00')
+        ->assertAttributeContains('[data-price-row="no-batch-model"]', 'class', 'opacity-50')
+        ->click('Standard')
+        ->assertDontSeeIn('[data-prices-table]', 'no batch — showing standard')
+        ->assertSeeIn('[data-price-row="batch-model"]', '$1.00');
+});
+
+test('only an http(s) source url turns the source pill into a link', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'linked-model',
+        'pricing_source' => PricingSource::ModelsDev,
+        'pricing_source_url' => 'https://models.dev/openai/linked-model',
+    ]);
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'unsafe-model',
+        'pricing_source' => PricingSource::ModelsDev,
+        'pricing_source_url' => 'javascript:alert(1)',
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->assertAttribute('[data-price-row="linked-model"] a', 'href', 'https://models.dev/openai/linked-model')
+        ->assertAttribute('[data-price-row="linked-model"] a', 'target', '_blank')
+        ->assertAttribute('[data-price-row="linked-model"] a', 'rel', 'noopener noreferrer')
+        ->assertScript("document.querySelector('[data-price-row=\"unsafe-model\"] a') === null", true)
+        ->assertSeeIn('[data-price-row="unsafe-model"] [data-price-source]', 'Models.dev');
+});
+
+test('the edit dialog assigns a free usage pool', function (): void {
+    $aiFreeUsagePool = AiFreeUsagePool::factory()->create(['name' => 'Gemini free tier']);
+    $aiModelPrice = AiModelPrice::factory()->create(['provider' => 'gemini', 'model' => 'gemini-3-flash']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-row="gemini-3-flash"] [data-price-edit]')
+        ->assertSeeIn('[data-edit-price-dialog]', 'Edit gemini / gemini-3-flash')
+        ->assertSeeIn('[data-edit-price-pool]', 'No pool')
+        ->click('[data-edit-price-pool]')
+        ->click('[role="option"]:has-text("Gemini free tier")')
+        ->click('[data-edit-price-dialog] button[type="submit"]')
+        ->assertSee('Model price updated.');
+
+    expect($aiModelPrice->fresh()->free_usage_pool_id)->toBe($aiFreeUsagePool->id);
+});
+
+test('reopening the edit dialog on another row shows the values of that row', function (): void {
+    $aiFreeUsagePool = AiFreeUsagePool::factory()->create(['name' => 'Gemini free tier']);
+    AiModelPrice::factory()->create([
+        'provider' => 'gemini',
+        'model' => 'first-model',
+        'free_usage_pool_id' => $aiFreeUsagePool->id,
+        'supports_reasoning' => true,
+        'reasoning_levels' => ['low'],
+        'is_price_locked' => false,
+    ]);
+    AiModelPrice::factory()->create([
+        'provider' => 'gemini',
+        'model' => 'second-model',
+        'supports_reasoning' => null,
+        'reasoning_levels' => null,
+        'is_price_locked' => false,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-row="first-model"] [data-price-edit]')
+        ->assertSeeIn('[data-edit-price-pool]', 'Gemini free tier')
+        ->assertSeeIn('[data-price-supports-reasoning]', 'Yes')
+        ->assertChecked('[data-price-reasoning-level="low"]')
+        ->assertMissing('input[name="automatic_updates_enabled"]')
+        ->click('On — kept in sync online')
+        ->assertPresent('input[name="automatic_updates_enabled"]')
+        ->keys('#edit_input', 'Escape')
+        ->assertMissing('[data-edit-price-dialog]')
+        ->click('[data-price-row="second-model"] [data-price-edit]')
+        ->assertSeeIn('[data-edit-price-dialog]', 'Edit gemini / second-model')
+        ->assertSeeIn('[data-edit-price-pool]', 'No pool')
+        ->assertSeeIn('[data-price-supports-reasoning]', 'Unknown')
+        ->assertNotChecked('[data-price-reasoning-level="low"]')
+        ->assertMissing('input[name="automatic_updates_enabled"]')
+        ->assertSee('On — kept in sync online');
+});

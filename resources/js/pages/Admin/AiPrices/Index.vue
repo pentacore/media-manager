@@ -589,7 +589,7 @@ const priciest = ref(
         </div>
 
         <!-- Stat cards -->
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 md:grid-cols-3" data-price-stats>
             <StatCard
                 label="Models priced"
                 :value="prices.length"
@@ -634,7 +634,10 @@ const priciest = ref(
         </div>
 
         <!-- Free usage pools -->
-        <div class="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            data-pools-card
+        >
             <div
                 class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
             >
@@ -738,6 +741,7 @@ const priciest = ref(
                                         variant="ghost"
                                         size="sm"
                                         class="h-7 px-2 text-xs"
+                                        data-pool-edit
                                         @click="startPoolEdit(pool)"
                                     >
                                         Edit
@@ -773,7 +777,7 @@ const priciest = ref(
             :open="editingPool !== null"
             @update:open="(v) => !v && cancelPoolEdit()"
         >
-            <DialogContent v-if="editingPool">
+            <DialogContent v-if="editingPool" data-edit-pool-dialog>
                 <DialogHeader>
                     <DialogTitle>Edit {{ editingPool.name }}</DialogTitle>
                 </DialogHeader>
@@ -1134,6 +1138,7 @@ const priciest = ref(
                                         variant="ghost"
                                         size="sm"
                                         class="h-7 px-2 text-xs"
+                                        data-price-edit
                                         @click="startEdit(price)"
                                     >
                                         Edit
@@ -1190,7 +1195,7 @@ const priciest = ref(
             :open="editing !== null"
             @update:open="(v) => !v && cancelEdit()"
         >
-            <DialogContent v-if="editing">
+            <DialogContent v-if="editing" data-edit-price-dialog>
                 <DialogHeader>
                     <DialogTitle>
                         Edit {{ editing.provider }} / {{ editing.model }}
@@ -1299,7 +1304,10 @@ const priciest = ref(
                                 id="edit_free_usage_pool_id"
                                 v-model="editPoolId"
                             >
-                                <SelectTrigger class="h-9 w-full text-sm">
+                                <SelectTrigger
+                                    class="h-9 w-full text-sm"
+                                    data-edit-price-pool
+                                >
                                     <SelectValue placeholder="No pool" />
                                 </SelectTrigger>
                                 <SelectContent>
