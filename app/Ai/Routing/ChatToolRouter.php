@@ -21,7 +21,7 @@ use Laravel\Ai\Storage\StoredMessage;
  */
 final readonly class ChatToolRouter
 {
-    private const float INCLUDE_AT = 0.5;
+    public const float INCLUDE_AT = 0.5;
 
     private const int PREVIOUS_REPLY_LIMIT = 1500;
 
@@ -51,6 +51,7 @@ final readonly class ChatToolRouter
             collect(ToolGroup::cases())
                 ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new Boolean($toolGroup->question())])
                 ->all(),
+            Classifier::CHAT_TIMEOUT_SECONDS,
         );
 
         if ($answers === null) {

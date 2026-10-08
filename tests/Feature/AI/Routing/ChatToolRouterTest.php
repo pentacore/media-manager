@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Classification\Classifier;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Tools\Arr\DeleteMediaTool;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\ClassificationPrompt;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
@@ -171,3 +173,12 @@ test('an approved workflow continuation keeps the full toolset without classifyi
 test('routing library changes loads the add options lookup and the release search', function (string $toolName): void {
     expect(ToolGroup::forToolName($toolName))->toBe([ToolGroup::LibraryChanges]);
 })->with(['GetMediaAddOptionsTool', 'SearchMediaReleasesTool']);
+
+test('chat routing classifies with the short chat timeout', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
+
+    resolve(ChatToolRouter::class)->route('why is my download stuck?', null);
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === Classifier::CHAT_TIMEOUT_SECONDS);
+});
