@@ -680,6 +680,7 @@ function formatTimestamp(value: string): string {
                 <a
                     :href="exportUrl"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                    data-usage-export
                 >
                     <Download class="size-3.5" />Export CSV
                 </a>
@@ -689,7 +690,7 @@ function formatTimestamp(value: string): string {
         <UnpricedModelWarning :models="props.unpricedModels" />
 
         <!-- Stat cards -->
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-usage-stats>
             <StatCard
                 label="Spend"
                 :value="formatCost(totals.total_cost)"
@@ -720,6 +721,7 @@ function formatTimestamp(value: string): string {
         <div
             v-if="props.free_pools.length > 0"
             class="overflow-hidden rounded-xl border border-border bg-card"
+            data-usage-free-pools
         >
             <div
                 class="flex items-center justify-between border-b border-border px-4 py-3"
@@ -738,6 +740,7 @@ function formatTimestamp(value: string): string {
                     v-for="pool in props.free_pools"
                     :key="pool.id"
                     class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[220px,1fr]"
+                    :data-usage-free-pool="pool.id"
                 >
                     <div>
                         <div class="text-[12.5px] font-medium">
@@ -812,6 +815,7 @@ function formatTimestamp(value: string): string {
         <div
             v-if="props.rate_limits.length > 0"
             class="overflow-hidden rounded-xl border border-border bg-card"
+            data-usage-rate-limits
         >
             <div
                 class="flex items-center justify-between border-b border-border px-4 py-3"
@@ -897,10 +901,14 @@ function formatTimestamp(value: string): string {
         </div>
 
         <!-- Scenario panel -->
-        <div class="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            data-usage-scenario
+        >
             <button
                 type="button"
                 class="flex w-full items-center justify-between border-b border-border px-4 py-3 hover:bg-bg-hover"
+                data-usage-scenario-toggle
                 @click="panelOpen = !panelOpen"
             >
                 <span class="flex items-center gap-2">
@@ -931,7 +939,10 @@ function formatTimestamp(value: string): string {
                                 )
                         "
                     >
-                        <SelectTrigger class="h-8 text-sm">
+                        <SelectTrigger
+                            class="h-8 text-sm"
+                            data-usage-scenario-load
+                        >
                             <SelectValue
                                 placeholder="Pick a priced model to copy its rates…"
                             />
@@ -987,6 +998,7 @@ function formatTimestamp(value: string): string {
                     <Button
                         size="sm"
                         class="h-7 text-xs"
+                        data-usage-scenario-apply
                         @click="applyScenario"
                     >
                         Apply
@@ -996,6 +1008,7 @@ function formatTimestamp(value: string): string {
                         size="sm"
                         variant="outline"
                         class="h-7 text-xs"
+                        data-usage-scenario-clear
                         @click="clearScenario"
                     >
                         Clear
@@ -1008,6 +1021,7 @@ function formatTimestamp(value: string): string {
         <div class="grid gap-4 lg:grid-cols-2">
             <div
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-usage-by-model
             >
                 <div
                     class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
@@ -1090,6 +1104,7 @@ function formatTimestamp(value: string): string {
 
             <div
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-usage-by-provider
             >
                 <div
                     class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
@@ -1251,7 +1266,10 @@ function formatTimestamp(value: string): string {
         </div>
 
         <!-- Recent calls ledger -->
-        <div class="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            data-usage-ledger
+        >
             <div
                 class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
             >
@@ -1394,7 +1412,10 @@ function formatTimestamp(value: string): string {
             :open="detail !== null || detailLoading || detailError !== null"
             @update:open="(v) => !v && closeDetail()"
         >
-            <DialogContent class="flex max-h-[85vh] max-w-3xl flex-col">
+            <DialogContent
+                class="flex max-h-[85vh] max-w-3xl flex-col"
+                data-usage-detail
+            >
                 <DialogHeader>
                     <DialogTitle>Invocation detail</DialogTitle>
                 </DialogHeader>
@@ -1540,6 +1561,7 @@ function formatTimestamp(value: string): string {
                     <!-- Pricing source banner -->
                     <div
                         class="flex items-center justify-between rounded-md border border-border bg-bg-elev px-3 py-2"
+                        data-usage-pricing
                     >
                         <div class="flex items-center gap-2 text-[12px]">
                             <span class="text-muted-foreground">Pricing:</span>
@@ -1568,6 +1590,7 @@ function formatTimestamp(value: string): string {
                     <!-- Cost breakdown -->
                     <div
                         class="overflow-hidden rounded-md border border-border"
+                        data-usage-breakdown
                     >
                         <div class="overflow-x-auto">
                             <table class="w-full border-collapse text-[12px]">
@@ -1775,6 +1798,7 @@ function formatTimestamp(value: string): string {
                             detail.record.price_source !== 'assigned'
                         "
                         class="rounded-md border border-border bg-card p-3"
+                        data-usage-assign
                     >
                         <div class="mb-2 flex items-center justify-between">
                             <Label
@@ -1798,7 +1822,10 @@ function formatTimestamp(value: string): string {
                                                 : '')
                                 "
                             >
-                                <SelectTrigger class="h-8 flex-1 text-xs">
+                                <SelectTrigger
+                                    class="h-8 flex-1 text-xs"
+                                    data-usage-assign-select
+                                >
                                     <SelectValue
                                         placeholder="Pick a catalog model…"
                                     />
@@ -1817,6 +1844,7 @@ function formatTimestamp(value: string): string {
                                 size="sm"
                                 class="h-8 text-xs"
                                 :disabled="!assignKey || assigning"
+                                data-usage-assign-submit
                                 @click="assignPrice"
                             >
                                 {{ assigning ? 'Assigning…' : 'Assign' }}
@@ -1830,6 +1858,7 @@ function formatTimestamp(value: string): string {
                         size="sm"
                         variant="outline"
                         class="h-7 text-xs"
+                        data-usage-detail-close
                         @click="closeDetail"
                     >
                         Close
