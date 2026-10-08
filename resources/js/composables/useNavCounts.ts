@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/vue3';
 import type { Ref } from 'vue';
-import { onMounted, onUnmounted, ref, watchEffect } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useCan } from '@/composables/useCan';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { useWebSocket } from '@/composables/useWebSocket';
@@ -40,7 +40,9 @@ const SESSION_EXPIRY_MS = 10 * 60 * 1000;
 
 /**
  * Live counters for the sidebar badges. Seeded from the `nav` shared prop and
- * kept current by three private channels.
+ * kept current by three private channels. `nav` is a lazy shared prop: full
+ * page visits (and prefetched ones) send a fresh object, partial reloads omit
+ * it and Inertia keeps the previous object.
  */
 export function useNavCounts(): NavCounts {
     const page = usePage();
@@ -87,15 +89,20 @@ export function useNavCounts(): NavCounts {
         }
     }
 
-    // Re-sync all counters whenever a fresh `nav` snapshot arrives (every
-    // navigation / partial reload shares it). The local ID sets only track
+    // Re-sync all counters when a fresh `nav` snapshot arrives. Watch the
+    // reference, not every page update: a partial reload keeps the previous
+    // `nav` object, and re-applying that older snapshot would undo the live
+    // deltas the channels below added since. The local ID sets only track
     // deltas observed since the previous snapshot, so they are cleared here —
     // keeping them would double-count events already baked into the server
     // numbers.
-    watchEffect(() => {
-        const nav = page.props.nav;
+    watch(
+        () => page.props.nav,
+        (nav) => {
+            if (!nav) {
+                return;
+            }
 
-        if (nav) {
             pendingActions.value = nav.pendingActions ?? 0;
             activeSessions.value = nav.activeSessions ?? 0;
             libraryIntervention.value = nav.libraryIntervention ?? 0;
@@ -106,8 +113,8 @@ export function useNavCounts(): NavCounts {
             recentSessionIds.clear();
             sessionTimestamps.clear();
             pendingIds.clear();
-        }
-    });
+        },
+    );
 
     onMounted(() => {
         channelLeases.push(
