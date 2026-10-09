@@ -247,3 +247,49 @@ test('a broadcast for an unlisted request, or without a result, changes nothing'
         ->assertSeeIn('[data-action-failure-uncertain]', 'Outcome unknown — check Sonarr before retrying.')
         ->assertNoSmoke();
 });
+
+test('a live failure after missed events replaces the old outcome with the new one', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->failed()->create();
+    Queue::fake([ExecuteActionRequest::class]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-action-failure-badge="%d"][data-action-failure-tone="danger"]', $actionRequest->id), 'Execution failed')
+        ->assertSeeIn('[data-action-failure-message]', 'Sonarr answered 404 Not Found.')
+        ->assertMissing('[data-action-failure-uncertain]');
+
+    // While the page's socket was down, the request was retried and failed
+    // again with an unknown outcome; only that last failure reaches the page.
+    $actionRequest->update([
+        'result' => [
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => 'The worker was lost mid-run, so whether the delete reached Sonarr is unknown.',
+            'exception' => ArrWriteUnconfirmed::class,
+            'indeterminate' => true,
+        ],
+    ]);
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', [
+        'id' => $actionRequest->id,
+        'status' => 'failed',
+        'result' => ['success' => false, 'reason' => 'needs_reconciliation', 'rejection_reason' => null],
+        'updated_at' => now()->toISOString(),
+    ]));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-action-failure-message]')?.innerText.includes('worker was lost') === true"));
+
+    $webpage->assertSeeIn(sprintf('[data-action-failure-badge="%d"][data-action-failure-tone="warn"]', $actionRequest->id), 'Needs reconciliation')
+        ->assertSeeIn('[data-action-failure-uncertain]', 'Outcome unknown — check Sonarr before retrying.')
+        ->assertSeeIn('[data-action-failure-message]', 'whether the delete reached Sonarr is unknown')
+        ->assertDontSeeIn('[data-action-failure]', 'Sonarr answered 404 Not Found.')
+        ->click('[data-action-retry]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Retry an action with an unknown outcome?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Failed);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});

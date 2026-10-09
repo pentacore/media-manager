@@ -245,8 +245,10 @@ function applyStatusChange(payload: StatusChangePayload): void {
     target.status = payload.status;
 
     // The broadcast carries only the member-safe result. An admin's failure
-    // message and outcome flag come with the server-rendered `requests`.
-    if (statusChanged && payload.status === 'failed' && isAdmin.value) {
+    // message and outcome flag come with the server-rendered `requests`, so
+    // every live failure reloads them: a same-status event may follow missed
+    // ones (a retry and a new failure) and carry a different outcome.
+    if (payload.status === 'failed' && isAdmin.value) {
         scheduleRequestsReload();
     }
 }
@@ -423,8 +425,14 @@ async function retry(row: ActionRequestRow): Promise<void> {
     if (isUncertainOutcome(row.result)) {
         const confirmed = await confirm(retryConfirmation(row));
 
-        // A live event may have moved the row on while the dialog was open.
-        if (!confirmed || row.status !== 'failed') {
+        // A live event may have moved the row on while the dialog was open,
+        // and a `requests` reload may have swapped the row object, so read
+        // the row the page lists now rather than the one clicked.
+        const current = visibleRequests.value.find(
+            (listed) => listed.id === row.id,
+        );
+
+        if (!confirmed || current?.status !== 'failed') {
             return;
         }
     }
@@ -552,6 +560,11 @@ function attemptVariant(status: string): PillVariant {
         default:
             return 'info';
     }
+}
+
+/** A failed row's badge: `warn` for an unknown outcome, `danger` otherwise. */
+function failureBadgeVariant(row: ActionRequestRow): PillVariant {
+    return isUncertainOutcome(row.result) ? 'warn' : 'danger';
 }
 
 function statusCount(id: string): number {
@@ -807,12 +820,11 @@ function pipelineState(
                                         <StatusPill :status="row.status" />
                                         <Pill
                                             v-if="row.status === 'failed'"
-                                            :variant="
-                                                isUncertainOutcome(row.result)
-                                                    ? 'warn'
-                                                    : 'danger'
-                                            "
+                                            :variant="failureBadgeVariant(row)"
                                             :data-action-failure-badge="row.id"
+                                            :data-action-failure-tone="
+                                                failureBadgeVariant(row)
+                                            "
                                         >
                                             {{ failureReasonLabel(row.result) }}
                                         </Pill>

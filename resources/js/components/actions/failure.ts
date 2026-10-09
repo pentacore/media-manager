@@ -100,8 +100,9 @@ export function retryConfirmation(
  * Folds a live ActionRequestStatusChanged result into a row's result. The
  * broadcast carries only the member-safe keys, so while the status is
  * unchanged it is merged over the existing result and an admin keeps the
- * message and outcome flag the page props brought. A new status means a new
- * result, which replaces the old one. A null result (a retry cleared it)
+ * message and outcome flag the page props brought. A new status or a new
+ * reason means a new result (events missed while the socket was down can hide
+ * a whole retry), which replaces the old one. A null result (a retry cleared it)
  * clears the row's; a payload without a result changes nothing unless the
  * status moved.
  */
@@ -118,7 +119,9 @@ export function mergeLiveResult(
         return null;
     }
 
-    return statusUnchanged && current !== null
+    return statusUnchanged &&
+        current !== null &&
+        failureReason(current) === failureReason(live)
         ? { ...current, ...live }
         : { ...live };
 }

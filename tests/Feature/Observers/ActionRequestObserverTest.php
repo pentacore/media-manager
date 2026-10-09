@@ -8,6 +8,7 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -136,9 +137,35 @@ test('stored metadata.result is narrowed to safe fields only', function (): void
     expect($log->metadata['result'])->toEqual([
         'success' => false,
         'reason' => 'retries_exhausted',
+        'rejection_reason' => null,
     ]);
     expect($log->metadata['result'])->not->toHaveKey('message');
     expect($log->metadata['result'])->not->toHaveKey('exception');
+});
+
+test('stored metadata.result is the member-safe result the browser reads', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+
+    $created = ActivityLog::where('action', 'action_request.created')
+        ->where('subject_id', $actionRequest->id)
+        ->sole();
+
+    $actionRequest->update([
+        'status' => ActionRequestStatus::Rejected,
+        'result' => ['success' => false, 'reason' => 'rejected', 'rejection_reason' => 'Not this one.', 'message' => 'internal'],
+    ]);
+
+    $rejected = ActivityLog::where('action', 'action_request.rejected')
+        ->where('subject_id', $actionRequest->id)
+        ->sole();
+
+    expect($created->metadata['result'])->toBeNull()
+        ->and($rejected->metadata['result'])->toEqual(resolve(ActionRequestBrowserPayload::class)->safeResult($actionRequest->fresh()))
+        ->and($rejected->metadata['result'])->toEqual([
+            'success' => false,
+            'reason' => 'rejected',
+            'rejection_reason' => 'Not this one.',
+        ]);
 });
 
 test('logs failed transition without a reason falls back to unknown', function (): void {

@@ -16,6 +16,13 @@ class UpstreamErrorText
     public const string AGENT_EMPTY_FALLBACK = 'The agent failed without a usable description.';
 
     /**
+     * The empty-message fallback for a queued action that failed on a local
+     * exception (an executor bug, a lost or timed-out job), not on a media
+     * service's answer.
+     */
+    public const string ACTION_EMPTY_FALLBACK = 'The action failed without a usable description.';
+
+    /**
      * Reduce an upstream error message to something safe to persist or log.
      *
      * Client exception messages embed whatever the remote service said, which

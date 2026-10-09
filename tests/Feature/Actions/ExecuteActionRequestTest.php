@@ -24,6 +24,7 @@ use App\Services\Seerr\SeerrActions;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
+use App\Support\UpstreamErrorText;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
@@ -523,6 +524,31 @@ test('the failed() hook stores a sanitized message', function (): void {
     expect($request->fresh()->result['reason'])->toBe('job_failed')
         ->and($request->fresh()->result['message'])->toContain('cURL error 7')
         ->and($request->fresh()->result['message'])->not->toContain('radarr-secret');
+});
+
+test('a local exception with no message is stored with the neutral action fallback, not the upstream one', function (): void {
+    $permanent = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+    $jobFailed = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new LogicException);
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($permanent)->handle();
+    new ExecuteActionRequest($jobFailed)->failed(new RuntimeException('   '));
+
+    expect($permanent->fresh()->result)
+        ->reason->toBe('execution_failed')
+        ->message->toBe(UpstreamErrorText::ACTION_EMPTY_FALLBACK)
+        ->and($jobFailed->fresh()->result)
+        ->reason->toBe('job_failed')
+        ->message->toBe(UpstreamErrorText::ACTION_EMPTY_FALLBACK);
 });
 
 test('a request pinned to a deleted connection fails with the pin message', function (): void {

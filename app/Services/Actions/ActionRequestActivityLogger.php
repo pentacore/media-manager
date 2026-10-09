@@ -13,8 +13,10 @@ use App\Models\ActivityLog;
  * (after commit); conditional query-builder transitions (the Executing claim,
  * the stuck reconcile) bypass observers and call statusChanged() themselves.
  */
-final class ActionRequestActivityLogger
+final readonly class ActionRequestActivityLogger
 {
+    public function __construct(private ActionRequestBrowserPayload $actionRequestBrowserPayload) {}
+
     public function created(ActionRequest $actionRequest): void
     {
         $this->writeLog($actionRequest, 'action_request.created', sprintf(
@@ -127,16 +129,6 @@ final class ActionRequestActivityLogger
     {
         $actionRequest->loadMissing('webhookEvent');
 
-        // Strip sensitive fields from the stored result payload (exception
-        // messages, stack traces). Full context stays on the ActionRequest
-        // itself; this metadata flows to the Recent Activity feed which is
-        // visible to members.
-        $result = $actionRequest->result ?? [];
-        $safeResult = [
-            'success' => $result['success'] ?? null,
-            'reason' => $result['reason'] ?? null,
-        ];
-
         ActivityLog::create([
             'user_id' => $actionRequest->approved_by,
             'service_connection_id' => $actionRequest->webhookEvent?->service_connection_id,
@@ -151,7 +143,9 @@ final class ActionRequestActivityLogger
                 'source_service' => $actionRequest->source_service,
                 'target_service' => $actionRequest->target_service,
                 'status' => $actionRequest->status->value,
-                'result' => $safeResult,
+                // The Recent Activity feed is visible to members, so it stores
+                // the member-safe result; the full one stays on the request.
+                'result' => $this->actionRequestBrowserPayload->safeResult($actionRequest),
                 ...$metadata,
             ],
         ]);
