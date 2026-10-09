@@ -8,13 +8,19 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\StuckImportDecider;
+use App\Ai\Decision\StuckImportDecision;
+use App\Ai\Decision\StuckImportResolver;
 use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AgentDecisionStatus;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
 use App\Enums\QueueLane;
+use App\Enums\ServiceType;
+use App\Enums\StuckImportChoice;
 use App\Models\ActionRequest;
 use App\Models\AgentDecision;
+use App\Models\ClassificationOutcome;
 use App\Models\WebhookEvent;
 use App\Notifications\DecisionAgentActed;
 use App\Providers\AIServiceProvider;
@@ -100,6 +106,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         AiSettings $aiSettings,
         Classifier $classifier,
         ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+        StuckImportDecider $stuckImportDecider,
+        StuckImportResolver $stuckImportResolver,
     ): void {
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
@@ -167,6 +175,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
+            if ($this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder)) {
+                return;
+            }
+
             $response = (new DecisionAgent)->prompt($this->buildPrompt());
             $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
         } catch (Throwable $throwable) {
@@ -192,6 +204,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->resolveGateOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->resolveActionKindOutcome($decisionRunContext, $classificationOutcomeRecorder);
+        $this->resolveFallbackAgreement($decisionRunContext, $classificationOutcomeRecorder);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
     }
 
@@ -389,6 +402,125 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $this->outcomeSubjectKey(),
             count(array_unique($kinds)) === 1 ? (string) $kinds[0] : 'mixed',
             [ClassificationVerdict::Scoped, ClassificationVerdict::Unscoped],
+        );
+    }
+
+    /**
+     * Stuck imports first ask the classifier. A confident import or removal
+     * is queued through the same rails the agent's tools use, and a confident
+     * "manual" is recorded for a human, all without an agent run. Anything
+     * else — fast path off, no download id, no or unconfident answer, a
+     * failed lookup or dispatch — returns false and the agent runs as before.
+     */
+    private function resolvedByFastPath(
+        ?int $webhookEventId,
+        DecisionRunContext $decisionRunContext,
+        AiSettings $aiSettings,
+        DecisionAgentSettings $decisionAgentSettings,
+        StuckImportDecider $stuckImportDecider,
+        StuckImportResolver $stuckImportResolver,
+        ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+    ): bool {
+        $service = mb_strtolower($this->service);
+        $downloadId = $decisionRunContext->eventDownloadId();
+
+        if ($this->eventType !== 'ManualInteractionRequired'
+            || ! $aiSettings->stuckImportFastPathEnabled()
+            || $downloadId === null
+            || ! in_array($service, ['sonarr', 'radarr'], true)) {
+            return false;
+        }
+
+        if (! $decisionAgentSettings->allowManualImport()) {
+            $this->record($webhookEventId, AgentDecisionStatus::NoAction, 'Manual-import resolution is disabled in Decision Agent settings, so the stuck download was left for a human.', $decisionRunContext);
+
+            return true;
+        }
+
+        try {
+            $connection = $decisionRunContext->resolveConnection($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
+        } catch (Throwable) {
+            return false;
+        }
+
+        $stuckImportDecision = $stuckImportDecider->decide($connection, $service, $downloadId);
+
+        if (! $stuckImportDecision instanceof StuckImportDecision) {
+            return false;
+        }
+
+        $subjectKey = ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId));
+        $threshold = $aiSettings->stuckImportThreshold();
+
+        if (! $stuckImportDecision->isConfident) {
+            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
+
+            return false;
+        }
+
+        $result = match ($stuckImportDecision->choice) {
+            StuckImportChoice::Import => $stuckImportResolver->import($decisionRunContext, $service, $downloadId),
+            StuckImportChoice::Remove => $stuckImportResolver->remove($decisionRunContext, $service, $downloadId, $stuckImportDecision->reason(), $stuckImportDecision->blocklist, $stuckImportDecision->searchReplacement),
+            StuckImportChoice::Manual => ['queued' => false, 'reason' => 'manual'],
+        };
+
+        $reason = $result['reason'] ?? null;
+
+        if (in_array($reason, ['lookup_failed', 'dispatch_failed'], true)) {
+            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
+
+            return false;
+        }
+
+        $verdictLine = sprintf(
+            'Resolved by the classifier: %s, %d%% likely (threshold %d%%).',
+            $stuckImportDecision->choice->label(),
+            (int) round($stuckImportDecision->probability * 100),
+            (int) round($threshold * 100),
+        );
+
+        if ($reason === 'no_action_type_config') {
+            $this->record($webhookEventId, AgentDecisionStatus::NoAction, sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? '')), $decisionRunContext);
+
+            return true;
+        }
+
+        $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
+
+        $summary = ($result['queued'] ?? false) === true
+            ? sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? ''))
+            : sprintf('Resolved by the classifier: needs a human (%d%% likely). A human must resolve this stuck download in Sonarr/Radarr.', (int) round($stuckImportDecision->probability * 100));
+
+        $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
+        $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+
+        return true;
+    }
+
+    /**
+     * After an unconfident fast-path call fell back to the agent, compare
+     * the classifier's prediction with what the agent actually queued.
+     */
+    private function resolveFallbackAgreement(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        $downloadId = $decisionRunContext->eventDownloadId();
+
+        if ($this->eventType !== 'ManualInteractionRequired' || $downloadId === null) {
+            return;
+        }
+
+        $types = ActionRequest::query()->whereKey($decisionRunContext->actionRequestIds())->pluck('type')->all();
+        $actual = match (true) {
+            in_array('resolve_manual_import', $types, true) => StuckImportChoice::Import->value,
+            in_array('remove_stuck_download', $types, true) => StuckImportChoice::Remove->value,
+            default => StuckImportChoice::Manual->value,
+        };
+
+        $classificationOutcomeRecorder->resolveAgainst(
+            ClassificationGate::StuckImport,
+            ClassificationOutcome::subjectKey('download', sprintf('%s:%s', mb_strtolower($this->service), $downloadId)),
+            $actual,
+            [ClassificationVerdict::Fallback],
         );
     }
 
