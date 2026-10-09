@@ -1,23 +1,48 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+export interface BarChartPoint {
+    label: string;
+    value: number;
+    /**
+     * Renders a muted, dashed placeholder bar instead of plotting `value` —
+     * for a data point with nothing resolved yet, where a 0-height bar would
+     * read as a confirmed zero rather than "no data".
+     */
+    placeholder?: boolean;
+    /** Overrides the bar's hover tooltip; defaults to "label: value". */
+    tooltip?: string;
+}
+
 const props = withDefaults(
     defineProps<{
-        data: Array<{ label: string; value: number }>;
+        data: Array<BarChartPoint>;
         height?: number;
         markerAt?: number | null;
+        /**
+         * Scale every bar against this value instead of the tallest bar in
+         * `data`. Use it for charts whose values share a fixed scale (e.g.
+         * percentages out of 100) so an empty band doesn't look identical to
+         * a full one.
+         */
+        max?: number | null;
     }>(),
     {
         height: 120,
         markerAt: null,
+        max: null,
     },
 );
 
-const max = computed(() =>
-    props.data.reduce((acc, point) => Math.max(acc, point.value), 0),
+const scaleMax = computed(
+    () =>
+        props.max ??
+        props.data.reduce((acc, point) => Math.max(acc, point.value), 0),
 );
 
 const showLabels = computed(() => props.data.length <= 20);
+
+const PLACEHOLDER_HEIGHT_PCT = 6;
 
 const bars = computed(() => {
     const count = props.data.length;
@@ -31,13 +56,17 @@ const bars = computed(() => {
     const barWidth = Math.max(slot - gap, 0.5);
 
     return props.data.map((point, index) => {
-        const ratio = max.value > 0 ? point.value / max.value : 0;
-        const heightPct = ratio * 100;
+        const ratio = scaleMax.value > 0 ? point.value / scaleMax.value : 0;
+        const heightPct = point.placeholder
+            ? PLACEHOLDER_HEIGHT_PCT
+            : Math.min(ratio * 100, 100);
 
         return {
             key: `${point.label}-${index}`,
             label: point.label,
             value: point.value,
+            placeholder: point.placeholder ?? false,
+            tooltip: point.tooltip ?? `${point.label}: ${point.value}`,
             x: index * slot + gap / 2,
             width: barWidth,
             y: 100 - heightPct,
@@ -65,9 +94,13 @@ const bars = computed(() => {
                 :width="bar.width"
                 :height="bar.height"
                 rx="0.6"
-                class="fill-accent/70 transition-colors hover:fill-accent"
+                :class="
+                    bar.placeholder
+                        ? 'fill-none stroke-muted-foreground/50 stroke-[1.5] [stroke-dasharray:2,1.5]'
+                        : 'fill-accent/70 transition-colors hover:fill-accent'
+                "
             >
-                <title>{{ bar.label }}: {{ bar.value }}</title>
+                <title>{{ bar.tooltip }}</title>
             </rect>
             <line
                 v-if="markerAt !== null && markerAt !== undefined"

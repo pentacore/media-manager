@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BarChart } from '@/components/mm';
+import type { BarChartPoint } from '@/components/mm/BarChart.vue';
 
 export interface GateBand {
     label: string;
@@ -27,14 +28,23 @@ function percent(value: number): string {
     return `${Math.round(value * 100)}%`;
 }
 
-function bars(gate: GateSummary): Array<{ label: string; value: number }> {
+function bars(gate: GateSummary): BarChartPoint[] {
     return gate.bands.map((band) => ({
-        label: `${band.label} · ${band.count} event(s)`,
+        label: band.label,
         value:
             band.positive_rate === null
                 ? 0
                 : Math.round(band.positive_rate * 100),
+        placeholder: band.resolved === 0,
+        tooltip:
+            band.resolved === 0
+                ? `${band.label}: no resolved events yet (${band.count} event(s))`
+                : `${band.label}: ${percent(band.positive_rate ?? 0)} positive, ${band.resolved} of ${band.count} event(s) resolved`,
     }));
+}
+
+function countLabel(band: GateBand): string {
+    return band.resolved === 0 ? '–' : String(band.count);
 }
 
 function summaryLine(gate: GateSummary): string {
@@ -97,7 +107,20 @@ function summaryLine(gate: GateSummary): string {
                     :data="bars(gate)"
                     :height="90"
                     :marker-at="gate.threshold"
+                    :max="100"
                 />
+                <div
+                    class="flex justify-between text-[10px] text-muted-foreground tabular-nums"
+                    data-gate-counts
+                >
+                    <span
+                        v-for="band in gate.bands"
+                        :key="`count-${gate.gate}-${band.label}`"
+                        class="flex-1 text-center"
+                    >
+                        {{ countLabel(band) }}
+                    </span>
+                </div>
                 <p
                     class="text-[11.5px] text-muted-foreground"
                     data-gate-summary
