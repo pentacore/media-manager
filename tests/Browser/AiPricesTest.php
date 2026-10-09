@@ -923,3 +923,23 @@ test('reopening the edit dialog on another row shows the values of that row', fu
         ->assertMissing('input[name="automatic_updates_enabled"]')
         ->assertSee('On — kept in sync online');
 });
+
+test('reopening the edit dialog on the same row discards an unsaved local change', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'gemini',
+        'model' => 'reopened-model',
+        'is_price_locked' => false,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-row="reopened-model"] [data-price-edit]')
+        ->assertMissing('input[name="automatic_updates_enabled"]')
+        ->click('On — kept in sync online')
+        ->assertPresent('input[name="automatic_updates_enabled"]')
+        ->keys('#edit_input', 'Escape')
+        ->assertMissing('[data-edit-price-dialog]')
+        ->click('[data-price-row="reopened-model"] [data-price-edit]')
+        ->assertSeeIn('[data-edit-price-dialog]', 'Edit gemini / reopened-model')
+        ->assertMissing('input[name="automatic_updates_enabled"]');
+});

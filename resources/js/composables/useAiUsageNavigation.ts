@@ -6,7 +6,7 @@ import type {
     ScenarioRates,
     TierFilter,
     WindowKey,
-} from '@/components/ai-usage/types';
+} from '@/components/ai-usage';
 import type { QueryParams } from '@/wayfinder';
 
 export type AiUsageFilterState = {
@@ -29,8 +29,6 @@ export type UseAiUsageNavigationReturn = {
  * The AI usage page's visits: switching the time window, kind or tier filter,
  * applying or clearing a what-if scenario, and the CSV export URL. Each keeps
  * the filters it does not change. `state` reads the page's current props.
- * Imports the feature types by file path, not through the `ai-usage` barrel,
- * so the composable never pulls the components in.
  */
 export function useAiUsageNavigation(
     state: () => AiUsageFilterState,

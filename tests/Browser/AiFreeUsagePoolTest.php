@@ -23,6 +23,32 @@ test('admin can create a free usage pool from the AI prices page', function (): 
     expect(AiFreeUsagePool::query()->where('name', 'Gemini free tier')->exists())->toBeTrue();
 });
 
+test('a new pool can switch its reset period and its split/unified budget mode before saving', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('Add pool')
+        ->fill('name', 'Shared budget tier')
+        ->assertVisible('#pool_free_input')
+        ->assertMissing('#pool_free_total')
+        ->click('[data-slot="select-trigger"]:has-text("Monthly")')
+        ->click('[role="option"]:has-text("Weekly")')
+        ->click('#pool_unified')
+        ->assertMissing('#pool_free_input')
+        ->fill('#pool_free_total', '500000')
+        ->click('Save')
+        ->assertSee('Free usage pool added.');
+
+    $aiFreeUsagePool = AiFreeUsagePool::query()->where('name', 'Shared budget tier')->sole();
+
+    expect($aiFreeUsagePool->period)->toBe(FreeUsagePeriod::Weekly)
+        ->and($aiFreeUsagePool->unified)->toBeTrue()
+        ->and($aiFreeUsagePool->free_total_tokens)->toBe(500000);
+});
+
 test('the pools table lists each pool with its period, budget, members and docs link', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     $splitPool = AiFreeUsagePool::factory()->create([

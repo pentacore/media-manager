@@ -47,17 +47,7 @@ export interface PriceRow {
     search_unit_per_k: string;
     batch_search_unit_per_k: string | null;
     free_usage_pool_id: number | null;
-    pricing_source:
-        | 'seed'
-        | 'models_dev'
-        | 'first_party'
-        | 'manual'
-        | 'legacy'
-        | 'openrouter'
-        | 'litellm'
-        | 'xai_api'
-        | 'feed_consensus'
-        | null;
+    pricing_source: PricingSourceKey | null;
     pricing_source_url: string | null;
     pricing_source_updated_at: string | null;
     pricing_synced_at: string | null;

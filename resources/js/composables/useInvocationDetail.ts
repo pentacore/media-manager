@@ -2,10 +2,7 @@ import { router } from '@inertiajs/vue3';
 import type { Ref } from 'vue';
 import { ref } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
-import type {
-    InvocationDetail,
-    ScenarioRates,
-} from '@/components/ai-usage/types';
+import type { InvocationDetail, ScenarioRates } from '@/components/ai-usage';
 
 export type UseInvocationDetailReturn = {
     detail: Ref<InvocationDetail | null>;
