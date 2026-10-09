@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrRequestLock;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -672,19 +673,20 @@ test('admin can fetch edit options for a TV request from Sonarr', function (): v
         ->assertJsonPath('root_folders.0.path', '/tv');
 });
 
-test("edit options say so when no active arr serves the request's media type", function (array $request): void {
+test("edit options say so when no active arr serves the request's media type", function (array $request, string $message): void {
     ServiceConnection::factory()->radarr()->inactive()->create(['url' => 'http://radarr.local:7878']);
     Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response(['id' => 42, ...$request])]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->getJson(route('media.requests.edit-options', 42))
         ->assertUnprocessable()
-        ->assertJsonPath('error', 'no_arr_for_media_type');
+        ->assertJsonPath('error', 'no_arr_for_media_type')
+        ->assertJsonPath('message', $message);
 
     Http::assertNotSent(fn ($sent): bool => str_contains($sent->url(), 'radarr'));
 })->with([
-    'a movie with Radarr deactivated' => [['media' => ['id' => 100, 'mediaType' => 'movie']]],
-    'an unknown media type' => [['type' => 'music']],
+    'a movie with Radarr deactivated' => [['media' => ['id' => 100, 'mediaType' => 'movie']], 'No active Radarr connection configured.'],
+    'an unknown media type' => [['type' => 'music'], 'Only TV and movie requests have a quality profile and root folder to edit.'],
 ]);
 
 test('admin can update a request and the PUT carries the merged body', function (): void {
@@ -794,6 +796,69 @@ test('bulk clear queues the deletes instead of running them in the request', fun
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
 });
 
+test('a second bulk clear while one is still running queues nothing and says so', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    $admin = User::factory()->admin()->create();
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 2],
+            'results' => [
+                ['id' => 11, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 1]],
+                ['id' => 22, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 2]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertSessionHas('inertia.flash_data.toast.message', fn (string $message): bool => str_contains($message, 'Clearing 2 available'));
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Already clearing available requests. Use Sync Seerr once it finishes to see the result.');
+
+    Queue::assertPushed(ClearSeerrRequests::class, 1);
+});
+
+test('a clear running for one status does not block another status', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 1],
+            'results' => [['id' => 33, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 3]]],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'completed'])
+        ->assertRedirect(route('media.requests.index', ['status' => 'completed']));
+
+    Queue::assertPushed(ClearSeerrRequests::class, fn (ClearSeerrRequests $clearSeerrRequests): bool => $clearSeerrRequests->status === 'completed');
+});
+
+test('a clear that finds nothing or cannot list the requests frees its slot', function (Closure $fakeSeerr): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    Sleep::fake();
+    $fakeSeerr();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertRedirect(route('media.requests.index'));
+
+    Queue::assertNotPushed(ClearSeerrRequests::class);
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+})->with([
+    'nothing to clear' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 0, 'pageSize' => 100, 'results' => 0], 'results' => []])])],
+    'Seerr down' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('boom', 503)])],
+]);
+
 test('bulk-clear declined uses local status filter', function (): void {
     $admin = User::factory()->admin()->create();
 
@@ -856,19 +921,25 @@ test('requests page prefers external_url for connection link', function (): void
         );
 });
 
-test('edit options never echo the Seerr or arr response', function (): void {
+test('edit options never echo the Seerr response', function (): void {
     Sleep::fake();
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sonarr-key']);
     $admin = User::factory()->admin()->create();
 
     Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response('Cannot open /app/config/db/db.sqlite3', 500)]);
 
-    expect($this->actingAs($admin)->getJson(route('media.requests.edit-options', 42))->assertStatus(502)->json('error'))
+    $testResponse = $this->actingAs($admin)
+        ->getJson(route('media.requests.edit-options', 42))
+        ->assertStatus(502)
+        ->assertJsonPath('error', 'seerr_unreachable');
+
+    expect($testResponse->json('message'))
+        ->toStartWith('Seerr could not load this request: ')
         ->toContain('[redacted path]')
         ->not->toContain('/app/config');
 });
 
-test('edit options report an arr failure without its paths', function (): void {
+test('edit options report an arr failure in words, without its paths', function (): void {
     Sleep::fake();
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sonarr-key']);
 
@@ -877,8 +948,13 @@ test('edit options report an arr failure without its paths', function (): void {
         'sonarr.local:8989/api/v3/qualityprofile' => Http::response('Database at /config/sonarr.db is locked', 500),
     ]);
 
-    expect($this->actingAs(User::factory()->admin()->create())->getJson(route('media.requests.edit-options', 42))->assertStatus(502)->json('error'))
-        ->toStartWith('arr_unreachable: ')
+    $testResponse = $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('media.requests.edit-options', 42))
+        ->assertStatus(502)
+        ->assertJsonPath('error', 'arr_unreachable');
+
+    expect($testResponse->json('message'))
+        ->toStartWith('Sonarr could not list its quality profiles and root folders: ')
         ->not->toContain('/config/sonarr.db');
 });
 

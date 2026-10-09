@@ -34,3 +34,6 @@ Each `*WebhookHandler` lists, in `private const array CACHE_CLEARING_EVENTS`, th
 
 ## The Prowlarr release cache is written only for admins
 `IndexerReleaseCache::remember()` stores each search row's guid so a later grab can only target a release MediaManager showed. Only admins can grab (`prowlarr.grab` is `can:admin`), so `SearchIndexersController` calls `remember()` for admins and `present()` for everyone else — the same display allowlist with `key` and `indexer_id` null and nothing written. A new caller that shows Prowlarr releases follows the same split.
+
+## The Seerr bulk clear claims a slot before it queues
+`RequestController::clear()` calls `SeerrClearInFlight::claim($connectionId, $status)` (an atomic `Cache::add()`, TTL 660 s) before it lists or queues anything, and answers an info toast ("Already clearing …") when the slot is taken, because `ClearSeerrRequests`' `ShouldBeUnique` would otherwise drop the second dispatch behind a success toast. Every early return after the claim releases it; the job releases it in `handle()`'s `finally` and in `failed()`. Keep the TTL above the job's `#[UniqueFor]`, so a crashed worker can only delay the next clear, never let one be dropped silently. A new queued bulk operation guarded by `ShouldBeUnique` that reports success to the user follows the same claim-before-dispatch shape.

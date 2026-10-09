@@ -6,6 +6,7 @@ use App\Jobs\ClearSeerrRequests;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrClearInFlight;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 
@@ -63,4 +64,31 @@ test('it does nothing for a deactivated connection', function (): void {
 
     Http::assertNothingSent();
     expect(ActivityLog::query()->where('action', 'seerr.requests_cleared')->exists())->toBeFalse();
+});
+
+test('it frees the clear slot when it finishes', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/request/*' => Http::response(['ok' => true])]);
+    SeerrClearInFlight::claim($this->connection->id, 'available');
+
+    new ClearSeerrRequests($this->connection->id, 'available', [11], null)->handle();
+
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+});
+
+test('it frees the clear slot even when it bails out early', function (): void {
+    $this->connection->update(['is_active' => false]);
+    SeerrClearInFlight::claim($this->connection->id, 'available');
+
+    new ClearSeerrRequests($this->connection->id, 'available', [11], null)->handle();
+
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+    Http::assertNothingSent();
+});
+
+test('it frees the clear slot when the worker gives up on it', function (): void {
+    SeerrClearInFlight::claim($this->connection->id, 'failed');
+
+    new ClearSeerrRequests($this->connection->id, 'failed', [11], null)->failed(new RuntimeException('Timed out.'));
+
+    expect(SeerrClearInFlight::claim($this->connection->id, 'failed'))->toBeTrue();
 });

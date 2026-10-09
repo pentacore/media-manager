@@ -53,6 +53,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { jsonRequest } from '@/lib/http';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -362,24 +363,16 @@ function openEdit(req: SeerrRequest): void {
     editProfileId.value = '';
     editRootFolder.value = '';
 
-    fetch(RequestController.editOptions.url(req.id), {
-        headers: { Accept: 'application/json' },
-        credentials: 'same-origin',
-    })
-        .then(async (response) => {
-            const body = (await response.json()) as
-                EditOptions | { error: string };
+    // The dialog may have closed or moved to another request by the time
+    // the answer lands; compare ids (the ref holds a reactive proxy).
+    const stillEditing = (): boolean => editingRequest.value?.id === req.id;
 
-            if (!response.ok) {
-                editError.value =
-                    'error' in body
-                        ? body.error
-                        : `Request failed (${response.status})`;
-
+    jsonRequest<EditOptions>('GET', RequestController.editOptions.url(req.id))
+        .then((opts) => {
+            if (!stillEditing()) {
                 return;
             }
 
-            const opts = body as EditOptions;
             editOptions.value = opts;
             editProfileId.value =
                 opts.current.profile_id !== null
@@ -388,11 +381,19 @@ function openEdit(req: SeerrRequest): void {
             editRootFolder.value = opts.current.root_folder ?? '';
         })
         .catch((error: unknown) => {
+            if (!stillEditing()) {
+                return;
+            }
+
             editError.value =
-                error instanceof Error ? error.message : 'Network error';
+                error instanceof Error
+                    ? error.message
+                    : 'Could not load the edit options.';
         })
         .finally(() => {
-            editLoading.value = false;
+            if (stillEditing()) {
+                editLoading.value = false;
+            }
         });
 }
 
@@ -732,6 +733,7 @@ const rangeText = computed(() => {
                             type="button"
                             class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Edit profile / root folder"
+                            data-request-edit
                             @click="openEdit(req)"
                         >
                             <Pencil class="size-3.5" />
@@ -830,6 +832,7 @@ const rangeText = computed(() => {
                 <div
                     v-else-if="editError"
                     class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                    data-request-edit-error
                 >
                     {{ editError }}
                 </div>

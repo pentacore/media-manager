@@ -9,6 +9,7 @@ use App\Enums\QueueLane;
 use App\Enums\ServiceType;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
+use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrClient;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,6 +21,7 @@ use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Bulk-deletes Seerr requests picked on the Requests page (up to 500), one
@@ -27,7 +29,9 @@ use Illuminate\Support\Facades\Log;
  * so a dead server cannot pin the worker for the whole list, then records
  * the outcome in the activity feed. Runs on the maintenance lane (drained by
  * the queue-ai worker): up to 500 sequential HTTP calls would otherwise pin
- * the general worker behind webhooks and approved actions.
+ * the general worker behind webhooks and approved actions. The Requests
+ * page claims SeerrClearInFlight before queueing this job; handle() and
+ * failed() release it.
  */
 #[Queue(QueueLane::Maintenance)]
 #[UniqueFor(600)]
@@ -55,6 +59,24 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
     }
 
     public function handle(): void
+    {
+        try {
+            $this->deleteRequests();
+        } finally {
+            SeerrClearInFlight::release($this->serviceConnectionId, $this->status);
+        }
+    }
+
+    /**
+     * The worker gave up (a timeout) without finishing handle(): free the
+     * slot so the Requests page can start another clear.
+     */
+    public function failed(?Throwable $throwable): void
+    {
+        SeerrClearInFlight::release($this->serviceConnectionId, $this->status);
+    }
+
+    private function deleteRequests(): void
     {
         $connection = ServiceConnection::query()->find($this->serviceConnectionId);
 
