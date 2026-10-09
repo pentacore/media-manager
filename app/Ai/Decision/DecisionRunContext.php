@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
@@ -37,6 +38,9 @@ class DecisionRunContext
      * $eventPayload/$originConnectionId, so the approval-card reason still
      * names the event when the WebhookEvent row is gone.
      *
+     * $actionKind is the action kind the gate scoped this run to, or null for
+     * the full toolset.
+     *
      * @param  array<string, mixed>  $eventPayload
      */
     public function __construct(
@@ -46,6 +50,7 @@ class DecisionRunContext
         public readonly array $eventPayload = [],
         public readonly ?int $originConnectionId = null,
         public readonly ?string $eventType = null,
+        public readonly ?DecisionActionKind $actionKind = null,
     ) {}
 
     /**
@@ -168,5 +173,31 @@ class DecisionRunContext
     public function actedCount(): int
     {
         return count(array_filter($this->queued, static fn (array $row): bool => ! $row['requires_approval']));
+    }
+
+    /**
+     * Whether this run loads only its action kind's tools.
+     */
+    public function isScoped(): bool
+    {
+        return $this->actionKind instanceof DecisionActionKind && $this->actionKind !== DecisionActionKind::Other;
+    }
+
+    /**
+     * The declared tools this run may use: the core plus the action kind's
+     * tools when scoped, every declared tool otherwise.
+     *
+     * @param  array<int, object>  $tools
+     * @return array<int, object>
+     */
+    public function scopeTools(array $tools): array
+    {
+        if (! $this->isScoped()) {
+            return $tools;
+        }
+
+        $allowed = [...DecisionActionKind::coreTools(), ...($this->actionKind?->toolClasses() ?? [])];
+
+        return array_values(array_filter($tools, static fn (object $tool): bool => in_array($tool::class, $allowed, true)));
     }
 }

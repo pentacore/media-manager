@@ -76,3 +76,27 @@ test('admin can switch the reranking provider and model', function (): void {
     expect($aiSettings->rerankingProvider())->toBe('jina')
         ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3');
 });
+
+test('admin can switch on the stuck-import fast path and tool scoping', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-settings.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-stuck-import-toggle]', 'Disabled')
+        ->assertSeeIn('[data-decision-tool-scoping-toggle]', 'Disabled')
+        ->click('[data-stuck-import-toggle]')
+        ->click('[data-decision-tool-scoping-toggle]')
+        ->clear('#stuck_import_threshold')
+        ->type('#stuck_import_threshold', '0.9')
+        ->click('Save settings')
+        ->assertSee('AI settings updated.')
+        ->assertSeeIn('[data-stuck-import-toggle]', 'Enabled')
+        ->assertSeeIn('[data-decision-tool-scoping-toggle]', 'Enabled');
+
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->stuckImportFastPathEnabled())->toBeTrue()
+        ->and($aiSettings->decisionToolScopingEnabled())->toBeTrue()
+        ->and($aiSettings->stuckImportThreshold())->toBe(0.9)
+        ->and($aiSettings->classificationAuditSampleRate())->toBe(0.05);
+});

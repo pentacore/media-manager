@@ -53,4 +53,13 @@ class AgentDecisionFactory extends Factory
             'summary' => 'Skipped by the classification gate: 10% likely to need action (threshold 30%).',
         ]);
     }
+
+    public function resolvedByClassifier(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => AgentDecisionStatus::ResolvedByClassifier,
+            'summary' => 'Resolved by the classifier: import, 95% likely (threshold 85%). Import queued and will auto-run.',
+            'actions_count' => 0,
+        ]);
+    }
 }

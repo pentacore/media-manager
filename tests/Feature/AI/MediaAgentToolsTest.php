@@ -8,7 +8,9 @@ use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
+use App\Ai\Tools\Arr\StuckImportVerdictTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
+use App\Settings\AiSettings;
 
 test('media agent delegates stuck-download investigation and keeps the acting tools', function (): void {
     $tools = collect((new MediaAgent)->tools())->map(fn (object $tool): string => $tool::class);
@@ -33,4 +35,14 @@ test('media agent instructions cover the stuck-download triage flow', function (
     expect($instructions)->toContain('InvestigateStuckDownload')
         ->toContain('ResolveManualImportChatTool')
         ->toContain('RemoveStuckDownloadChatTool');
+});
+
+test('media agent offers the stuck-import verdict tool only while the fast path is on', function (): void {
+    $tools = fn (): array => collect((new MediaAgent)->tools())->map(fn (object $tool): string => $tool::class)->all();
+
+    expect($tools())->not->toContain(StuckImportVerdictTool::class);
+
+    resolve(AiSettings::class)->setStuckImportFastPathEnabled(true);
+
+    expect($tools())->toContain(StuckImportVerdictTool::class);
 });

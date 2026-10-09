@@ -73,9 +73,28 @@ class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTool
             : DecisionAgentSettings::eventKey($decisionRunContext->sourceService, $decisionRunContext->eventType);
     }
 
+    /**
+     * The stuck-import workflow section of the prompt. Dropped for a scoped
+     * run: a confidently-classified action kind is never the stuck-import
+     * fast path (that path always bypasses classification), so the section
+     * is dead weight that only spends context.
+     */
+    private const string STUCK_IMPORTS_SECTION = <<<'PROMPT'
+STUCK IMPORTS (ManualInteractionRequired)
+For a Sonarr/Radarr "manual interaction required" event, decide what to do by reading the actual import rejections — do NOT use ProposeActionTool for these.
+1. Call InspectStuckImportTool (service + download_id from the payload). It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
+2. Read the rejections and choose:
+   - The files map and there are no rejections, OR the only obstacle is a benign "we know what it is but won't auto-import" reason — e.g. "matched by series id" / "automatic import is not possible" → IMPORT it with ResolveManualImportTool.
+   - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade. Pass blocklist=true only when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; leave it off for a plain non-upgrade. Pass search_replacement=true when a replacement should be grabbed (e.g. blocklisted a bad release but the content is still wanted); leave it false when the content shouldn't be retried.
+   - Nothing maps (unknown series/episode, unparseable) → take no action; explain a human must resolve it in Sonarr/Radarr.
+   - Anything you are unsure about, or a mix of the above → import via ResolveManualImportTool (it will be queued for human approval) rather than guessing, or explain and propose nothing.
+3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its action rule allows it.
+- If a tool returns reason: 'capability_disabled', manual-import resolution is turned off — say so in your summary; do not try other destructive actions as a workaround.
+PROMPT;
+
     public function instructions(): Stringable|string
     {
-        return <<<'PROMPT'
+        $head = <<<'PROMPT'
 You are DecisionAgent, an autonomous operator for a self-hosted media stack (Sonarr, Radarr, Emby, Seerr, Prowlarr).
 
 You are invoked once per inbound webhook event. Your job: decide whether the event warrants any action, and if so, propose it. You are NOT talking to a human in real time — there is no one to ask follow-up questions. Reason from the event payload and the read tools, then either propose actions or explain why none are needed.
@@ -90,18 +109,9 @@ WORKFLOW
    - NowPlayingTool / WatchHistoryTool — Emby state.
    Do not over-fetch. Avoid redundant calls.
 3. Decide. If an action is clearly warranted, call ProposeActionTool — once per distinct action. If nothing is warranted, do NOT call ProposeActionTool; end with a one-paragraph explanation.
+PROMPT;
 
-STUCK IMPORTS (ManualInteractionRequired)
-For a Sonarr/Radarr "manual interaction required" event, decide what to do by reading the actual import rejections — do NOT use ProposeActionTool for these.
-1. Call InspectStuckImportTool (service + download_id from the payload). It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
-2. Read the rejections and choose:
-   - The files map and there are no rejections, OR the only obstacle is a benign "we know what it is but won't auto-import" reason — e.g. "matched by series id" / "automatic import is not possible" → IMPORT it with ResolveManualImportTool.
-   - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade. Pass blocklist=true only when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; leave it off for a plain non-upgrade. Pass search_replacement=true when a replacement should be grabbed (e.g. blocklisted a bad release but the content is still wanted); leave it false when the content shouldn't be retried.
-   - Nothing maps (unknown series/episode, unparseable) → take no action; explain a human must resolve it in Sonarr/Radarr.
-   - Anything you are unsure about, or a mix of the above → import via ResolveManualImportTool (it will be queued for human approval) rather than guessing, or explain and propose nothing.
-3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its action rule allows it.
-- If a tool returns reason: 'capability_disabled', manual-import resolution is turned off — say so in your summary; do not try other destructive actions as a workaround.
-
+        $tail = <<<'PROMPT'
 PROPOSING OTHER ACTIONS
 - ProposeActionTool takes: type, target_service, rationale, payload.
 - Whether a proposal auto-executes or waits for human approval is decided by admin rules — NOT by you. Propose what is correct; the system gates it.
@@ -114,6 +124,12 @@ JUDGEMENT
 - Be conservative: when the right action is genuinely ambiguous, propose nothing and explain, rather than guessing.
 - Your final reply is an audit record a human will read. Make it a concise, factual summary of what you observed and what you proposed (or why you proposed nothing).
 PROMPT;
+
+        $scoped = App::bound(DecisionRunContext::class) && resolve(DecisionRunContext::class)->isScoped();
+
+        return $scoped
+            ? $head."\n\n".$tail
+            : $head."\n\n".self::STUCK_IMPORTS_SECTION."\n\n".$tail;
     }
 
     /**
@@ -132,7 +148,7 @@ PROMPT;
      */
     public function tools(): iterable
     {
-        return [
+        $tools = [
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
             resolve(SearchMediaTool::class),
@@ -145,5 +161,9 @@ PROMPT;
             resolve(ResolveManualImportTool::class),
             resolve(RemoveStuckDownloadTool::class),
         ];
+
+        return App::bound(DecisionRunContext::class)
+            ? resolve(DecisionRunContext::class)->scopeTools($tools)
+            : $tools;
     }
 }

@@ -4,17 +4,12 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Decision;
 
-use App\Ai\Decision\DecisionRunContext;
-use App\Services\Actions\ActionDescriber;
-use App\Services\Actions\ActionOrchestrator;
+use App\Ai\Decision\StuckImportResolver;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request;
 use Stringable;
-use Throwable;
 
 /**
  * Removes a stuck Sonarr/Radarr download from the queue — the resolution for a
@@ -78,58 +73,7 @@ class RemoveStuckDownloadTool extends DecisionTool
         $blocklist = ($args['blocklist'] ?? null) === true;
         $searchReplacement = ($args['search_replacement'] ?? null) === true;
 
-        $subjectMismatch = $this->rejectForeignDownload($downloadId, $decisionRunContext);
-
-        if ($subjectMismatch !== null) {
-            return $subjectMismatch;
-        }
-
-        try {
-            $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'blocklist' => $blocklist, 'search_replacement' => $searchReplacement];
-
-            $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
-                type: 'remove_stuck_download',
-                sourceService: $service,
-                targetService: $service,
-                payload: $actionPayload,
-                rationale: Str::limit(sprintf('Remove stuck %s download %s: %s', $service, $downloadId, $reason), 1000, ''),
-                description: resolve(ActionDescriber::class)
-                    ->describe('remove_stuck_download', $decisionRunContext->pinContext($actionPayload))
-                    ->because($decisionRunContext->proposalReason()),
-                webhookEventId: $decisionRunContext->webhookEventId,
-                forceRequiresApproval: true,
-                pinnedConnectionId: $decisionRunContext->originConnectionId,
-            );
-        } catch (Throwable $throwable) {
-            Log::warning('RemoveStuckDownloadTool: dispatch failed', [
-                'service' => $service,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
-
-            return ['queued' => false, 'reason' => 'dispatch_failed'];
-        }
-
-        if ($actionRequest === null) {
-            return [
-                'queued' => false,
-                'reason' => 'no_action_type_config',
-                'message' => 'The remove_stuck_download Action Rule is missing or disabled; an admin must enable it.',
-            ];
-        }
-
-        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
-
-        return [
-            'queued' => true,
-            'action_request_id' => $actionRequest->id,
-            'status' => $actionRequest->status->value,
-            'requires_approval' => $actionRequest->requires_approval,
-            'remaining_budget' => $decisionRunContext->remainingBudget(),
-            'message' => $actionRequest->requires_approval
-                ? 'Removal queued for human approval.'
-                : 'Removal queued and will auto-run.',
-        ];
+        return resolve(StuckImportResolver::class)->remove($decisionRunContext, $service, $downloadId, $reason, $blocklist, $searchReplacement);
     }
 
     /**
@@ -155,34 +99,6 @@ class RemoveStuckDownloadTool extends DecisionTool
                 ->description('After removing, have the arr immediately search for a replacement release. Combine with blocklist=true to retry with a different release; leave false when the content should not be re-grabbed at all. Default false.')
                 ->required()
                 ->nullable(),
-        ];
-    }
-
-    /**
-     * A removal may only target the download that triggered this run when the
-     * event names one. Without this, injected payload text could steer the
-     * agent into deleting an unrelated download's data. The event's id is read
-     * the way the arr webhook handlers read it: top-level downloadId, falling
-     * back to downloadInfo.downloadId.
-     *
-     * @return array<string, mixed>|null structured rejection, or null when OK
-     */
-    private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
-    {
-        $eventDownloadId = $decisionRunContext->eventDownloadId();
-
-        if ($eventDownloadId === null || $eventDownloadId === $downloadId) {
-            return null;
-        }
-
-        return [
-            'queued' => false,
-            'reason' => 'subject_mismatch',
-            'message' => sprintf(
-                'download_id %s does not match the download that triggered this event (%s). Only the triggering download may be removed.',
-                $downloadId,
-                $eventDownloadId,
-            ),
         ];
     }
 }

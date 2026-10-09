@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Deferred, Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import ClassificationGatesPanel from '@/components/ai/ClassificationGatesPanel.vue';
+import type { GateSummary } from '@/components/ai/ClassificationGatesPanel.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import {
     FreePoolUsage,
@@ -53,6 +55,7 @@ const props = defineProps<{
     rate_limits: RateLimitStatusRow[];
     rate_limits_enforced: boolean;
     unpricedModels: { role: string; provider: string; model: string }[];
+    classification_gates?: GateSummary[];
 }>();
 
 defineOptions({
@@ -149,6 +152,19 @@ const {
         </div>
 
         <ToolStatsTable :rows="props.tool_stats" />
+
+        <Deferred data="classification_gates">
+            <template #fallback>
+                <div
+                    class="h-48 animate-pulse rounded-xl border border-border bg-card"
+                    data-classification-gates-loading
+                />
+            </template>
+            <ClassificationGatesPanel
+                v-if="props.classification_gates"
+                :gates="props.classification_gates"
+            />
+        </Deferred>
 
         <RecentInvocationsTable
             :rows="recent"
