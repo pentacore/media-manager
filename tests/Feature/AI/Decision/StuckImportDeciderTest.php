@@ -119,6 +119,25 @@ test('a classifier failure is no decision', function (): void {
     expect(resolve(StuckImportDecider::class)->decide(deciderSonarr(), 'sonarr', 'dl-1'))->toBeNull();
 });
 
+test('more than 20 candidate files are capped before classifying', function (): void {
+    $files = array_map(
+        fn (int $i): array => [
+            'path' => sprintf('/dl/show.s01e%02d.mkv', $i),
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'series' => ['id' => 5],
+            'episodes' => [['id' => $i]],
+            'rejections' => [],
+        ],
+        range(1, 25),
+    );
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response($files)]);
+    Classification::fake([deciderAnswers('import', 0.9)]);
+
+    resolve(StuckImportDecider::class)->decide(deciderSonarr(), 'sonarr', 'dl-1');
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => is_array($prompt->state) && count($prompt->state['files']) === 20);
+});
+
 test('a failed inspection is no decision and never classifies', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('boom', 500)]);
     Classification::fake([]);

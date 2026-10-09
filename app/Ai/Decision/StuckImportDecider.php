@@ -10,6 +10,7 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\StuckImportInspector;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Laravel\Ai\Classification\Boolean;
 use Laravel\Ai\Classification\Choice;
 use Laravel\Ai\Responses\Data\Answer;
@@ -29,6 +30,14 @@ final readonly class StuckImportDecider
 
     /** Candidate files sent to the classifier, at most. */
     private const int MAX_FILES = 20;
+
+    /**
+     * Each sent file's upstream rejection reasons, joined and truncated to
+     * this many characters, so a release with pathological rejection text
+     * can't blow out the classification payload even while MAX_FILES caps
+     * the file count.
+     */
+    private const int MAX_REJECTION_CHARS = 300;
 
     private const string CHOICE_QUESTION = "A Sonarr/Radarr download is stuck waiting for manual import. Given each candidate file's mapping and the upstream rejection reasons, what should happen to it?";
 
@@ -63,7 +72,7 @@ final readonly class StuckImportDecider
 
         $answers = $this->classifier->classify(self::class, [
             ...$inspection,
-            'files' => array_slice($inspection['files'], 0, self::MAX_FILES),
+            'files' => $this->cappedFiles($inspection['files']),
         ], [
             'choice' => new Choice(self::CHOICE_QUESTION, StuckImportChoice::options()),
             'blocklist' => new Boolean(self::BLOCKLIST_QUESTION),
@@ -101,5 +110,26 @@ final readonly class StuckImportDecider
     private function booleanProbability(?Answer $answer): ?float
     {
         return $answer instanceof BooleanAnswer ? $answer->probability : null;
+    }
+
+    /**
+     * At most MAX_FILES candidate files, each with its rejection text capped
+     * to MAX_REJECTION_CHARS.
+     *
+     * @param  array<int, array<string, mixed>>  $files
+     * @return array<int, array<string, mixed>>
+     */
+    private function cappedFiles(array $files): array
+    {
+        return array_map(
+            fn (array $file): array => [
+                ...$file,
+                'rejections' => array_map(
+                    static fn (string $rejection): string => Str::limit($rejection, self::MAX_REJECTION_CHARS, ''),
+                    is_array($file['rejections'] ?? null) ? $file['rejections'] : [],
+                ),
+            ],
+            array_slice($files, 0, self::MAX_FILES),
+        );
     }
 }
