@@ -25,6 +25,7 @@ use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
 use App\Ai\Tools\Bazarr\InspectSubtitleTool;
 use App\Ai\Tools\Bazarr\RequestSubtitleOperationTool;
 use App\Ai\Tools\Bazarr\SearchSubtitlesTool;
+use App\Ai\Tools\Decision\StuckImportVerdictTool;
 use App\Ai\Tools\Emby\LibraryScanTool;
 use App\Ai\Tools\Emby\MarkAsUnwatchedTool;
 use App\Ai\Tools\Emby\MarkAsWatchedTool;
@@ -234,6 +235,10 @@ PROMPT;
             $tools[] = resolve(InspectSubtitleTool::class);
             $tools[] = resolve(SearchSubtitlesTool::class);
             $tools[] = resolve(RequestSubtitleOperationTool::class);
+        }
+
+        if (resolve(AiSettings::class)->stuckImportFastPathEnabled()) {
+            $tools[] = resolve(StuckImportVerdictTool::class);
         }
 
         if (! empty(config('services.tmdb.api_key'))) {
