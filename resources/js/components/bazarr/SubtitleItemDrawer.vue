@@ -271,6 +271,23 @@ function supports(capability: string): boolean {
     return capabilities.value?.[capability] === true;
 }
 
+/**
+ * useHttp sends only a 422 to onError; a 5xx goes to onHttpException and a
+ * dropped connection to onNetworkError, and both reject the returned promise
+ * (.ai/rules/js.md). One toast covers all three.
+ */
+function failureToasts(message: string): {
+    onError: () => void;
+    onHttpException: () => void;
+    onNetworkError: () => void;
+} {
+    const show = (): void => {
+        toast.error(message);
+    };
+
+    return { onError: show, onHttpException: show, onNetworkError: show };
+}
+
 function search(): void {
     if (!props.item || !props.connectionId) {
         return;
@@ -280,15 +297,18 @@ function search(): void {
     searchHttp.media_type = props.item.media_type;
     searchHttp.media_id = props.item.media_id;
     searchHttp.target_fingerprint = props.item.target_fingerprint;
-    searchHttp.get(SearchController.url(), {
-        onSuccess: (response) => {
-            inspectedItem.value = response.item;
-            candidates.value = response.candidates;
-            history.value = response.history;
-            capabilities.value = response.capabilities;
-        },
-        onError: () => toast.error('Could not search Bazarr right now.'),
-    });
+    searchHttp
+        .get(SearchController.url(), {
+            onSuccess: (response) => {
+                inspectedItem.value = response.item;
+                candidates.value = response.candidates;
+                history.value = response.history;
+                capabilities.value = response.capabilities;
+            },
+            ...failureToasts('Could not search Bazarr right now.'),
+        })
+        // Every failure is toasted above; the rejection is expected.
+        .catch(() => undefined);
 }
 
 function basePayload(operation: OperationName): Record<string, unknown> | null {
@@ -319,14 +339,16 @@ function submit(
 
     operationHttp.reset();
     Object.assign(operationHttp, payload, fields);
-    operationHttp.post(OperationController.url(), {
-        onSuccess: (response) => {
-            selectedOperation.value = null;
-            toast.success(response.message);
-        },
-        onError: () =>
-            toast.error('The subtitle operation could not be requested.'),
-    });
+    operationHttp
+        .post(OperationController.url(), {
+            onSuccess: (response) => {
+                selectedOperation.value = null;
+                toast.success(response.message);
+            },
+            ...failureToasts('The subtitle operation could not be requested.'),
+        })
+        // Every failure is toasted above; the rejection is expected.
+        .catch(() => undefined);
 }
 
 function requestBest(): void {
@@ -374,15 +396,17 @@ function submitUpload(): void {
     };
     Object.assign(uploadHttp, payload);
     uploadHttp.transform(() => payload);
-    uploadHttp.post(UploadController.url(), {
-        onSuccess: (response) => {
-            uploadOpen.value = false;
-            selectedUpload.value = null;
-            toast.success(response.message);
-        },
-        onError: () =>
-            toast.error('The subtitle upload could not be requested.'),
-    });
+    uploadHttp
+        .post(UploadController.url(), {
+            onSuccess: (response) => {
+                uploadOpen.value = false;
+                selectedUpload.value = null;
+                toast.success(response.message);
+            },
+            ...failureToasts('The subtitle upload could not be requested.'),
+        })
+        // Every failure is toasted above; the rejection is expected.
+        .catch(() => undefined);
 }
 
 function openTrackOperation(payload: {
