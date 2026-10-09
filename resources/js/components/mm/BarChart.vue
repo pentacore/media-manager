@@ -94,6 +94,7 @@ const bars = computed(() => {
                 :width="bar.width"
                 :height="bar.height"
                 rx="0.6"
+                :data-bar-placeholder="bar.placeholder ? 'true' : 'false'"
                 :class="
                     bar.placeholder
                         ? 'fill-none stroke-muted-foreground/50 stroke-[1.5] [stroke-dasharray:2,1.5]'
