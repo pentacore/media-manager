@@ -69,6 +69,21 @@ function formatTime(iso: string | null): string {
 
     return new Date(iso).toLocaleString();
 }
+
+type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
+
+function decisionVariant(status: string): PillVariant {
+    switch (status) {
+        case 'completed':
+            return 'ok';
+        case 'failed':
+            return 'danger';
+        case 'resolved_by_classifier':
+            return 'info';
+        default:
+            return 'default';
+    }
+}
 </script>
 
 <template>
@@ -230,11 +245,7 @@ function formatTime(iso: string | null): string {
             >
                 AI decision
                 <Pill
-                    :variant="
-                        event.agent_decision.status === 'completed'
-                            ? 'ok'
-                            : 'default'
-                    "
+                    :variant="decisionVariant(event.agent_decision.status)"
                     :data-decision-status="event.agent_decision.status"
                 >
                     {{ event.agent_decision.status.replaceAll('_', ' ') }}

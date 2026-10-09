@@ -3,19 +3,24 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Classification\Classifier;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Enums\AiProposedWorkflowStatus;
+use App\Enums\ClassificationVerdict;
 use App\Models\AiProposedWorkflow;
+use App\Models\ClassificationOutcome;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\ClassificationPrompt;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
@@ -171,3 +176,71 @@ test('an approved workflow continuation keeps the full toolset without classifyi
 test('routing library changes loads the add options lookup and the release search', function (string $toolName): void {
     expect(ToolGroup::forToolName($toolName))->toBe([ToolGroup::LibraryChanges]);
 })->with(['GetMediaAddOptionsTool', 'SearchMediaReleasesTool']);
+
+test('chat routing classifies with the short chat timeout', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
+
+    resolve(ChatToolRouter::class)->route('why is my download stuck?', null);
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === Classifier::CHAT_TIMEOUT_SECONDS);
+});
+
+test('a routed turn records one outcome row per tool group', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
+
+    resolve(ChatToolRouter::class)->route('why is my download stuck?', null, 'chat_turn:t1');
+
+    $rows = ClassificationOutcome::query()->where('subject_key', 'chat_turn:t1')->get()->keyBy('question');
+
+    expect($rows)->toHaveCount(count(ToolGroup::cases()))
+        ->and($rows['downloads']->verdict)->toBe(ClassificationVerdict::Included)
+        ->and($rows['playback']->verdict)->toBe(ClassificationVerdict::Excluded)
+        ->and($rows['downloads']->threshold)->toBe(ChatToolRouter::INCLUDE_AT);
+});
+
+test('recording tool use marks included groups used or unused', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9, 'playback' => 0.8])]);
+    $chatToolRouter = resolve(ChatToolRouter::class);
+
+    $chatToolRouter->route('stuck download and what is playing?', null, 'chat_turn:t2');
+    $chatToolRouter->recordToolUse('chat_turn:t2', [class_basename(NowPlayingTool::class)]);
+
+    $rows = ClassificationOutcome::query()->where('subject_key', 'chat_turn:t2')->get()->keyBy('question');
+
+    expect($rows['playback']->outcome_positive)->toBeTrue()
+        ->and($rows['downloads']->outcome_positive)->toBeFalse()
+        ->and($rows['indexers']->outcome_at)->toBeNull();
+});
+
+test('routing without a turn key records nothing', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
+
+    resolve(ChatToolRouter::class)->route('why is my download stuck?', null);
+
+    expect(ClassificationOutcome::count())->toBe(0);
+});
+
+test('recording tool use never lets a group lookup failure escape', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    app()->instance(StuckDownloadInvestigatorAgent::class, new class
+    {
+        public function name(): string
+        {
+            throw new RuntimeException('name lookup blew up');
+        }
+    });
+
+    $escaped = null;
+
+    try {
+        resolve(ChatToolRouter::class)->recordToolUse('chat_turn:t4', [class_basename(NowPlayingTool::class)]);
+    } catch (Throwable $throwable) {
+        $escaped = $throwable;
+    }
+
+    expect($escaped)->toBeNull();
+});

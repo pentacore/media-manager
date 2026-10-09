@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -92,4 +93,27 @@ test('admin sees which runs fell through a tier and can filter them', function (
         ->assertSee('Tier filter applies to this list')
         ->assertPresent("[data-usage-row=\"{$tierTwo->id}\"]")
         ->assertMissing("[data-usage-row=\"{$noTier->id}\"]");
+});
+
+test('the tier filter stays in the query string across a window, kind and scenario change', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'input_per_mtok' => 1.00, 'output_per_mtok' => 2.00]);
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'tier_position' => 2]);
+    AiUsageRecord::factory()->embeddings()->create(['model' => 'text-embedding-3-small', 'tier_position' => 2]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-usage-tier-filter] button')
+        ->click('[role="option"][aria-label="Fell through"]')
+        ->assertQueryStringHas('tier', 'fell_through')
+        ->click('30d')
+        ->assertQueryStringHas('tier', 'fell_through')
+        ->click('#usage-kind')
+        ->click('[role="option"][aria-label="Embeddings"]')
+        ->assertQueryStringHas('tier', 'fell_through')
+        ->click('[data-usage-scenario-toggle]')
+        ->click('[data-usage-scenario-load]')
+        ->click('[role="option"]:has-text("openai / gpt-5-mini")')
+        ->click('[data-usage-scenario-apply]')
+        ->assertQueryStringHas('tier', 'fell_through');
 });

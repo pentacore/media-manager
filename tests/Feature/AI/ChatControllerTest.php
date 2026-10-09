@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Routing\ToolGroup;
 use App\Enums\AiTask;
+use App\Enums\ClassificationVerdict;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Models\ClassificationOutcome;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
@@ -16,8 +19,10 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Laravel\Ai\Classification;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Responses\Data\BooleanAnswer;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -317,3 +322,41 @@ test('send and stream refuse an exhausted budget before looking at the conversat
 
     MediaAgent::assertNeverPrompted();
 })->with(['ai.chat.send', 'ai.chat.stream']);
+
+/**
+ * @param  array<string, float>  $probabilities
+ * @return array<string, BooleanAnswer>
+ */
+function chatRouterAnswers(array $probabilities): array
+{
+    return collect(ToolGroup::cases())
+        ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($probabilities[$toolGroup->value] ?? 0.05)])
+        ->all();
+}
+
+test('a chat turn with routing disabled writes and updates no outcome rows', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
+        ->assertOk();
+
+    Classification::assertNothingClassified();
+    expect(ClassificationOutcome::query()->count())->toBe(0);
+});
+
+test('a routed chat turn records which tool groups the reply used', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([chatRouterAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
+        ->assertOk();
+
+    expect(ClassificationOutcome::query()->where('question', 'playback')->sole())
+        ->verdict->toBe(ClassificationVerdict::Included)
+        ->outcome_positive->toBeFalse()
+        ->and(ClassificationOutcome::query()->where('question', 'indexers')->sole()->verdict)->toBe(ClassificationVerdict::Excluded);
+});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
+use App\Enums\ClassificationGate;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
@@ -610,6 +611,15 @@ test('index reports no unpriced models when no hard cap is set', function (): vo
         ->assertInertia(fn ($page) => $page
             ->component('Admin/AiUsage/Index')
             ->where('unpricedModels', []));
+});
+
+test('the AI usage page defers the classification gate summary', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->missing('classification_gates')
+            ->loadDeferredProps(fn ($reload) => $reload->has('classification_gates', count(ClassificationGate::cases()))));
 });
 
 test('recent invocations carry their tier and can be filtered by it', function (): void {

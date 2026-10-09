@@ -215,6 +215,8 @@ function decisionVariant(status: string): PillVariant {
             return 'ok';
         case 'failed':
             return 'danger';
+        case 'resolved_by_classifier':
+            return 'info';
         default:
             return 'default';
     }
