@@ -6,6 +6,15 @@ namespace App\Support;
 
 class UpstreamErrorText
 {
+    /** What sanitize() returns for an upstream error that carries no usable text. */
+    public const string UPSTREAM_EMPTY_FALLBACK = 'The upstream service returned an error without a usable description.';
+
+    /**
+     * The empty-message fallback for agent runs: the failure belongs to the
+     * agent (provider, tool loop or local code), not to a media service.
+     */
+    public const string AGENT_EMPTY_FALLBACK = 'The agent failed without a usable description.';
+
     /**
      * Reduce an upstream error message to something safe to persist or log.
      *
@@ -13,9 +22,11 @@ class UpstreamErrorText
      * for the arr and Bazarr APIs routinely means absolute library paths and —
      * via Guzzle's effective URI — query strings carrying credentials. Case
      * failure reasons are shown to operators and kept indefinitely, so the text
-     * has to lose both before it is stored.
+     * has to lose both before it is stored. A message with nothing left
+     * becomes $emptyFallback, which callers outside the media integrations set
+     * so the sentence names the right culprit.
      */
-    public static function sanitize(string $message, int $limit = 300): string
+    public static function sanitize(string $message, int $limit = 300, string $emptyFallback = self::UPSTREAM_EMPTY_FALLBACK): string
     {
         // Upstream JSON bodies arrive with escaped separators; unescape first so
         // the path pattern below sees them.
@@ -37,8 +48,6 @@ class UpstreamErrorText
         ) ?? $message;
         $message = trim((string) preg_replace('/\s+/', ' ', $message));
 
-        return $message === ''
-            ? 'The upstream service returned an error without a usable description.'
-            : mb_substr($message, 0, $limit);
+        return $message === '' ? $emptyFallback : mb_substr($message, 0, $limit);
     }
 }

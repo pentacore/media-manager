@@ -192,7 +192,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
-            $this->record($webhookEventId, AgentDecisionStatus::Failed, sprintf('Agent run failed: %s', UpstreamErrorText::sanitize($throwable->getMessage(), 2000)), $decisionRunContext);
+            $this->record($webhookEventId, AgentDecisionStatus::Failed, sprintf('Agent run failed: %s', UpstreamErrorText::sanitize($throwable->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK)), $decisionRunContext);
 
             return;
         } finally {
