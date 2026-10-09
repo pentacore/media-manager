@@ -205,13 +205,25 @@ test('a queue page SABnzbd refuses shows the refusal instead of empty lists', fu
             ->where('configured', true)
             ->where('queue', [])
             ->where('history.slots', [])
-            ->where('error', 'SABnzbd refused the request — check the connection settings.'));
+            ->where('error', 'SABnzbd is unavailable — ask an admin to check the connection.'));
 })->with([
     'wrong api key' => [['status' => false, 'error' => 'API Key Incorrect']],
     'login page' => ['<html><body>Sign in</body></html>'],
     'queue section is not an object' => [['queue' => 'busy']],
     'no queue section' => [['version' => '4.2.0']],
 ]);
+
+test('an admin is sent to the connection settings when SABnzbd refuses', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'wrong-key']);
+    Http::fake(['sab.local:8080/api*' => Http::response(['status' => false, 'error' => 'API Key Incorrect'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sabnzbd/Queue/Index')
+            ->where('error', 'SABnzbd refused the request — check the connection settings.'));
+});
 
 test('a queue page SABnzbd cannot be reached for still says it could not reach SABnzbd', function (): void {
     Sleep::fake();

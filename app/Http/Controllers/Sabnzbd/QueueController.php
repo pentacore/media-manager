@@ -79,7 +79,7 @@ class QueueController extends Controller
         } catch (SabnzbdRefused) {
             // HTTP 200 that is a refusal (a wrong API key) or not SABnzbd's
             // JSON at all (a proxy login page). Caught before its parent.
-            return $this->unavailablePage($historyPage, __('SABnzbd refused the request — check the connection settings.'));
+            return $this->unavailablePage($historyPage, $this->upstreamRefusedMessage(ServiceType::SABnzbd, $request->user()));
         } catch (RequestException|ConnectionException) {
             return $this->unavailablePage($historyPage, __('Could not reach SABnzbd.'));
         }
