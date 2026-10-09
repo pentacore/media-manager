@@ -26,7 +26,7 @@ final readonly class ClassificationGateReporting
     public function __construct(private AiSettings $aiSettings) {}
 
     /**
-     * @return list<array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}>
+     * @return list<array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_resolved: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}>
      */
     public function summary(?CarbonImmutable $since): array
     {
@@ -46,7 +46,7 @@ final readonly class ClassificationGateReporting
 
     /**
      * @param  Collection<int, stdClass>  $rows
-     * @return array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}
+     * @return array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_resolved: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}
      */
     private function gateSummary(ClassificationGate $classificationGate, Collection $rows): array
     {
@@ -75,6 +75,7 @@ final readonly class ClassificationGateReporting
             'positive' => (int) $rows->sum('positive'),
             'verdicts' => $rows->groupBy('verdict')->map(fn (Collection $verdictRows): int => (int) $verdictRows->sum('total'))->all(),
             'audit_runs' => (int) $auditRows->sum('total'),
+            'audit_resolved' => (int) $auditRows->sum('resolved'),
             'audit_positive' => (int) $auditRows->sum('positive'),
             'bands' => $bands,
         ];

@@ -18,6 +18,7 @@ export interface GateSummary {
     positive: number;
     verdicts: Record<string, number>;
     audit_runs: number;
+    audit_resolved: number;
     audit_positive: number;
     bands: GateBand[];
 }
@@ -56,9 +57,9 @@ function summaryLine(gate: GateSummary): string {
         ([verdict, count]) => `${count} ${verdict.replaceAll('_', ' ')}`,
     );
 
-    if (gate.audit_runs > 0) {
+    if (gate.audit_resolved > 0) {
         parts.push(
-            `${gate.audit_positive} of ${gate.audit_runs} audit run(s) needed action`,
+            `${gate.audit_positive} of ${gate.audit_resolved} resolved audit run(s) needed action`,
         );
     }
 

@@ -16,7 +16,7 @@ test('the AI usage page shows a calibration card per classification gate', funct
         ->assertNoSmoke()
         ->assertVisible('[data-classification-gates]')
         ->assertSeeIn('[data-gate="decision_gate"]', 'Webhook decision gate')
-        ->assertSeeIn('[data-gate="decision_gate"] [data-gate-summary]', '1 of 1 audit run(s) needed action')
+        ->assertSeeIn('[data-gate="decision_gate"] [data-gate-summary]', '1 of 1 resolved audit run(s) needed action')
         ->assertVisible('[data-gate="decision_gate"] [data-bar-chart-marker]')
         ->assertSeeIn('[data-gate="chat_routing"] [data-gate-summary]', 'No decisions in this window.');
 });

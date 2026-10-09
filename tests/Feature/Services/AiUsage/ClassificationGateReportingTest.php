@@ -36,8 +36,17 @@ test('the summary reports audit runs, verdict counts and the current threshold',
 
     $gate = collect(resolve(ClassificationGateReporting::class)->summary(null))->firstWhere('gate', 'decision_gate');
 
-    expect($gate)->threshold->toBe(0.4)->audit_runs->toBe(1)->audit_positive->toBe(1)
+    expect($gate)->threshold->toBe(0.4)->audit_runs->toBe(1)->audit_resolved->toBe(1)->audit_positive->toBe(1)
         ->and($gate['verdicts'])->toBe(['skipped' => 1, 'audit_run' => 1]);
+});
+
+test('audit_resolved counts only resolved audit rows', function (): void {
+    ClassificationOutcome::factory()->gate(ClassificationGate::DecisionGate)->resolved(true)->create(['probability' => 0.1, 'verdict' => ClassificationVerdict::AuditRun]);
+    ClassificationOutcome::factory()->gate(ClassificationGate::DecisionGate)->create(['probability' => 0.1, 'verdict' => ClassificationVerdict::AuditRun]);
+
+    $gate = collect(resolve(ClassificationGateReporting::class)->summary(null))->firstWhere('gate', 'decision_gate');
+
+    expect($gate)->audit_runs->toBe(2)->audit_resolved->toBe(1);
 });
 
 test('rows before the window are left out', function (): void {
