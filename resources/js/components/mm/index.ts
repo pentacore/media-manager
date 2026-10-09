@@ -15,5 +15,6 @@ export { default as TimeWindowFilter } from './TimeWindowFilter.vue';
 export { default as RateLimitEditor } from './RateLimitEditor.vue';
 export { default as PoolFormFields } from './PoolFormFields.vue';
 export { default as BarChart } from './BarChart.vue';
+export type { BarChartPoint } from './BarChart.vue';
 export { default as Heatmap } from './Heatmap.vue';
 export { default as BreakdownMeter } from './BreakdownMeter.vue';

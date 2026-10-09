@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BarChart } from '@/components/mm';
-import type { BarChartPoint } from '@/components/mm/BarChart.vue';
+import type { BarChartPoint } from '@/components/mm';
 
 export interface GateBand {
     label: string;
