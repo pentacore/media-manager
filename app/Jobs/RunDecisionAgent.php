@@ -475,7 +475,14 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         try {
             $connection = $decisionRunContext->resolveConnection($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
-        } catch (Throwable) {
+        } catch (Throwable $throwable) {
+            Log::warning('RunDecisionAgent: fast path could not resolve the service connection', [
+                'service' => $service,
+                'download_id' => $downloadId,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
             return null;
         }
 
