@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Ai\Tools\Decision\StuckImportVerdictTool;
+use App\Ai\Tools\Arr\StuckImportVerdictTool;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use Illuminate\Support\Facades\Http;

@@ -8,7 +8,6 @@ use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\Decision\RemoveStuckDownloadTool;
 use App\Ai\Tools\Decision\ResolveManualImportTool;
-use App\Ai\Tools\Decision\StuckImportVerdictTool;
 
 arch('every tool under app/Ai/Tools/ extends BaseTool, except the DecisionAgent tools')
     ->expect('App\Ai\Tools')
@@ -21,7 +20,6 @@ arch('every tool under app/Ai/Tools/ extends BaseTool, except the DecisionAgent 
         RemoveStuckDownloadTool::class,
         ResolveManualImportTool::class,
         InspectStuckImportTool::class,
-        StuckImportVerdictTool::class,
     ]);
 
 arch('every DecisionAgent tool under app/Ai/Tools/Decision extends DecisionTool')

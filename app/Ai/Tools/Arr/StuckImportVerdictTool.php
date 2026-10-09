@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace App\Ai\Tools\Decision;
+namespace App\Ai\Tools\Arr;
 
 use App\Ai\Decision\StuckImportDecider;
 use App\Ai\Decision\StuckImportDecision;
+use App\Ai\Risk;
+use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Tools\Request;
 use Stringable;
-use Throwable;
 
 /**
  * Chat's fast first look at a stuck download: the deterministic inspection
@@ -21,23 +21,16 @@ use Throwable;
  * investigator sub-agent's LLM loop. Read-only; MediaAgent only has it while
  * the stuck-import fast path is enabled.
  */
-class StuckImportVerdictTool extends DecisionTool
+class StuckImportVerdictTool extends BaseTool
 {
-    protected const string OUTCOME_KEY = 'ok';
-
     public function description(): Stringable|string
     {
         return 'Fast verdict on a stuck Sonarr/Radarr download when you already know its download_id: inspects the candidate files and returns a classifier recommendation (import, remove or manual) with its confidence. Read-only. If confident is false, or you do not know the download_id, use InvestigateStuckDownload instead.';
     }
 
-    protected function requiresRunContext(): bool
+    public function risk(): Risk
     {
-        return false;
-    }
-
-    protected function countsTowardActionCap(): bool
-    {
-        return false;
+        return Risk::Read;
     }
 
     /**
@@ -58,15 +51,9 @@ class StuckImportVerdictTool extends DecisionTool
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];
 
-        try {
-            $connection = ServiceConnection::resolveActive($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
-        } catch (Throwable $throwable) {
-            Log::warning('StuckImportVerdictTool: connection lookup failed', [
-                'service' => $service,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
+        $connection = ServiceConnection::findActive($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
 
+        if (! $connection instanceof ServiceConnection) {
             return ['ok' => false, 'reason' => 'lookup_failed', 'message' => 'No active connection for that service.'];
         }
 

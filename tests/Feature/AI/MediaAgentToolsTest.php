@@ -8,8 +8,8 @@ use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
+use App\Ai\Tools\Arr\StuckImportVerdictTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
-use App\Ai\Tools\Decision\StuckImportVerdictTool;
 use App\Settings\AiSettings;
 
 test('media agent delegates stuck-download investigation and keeps the acting tools', function (): void {
