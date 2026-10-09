@@ -142,3 +142,28 @@ test('the exception names the model, the exhausted limit and the usage', functio
             ->toBe('Rate limit reached for openai/gpt-5-mini: 1 of 1 requests per minute used.');
     }
 });
+
+test('exhaustedReason names the reached limit without throwing', function (): void {
+    guardLimitedPrice(['provider' => 'openai', 'model' => 'gpt-5-mini'], [
+        ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1],
+    ]);
+    guardUsage('openai', 'gpt-5-mini', 10, 5, CarbonImmutable::now()->subSeconds(5));
+
+    expect(resolve(AiRateLimitGuard::class)->exhaustedReason('openai', 'gpt-5-mini'))
+        ->toBe('rate-limited (1 of 1 requests per minute)');
+});
+
+test('exhaustedReason is null under the limit, without limits and while enforcement is off', function (): void {
+    guardLimitedPrice(['provider' => 'openai', 'model' => 'gpt-5-mini'], [
+        ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 2],
+    ]);
+    guardUsage('openai', 'gpt-5-mini', 10, 5, CarbonImmutable::now()->subSeconds(5));
+
+    expect(resolve(AiRateLimitGuard::class)->exhaustedReason('openai', 'gpt-5-mini'))->toBeNull()
+        ->and(resolve(AiRateLimitGuard::class)->exhaustedReason('openai', 'gpt-5-nano'))->toBeNull();
+
+    guardUsage('openai', 'gpt-5-mini', 10, 5, CarbonImmutable::now()->subSeconds(4));
+    resolve(AiSettings::class)->setRateLimitsEnforced(false);
+
+    expect(resolve(AiRateLimitGuard::class)->exhaustedReason('openai', 'gpt-5-mini'))->toBeNull();
+});

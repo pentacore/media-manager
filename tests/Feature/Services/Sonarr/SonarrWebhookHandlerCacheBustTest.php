@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 use App\Cache\Services\SonarrCache;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Services\Library\InterventionCounter;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('mediamanager.cache.store', 'array');
@@ -14,55 +18,69 @@ beforeEach(function (): void {
     config()->set('mediamanager.cache.ttl.entity', 300);
     config()->set('mediamanager.cache.ttl.metadata', 600);
     Cache::store('array')->flush();
+    Queue::fake();
+    Notification::fake();
+    // ManualInteractionRequired recomputes the intervention badge, which
+    // would otherwise walk the factory's Sonarr host.
+    $this->mock(InterventionCounter::class)->shouldReceive('recompute')->andReturn(0);
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => true]);
 });
 
-test('handle() busts Sonarr cache for the connection after processing', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->create();
-    $cache = new SonarrCache($connection);
-
-    // Warm
-    $cache->rememberList('list', fn (): array => ['warm' => true]);
-
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'test',
-        'payload' => ['eventType' => 'Test'],
+function sonarrCacheBustEvent(ServiceConnection $serviceConnection, string $eventType): WebhookEvent
+{
+    return WebhookEvent::factory()->create([
+        'service_connection_id' => $serviceConnection->id,
+        'event_type' => $eventType,
+        'payload' => [
+            'eventType' => $eventType,
+            'series' => ['id' => 42, 'title' => 'My Show'],
+            'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 1]],
+        ],
     ]);
+}
 
-    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+/**
+ * Warms the connection's cached series list.
+ */
+function sonarrCacheBustWarm(ServiceConnection $serviceConnection): void
+{
+    new SonarrCache($serviceConnection)->rememberList('list', fn (): array => ['warm' => true]);
+}
 
-    // Cold — closure should run again
-    $hits = 0;
-    $cache->rememberList('list', function () use (&$hits): array {
-        $hits++;
+/**
+ * The connection's cached series list, read without populating it.
+ */
+function sonarrCacheBustCachedList(ServiceConnection $serviceConnection): mixed
+{
+    $prefix = sprintf('sonarr:%d', $serviceConnection->id);
 
-        return ['fresh' => true];
-    });
+    return Cache::store('array')->tags([$prefix])->get(sprintf('%s:list', $prefix));
+}
 
-    expect($hits)->toBe(1);
-});
+test('a library-changing Sonarr event clears the connection cache', function (string $eventType): void {
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create();
+    sonarrCacheBustWarm($serviceConnection);
 
-test('handle() does not bust other connections cache', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->create();
-    $other = ServiceConnection::factory()->sonarr()->create();
+    resolve(SonarrWebhookHandler::class)->handle(sonarrCacheBustEvent($serviceConnection, $eventType));
 
-    $otherCache = new SonarrCache($other);
-    $otherCache->rememberList('list', fn (): array => ['warm' => true]);
+    expect(sonarrCacheBustCachedList($serviceConnection))->toBeNull();
+})->with(['Download', 'Rename', 'SeriesAdd', 'SeriesDelete', 'EpisodeFileDelete']);
 
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'test',
-        'payload' => ['eventType' => 'Test'],
-    ]);
+test('a Sonarr event that changes nothing cached keeps the connection cache', function (string $eventType): void {
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create();
+    sonarrCacheBustWarm($serviceConnection);
 
-    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+    resolve(SonarrWebhookHandler::class)->handle(sonarrCacheBustEvent($serviceConnection, $eventType));
 
-    $hits = 0;
-    $otherCache->rememberList('list', function () use (&$hits): array {
-        $hits++;
+    expect(sonarrCacheBustCachedList($serviceConnection))->toBe(['warm' => true]);
+})->with(['Test', 'Grab', 'Health', 'HealthRestored', 'ApplicationUpdate', 'ManualInteractionRequired', 'SomethingNew']);
 
-        return ['fresh' => true];
-    });
+test('a library-changing Sonarr event leaves other connections caches alone', function (): void {
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create();
+    $otherConnection = ServiceConnection::factory()->sonarr()->create();
+    sonarrCacheBustWarm($otherConnection);
 
-    expect($hits)->toBe(0);
+    resolve(SonarrWebhookHandler::class)->handle(sonarrCacheBustEvent($serviceConnection, 'Download'));
+
+    expect(sonarrCacheBustCachedList($otherConnection))->toBe(['warm' => true]);
 });

@@ -115,10 +115,10 @@ test('an AI Models save records its changes once and a repeat save records nothi
     config()->set('ai.providers.openai.key', 'sk-test');
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
     $admin = User::factory()->admin()->create();
-    $blank = ['provider' => null, 'model' => null, 'reasoning' => null];
+    $blank = ['tiers' => [['provider' => null, 'model' => null, 'reasoning' => null, 'min_pool_percent' => null, 'min_pool_tokens' => null]]];
     $payload = [
         'tasks' => [
-            'chat' => ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium'],
+            'chat' => ['tiers' => [['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium', 'min_pool_percent' => null, 'min_pool_tokens' => null]]],
             'title' => $blank,
             'decision' => $blank,
             'file_inspector' => $blank,
@@ -137,7 +137,7 @@ test('an AI Models save records its changes once and a repeat save records nothi
     expect($rows)->toHaveCount(1)
         ->and($rows->first()->isAudit())->toBeTrue()
         ->and($rows->first()->user_id)->toBe($admin->id)
-        ->and($rows->first()->metadata['changes']['chat:default'])->toBe(['from' => null, 'to' => 'openai/gpt-5.6-luna · medium'])
+        ->and($rows->first()->metadata['changes']['chat:default#0'])->toBe(['from' => null, 'to' => 'openai/gpt-5.6-luna · medium'])
         ->and(settingsAuditRows('ai'))->toHaveCount(0);
 });
 

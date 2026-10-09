@@ -18,6 +18,17 @@ use App\Services\Webhook\AbstractArrWebhookHandler;
 
 class SonarrWebhookHandler extends AbstractArrWebhookHandler
 {
+    /**
+     * The events that change what SonarrCache holds: series statistics, the
+     * series entity, its episodes, the calendar ranges, root-folder free
+     * space and lookup results. Test, Grab (no cache holds the queue),
+     * Health, HealthRestored, ApplicationUpdate, ManualInteractionRequired
+     * and ignored types change none of it, so they clear nothing.
+     *
+     * @var list<string>
+     */
+    private const array CACHE_CLEARING_EVENTS = ['Download', 'Rename', 'SeriesAdd', 'SeriesDelete', 'EpisodeFileDelete'];
+
     public function __construct(
         private readonly SeriesIndexer $seriesIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
@@ -58,7 +69,7 @@ class SonarrWebhookHandler extends AbstractArrWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        if ($webhookEvent->serviceConnection !== null) {
+        if ($webhookEvent->serviceConnection !== null && in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
             new SonarrCache($webhookEvent->serviceConnection)->bustAll();
         }
 

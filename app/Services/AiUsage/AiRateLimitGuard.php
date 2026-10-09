@@ -32,8 +32,36 @@ class AiRateLimitGuard
      */
     public function enforce(string $provider, string $model): void
     {
+        $exceeded = $this->exceeded($provider, $model);
+
+        throw_if($exceeded instanceof AiModelRateLimitExceededException, $exceeded);
+    }
+
+    /**
+     * Why the model may not run right now (tier selection skips it), or null
+     * when it may — always null while enforcement is off.
+     */
+    public function exhaustedReason(string $provider, string $model): ?string
+    {
+        $exceeded = $this->exceeded($provider, $model);
+
+        if (! $exceeded instanceof AiModelRateLimitExceededException) {
+            return null;
+        }
+
+        return sprintf(
+            'rate-limited (%d of %d %s per %s)',
+            $exceeded->used,
+            $exceeded->limitValue,
+            $exceeded->metric->value,
+            $exceeded->period->value,
+        );
+    }
+
+    private function exceeded(string $provider, string $model): ?AiModelRateLimitExceededException
+    {
         if (! $this->aiSettings->rateLimitsEnforced()) {
-            return;
+            return null;
         }
 
         $baseModel = BaseModelName::of($model);
@@ -45,7 +73,7 @@ class AiRateLimitGuard
             ->first();
 
         if ($price === null || $price->rateLimits->isEmpty()) {
-            return;
+            return null;
         }
 
         $usage = $this->rateLimitUsage->byPeriod(
@@ -61,7 +89,7 @@ class AiRateLimitGuard
             );
 
             if ($used >= $rateLimit->limit_value) {
-                throw new AiModelRateLimitExceededException(
+                return new AiModelRateLimitExceededException(
                     provider: $provider,
                     model: $baseModel,
                     metric: $rateLimit->metric,
@@ -71,5 +99,7 @@ class AiRateLimitGuard
                 );
             }
         }
+
+        return null;
     }
 }

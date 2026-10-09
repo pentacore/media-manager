@@ -226,8 +226,9 @@ return [
 
         'ttl' => [
             // Paginated lists, searches, summaries. Long enough that
-            // switching between Seerr/Sonarr tabs feels instant; bust on
-            // any webhook event keeps it from going stale.
+            // switching between Seerr/Sonarr tabs feels instant; busting on
+            // library-changing webhook events (each handler's
+            // CACHE_CLEARING_EVENTS) keeps it from going stale.
             'list' => (int) env('MEDIAMANAGER_CACHE_TTL_LIST', 300),
             // Single-entity reads (e.g. one series, one movie, one request).
             'entity' => (int) env('MEDIAMANAGER_CACHE_TTL_ENTITY', 600),

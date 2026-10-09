@@ -76,24 +76,27 @@ class SearchController extends Controller
 
         $seerrConnection = $term === '' ? null : ServiceConnection::findActive(ServiceType::Seerr);
 
+        // One defer group per upstream service: Inertia sends one request per
+        // group, all at once, so Sonarr, Radarr, Seerr and Prowlarr answer in
+        // parallel instead of one after another in a single request.
         return Inertia::render('Search', [
             'query' => $term,
             'scope' => $scope,
             'connections' => $this->resolveConnectionUrls($seerrOnly),
             'seriesResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchSonarr($term, $arrConnections)),
+                : Inertia::defer(fn (): array => $this->searchSonarr($term, $arrConnections), 'sonarr'),
             'movieResults' => $term === '' || $seerrOnly
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchRadarr($term, $arrConnections)),
+                : Inertia::defer(fn (): array => $this->searchRadarr($term, $arrConnections), 'radarr'),
             'requestResults' => $term === ''
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter)),
+                : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter), 'seerr'),
             'requesting' => $seerrConnection instanceof ServiceConnection
                 ? Inertia::defer(fn (): array => $seerrUserResolver->requestingContext($seerrConnection, $request->user()), 'requesting')
                 : null,
             'indexerResults' => $includeIndexers
-                ? Inertia::defer(fn (): array => $this->searchIndexers($term))
+                ? Inertia::defer(fn (): array => $this->searchIndexers($term), 'indexers')
                 : $empty,
         ]);
     }

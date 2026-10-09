@@ -1,3 +1,36 @@
+# [1.37.0](https://github.com/pentacore/media-manager/compare/v1.36.0...v1.37.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **ai:** clear tier conditions on pool-less models and show the real inherit target ([8b7aad2](https://github.com/pentacore/media-manager/commit/8b7aad2d95142a002f093c802f17b10240e32215))
+* **ai:** keep AI models page up when pool status fails ([ffa2331](https://github.com/pentacore/media-manager/commit/ffa233113dae84b3f6120ce28ae8055333bb79cd))
+* **ai:** let admins clear stale pool conditions, fix tier reasoning label, show override live line ([047d1d9](https://github.com/pentacore/media-manager/commit/047d1d9a1e042cd9a391d129b895920660128d40))
+* **nav:** re-sync badges on a same-component full visit too ([6d679b0](https://github.com/pentacore/media-manager/commit/6d679b014696b0c281f7ec31797ac176f1c6475e))
+* **webhooks:** clear Seerr's cache on MEDIA_AUTO_REQUESTED too ([aade51a](https://github.com/pentacore/media-manager/commit/aade51ae06e6879f7717b3a4602b633f068c63f5))
+
+
+### Features
+
+* **ai:** add tier position and pool conditions to ai_task_models ([3c255bf](https://github.com/pentacore/media-manager/commit/3c255bfa44b1826da890c60acd45e9fd5dacc1d5))
+* **ai:** edit model tiers on the AI Models page ([f3fdf89](https://github.com/pentacore/media-manager/commit/f3fdf89b7062c747cb4cf0f16913cd6f8e5996b3))
+* **ai:** measure free pool headroom and expose rate-limit reasons ([ec1ab03](https://github.com/pentacore/media-manager/commit/ec1ab03d0e75984fb0b53b9a79d014ccd16e1cdd))
+* **ai:** pick each task's model from its tier list by pool headroom ([0fca609](https://github.com/pentacore/media-manager/commit/0fca609a4135ae89b9c38e9c7ecc58b26b4946a5))
+* **ai:** record which model tier each run used ([93e102c](https://github.com/pentacore/media-manager/commit/93e102cedce0c309f145f71604c8942508da4db1))
+* **ai:** save and show tier lists on the AI Models page backend ([6064150](https://github.com/pentacore/media-manager/commit/60641506b5a67499d793e31862e9871a7f597b8d))
+* **ai:** show the answering tier in chat and on AI Usage ([54317f1](https://github.com/pentacore/media-manager/commit/54317f1588555f8e2732efc7a2b6d8dee2172f39))
+
+
+### Performance Improvements
+
+* **inertia:** build expensive shared props only for full visits ([6243f60](https://github.com/pentacore/media-manager/commit/6243f600a8eb398f8779bc9dbca97cc9b1c8a14e))
+* **inertia:** give the connection edit page its own deferred groups ([8e2fde3](https://github.com/pentacore/media-manager/commit/8e2fde39e642a7cd7925081f37468c12b0341032))
+* **inertia:** load independent upstream deferred props in parallel ([e8796af](https://github.com/pentacore/media-manager/commit/e8796af3ee86996cd46d82dfde069c1599ba7250))
+* **nav:** prefetch sidebar links and library cards on hover ([aec5b08](https://github.com/pentacore/media-manager/commit/aec5b08704168aecd23bc0294500c63ff86031aa))
+* **nav:** stop prefetching pages that are costly or act on GET ([f727619](https://github.com/pentacore/media-manager/commit/f727619977a24b9a66061430ac2a03c58b46ea3d))
+* **prowlarr:** keep member indexer searches out of the release cache ([6016ab4](https://github.com/pentacore/media-manager/commit/6016ab4b73ae9d8fa09e6448a67ece00e14f2f94))
+* **webhooks:** clear service caches only for events that change cached data ([22a139c](https://github.com/pentacore/media-manager/commit/22a139c54b2b522759dcee0ed5f23c403ada0233))
+
 # [1.36.0](https://github.com/pentacore/media-manager/compare/v1.35.2...v1.36.0) (2026-10-08)
 
 

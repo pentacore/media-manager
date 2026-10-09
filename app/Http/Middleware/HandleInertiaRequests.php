@@ -57,6 +57,7 @@ class HandleInertiaRequests extends Middleware
     #[Override]
     public function share(Request $request): array
     {
+        /** @var User|null $user */
         $user = $request->user();
 
         return [
@@ -69,29 +70,50 @@ class HandleInertiaRequests extends Middleware
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'integrations' => [
-                'seerr' => $user !== null && ServiceConnection::query()
-                    ->where('type', ServiceType::Seerr)
-                    ->where('is_active', true)
-                    ->exists(),
-                'prowlarr' => $user !== null && ServiceConnection::query()
-                    ->where('type', ServiceType::Prowlarr)
-                    ->where('is_active', true)
-                    ->exists(),
-                'whisparr' => $user !== null
-                    && $user->can(Abilities::ADMIN)
-                    && ServiceConnection::query()
-                        ->where('type', ServiceType::Whisparr)
-                        ->where('is_active', true)
-                        ->exists(),
-            ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
-            'version' => $user ? [
+            // Closures: Inertia resolves a shared closure only when the
+            // response includes its key, so full visits and prefetches build
+            // these while partial reloads (deferred groups, polling, realtime
+            // reloads) skip the queries and cache reads entirely. They are
+            // built here on every request and capture only this request's
+            // user: never move them into a static, a singleton or a
+            // cross-request cache (Octane).
+            'integrations' => fn (): array => $this->integrations($user),
+            'nav' => fn (): array => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
+            'version' => fn (): ?array => $user ? [
                 'current' => AppVersion::current(),
                 'latest' => AppVersion::latest(),
                 'updateAvailable' => AppVersion::updateAvailable(),
             ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+        ];
+    }
+
+    /**
+     * Which optional integrations have an active connection, read in one
+     * query per page visit. Not cached across requests, so an admin's
+     * connection change shows on the very next navigation.
+     *
+     * @return array{seerr: bool, prowlarr: bool, whisparr: bool}
+     */
+    private function integrations(?User $user): array
+    {
+        if (! $user instanceof User) {
+            return ['seerr' => false, 'prowlarr' => false, 'whisparr' => false];
+        }
+
+        /** @var list<ServiceType> $activeTypes */
+        $activeTypes = ServiceConnection::query()
+            ->where('is_active', true)
+            ->whereIn('type', [ServiceType::Seerr, ServiceType::Prowlarr, ServiceType::Whisparr])
+            ->distinct()
+            ->pluck('type')
+            ->all();
+
+        return [
+            'seerr' => in_array(ServiceType::Seerr, $activeTypes, true),
+            'prowlarr' => in_array(ServiceType::Prowlarr, $activeTypes, true),
+            // The Whisparr pages are admin-only, so members never see the link.
+            'whisparr' => $user->can(Abilities::ADMIN) && in_array(ServiceType::Whisparr, $activeTypes, true),
         ];
     }
 

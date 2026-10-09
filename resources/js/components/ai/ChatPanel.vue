@@ -151,6 +151,7 @@ const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
                 : (options.reasoningLevels.find(
                       (level) => level.value === reasoning,
                   )?.label ?? reasoning),
+        tier: override.value.model ? null : options.defaults.tier,
     };
 });
 

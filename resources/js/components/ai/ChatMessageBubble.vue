@@ -131,7 +131,7 @@ const MAX_TEMPLATE_BODY = 4000;
                 class="font-mono-tabular mt-1 text-[11px] text-fg-subtle"
                 data-answered-by
             >
-                {{
+                <span>{{
                     [
                         message.answered_by.provider,
                         message.answered_by.model,
@@ -139,7 +139,14 @@ const MAX_TEMPLATE_BODY = 4000;
                     ]
                         .filter(Boolean)
                         .join(' · ')
-                }}
+                }}</span>
+                <span
+                    v-if="(message.answered_by.tier?.position ?? 1) > 1"
+                    :title="message.answered_by.tier?.reason ?? undefined"
+                    data-answered-by-tier
+                >
+                    · tier {{ message.answered_by.tier?.position }}
+                </span>
             </p>
         </div>
     </div>

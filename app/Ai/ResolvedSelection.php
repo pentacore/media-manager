@@ -8,7 +8,8 @@ use App\Enums\AiReasoningLevel;
 
 /**
  * The provider, model and reasoning level a task runs on after every
- * override and fallback is applied.
+ * override, fallback and tier is applied; `tier` says which tier of the task's
+ * list ran.
  */
 final readonly class ResolvedSelection
 {
@@ -16,6 +17,7 @@ final readonly class ResolvedSelection
         public string $provider,
         public string $model,
         public AiReasoningLevel $reasoning,
+        public ?TierOutcome $tier = null,
     ) {}
 
     public function modelSelection(): ModelSelection

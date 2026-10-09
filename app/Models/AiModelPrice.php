@@ -6,9 +6,11 @@ namespace App\Models;
 
 use App\Enums\AiReasoningLevel;
 use App\Enums\PricingSource;
+use App\Observers\AiModelPriceObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
@@ -83,6 +85,7 @@ use Override;
     'reasoning_style',
 ])]
 #[Appends(['automatic_updates_enabled'])]
+#[ObservedBy(AiModelPriceObserver::class)]
 class AiModelPrice extends Model
 {
     use HasFactory;

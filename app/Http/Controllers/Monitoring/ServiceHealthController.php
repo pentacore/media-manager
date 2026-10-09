@@ -65,7 +65,7 @@ class ServiceHealthController extends Controller
             ],
             'canRunChecks' => (bool) $request->user()?->isMember(),
             'diskSpace' => Inertia::defer(fn (): array => $this->loadDiskSpaceForAll($connections)),
-            'prowlarrIndexers' => Inertia::defer(fn (): array => $this->loadProwlarrIndexersForAll($connections)),
+            'prowlarrIndexers' => Inertia::defer(fn (): array => $this->loadProwlarrIndexersForAll($connections), 'prowlarrIndexers'),
         ]);
     }
 

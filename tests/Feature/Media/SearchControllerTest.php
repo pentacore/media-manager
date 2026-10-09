@@ -238,11 +238,11 @@ test('search returns Seerr titles with their library status and no per-hit detai
     $this->actingAs($member)
         ->get(route('media.search.index', ['q' => 'found', 'scope' => 'requests']))
         ->assertInertia(fn ($page) => $page
-            // Scoped to the 'default' group so this reload doesn't also pull
+            // Scoped to the 'seerr' group so this reload doesn't also pull
             // the separately-grouped 'requesting' prop, which would fire an
             // extra /api/v1/user call and break the single-request assertion
             // below.
-            ->loadDeferredProps('default', fn ($reload) => $reload
+            ->loadDeferredProps('seerr', fn ($reload) => $reload
                 ->where('requestResults.error', null)
                 ->has('requestResults.results', 1)
                 ->where('requestResults.results.0.tmdb_id', 1396)
@@ -265,7 +265,7 @@ test('search keeps Seerr hits that were never requested', function (): void {
     $this->actingAs($member)
         ->get(route('media.search.index', ['q' => 'fresh', 'scope' => 'requests']))
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', fn ($reload) => $reload
+            ->loadDeferredProps('seerr', fn ($reload) => $reload
                 ->has('requestResults.results', 1)
                 ->where('requestResults.results.0.status', 'none')));
 });
@@ -280,7 +280,7 @@ test('search maps each Seerr media status onto its title row', function (int $me
     $this->actingAs($member)
         ->get(route('media.search.index', ['q' => 'any', 'scope' => 'requests']))
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', fn ($reload) => $reload->where('requestResults.results.0.status', $expected)));
+            ->loadDeferredProps('seerr', fn ($reload) => $reload->where('requestResults.results.0.status', $expected)));
 })->with([
     'pending' => [2, 'pending'],
     'processing' => [3, 'requested'],
@@ -320,9 +320,9 @@ test('search filters out person hits returned by Seerr multi-search', function (
         ->get(route('media.search.index', ['q' => 'actor']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            // Scoped to 'default' so this reload doesn't also pull the
+            // Scoped to 'seerr' so this reload doesn't also pull the
             // separately-grouped 'requesting' prop (see the note above).
-            ->loadDeferredProps('default', fn ($page) => $page
+            ->loadDeferredProps('seerr', fn ($page) => $page
                 ->where('requestResults.results', [])
             )
         );
@@ -431,7 +431,7 @@ test('search does not leak provider exception details to members', function (): 
     );
 });
 
-test('a genuine upstream failure still degrades to "temporarily unavailable" for Sonarr, Seerr and Prowlarr', function (string $service, string $path, string $prop): void {
+test('a genuine upstream failure still degrades to "temporarily unavailable" for Sonarr, Seerr and Prowlarr', function (string $service, string $path, string $prop, string $group): void {
     $factory = ServiceConnection::factory();
     match ($service) {
         'sonarr' => $factory->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']),
@@ -447,13 +447,13 @@ test('a genuine upstream failure still degrades to "temporarily unavailable" for
         ->get(route('media.search.index', $query))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', fn ($page) => $page
+            ->loadDeferredProps($group, fn ($page) => $page
                 ->where("{$prop}.results", [])
                 ->where("{$prop}.error", sprintf('%s search is temporarily unavailable.', ucfirst($service)))));
 })->with([
-    'sonarr' => ['sonarr', 'sonarr.local:8989/api/v3/series', 'seriesResults'],
-    'seerr' => ['seerr', 'seerr.local:5055/api/v1/search*', 'requestResults'],
-    'prowlarr' => ['prowlarr', 'prowlarr.local:9696/api/v1/search*', 'indexerResults'],
+    'sonarr' => ['sonarr', 'sonarr.local:8989/api/v3/series', 'seriesResults', 'sonarr'],
+    'seerr' => ['seerr', 'seerr.local:5055/api/v1/search*', 'requestResults', 'seerr'],
+    'prowlarr' => ['prowlarr', 'prowlarr.local:9696/api/v1/search*', 'indexerResults', 'indexers'],
 ]);
 
 test('a malformed Prowlarr publishDate still degrades to a null age, not an error', function (): void {

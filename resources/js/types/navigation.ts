@@ -33,6 +33,14 @@ export type NavItem = {
     requiresProwlarr?: boolean;
     /** Hidden unless an active Whisparr connection exists and the viewer is an admin (shared `integrations.whisparr`). */
     requiresWhisparr?: boolean;
+    /**
+     * Hover prefetch, on unless `false`. Set `false` when the page, in its
+     * initial (non-deferred) props, reads an upstream service that is
+     * uncached or whose failures are not cached, runs heavy un-deferred DB
+     * aggregation, or dispatches work/has a side effect on GET, so a passing
+     * hover never pays that cost.
+     */
+    prefetch?: boolean;
 };
 
 /**
