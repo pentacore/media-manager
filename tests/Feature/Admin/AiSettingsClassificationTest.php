@@ -140,3 +140,37 @@ test('index exposes classification settings, provider keys and advanced tool ava
             ->where('advancedTools.code_execution', true)
         );
 });
+
+test('admin saves the Jev usage settings', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), validAiSettingsPayload([
+            'stuck_import_fast_path_enabled' => '1',
+            'stuck_import_threshold' => '0.9',
+            'decision_tool_scoping_enabled' => '1',
+            'classification_audit_sample_rate' => '0.1',
+        ]))
+        ->assertRedirect();
+
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->stuckImportFastPathEnabled())->toBeTrue()
+        ->and($aiSettings->stuckImportThreshold())->toBe(0.9)
+        ->and($aiSettings->decisionToolScopingEnabled())->toBeTrue()
+        ->and($aiSettings->classificationAuditSampleRate())->toBe(0.1);
+});
+
+test('the Jev usage thresholds must lie between zero and one', function (string $field): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), validAiSettingsPayload([$field => '1.5']))
+        ->assertSessionHasErrors($field);
+})->with(['stuck_import_threshold', 'classification_audit_sample_rate']);
+
+test('the settings page carries the Jev usage settings', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-settings.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('settings.stuck_import_fast_path_enabled', false)
+            ->where('settings.stuck_import_threshold', 0.85)
+            ->where('settings.decision_tool_scoping_enabled', false)
+            ->where('settings.classification_audit_sample_rate', 0.05));
+});

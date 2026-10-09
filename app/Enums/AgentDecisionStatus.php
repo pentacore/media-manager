@@ -22,6 +22,9 @@ enum AgentDecisionStatus: string
     /** Classification judged the event unlikely to need action; the agent did not run. */
     case SkippedByGate = 'skipped_by_gate';
 
+    /** The stuck-import classifier fast path handled the event; the agent did not run. */
+    case ResolvedByClassifier = 'resolved_by_classifier';
+
     public function label(): string
     {
         return match ($this) {
@@ -29,6 +32,7 @@ enum AgentDecisionStatus: string
             self::Completed => 'Completed',
             self::Failed => 'Failed',
             self::SkippedByGate => 'Skipped by gate',
+            self::ResolvedByClassifier => 'Resolved by classifier',
         };
     }
 }

@@ -31,3 +31,17 @@ test('a gate-skipped decision shows its pill and gate summary on the webhook det
         ->assertSeeIn('[data-decision-status="skipped_by_gate"]', 'skipped by gate')
         ->assertSeeIn('[data-decision-summary]', 'Skipped by the classification gate');
 });
+
+test('a classifier-resolved decision renders as a readable pill on the webhook log', function (): void {
+    $webhookEvent = WebhookEvent::factory()->processed()->create();
+    AgentDecision::factory()->resolvedByClassifier()->for($webhookEvent)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.webhook-log.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-decision-status="resolved_by_classifier"]', 'resolved by classifier');
+
+    visit(route('admin.webhook-log.show', $webhookEvent, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-decision-summary]', 'Resolved by the classifier');
+});

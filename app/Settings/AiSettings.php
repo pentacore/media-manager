@@ -64,6 +64,14 @@ class AiSettings
 
     public const string CHAT_ROUTING_ENABLED_KEY = 'ai.classification.chat_routing.enabled';
 
+    public const string STUCK_IMPORT_FAST_PATH_ENABLED_KEY = 'ai.classification.stuck_import.enabled';
+
+    public const string STUCK_IMPORT_THRESHOLD_KEY = 'ai.classification.stuck_import.threshold';
+
+    public const string DECISION_TOOL_SCOPING_ENABLED_KEY = 'ai.classification.decision_tool_scoping.enabled';
+
+    public const string CLASSIFICATION_AUDIT_SAMPLE_RATE_KEY = 'ai.classification.audit_sample_rate';
+
     public const string RERANKING_PROVIDER_KEY = 'ai.reranking.provider';
 
     public const string RERANKING_MODEL_KEY = 'ai.reranking.model';
@@ -93,6 +101,18 @@ class AiSettings
      * unlikely to need the agent, when nothing is persisted.
      */
     private const float DEFAULT_GATE_THRESHOLD = 0.3;
+
+    /**
+     * Probability the stuck-import fast path needs before it acts without
+     * the DecisionAgent.
+     */
+    private const float DEFAULT_STUCK_IMPORT_THRESHOLD = 0.85;
+
+    /**
+     * Share of below-threshold gate decisions that run anyway, so skipped
+     * events still produce outcome data.
+     */
+    private const float DEFAULT_AUDIT_SAMPLE_RATE = 0.05;
 
     /**
      * Per-request override that takes precedence over the persisted mode.
@@ -445,6 +465,78 @@ class AiSettings
     }
 
     /**
+     * Whether ManualInteractionRequired events try the classifier fast path
+     * before the DecisionAgent. Off until an admin enables it.
+     */
+    public function stuckImportFastPathEnabled(): bool
+    {
+        return (bool) ($this->appSettings->get(self::STUCK_IMPORT_FAST_PATH_ENABLED_KEY) ?? false);
+    }
+
+    /**
+     * Persist the fast-path toggle. A null value clears the setting so the
+     * fast path falls back to off again.
+     */
+    public function setStuckImportFastPathEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::STUCK_IMPORT_FAST_PATH_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Probability the classifier's stuck-import choice needs before the fast
+     * path acts on it, clamped to [0, 1].
+     */
+    public function stuckImportThreshold(): float
+    {
+        return $this->threshold(self::STUCK_IMPORT_THRESHOLD_KEY, self::DEFAULT_STUCK_IMPORT_THRESHOLD);
+    }
+
+    /**
+     * Persist the fast-path threshold. A null value clears the setting so the
+     * threshold falls back to the default again.
+     */
+    public function setStuckImportThreshold(?float $threshold): void
+    {
+        $this->appSettings->set(self::STUCK_IMPORT_THRESHOLD_KEY, $threshold);
+    }
+
+    /**
+     * Whether the decision gate's classification call also picks an action
+     * kind that scopes the DecisionAgent's tools. Off until an admin enables it.
+     */
+    public function decisionToolScopingEnabled(): bool
+    {
+        return (bool) ($this->appSettings->get(self::DECISION_TOOL_SCOPING_ENABLED_KEY) ?? false);
+    }
+
+    /**
+     * Persist the tool-scoping toggle. A null value clears the setting so
+     * scoping falls back to off again.
+     */
+    public function setDecisionToolScopingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::DECISION_TOOL_SCOPING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Share of below-threshold webhook-gate and subtitle-triage decisions
+     * that run anyway as audit runs, clamped to [0, 1]. Zero disables audits.
+     */
+    public function classificationAuditSampleRate(): float
+    {
+        return $this->threshold(self::CLASSIFICATION_AUDIT_SAMPLE_RATE_KEY, self::DEFAULT_AUDIT_SAMPLE_RATE);
+    }
+
+    /**
+     * Persist the audit sample rate. A null value clears the setting so the
+     * rate falls back to the default again.
+     */
+    public function setClassificationAuditSampleRate(?float $rate): void
+    {
+        $this->appSettings->set(self::CLASSIFICATION_AUDIT_SAMPLE_RATE_KEY, $rate);
+    }
+
+    /**
      * The provider semantic search reranks with (`cohere`, `jina` or
      * `openrouter`). A saved value overrides the `ai.default_for_reranking`
      * config default; an unknown value falls back to Cohere.
@@ -577,9 +669,9 @@ class AiSettings
         return (string) config('ai.default', 'openai');
     }
 
-    private function threshold(string $key): float
+    private function threshold(string $key, float $default = self::DEFAULT_GATE_THRESHOLD): float
     {
-        $stored = $this->appSettings->get($key) ?? self::DEFAULT_GATE_THRESHOLD;
+        $stored = $this->appSettings->get($key) ?? $default;
 
         return max(0.0, min(1.0, (float) $stored));
     }

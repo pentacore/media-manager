@@ -17,6 +17,7 @@ use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\SearchMediaReleasesTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
+use App\Ai\Tools\Arr\StuckImportVerdictTool;
 use App\Ai\Tools\Bazarr\InspectSubtitleTool;
 use App\Ai\Tools\Bazarr\RequestSubtitleOperationTool;
 use App\Ai\Tools\Bazarr\SearchSubtitlesTool;
@@ -104,6 +105,7 @@ enum ToolGroup: string
                 StuckDownloadInvestigatorAgent::class,
                 ResolveManualImportChatTool::class,
                 RemoveStuckDownloadChatTool::class,
+                StuckImportVerdictTool::class,
             ],
             self::LibraryChanges => [
                 GetMediaAddOptionsTool::class,

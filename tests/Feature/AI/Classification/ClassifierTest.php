@@ -65,3 +65,19 @@ test('a non-OpenRouter classification call carries no routing preferences', func
 
     Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->providerOptions === []);
 });
+
+test('background classification calls use the five second timeout by default', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.5)]]);
+
+    resolve(Classifier::class)->probability('x', 'payload', 'Needs action?');
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === Classifier::BACKGROUND_TIMEOUT_SECONDS);
+});
+
+test('a caller can pass its own classification timeout', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.5)]]);
+
+    resolve(Classifier::class)->probability('x', 'payload', 'Needs action?', Classifier::CHAT_TIMEOUT_SECONDS);
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === 3);
+});

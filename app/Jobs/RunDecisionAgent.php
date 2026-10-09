@@ -5,12 +5,22 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\StuckImportDecider;
+use App\Ai\Decision\StuckImportDecision;
+use App\Ai\Decision\StuckImportResolver;
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AgentDecisionStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Enums\QueueLane;
+use App\Enums\ServiceType;
+use App\Enums\StuckImportChoice;
 use App\Models\ActionRequest;
 use App\Models\AgentDecision;
+use App\Models\ClassificationOutcome;
 use App\Models\WebhookEvent;
 use App\Notifications\DecisionAgentActed;
 use App\Providers\AIServiceProvider;
@@ -29,6 +39,11 @@ use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Laravel\Ai\Classification\Boolean;
+use Laravel\Ai\Classification\Choice;
+use Laravel\Ai\Responses\Data\Answer;
+use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Laravel\Ai\Responses\Data\ChoiceAnswer;
 use Throwable;
 
 /**
@@ -55,6 +70,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
     /** The yes/no question the classification gate asks about each event. */
     private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
+
+    /** The choice question that scopes the DecisionAgent's tools. */
+    private const string ACTION_KIND_QUESTION = 'If this media-server webhook event needs an operator action, which kind of action is it?';
+
+    /** Probability at or above which a classified action kind scopes the run. */
+    public const float SCOPE_AT = 0.5;
 
     /**
      * $payload and $serviceConnectionId snapshot the triggering event so the
@@ -84,6 +105,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         AiBudgetGuard $aiBudgetGuard,
         AiSettings $aiSettings,
         Classifier $classifier,
+        ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+        StuckImportDecider $stuckImportDecider,
+        StuckImportResolver $stuckImportResolver,
     ): void {
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
@@ -123,7 +147,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if ($this->skippedByGate($webhookEventId, $aiSettings, $classifier)) {
+        $answers = $this->classifyEvent($aiSettings, $classifier);
+        $gateVerdict = $this->gateVerdict($webhookEventId, $answers['decision'] ?? null, $aiSettings, $classificationOutcomeRecorder);
+
+        if ($gateVerdict === ClassificationVerdict::Skipped) {
             return;
         }
 
@@ -133,6 +160,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $actionKind = $this->scopedActionKind($answers['action_kind'] ?? null, $classificationOutcomeRecorder);
+
         $decisionRunContext = new DecisionRunContext(
             webhookEventId: $webhookEventId,
             maxActions: $decisionAgentSettings->maxActionsPerRun(),
@@ -141,12 +170,20 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             originConnectionId: $this->serviceConnectionId
                 ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
             eventType: $this->eventType,
+            actionKind: $actionKind,
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
+        $fastPathOutcome = null;
+        $summary = '';
+
         try {
-            $response = (new DecisionAgent)->prompt($this->buildPrompt());
-            $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
+            $fastPathOutcome = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
+
+            if ($fastPathOutcome === null) {
+                $response = (new DecisionAgent)->prompt($this->buildPrompt());
+                $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
+            }
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [
                 'webhook_event_id' => $webhookEventId,
@@ -162,8 +199,26 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             app()->forgetInstance(DecisionRunContext::class);
         }
 
+        // The fast path already recorded its own AgentDecision and
+        // classification outcomes above; only the notification — which can
+        // itself fail — is sent out here, safely past the try/finally.
+        if ($fastPathOutcome !== null) {
+            if ($fastPathOutcome !== '') {
+                $this->notify($decisionRunContext, $fastPathOutcome, $decisionAgentSettings);
+            }
+
+            return;
+        }
+
+        if ($gateVerdict === ClassificationVerdict::AuditRun) {
+            $summary = sprintf('Audit run (the classification gate would have skipped this event). %s', $summary);
+        }
+
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
+        $this->resolveGateOutcome($decisionRunContext, $classificationOutcomeRecorder);
+        $this->resolveActionKindOutcome($decisionRunContext, $classificationOutcomeRecorder);
+        $this->resolveFallbackAgreement($decisionRunContext, $classificationOutcomeRecorder);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
     }
 
@@ -221,36 +276,310 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Cheap classification before a paid 16-step run. Stuck imports always
-     * run — a wrong skip there leaves a download stuck — and any classifier
-     * failure falls through to the agent.
+     * One classification call per event, asking every enabled question about
+     * it. Stuck imports are never gated: a wrong skip leaves a download stuck.
+     * Null when nothing is asked or classification fails (fail open).
+     *
+     * @return array<string, Answer>|null
      */
-    private function skippedByGate(?int $webhookEventId, AiSettings $aiSettings, Classifier $classifier): bool
+    private function classifyEvent(AiSettings $aiSettings, Classifier $classifier): ?array
     {
-        if (! $aiSettings->decisionGateEnabled() || $this->eventType === 'ManualInteractionRequired') {
-            return false;
+        if ($this->eventType === 'ManualInteractionRequired') {
+            return null;
         }
 
-        $probability = $classifier->probability(
-            self::class,
-            ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)],
-            self::GATE_QUESTION,
-        );
+        $questions = [];
 
+        if ($aiSettings->decisionGateEnabled()) {
+            $questions['decision'] = new Boolean(self::GATE_QUESTION);
+        }
+
+        if ($aiSettings->decisionToolScopingEnabled()) {
+            $questions['action_kind'] = new Choice(self::ACTION_KIND_QUESTION, DecisionActionKind::choiceOptions());
+        }
+
+        if ($questions === []) {
+            return null;
+        }
+
+        return $classifier->classify(self::class, $this->classificationState(), $questions);
+    }
+
+    /**
+     * @return array{service: string, event_type: string, payload: string}
+     */
+    private function classificationState(): array
+    {
+        return ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)];
+    }
+
+    /**
+     * Cheap classification before a paid 16-step run. Below the threshold
+     * the event is skipped, unless the audit sample picks it to run anyway.
+     * Null when the gate did not run or classification failed.
+     */
+    private function gateVerdict(?int $webhookEventId, ?Answer $answer, AiSettings $aiSettings, ClassificationOutcomeRecorder $classificationOutcomeRecorder): ?ClassificationVerdict
+    {
+        if (! $answer instanceof BooleanAnswer) {
+            return null;
+        }
+
+        $probability = $answer->probability;
         $threshold = $aiSettings->decisionGateThreshold();
 
-        if ($probability === null || $probability >= $threshold) {
-            return false;
+        $classificationVerdict = match (true) {
+            $probability >= $threshold => ClassificationVerdict::Passed,
+            $classificationOutcomeRecorder->shouldAudit() => ClassificationVerdict::AuditRun,
+            default => ClassificationVerdict::Skipped,
+        };
+
+        $classificationOutcomeRecorder->record(ClassificationGate::DecisionGate, $this->outcomeSubjectKey(), 'decision', $probability, $classificationVerdict, $threshold);
+
+        if ($classificationVerdict === ClassificationVerdict::Skipped) {
+            $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
+                'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
+                (int) round($probability * 100),
+                (int) round($threshold * 100),
+                self::GATE_QUESTION,
+            ), null);
         }
 
-        $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
-            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
-            (int) round($probability * 100),
-            (int) round($threshold * 100),
-            self::GATE_QUESTION,
-        ), null);
+        return $classificationVerdict;
+    }
 
-        return true;
+    /**
+     * The gate was right to pass the event when the agent queued an action.
+     */
+    private function resolveGateOutcome(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        $count = $decisionRunContext->count();
+
+        $classificationOutcomeRecorder->resolve(
+            ClassificationGate::DecisionGate,
+            $this->outcomeSubjectKey(),
+            $count > 0,
+            $count > 0 ? sprintf('%d action(s) proposed', $count) : 'no action',
+            [ClassificationVerdict::Passed, ClassificationVerdict::AuditRun],
+        );
+    }
+
+    /**
+     * The key this run's classification outcome rows share.
+     */
+    private function outcomeSubjectKey(): string
+    {
+        return $this->uniqueId();
+    }
+
+    /**
+     * The action kind to scope this run to, or null for the full toolset.
+     * Below SCOPE_AT, when classification failed, or when the choice is
+     * "other" (the run keeps every tool either way, so "other" is never
+     * scoped), the run keeps every tool.
+     */
+    private function scopedActionKind(?Answer $answer, ClassificationOutcomeRecorder $classificationOutcomeRecorder): ?DecisionActionKind
+    {
+        if (! $answer instanceof ChoiceAnswer) {
+            return null;
+        }
+
+        $probability = $answer->probabilityOf($answer->choice);
+        $actionKind = DecisionActionKind::tryFrom($answer->choice);
+        $scoped = $actionKind instanceof DecisionActionKind
+            && $actionKind !== DecisionActionKind::Other
+            && $probability >= self::SCOPE_AT;
+
+        $classificationOutcomeRecorder->record(
+            ClassificationGate::ActionKind,
+            $this->outcomeSubjectKey(),
+            'action_kind',
+            $probability,
+            $scoped ? ClassificationVerdict::Scoped : ClassificationVerdict::Unscoped,
+            self::SCOPE_AT,
+            $answer->choice,
+        );
+
+        return $scoped ? $actionKind : null;
+    }
+
+    /**
+     * The kind was right when every action the run queued belongs to it.
+     * A run that queued nothing leaves the outcome open, and so does a run
+     * predicted "other": that kind has no checkable mapping to action types,
+     * so its outcome row is resolved by nothing here and stays open.
+     */
+    private function resolveActionKindOutcome(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        if ($decisionRunContext->count() === 0) {
+            return;
+        }
+
+        $types = ActionRequest::query()->whereKey($decisionRunContext->actionRequestIds())->pluck('type')->all();
+        $kinds = array_map(static fn (string $type): ?string => DecisionActionKind::forActionType($type)?->value, $types);
+        $actual = count(array_unique($kinds)) === 1 ? (string) $kinds[0] : 'mixed';
+
+        foreach (DecisionActionKind::cases() as $decisionActionKind) {
+            if ($decisionActionKind === DecisionActionKind::Other) {
+                continue;
+            }
+
+            $classificationOutcomeRecorder->resolveAgainst(
+                ClassificationGate::ActionKind,
+                $this->outcomeSubjectKey(),
+                $actual,
+                [ClassificationVerdict::Scoped, ClassificationVerdict::Unscoped],
+                $decisionActionKind->value,
+            );
+        }
+    }
+
+    /**
+     * Stuck imports first ask the classifier. A confident import or removal
+     * is queued through the same rails the agent's tools use, and a confident
+     * "manual" is recorded for a human, all without an agent run. Anything
+     * else — fast path off, no download id, no or unconfident answer, a
+     * failed lookup or dispatch — returns null and the agent runs as before.
+     *
+     * Never sends the admin notification itself: a notification failure
+     * (DB/broadcast channel) must not be caught by handle()'s agent-failure
+     * catch and misrecord an already-resolved decision as Failed. Instead it
+     * returns the resolved outcome for handle() to notify from once the
+     * try/finally around this call has completed: null when not resolved
+     * (run the agent), '' when resolved with nothing to notify about, or the
+     * summary to notify with.
+     */
+    private function resolvedByFastPath(
+        ?int $webhookEventId,
+        DecisionRunContext $decisionRunContext,
+        AiSettings $aiSettings,
+        DecisionAgentSettings $decisionAgentSettings,
+        StuckImportDecider $stuckImportDecider,
+        StuckImportResolver $stuckImportResolver,
+        ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+    ): ?string {
+        $service = mb_strtolower($this->service);
+        $downloadId = $decisionRunContext->eventDownloadId();
+
+        if ($this->eventType !== 'ManualInteractionRequired'
+            || ! $aiSettings->stuckImportFastPathEnabled()
+            || $downloadId === null
+            || ! in_array($service, ['sonarr', 'radarr'], true)) {
+            return null;
+        }
+
+        if (! $decisionAgentSettings->allowManualImport()) {
+            $this->record($webhookEventId, AgentDecisionStatus::NoAction, 'Manual-import resolution is disabled in Decision Agent settings, so the stuck download was left for a human.', $decisionRunContext);
+
+            return '';
+        }
+
+        try {
+            $connection = $decisionRunContext->resolveConnection($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
+        } catch (Throwable $throwable) {
+            Log::warning('RunDecisionAgent: fast path could not resolve the service connection', [
+                'service' => $service,
+                'download_id' => $downloadId,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $stuckImportDecision = $stuckImportDecider->decide($connection, $service, $downloadId);
+
+        if (! $stuckImportDecision instanceof StuckImportDecision) {
+            return null;
+        }
+
+        $subjectKey = ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId));
+        $threshold = $aiSettings->stuckImportThreshold();
+
+        if (! $stuckImportDecision->isConfident) {
+            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
+
+            return null;
+        }
+
+        $result = match ($stuckImportDecision->choice) {
+            StuckImportChoice::Import => $stuckImportResolver->import($decisionRunContext, $service, $downloadId),
+            StuckImportChoice::Remove => $stuckImportResolver->remove($decisionRunContext, $service, $downloadId, $stuckImportDecision->reason(), $stuckImportDecision->blocklist, $stuckImportDecision->searchReplacement),
+            StuckImportChoice::Manual => ['queued' => false, 'reason' => 'manual'],
+        };
+
+        $reason = $result['reason'] ?? null;
+
+        if (in_array($reason, ['lookup_failed', 'dispatch_failed'], true)) {
+            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
+
+            return null;
+        }
+
+        $verdictLine = sprintf(
+            'Resolved by the classifier: %s, %d%% likely (threshold %d%%).',
+            $stuckImportDecision->choice->label(),
+            (int) round($stuckImportDecision->probability * 100),
+            (int) round($threshold * 100),
+        );
+
+        if ($reason === 'no_action_type_config') {
+            $this->record($webhookEventId, AgentDecisionStatus::NoAction, sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? '')), $decisionRunContext);
+
+            return '';
+        }
+
+        $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
+
+        // "nothing_importable" is resolved negative right away: nothing
+        // downstream ever learns this row's eventual outcome (there is no
+        // action request or human decision to watch), so it would otherwise
+        // stay open forever.
+        if ($reason === 'nothing_importable') {
+            $classificationOutcomeRecorder->resolve(
+                ClassificationGate::StuckImport,
+                $subjectKey,
+                false,
+                'nothing_importable',
+                [ClassificationVerdict::ResolvedByClassifier],
+                null,
+                $stuckImportDecision->choice->value,
+            );
+        }
+
+        $summary = ($result['queued'] ?? false) === true
+            ? sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? ''))
+            : sprintf('Resolved by the classifier: needs a human (%d%% likely). A human must resolve this stuck download in Sonarr/Radarr.', (int) round($stuckImportDecision->probability * 100));
+
+        $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
+
+        return $summary;
+    }
+
+    /**
+     * After an unconfident fast-path call fell back to the agent, compare
+     * the classifier's prediction with what the agent actually queued.
+     */
+    private function resolveFallbackAgreement(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
+    {
+        $downloadId = $decisionRunContext->eventDownloadId();
+
+        if ($this->eventType !== 'ManualInteractionRequired' || $downloadId === null) {
+            return;
+        }
+
+        $types = ActionRequest::query()->whereKey($decisionRunContext->actionRequestIds())->pluck('type')->all();
+        $actual = match (true) {
+            in_array('resolve_manual_import', $types, true) => StuckImportChoice::Import->value,
+            in_array('remove_stuck_download', $types, true) => StuckImportChoice::Remove->value,
+            default => StuckImportChoice::Manual->value,
+        };
+
+        $classificationOutcomeRecorder->resolveAgainst(
+            ClassificationGate::StuckImport,
+            ClassificationOutcome::subjectKey('download', sprintf('%s:%s', mb_strtolower($this->service), $downloadId)),
+            $actual,
+            [ClassificationVerdict::Fallback],
+        );
     }
 
     private function logCooldownSkip(?int $webhookEventId, string $subjectKey): void

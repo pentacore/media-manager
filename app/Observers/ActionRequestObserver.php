@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace App\Observers;
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
+use App\Enums\ActionRequestStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
+use App\Enums\StuckImportChoice;
 use App\Models\ActionRequest;
+use App\Models\ClassificationOutcome;
 use App\Services\Actions\ActionRequestActivityLogger;
 use Exception;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
@@ -27,7 +33,10 @@ use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
  */
 class ActionRequestObserver implements ShouldHandleEventsAfterCommit
 {
-    public function __construct(private readonly ActionRequestActivityLogger $actionRequestActivityLogger) {}
+    public function __construct(
+        private readonly ActionRequestActivityLogger $actionRequestActivityLogger,
+        private readonly ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+    ) {}
 
     public function created(ActionRequest $actionRequest): void
     {
@@ -49,5 +58,49 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
         } catch (Exception $exception) {
             report($exception);
         }
+
+        $this->resolveStuckImportOutcome($actionRequest);
+    }
+
+    /**
+     * A classifier-queued stuck-import action was right when a human approved
+     * it or it auto-ran to completion, and wrong when a human rejected it.
+     * Filtered to the row the action's own type predicted, so an unrelated
+     * action on the same download (e.g. a chat-queued removal while the
+     * classifier's "manual" row, or a different choice's row, is still open)
+     * never resolves the wrong outcome.
+     */
+    private function resolveStuckImportOutcome(ActionRequest $actionRequest): void
+    {
+        if (! in_array($actionRequest->type, ['resolve_manual_import', 'remove_stuck_download'], true)) {
+            return;
+        }
+
+        $positive = match ($actionRequest->status) {
+            ActionRequestStatus::Approved => true,
+            ActionRequestStatus::Completed => $actionRequest->requires_approval ? null : true,
+            ActionRequestStatus::Rejected => false,
+            default => null,
+        };
+
+        $service = $actionRequest->payload['service'] ?? null;
+        $downloadId = $actionRequest->payload['download_id'] ?? null;
+
+        if ($positive === null || ! is_string($service) || ! is_string($downloadId)) {
+            return;
+        }
+
+        $predicted = $actionRequest->type === 'resolve_manual_import'
+            ? StuckImportChoice::Import->value
+            : StuckImportChoice::Remove->value;
+
+        $this->classificationOutcomeRecorder->resolve(
+            ClassificationGate::StuckImport,
+            ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId)),
+            $positive,
+            $actionRequest->status->value,
+            [ClassificationVerdict::ResolvedByClassifier],
+            predicted: $predicted,
+        );
     }
 }

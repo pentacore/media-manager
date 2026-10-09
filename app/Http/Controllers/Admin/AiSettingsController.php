@@ -59,6 +59,10 @@ class AiSettingsController extends Controller
                 'subtitle_triage_enabled' => $aiSettings->subtitleTriageEnabled(),
                 'subtitle_triage_threshold' => $aiSettings->subtitleTriageThreshold(),
                 'chat_routing_enabled' => $aiSettings->chatRoutingEnabled(),
+                'stuck_import_fast_path_enabled' => $aiSettings->stuckImportFastPathEnabled(),
+                'stuck_import_threshold' => $aiSettings->stuckImportThreshold(),
+                'decision_tool_scoping_enabled' => $aiSettings->decisionToolScopingEnabled(),
+                'classification_audit_sample_rate' => $aiSettings->classificationAuditSampleRate(),
                 'reranking_provider' => $aiSettings->rerankingProvider(),
                 'reranking_model' => $aiSettings->rerankingModel(),
                 'embeddings_provider' => $aiSettings->embeddingsProvider(),
@@ -302,6 +306,22 @@ class AiSettingsController extends Controller
 
         if (array_key_exists('chat_routing_enabled', $validated)) {
             $aiSettings->setChatRoutingEnabled((bool) $validated['chat_routing_enabled']);
+        }
+
+        if (array_key_exists('stuck_import_fast_path_enabled', $validated)) {
+            $aiSettings->setStuckImportFastPathEnabled((bool) $validated['stuck_import_fast_path_enabled']);
+        }
+
+        if (array_key_exists('stuck_import_threshold', $validated)) {
+            $aiSettings->setStuckImportThreshold((float) $validated['stuck_import_threshold']);
+        }
+
+        if (array_key_exists('decision_tool_scoping_enabled', $validated)) {
+            $aiSettings->setDecisionToolScopingEnabled((bool) $validated['decision_tool_scoping_enabled']);
+        }
+
+        if (array_key_exists('classification_audit_sample_rate', $validated)) {
+            $aiSettings->setClassificationAuditSampleRate((float) $validated['classification_audit_sample_rate']);
         }
 
         if (array_key_exists('reranking_provider', $validated)) {

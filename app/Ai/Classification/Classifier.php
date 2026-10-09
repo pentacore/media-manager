@@ -23,7 +23,11 @@ use Throwable;
  */
 final readonly class Classifier
 {
-    private const int TIMEOUT_SECONDS = 10;
+    /** Timeout for gates that run in queued jobs. */
+    public const int BACKGROUND_TIMEOUT_SECONDS = 5;
+
+    /** Timeout for gates a person waits on, such as chat tool routing. */
+    public const int CHAT_TIMEOUT_SECONDS = 3;
 
     public function __construct(
         private AiSettings $aiSettings,
@@ -34,9 +38,10 @@ final readonly class Classifier
     /**
      * @param  string|array<string, mixed>  $state
      * @param  array<string, Question>  $questions
+     * @param  int  $timeoutSeconds  Seconds before the call is abandoned and the gate fails open.
      * @return array<string, Answer>|null
      */
-    public function classify(string $caller, string|array $state, array $questions): ?array
+    public function classify(string $caller, string|array $state, array $questions, int $timeoutSeconds = self::BACKGROUND_TIMEOUT_SECONDS): ?array
     {
         $provider = $this->aiSettings->classificationProvider();
 
@@ -47,7 +52,7 @@ final readonly class Classifier
         try {
             $response = $this->aiUsageCaller->during($caller, fn (): ClassificationResponse => Classification::of($state)
                 ->questions($questions)
-                ->timeout(self::TIMEOUT_SECONDS)
+                ->timeout($timeoutSeconds)
                 ->withProviderOptions(fn (Provider $resolvedProvider): array => $this->openRouterRequestOptions->for($resolvedProvider->driver()))
                 ->classify($provider, $this->aiSettings->classificationModel()));
 
@@ -68,10 +73,11 @@ final readonly class Classifier
 
     /**
      * @param  string|array<string, mixed>  $state
+     * @param  int  $timeoutSeconds  Seconds before the call is abandoned and the gate fails open.
      */
-    public function probability(string $caller, string|array $state, string $question): ?float
+    public function probability(string $caller, string|array $state, string $question, int $timeoutSeconds = self::BACKGROUND_TIMEOUT_SECONDS): ?float
     {
-        $answer = $this->classify($caller, $state, ['decision' => new Boolean($question)])['decision'] ?? null;
+        $answer = $this->classify($caller, $state, ['decision' => new Boolean($question)], $timeoutSeconds)['decision'] ?? null;
 
         return $answer instanceof BooleanAnswer ? $answer->probability : null;
     }

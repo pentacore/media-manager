@@ -7,8 +7,7 @@ namespace App\Ai\Tools\Decision;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Arr\ArrConnections;
-use App\Services\Arr\ManualImportResolver;
+use App\Services\Arr\StuckImportInspector;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
@@ -71,8 +70,7 @@ class InspectStuckImportTool extends DecisionTool
             $connection = $context instanceof DecisionRunContext
                 ? $context->resolveConnection($type)
                 : ServiceConnection::resolveActive($type);
-            $client = resolve(ArrConnections::class)->client($connection);
-            $candidates = $client->getManualImport(['downloadId' => $downloadId]);
+            $inspection = resolve(StuckImportInspector::class)->inspect($connection, $service, $downloadId);
         } catch (Throwable $throwable) {
             Log::warning('InspectStuckImportTool: lookup failed', [
                 'service' => $service,
@@ -84,18 +82,7 @@ class InspectStuckImportTool extends DecisionTool
             return ['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.'];
         }
 
-        $manualImportResolver = resolve(ManualImportResolver::class);
-        $assessment = $manualImportResolver->assess($candidates, $service, $downloadId);
-
-        return [
-            'ok' => true,
-            'service' => $service,
-            'download_id' => $downloadId,
-            'total' => $assessment['total'],
-            'importable' => $assessment['importable'],
-            'fully_mapped' => $assessment['fully_mapped'],
-            'files' => $manualImportResolver->describe($candidates, $service),
-        ];
+        return ['ok' => true, ...$inspection];
     }
 
     /**
