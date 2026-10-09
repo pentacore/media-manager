@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Ai\Routing;
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Settings\AiSettings;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification\Boolean;
@@ -28,16 +31,19 @@ final readonly class ChatToolRouter
     public function __construct(
         private Classifier $classifier,
         private AiSettings $aiSettings,
+        private ClassificationOutcomeRecorder $classificationOutcomeRecorder,
     ) {}
 
     /**
      * The groups to load for this message, or null for the full toolset.
      * Groups whose tools the previous assistant turn called stay loaded, so
-     * a "yes, do it" follow-up keeps the tool it confirms.
+     * a "yes, do it" follow-up keeps the tool it confirms. When $turnKey is
+     * given and classification returned answers, records one outcome row
+     * per group.
      *
      * @return list<ToolGroup>|null
      */
-    public function route(string $message, ?string $conversationId): ?array
+    public function route(string $message, ?string $conversationId, ?string $turnKey = null): ?array
     {
         if (! $this->aiSettings->chatRoutingEnabled()) {
             return null;
@@ -60,17 +66,74 @@ final readonly class ChatToolRouter
 
         $probabilities = collect($answers)->map(fn (Answer $answer): float => $answer instanceof BooleanAnswer ? $answer->probability : 0.0);
 
-        if ($probabilities->max() < self::INCLUDE_AT) {
-            return null;
+        $groups = $probabilities->max() < self::INCLUDE_AT
+            ? null
+            : $probabilities->filter(fn (float $probability): bool => $probability >= self::INCLUDE_AT)
+                ->keys()
+                ->map(fn (string $value): ToolGroup => ToolGroup::from($value))
+                ->merge(collect($previousToolNames)->flatMap(fn (string $name): array => ToolGroup::forToolName($name)))
+                ->unique(fn (ToolGroup $toolGroup): string => $toolGroup->value)
+                ->values()
+                ->all();
+
+        if ($turnKey !== null) {
+            $this->recordRouting($turnKey, $probabilities->all(), $groups);
         }
 
-        return $probabilities->filter(fn (float $probability): bool => $probability >= self::INCLUDE_AT)
-            ->keys()
-            ->map(fn (string $value): ToolGroup => ToolGroup::from($value))
-            ->merge(collect($previousToolNames)->flatMap(fn (string $name): array => ToolGroup::forToolName($name)))
-            ->unique(fn (ToolGroup $toolGroup): string => $toolGroup->value)
-            ->values()
+        return $groups;
+    }
+
+    /**
+     * One row per group: included when the turn loaded it (every group is
+     * loaded when routing fell back to the full toolset).
+     *
+     * @param  array<string, float>  $probabilities
+     * @param  list<ToolGroup>|null  $groups
+     */
+    private function recordRouting(string $turnKey, array $probabilities, ?array $groups): void
+    {
+        $included = $groups === null
+            ? array_keys($probabilities)
+            : array_map(static fn (ToolGroup $toolGroup): string => $toolGroup->value, $groups);
+
+        foreach ($probabilities as $group => $probability) {
+            $this->classificationOutcomeRecorder->record(
+                ClassificationGate::ChatRouting,
+                $turnKey,
+                $group,
+                $probability,
+                in_array($group, $included, true) ? ClassificationVerdict::Included : ClassificationVerdict::Excluded,
+                self::INCLUDE_AT,
+            );
+        }
+    }
+
+    /**
+     * Resolve the turn's included groups: positive when the reply called one
+     * of the group's tools.
+     *
+     * @param  list<string>  $toolNames
+     */
+    public function recordToolUse(string $turnKey, array $toolNames): void
+    {
+        $used = collect($toolNames)
+            ->flatMap(fn (string $name): array => ToolGroup::forToolName($name))
+            ->map(fn (ToolGroup $toolGroup): string => $toolGroup->value)
+            ->unique()
             ->all();
+
+        foreach (ToolGroup::cases() as $toolGroup) {
+            $isUsed = in_array($toolGroup->value, $used, true);
+
+            $this->classificationOutcomeRecorder->resolve(
+                ClassificationGate::ChatRouting,
+                $turnKey,
+                $isUsed,
+                $isUsed ? 'used' : 'not used',
+                [ClassificationVerdict::Included],
+                $toolGroup->value,
+            );
+        }
     }
 
     /**

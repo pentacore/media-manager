@@ -17,6 +17,7 @@ use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
 use App\Http\Streaming\ChatStreamProtocol;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Models\ClassificationOutcome;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
@@ -40,7 +41,9 @@ use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Responses\TextResponse;
 use Throwable;
 
 class ChatController extends Controller
@@ -73,16 +76,19 @@ class ChatController extends Controller
         $messageToSend = $continuation ?? $validated['message'];
         $turnStartedAt = CarbonImmutable::now();
         $attachments = $chatAttachmentStore->store($user, $sendChatRequest->file('attachments', []));
+        $turnKey = ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7());
 
         try {
             // A workflow continuation executes whichever destructive tools the
             // approved steps name, so it always gets the full toolset.
-            $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId) : null;
+            $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
             $response = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
                 ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
+
+        $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
 
         $workflowPayload = $chatWorkflowContinuation->claimProposed($user, $turnStartedAt, $response->conversationId ?? null);
 
@@ -133,16 +139,19 @@ class ChatController extends Controller
         $isNewConversation = $conversationId === null;
         $message = $validated['message'];
         $attachments = $chatAttachmentStore->store($user, $streamChatRequest->file('attachments', []));
+        $turnKey = ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7());
 
         try {
-            $groups = $chatToolRouter->route($message, $conversationId);
+            $groups = $chatToolRouter->route($message, $conversationId, $turnKey);
             $stream = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
                 ->stream($message, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride): void {
+        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
+            $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
+
             $newConversationId = $response->conversationId ?? null;
             $chatAttachmentStore->assignConversation($attachments, $newConversationId);
 
@@ -238,6 +247,19 @@ class ChatController extends Controller
     {
         return (new MediaAgent)->continueOrStart($conversationId, as: $user)
             ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
+    }
+
+    /**
+     * The names of the tools a finished turn called.
+     *
+     * @return list<string>
+     */
+    private function calledToolNames(TextResponse $textResponse): array
+    {
+        return $textResponse->toolCalls
+            ->map(fn (ToolCall $toolCall): string => $toolCall->name)
+            ->values()
+            ->all();
     }
 
     /**
