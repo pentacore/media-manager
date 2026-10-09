@@ -113,6 +113,55 @@ test('a confident removal is always queued for approval with the flags it earned
         ->and($actionRequest->payload['blocklist'])->toBeTrue()
         ->and($actionRequest->payload['search_replacement'])->toBeFalse();
     DecisionAgent::assertNeverPrompted();
+    expect(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)
+        ->and(ClassificationOutcome::sole())->verdict->toBe(ClassificationVerdict::ResolvedByClassifier)->predicted->toBe('remove');
+});
+
+test('a partial mapping through the fast path is always queued for human approval', function (): void {
+    fakeStuckImportApis([
+        ['path' => '/dl/show.s01e01.mkv', 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'series' => ['id' => 5], 'episodes' => [['id' => 11]], 'rejections' => []],
+        ['path' => '/dl/show.s01e02.mkv', 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'series' => [], 'episodes' => [], 'rejections' => [['reason' => 'Unknown Series']]],
+    ]);
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+
+    runStuckImportJob();
+
+    DecisionAgent::assertNeverPrompted();
+    $actionRequest = ActionRequest::sole();
+    expect($actionRequest->type)->toBe('resolve_manual_import')
+        // The resolve_manual_import rule requires_approval is false in
+        // beforeEach, but a partial mapping forces approval regardless.
+        ->and($actionRequest->requires_approval)->toBeTrue();
+});
+
+test('a candidate lookup failure in the resolver after a confident decision falls back to the agent', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::sequence()
+            ->push(stuckImportCandidates())
+            ->push('boom', 500),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+    ]);
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+
+    runStuckImportJob();
+
+    DecisionAgent::assertPrompted(fn (): bool => true);
+    expect(ActionRequest::count())->toBe(0)
+        ->and(ClassificationOutcome::sole())->verdict->toBe(ClassificationVerdict::Fallback)->predicted->toBe('import')
+        ->and(AgentDecision::sole()->status)->not->toBe(AgentDecisionStatus::ResolvedByClassifier);
+});
+
+test('no ActionTypeConfig for the resolved action type records no action and never runs the agent', function (): void {
+    ActionTypeConfig::query()->where('type', 'resolve_manual_import')->delete();
+    fakeStuckImportApis(stuckImportCandidates());
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+
+    runStuckImportJob();
+
+    DecisionAgent::assertNeverPrompted();
+    expect(ActionRequest::count())->toBe(0)
+        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::NoAction)->summary->toContain('Action Rule')
+        ->and(ClassificationOutcome::count())->toBe(0);
 });
 
 test('a confident manual call records a needs-human decision and queues nothing', function (): void {
@@ -190,6 +239,13 @@ test('a fully unmapped download is recorded as needing a human', function (): vo
     DecisionAgent::assertNeverPrompted();
     expect(ActionRequest::count())->toBe(0)
         ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('needs a human');
+    // Nothing downstream will ever resolve this row (no action request, no
+    // human decision to watch), so the fast path closes it immediately.
+    expect(ClassificationOutcome::sole())
+        ->verdict->toBe(ClassificationVerdict::ResolvedByClassifier)
+        ->outcome_positive->toBeFalse()
+        ->outcome_detail->toBe('nothing_importable')
+        ->outcome_at->not->toBeNull();
 });
 
 test('a confident import queued for auto-run notifies per the settings', function (): void {
