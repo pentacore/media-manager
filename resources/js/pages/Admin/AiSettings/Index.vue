@@ -42,6 +42,10 @@ interface AiSettingsState {
     subtitle_triage_enabled: boolean;
     subtitle_triage_threshold: number;
     chat_routing_enabled: boolean;
+    stuck_import_fast_path_enabled: boolean;
+    stuck_import_threshold: number;
+    decision_tool_scoping_enabled: boolean;
+    classification_audit_sample_rate: number;
     reranking_provider: string;
     reranking_model: string | null;
     embeddings_provider: string;
@@ -124,6 +128,12 @@ const classificationModel = ref(props.settings.classification_model ?? '');
 const decisionGateEnabled = ref(props.settings.decision_gate_enabled);
 const subtitleTriageEnabled = ref(props.settings.subtitle_triage_enabled);
 const chatRoutingEnabled = ref(props.settings.chat_routing_enabled);
+const decisionToolScopingEnabled = ref(
+    props.settings.decision_tool_scoping_enabled,
+);
+const stuckImportFastPathEnabled = ref(
+    props.settings.stuck_import_fast_path_enabled,
+);
 const selectedRerankingProvider = ref(props.settings.reranking_provider);
 const rerankingModel = ref(props.settings.reranking_model ?? '');
 const selectedEmbeddingsProvider = ref(props.settings.embeddings_provider);
@@ -685,6 +695,126 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.chat_routing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Webhook tool scoping"
+                            hint="Also asks which kind of action the event needs, and loads only those tools. Stuck-import events always get every tool."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="decisionToolScopingEnabled"
+                                data-decision-tool-scoping-toggle
+                                :label="
+                                    decisionToolScopingEnabled
+                                        ? 'Enabled'
+                                        : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="decision_tool_scoping_enabled"
+                                :value="decisionToolScopingEnabled ? '1' : '0'"
+                            />
+                            <InputError
+                                :message="errors.decision_tool_scoping_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Stuck-import fast path"
+                            hint="Lets classification import or remove a stuck download without an agent run when it is confident. Removals still need approval; anything less confident runs the agent."
+                        >
+                            <span />
+                        </Field>
+                        <div class="flex flex-col gap-2">
+                            <div>
+                                <Toggle
+                                    v-model="stuckImportFastPathEnabled"
+                                    data-stuck-import-toggle
+                                    :label="
+                                        stuckImportFastPathEnabled
+                                            ? 'Enabled'
+                                            : 'Disabled'
+                                    "
+                                />
+                                <input
+                                    type="hidden"
+                                    name="stuck_import_fast_path_enabled"
+                                    :value="
+                                        stuckImportFastPathEnabled ? '1' : '0'
+                                    "
+                                />
+                            </div>
+                            <label
+                                for="stuck_import_threshold"
+                                class="flex items-center gap-2 text-[12px] text-muted-foreground"
+                            >
+                                Threshold
+                                <Input
+                                    id="stuck_import_threshold"
+                                    name="stuck_import_threshold"
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    class="h-8 w-24 text-sm"
+                                    :default-value="
+                                        settings.stuck_import_threshold
+                                    "
+                                />
+                            </label>
+                            <InputError
+                                :message="
+                                    errors.stuck_import_fast_path_enabled ??
+                                    errors.stuck_import_threshold
+                                "
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Audit sample rate"
+                            hint="Share of events the webhook gate or subtitle triage would skip that run anyway, to measure how often a skip is wrong. 0 turns audits off."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="classification_audit_sample_rate"
+                                name="classification_audit_sample_rate"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                class="h-8 w-24 text-sm"
+                                :default-value="
+                                    settings.classification_audit_sample_rate
+                                "
+                            />
+                            <InputError
+                                :message="
+                                    errors.classification_audit_sample_rate
+                                "
                                 class="mt-1"
                             />
                         </div>
