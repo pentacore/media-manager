@@ -1,3 +1,33 @@
+# [1.38.0](https://github.com/pentacore/media-manager/compare/v1.37.0...v1.38.0) (2026-10-09)
+
+
+### Bug Fixes
+
+* **admin:** denominate the audit-run summary by resolved rows ([989ecaf](https://github.com/pentacore/media-manager/commit/989ecaf7c26bc905e0428fc2d99a62c63f294a1c))
+* **admin:** scale calibration bars to a fixed 0-100% axis ([87b36be](https://github.com/pentacore/media-manager/commit/87b36be9e2813f36297f0afa87f2a1e78808c237))
+* **ai:** cap each stuck-import file's rejection text before classifying ([16ddfc5](https://github.com/pentacore/media-manager/commit/16ddfc516b28fa94a794bf0731eb61f583596dab))
+* **ai:** keep chat routing outcome tracking from failing a turn ([27d4097](https://github.com/pentacore/media-manager/commit/27d409720ea182aafbb5ec293ccba9781a48926a))
+* **ai:** log a warning when the fast path can't resolve a connection ([3829684](https://github.com/pentacore/media-manager/commit/382968423afc592e48c02e9ac4e08f1bafb65f1e))
+* **ai:** match stuck-import outcomes to the predicted choice and notify outside the run ([4f05d73](https://github.com/pentacore/media-manager/commit/4f05d7330b6cbc20d520706787cca53bf0faa787))
+* **ai:** resolve a nothing_importable fast-path row immediately ([3a45e5f](https://github.com/pentacore/media-manager/commit/3a45e5f244e592df8e8a3195e28be54f9e7ba6bc))
+* **ai:** skip chat tool-use outcome writes when routing is off ([5b3294a](https://github.com/pentacore/media-manager/commit/5b3294a87c14d206f1494e6aa41111ef893a1b8b))
+* **ai:** stop recording a confident "other" action kind as scoped ([ed0a0f2](https://github.com/pentacore/media-manager/commit/ed0a0f2210cdff004589a1853e110ae674220d6f))
+
+
+### Features
+
+* **admin:** classification gate calibration on AI usage and a classifier badge in the webhook log ([24c2107](https://github.com/pentacore/media-manager/commit/24c2107e159868d7b666227a46318c263ffff433))
+* **admin:** settings for the stuck-import fast path, tool scoping and audit sampling ([fbe24fd](https://github.com/pentacore/media-manager/commit/fbe24fdf048dbc9640b20cc6094048b6c50f57a0))
+* **ai:** add Jev usage settings and per-call classification timeouts ([fdbfc25](https://github.com/pentacore/media-manager/commit/fdbfc25e607278ab7954578d793e889619f0f727))
+* **ai:** decide stuck imports from the inspection with one Jev call ([ad260db](https://github.com/pentacore/media-manager/commit/ad260dbec0f5e6db415a67b36b2f4cfbebd3e704))
+* **ai:** give chat a fast classifier verdict on stuck downloads ([f95e8d6](https://github.com/pentacore/media-manager/commit/f95e8d6c8cd38a27a8f14a83ba3e69e7cf9c96af))
+* **ai:** resolve confident stuck imports without a decision agent run ([cdc89c9](https://github.com/pentacore/media-manager/commit/cdc89c960315918c0c04b968652349db00f7b00f))
+* **ai:** scope the decision agent's tools by a classified action kind ([75574e2](https://github.com/pentacore/media-manager/commit/75574e2539d9adb9b46de0b589e60765655a62b9))
+* **ai:** store classification gate outcomes for calibration ([c6b6aaa](https://github.com/pentacore/media-manager/commit/c6b6aaa315f4fa4343a673b4b151cb391bddc771))
+* **ai:** track subtitle triage outcomes and sample triaged-out cases ([2ae6648](https://github.com/pentacore/media-manager/commit/2ae66480ff653825d1cc7a5ad39cae02353d0541))
+* **ai:** track webhook gate outcomes and sample skipped events as audit runs ([78159f6](https://github.com/pentacore/media-manager/commit/78159f602c8b5e0b6fade7e594d2f734d57242db))
+* **ai:** track which routed chat tool groups each turn used ([e13645f](https://github.com/pentacore/media-manager/commit/e13645f0af08b3f56ce79ae9903fd6b438996069))
+
 # [1.37.0](https://github.com/pentacore/media-manager/compare/v1.36.0...v1.37.0) (2026-10-08)
 
 
