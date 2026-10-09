@@ -97,7 +97,7 @@ class StuckImportVerdictTool extends DecisionTool
     {
         return [
             'service' => $schema->string()->description('The arr service the stuck download belongs to: "sonarr" or "radarr".')->required(),
-            'download_id' => $schema->string()->description('The stuck download\'s downloadId.')->required(),
+            'download_id' => $schema->string()->description("The stuck download's downloadId.")->required(),
         ];
     }
 }

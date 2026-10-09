@@ -203,10 +203,10 @@ test('a routed turn records one outcome row per tool group', function (): void {
 test('recording tool use marks included groups used or unused', function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([routerGroupAnswers(['downloads' => 0.9, 'playback' => 0.8])]);
-    $router = resolve(ChatToolRouter::class);
+    $chatToolRouter = resolve(ChatToolRouter::class);
 
-    $router->route('stuck download and what is playing?', null, 'chat_turn:t2');
-    $router->recordToolUse('chat_turn:t2', [class_basename(NowPlayingTool::class)]);
+    $chatToolRouter->route('stuck download and what is playing?', null, 'chat_turn:t2');
+    $chatToolRouter->recordToolUse('chat_turn:t2', [class_basename(NowPlayingTool::class)]);
 
     $rows = ClassificationOutcome::query()->where('subject_key', 'chat_turn:t2')->get()->keyBy('question');
 

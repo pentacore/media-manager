@@ -86,10 +86,10 @@ test('blocklist and search replacement are set only for removals at the flag thr
         deciderAnswers('remove', 0.95, blocklist: 0.8, search: 0.79),
         deciderAnswers('import', 0.95, blocklist: 0.99, search: 0.99),
     ]);
-    $decider = resolve(StuckImportDecider::class);
+    $stuckImportDecider = resolve(StuckImportDecider::class);
 
-    $removal = $decider->decide(deciderSonarr(), 'sonarr', 'dl-1');
-    $import = $decider->decide(deciderSonarr(), 'sonarr', 'dl-1');
+    $removal = $stuckImportDecider->decide(deciderSonarr(), 'sonarr', 'dl-1');
+    $import = $stuckImportDecider->decide(deciderSonarr(), 'sonarr', 'dl-1');
 
     expect($removal->blocklist)->toBeTrue()
         ->and($removal->searchReplacement)->toBeFalse()

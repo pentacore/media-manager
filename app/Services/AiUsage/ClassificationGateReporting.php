@@ -13,6 +13,7 @@ use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use stdClass;
 
 /**
  * Per-gate calibration for the AI Usage page: how often each probability
@@ -30,7 +31,7 @@ final readonly class ClassificationGateReporting
     public function summary(?CarbonImmutable $since): array
     {
         $rows = ClassificationOutcome::query()
-            ->when($since !== null, fn (Builder $builder): Builder => $builder->where('created_at', '>=', $since))
+            ->when($since instanceof CarbonImmutable, fn (Builder $builder): Builder => $builder->where('created_at', '>=', $since))
             ->whereNotNull('probability')
             ->selectRaw('gate, verdict, LEAST(FLOOR(probability * ?), ?) AS band, COUNT(*) AS total, COUNT(outcome_at) AS resolved, SUM(CASE WHEN outcome_positive THEN 1 ELSE 0 END) AS positive', [self::BANDS, self::BANDS - 1])
             ->groupBy('gate', 'verdict', 'band')
@@ -44,7 +45,7 @@ final readonly class ClassificationGateReporting
     }
 
     /**
-     * @param  Collection<int, object>  $rows
+     * @param  Collection<int, stdClass>  $rows
      * @return array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}
      */
     private function gateSummary(ClassificationGate $classificationGate, Collection $rows): array
@@ -52,7 +53,7 @@ final readonly class ClassificationGateReporting
         $bands = [];
 
         for ($band = 0; $band < self::BANDS; $band++) {
-            $bandRows = $rows->filter(fn (object $row): bool => (int) $row->band === $band);
+            $bandRows = $rows->filter(fn (stdClass $row): bool => (int) $row->band === $band);
             $resolved = (int) $bandRows->sum('resolved');
 
             $bands[] = [

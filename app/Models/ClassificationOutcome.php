@@ -72,6 +72,8 @@ class ClassificationOutcome extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

@@ -152,7 +152,7 @@ class ChatController extends Controller
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
+        $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
             $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
 
             $newConversationId = $response->conversationId ?? null;

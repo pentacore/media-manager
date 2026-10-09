@@ -94,17 +94,17 @@ test('a failing write never reaches the caller', function (): void {
 })->throwsNoExceptions();
 
 test('audit sampling follows the lottery and never runs at a zero rate', function (): void {
-    $recorder = resolve(ClassificationOutcomeRecorder::class);
+    $classificationOutcomeRecorder = resolve(ClassificationOutcomeRecorder::class);
 
     Lottery::alwaysWin();
-    expect($recorder->shouldAudit())->toBeTrue();
+    expect($classificationOutcomeRecorder->shouldAudit())->toBeTrue();
 
     Lottery::alwaysLose();
-    expect($recorder->shouldAudit())->toBeFalse();
+    expect($classificationOutcomeRecorder->shouldAudit())->toBeFalse();
 
     Lottery::alwaysWin();
     resolve(AiSettings::class)->setClassificationAuditSampleRate(0.0);
-    expect($recorder->shouldAudit())->toBeFalse();
+    expect($classificationOutcomeRecorder->shouldAudit())->toBeFalse();
 });
 
 test('rows older than the retention window are pruned', function (): void {

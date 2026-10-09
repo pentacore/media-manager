@@ -14,9 +14,9 @@ use App\Models\SubtitleCase;
 use Illuminate\Support\Str;
 use LogicException;
 
-final class SubtitleCaseLifecycle
+final readonly class SubtitleCaseLifecycle
 {
-    public function __construct(private readonly ClassificationOutcomeRecorder $classificationOutcomeRecorder) {}
+    public function __construct(private ClassificationOutcomeRecorder $classificationOutcomeRecorder) {}
 
     /** @var array<string, list<string>> */
     private const array TRANSITIONS = [

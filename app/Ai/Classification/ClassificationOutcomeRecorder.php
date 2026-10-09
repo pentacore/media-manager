@@ -83,7 +83,7 @@ final readonly class ClassificationOutcomeRecorder
     public function resolveAgainst(ClassificationGate $classificationGate, string $subjectKey, string $actual, array $verdicts): void
     {
         try {
-            $this->openRows($classificationGate, $subjectKey, $verdicts, null, null)
+            $this->openRows($classificationGate, $subjectKey, $verdicts, null)
                 ->get()
                 ->each(fn (ClassificationOutcome $classificationOutcome): bool => $classificationOutcome->update([
                     'outcome_positive' => $classificationOutcome->predicted === $actual,

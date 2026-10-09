@@ -32,27 +32,27 @@ function triageRow(SubtitleCase $subtitleCase, ClassificationVerdict $classifica
 
 test('a resolved case resolves its passed triage outcome as positive', function (): void {
     $subtitleCase = triageOutcomeCase(SubtitleCaseStatus::ReplacementRequested);
-    $row = triageRow($subtitleCase);
+    $classificationOutcome = triageRow($subtitleCase);
 
     resolve(SubtitleCaseLifecycle::class)->resolve($subtitleCase);
 
-    expect($row->refresh())->outcome_positive->toBeTrue()->outcome_detail->toBe('resolved');
+    expect($classificationOutcome->refresh())->outcome_positive->toBeTrue()->outcome_detail->toBe('resolved');
 });
 
 test('a case sent to review after the advisor ran resolves its audit-run triage outcome as negative', function (): void {
     $subtitleCase = triageOutcomeCase(SubtitleCaseStatus::AdvisorRunning);
-    $row = triageRow($subtitleCase, ClassificationVerdict::AuditRun);
+    $classificationOutcome = triageRow($subtitleCase, ClassificationVerdict::AuditRun);
 
     resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, 'No candidate.');
 
-    expect($row->refresh()->outcome_positive)->toBeFalse();
+    expect($classificationOutcome->refresh()->outcome_positive)->toBeFalse();
 });
 
 test('a skipped triage row is never resolved by later transitions', function (): void {
     $subtitleCase = triageOutcomeCase(SubtitleCaseStatus::NeedsReview);
-    $row = triageRow($subtitleCase, ClassificationVerdict::Skipped);
+    $classificationOutcome = triageRow($subtitleCase, ClassificationVerdict::Skipped);
 
     resolve(SubtitleCaseLifecycle::class)->resolve($subtitleCase);
 
-    expect($row->refresh()->outcome_at)->toBeNull();
+    expect($classificationOutcome->refresh()->outcome_at)->toBeNull();
 });

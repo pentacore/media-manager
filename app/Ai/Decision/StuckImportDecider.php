@@ -30,7 +30,7 @@ final readonly class StuckImportDecider
     /** Candidate files sent to the classifier, at most. */
     private const int MAX_FILES = 20;
 
-    private const string CHOICE_QUESTION = 'A Sonarr/Radarr download is stuck waiting for manual import. Given each candidate file\'s mapping and the upstream rejection reasons, what should happen to it?';
+    private const string CHOICE_QUESTION = "A Sonarr/Radarr download is stuck waiting for manual import. Given each candidate file's mapping and the upstream rejection reasons, what should happen to it?";
 
     private const string BLOCKLIST_QUESTION = 'Is the release itself bad (corrupt, fake or wrong content), so it should be blocklisted and never grabbed again?';
 

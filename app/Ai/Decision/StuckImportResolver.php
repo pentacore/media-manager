@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Decision;
 
 use App\Enums\ServiceType;
+use App\Models\ActionRequest;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Arr\ArrConnections;
@@ -99,7 +100,7 @@ final readonly class StuckImportResolver
             return ['queued' => false, 'reason' => 'dispatch_failed'];
         }
 
-        if ($actionRequest === null) {
+        if (! $actionRequest instanceof ActionRequest) {
             return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
@@ -162,7 +163,7 @@ final readonly class StuckImportResolver
             return ['queued' => false, 'reason' => 'dispatch_failed'];
         }
 
-        if ($actionRequest === null) {
+        if (! $actionRequest instanceof ActionRequest) {
             return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',

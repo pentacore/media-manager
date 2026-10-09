@@ -19,7 +19,7 @@ function stuckImportRow(string $predicted = 'import'): ClassificationOutcome
 }
 
 test('approving a classifier-queued import resolves its outcome as positive', function (ActionRequestStatus $actionRequestStatus, bool $requiresApproval, ?bool $expected): void {
-    $row = stuckImportRow();
+    $classificationOutcome = stuckImportRow();
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'resolve_manual_import',
         'status' => ActionRequestStatus::Pending,
@@ -29,7 +29,7 @@ test('approving a classifier-queued import resolves its outcome as positive', fu
 
     $actionRequest->update(['status' => $actionRequestStatus]);
 
-    expect($row->refresh()->outcome_positive)->toBe($expected);
+    expect($classificationOutcome->refresh()->outcome_positive)->toBe($expected);
 })->with([
     'approved by a human' => [ActionRequestStatus::Approved, true, true],
     'rejected by a human' => [ActionRequestStatus::Rejected, true, false],
@@ -38,7 +38,7 @@ test('approving a classifier-queued import resolves its outcome as positive', fu
 ]);
 
 test('approving a classifier-queued removal resolves a row predicted remove', function (): void {
-    $row = stuckImportRow('remove');
+    $classificationOutcome = stuckImportRow('remove');
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'remove_stuck_download',
         'status' => ActionRequestStatus::Pending,
@@ -48,11 +48,11 @@ test('approving a classifier-queued removal resolves a row predicted remove', fu
 
     $actionRequest->update(['status' => ActionRequestStatus::Approved]);
 
-    expect($row->refresh()->outcome_positive)->toBeTrue();
+    expect($classificationOutcome->refresh()->outcome_positive)->toBeTrue();
 });
 
 test('approving a classifier-queued removal leaves a row predicted import open', function (): void {
-    $row = stuckImportRow('import');
+    $classificationOutcome = stuckImportRow('import');
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'remove_stuck_download',
         'status' => ActionRequestStatus::Pending,
@@ -62,11 +62,11 @@ test('approving a classifier-queued removal leaves a row predicted import open',
 
     $actionRequest->update(['status' => ActionRequestStatus::Approved]);
 
-    expect($row->refresh()->outcome_at)->toBeNull();
+    expect($classificationOutcome->refresh()->outcome_at)->toBeNull();
 });
 
 test('a row predicted manual is never resolved by an import approval', function (): void {
-    $row = stuckImportRow('manual');
+    $classificationOutcome = stuckImportRow('manual');
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'resolve_manual_import',
         'status' => ActionRequestStatus::Pending,
@@ -76,14 +76,14 @@ test('a row predicted manual is never resolved by an import approval', function 
 
     $actionRequest->update(['status' => ActionRequestStatus::Approved]);
 
-    expect($row->refresh()->outcome_at)->toBeNull();
+    expect($classificationOutcome->refresh()->outcome_at)->toBeNull();
 });
 
 test('other action types never touch stuck-import outcomes', function (): void {
-    $row = stuckImportRow();
+    $classificationOutcome = stuckImportRow();
     $actionRequest = ActionRequest::factory()->create(['type' => 'add_series', 'status' => ActionRequestStatus::Pending, 'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1']]);
 
     $actionRequest->update(['status' => ActionRequestStatus::Rejected]);
 
-    expect($row->refresh()->outcome_at)->toBeNull();
+    expect($classificationOutcome->refresh()->outcome_at)->toBeNull();
 });
