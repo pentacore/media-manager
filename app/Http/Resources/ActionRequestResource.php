@@ -55,7 +55,7 @@ class ActionRequestResource extends JsonResource
             'status' => $this->status->value,
             'requires_approval' => $this->requires_approval,
             'payload' => resolve(ActionRequestBrowserPayload::class)->for($this->resource),
-            'result' => $request->user()?->isAdmin() ? $this->result : $this->safeResult(),
+            'result' => $request->user()?->isAdmin() ? $this->result : resolve(ActionRequestBrowserPayload::class)->safeResult($this->resource),
             'approved_by' => $this->whenLoaded('approvedByUser', fn () => $this->approvedByUser?->name),
             'webhook_source' => $this->whenLoaded('webhookEvent', fn () => $this->webhookEvent?->serviceConnection?->name),
             'replacement_attempt' => $this->whenLoaded('mediaReplacementAttempt', fn (): ?array => $this->mediaReplacementAttempt === null ? null : [
@@ -65,27 +65,6 @@ class ActionRequestResource extends JsonResource
             ]),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
-        ];
-    }
-
-    /**
-     * What a non-admin may read of the result. The reviewer's rejection
-     * reason is written for the requester, so it is included.
-     *
-     * @return array{success: mixed, reason: mixed, rejection_reason: string|null}|null
-     */
-    private function safeResult(): ?array
-    {
-        if ($this->result === null) {
-            return null;
-        }
-
-        $rejectionReason = $this->result['rejection_reason'] ?? null;
-
-        return [
-            'success' => $this->result['success'] ?? null,
-            'reason' => $this->result['reason'] ?? null,
-            'rejection_reason' => is_string($rejectionReason) ? $rejectionReason : null,
         ];
     }
 }

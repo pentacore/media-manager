@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Models\ActionRequest;
+use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -30,23 +31,18 @@ class ActionRequestStatusChanged implements ShouldBroadcast
     }
 
     /**
+     * The result is narrowed to ActionRequestBrowserPayload::safeResult():
+     * raw exception messages can carry paths, tokens or server internals,
+     * and admins read the full result from the Action Queue's page props.
+     *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
     {
-        // Do NOT broadcast raw exception messages or stack traces — those can
-        // leak sensitive paths, tokens, or server-internal details. Full context
-        // remains in the DB for admins viewing the Actions page.
-        $result = $this->actionRequest->result ?? [];
-        $safeResult = [
-            'success' => $result['success'] ?? null,
-            'reason' => $result['reason'] ?? null,
-        ];
-
         return [
             'id' => $this->actionRequest->id,
             'status' => $this->actionRequest->status->value,
-            'result' => $safeResult,
+            'result' => resolve(ActionRequestBrowserPayload::class)->safeResult($this->actionRequest),
             'updated_at' => $this->actionRequest->updated_at->toISOString(),
         ];
     }
