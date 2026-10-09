@@ -120,3 +120,20 @@ test('refreshing the slot restarts its TTL', function (): void {
     $this->travel(2)->seconds();
     expect(SeerrClearInFlight::claim($this->connection->id, 'pending'))->not->toBeNull();
 });
+
+test('a clear queued before slot tokens existed still runs and leaves the slot alone', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/request/*' => Http::response(['ok' => true])]);
+    $heldToken = SeerrClearInFlight::claim($this->connection->id, 'available');
+    $clearSeerrRequests = new ReflectionClass(ClearSeerrRequests::class)->newInstanceWithoutConstructor();
+    $clearSeerrRequests->serviceConnectionId = $this->connection->id;
+    $clearSeerrRequests->status = 'available';
+    $clearSeerrRequests->requestIds = [11];
+    $clearSeerrRequests->userId = null;
+
+    $clearSeerrRequests->handle();
+    $clearSeerrRequests->failed(new RuntimeException('Timed out.'));
+
+    Http::assertSentCount(1);
+    expect($heldToken)->not->toBeNull()
+        ->and(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeNull();
+});

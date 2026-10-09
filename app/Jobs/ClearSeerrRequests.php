@@ -45,16 +45,24 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
     public const int MAX_CONSECUTIVE_CONNECTION_FAILURES = 5;
 
     /**
+     * The SeerrClearInFlight owner token the page claimed. Declared outside
+     * the constructor so a job queued before the token existed unserializes
+     * with null (a promoted property gets no default) and skips the release.
+     */
+    public ?string $slotToken = null;
+
+    /**
      * @param  list<int>  $requestIds
-     * @param  string  $slotToken  the SeerrClearInFlight owner token the page claimed
      */
     public function __construct(
         public int $serviceConnectionId,
         public string $status,
         public array $requestIds,
         public ?int $userId,
-        public string $slotToken,
-    ) {}
+        string $slotToken,
+    ) {
+        $this->slotToken = $slotToken;
+    }
 
     public function uniqueId(): string
     {
@@ -66,7 +74,7 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
         try {
             $this->deleteRequests();
         } finally {
-            SeerrClearInFlight::release($this->serviceConnectionId, $this->status, $this->slotToken);
+            $this->releaseSlot();
         }
     }
 
@@ -76,6 +84,15 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
      */
     public function failed(?Throwable $throwable): void
     {
+        $this->releaseSlot();
+    }
+
+    private function releaseSlot(): void
+    {
+        if ($this->slotToken === null) {
+            return;
+        }
+
         SeerrClearInFlight::release($this->serviceConnectionId, $this->status, $this->slotToken);
     }
 
