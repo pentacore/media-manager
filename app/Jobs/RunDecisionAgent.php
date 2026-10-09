@@ -530,6 +530,22 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
 
+        // "nothing_importable" is resolved negative right away: nothing
+        // downstream ever learns this row's eventual outcome (there is no
+        // action request or human decision to watch), so it would otherwise
+        // stay open forever.
+        if ($reason === 'nothing_importable') {
+            $classificationOutcomeRecorder->resolve(
+                ClassificationGate::StuckImport,
+                $subjectKey,
+                false,
+                'nothing_importable',
+                [ClassificationVerdict::ResolvedByClassifier],
+                null,
+                $stuckImportDecision->choice->value,
+            );
+        }
+
         $summary = ($result['queued'] ?? false) === true
             ? sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? ''))
             : sprintf('Resolved by the classifier: needs a human (%d%% likely). A human must resolve this stuck download in Sonarr/Radarr.', (int) round($stuckImportDecision->probability * 100));
