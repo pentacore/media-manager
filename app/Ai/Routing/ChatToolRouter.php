@@ -9,6 +9,7 @@ use App\Ai\Classification\Classifier;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification\Boolean;
 use Laravel\Ai\Contracts\ConversationStore;
@@ -16,6 +17,7 @@ use Laravel\Ai\Contracts\PaginatesConversations;
 use Laravel\Ai\Responses\Data\Answer;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Laravel\Ai\Storage\StoredMessage;
+use Throwable;
 
 /**
  * Sends MediaAgent only the tool groups a message needs. Fails open: routing
@@ -110,29 +112,40 @@ final readonly class ChatToolRouter
 
     /**
      * Resolve the turn's included groups: positive when the reply called one
-     * of the group's tools.
+     * of the group's tools. Never throws: ToolGroup::forToolName() resolves
+     * sub-agent classes from the container, and a lookup failure here must
+     * not fail a turn that already succeeded.
      *
      * @param  list<string>  $toolNames
      */
     public function recordToolUse(string $turnKey, array $toolNames): void
     {
-        $used = collect($toolNames)
-            ->flatMap(fn (string $name): array => ToolGroup::forToolName($name))
-            ->map(fn (ToolGroup $toolGroup): string => $toolGroup->value)
-            ->unique()
-            ->all();
+        try {
+            $used = collect($toolNames)
+                ->flatMap(fn (string $name): array => ToolGroup::forToolName($name))
+                ->map(fn (ToolGroup $toolGroup): string => $toolGroup->value)
+                ->unique()
+                ->all();
 
-        foreach (ToolGroup::cases() as $toolGroup) {
-            $isUsed = in_array($toolGroup->value, $used, true);
+            foreach (ToolGroup::cases() as $toolGroup) {
+                $isUsed = in_array($toolGroup->value, $used, true);
 
-            $this->classificationOutcomeRecorder->resolve(
-                ClassificationGate::ChatRouting,
-                $turnKey,
-                $isUsed,
-                $isUsed ? 'used' : 'not used',
-                [ClassificationVerdict::Included],
-                $toolGroup->value,
-            );
+                $this->classificationOutcomeRecorder->resolve(
+                    ClassificationGate::ChatRouting,
+                    $turnKey,
+                    $isUsed,
+                    $isUsed ? 'used' : 'not used',
+                    [ClassificationVerdict::Included],
+                    $toolGroup->value,
+                );
+            }
+        } catch (Throwable $throwable) {
+            Log::warning('Chat routing outcome tracking failed.', [
+                'operation' => 'recordToolUse',
+                'turn_key' => $turnKey,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
         }
     }
 

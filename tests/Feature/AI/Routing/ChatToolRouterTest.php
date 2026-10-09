@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Classification\Classifier;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ToolGroup;
@@ -221,4 +222,25 @@ test('routing without a turn key records nothing', function (): void {
     resolve(ChatToolRouter::class)->route('why is my download stuck?', null);
 
     expect(ClassificationOutcome::count())->toBe(0);
+});
+
+test('recording tool use never lets a group lookup failure escape', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    app()->instance(StuckDownloadInvestigatorAgent::class, new class
+    {
+        public function name(): string
+        {
+            throw new RuntimeException('name lookup blew up');
+        }
+    });
+
+    $escaped = null;
+
+    try {
+        resolve(ChatToolRouter::class)->recordToolUse('chat_turn:t4', [class_basename(NowPlayingTool::class)]);
+    } catch (Throwable $throwable) {
+        $escaped = $throwable;
+    }
+
+    expect($escaped)->toBeNull();
 });
