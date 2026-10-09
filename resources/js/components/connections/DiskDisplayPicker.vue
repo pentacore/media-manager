@@ -142,12 +142,12 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                             v-for="metric in ['free', 'used', 'both'] as const"
                             :key="metric"
                             type="button"
-                            class="inline-flex h-6 items-center rounded px-2 transition-colors"
-                            :class="
+                            :class="[
+                                'inline-flex h-6 items-center rounded px-2 transition-colors',
                                 diskDisplayFor(entry.path) === metric
                                     ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground'
-                            "
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            ]"
                             :data-disk-metric="metric"
                             @click="setDiskDisplay(entry.path, metric)"
                         >
@@ -169,12 +169,12 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                         v-for="metric in ['free', 'used', 'both'] as const"
                         :key="metric"
                         type="button"
-                        class="inline-flex h-6 items-center rounded px-2 transition-colors"
-                        :class="
+                        :class="[
+                            'inline-flex h-6 items-center rounded px-2 transition-colors',
                             diskDisplayFor('sum') === metric
                                 ? 'bg-accent text-accent-foreground'
-                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground'
-                        "
+                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                        ]"
                         :data-disk-sum-metric="metric"
                         @click="setDiskDisplay('sum', metric)"
                     >

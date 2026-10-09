@@ -12,13 +12,7 @@ const props = defineProps<{
 const sabScriptCopied = ref(false);
 
 async function copySabScript(): Promise<void> {
-    const script = props.script;
-
-    if (!script) {
-        return;
-    }
-
-    const ok = await copyToClipboard(script);
+    const ok = await copyToClipboard(props.script);
 
     if (!ok) {
         return;

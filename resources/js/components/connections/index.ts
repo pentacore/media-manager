@@ -14,11 +14,9 @@ export { NOT_CONNECTED_VALUE, withBazarrMappingIds } from './bazarrMappings';
 export type {
     ArrConnectionOption,
     ArrTag,
-    DiskMetric,
     DiskPath,
     EditableConnection,
     ProwlarrIndexer,
     ServiceTypeOption,
     SonarrRootFolder,
-    TestConnectionResponse,
 } from './types';

@@ -325,6 +325,76 @@ test('an admin creates a sonarr connection after a successful test', function ()
         ->and($serviceConnection->webhook_token)->toBe($token);
 });
 
+test('the radarr edit form shows the disk display and subtitle check tags but not sonarr library types', function (): void {
+    $serviceConnection = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+        'api_key' => 'test',
+    ]);
+    Http::fake([
+        'radarr.local:7878/api/v3/tag' => Http::response([['id' => 1, 'label' => 'sub-check']]),
+        'radarr.local:7878/api/v3/diskspace' => Http::response([
+            ['path' => '/movies', 'label' => null, 'freeSpace' => 100, 'totalSpace' => 200],
+        ]),
+    ]);
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-disk-display]', 'Service Health · disk display')
+        ->assertSeeIn('[data-subtitle-check-tags]', 'sub-check')
+        ->assertMissing('[data-sonarr-library-types]');
+});
+
+test('a chosen whisparr version survives switching the service type away and back', function (): void {
+    visit(route('admin.connections.create', absolute: false))
+        ->assertNoSmoke()
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Whisparr"]')
+        ->click('[data-whisparr-version] [data-slot="select-trigger"]')
+        ->click('[role="option"]:has-text("Eros")')
+        ->assertSeeIn('[data-whisparr-version] [data-slot="select-value"]', 'v2 (Eros / series-based)')
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Sonarr"]')
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Whisparr"]')
+        ->assertSeeIn('[data-whisparr-version] [data-slot="select-value"]', 'v2 (Eros / series-based)')
+        ->fill('name', 'New Whisparr')
+        ->fill('url', 'http://whisparr.local:6969')
+        ->fill('api_key', 'test')
+        ->click('[data-webhook-token-generate]')
+        ->click('Create Connection')
+        ->assertSee('Connection created.');
+
+    $serviceConnection = ServiceConnection::query()->where('name', 'New Whisparr')->sole();
+
+    expect($serviceConnection->settings['whisparr_version'] ?? null)->toBe('v2');
+});
+
+/*
+ * The edit page's service-type select is interactive (unlike Create's typed
+ * placeholders, Edit's sections are keyed off the connection's stored type,
+ * not the select), but showBazarrMappings is the one computed that reacts to
+ * the live selection, so switching Edit's type to Bazarr does surface the
+ * mapping selects.
+ */
+test('a bazarr mapping survives a type switch away and back on edit', function (): void {
+    $serviceConnection = connectionFormSonarr();
+    connectionFormFakeSonarr();
+    ServiceConnection::factory()->sonarr()->create(['name' => 'Other Sonarr']);
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertNoSmoke()
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Bazarr"]')
+        ->click('#sonarr_connection_id')
+        ->click('[role="option"][aria-label="Use Other Sonarr as Sonarr connection"]')
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Radarr"]')
+        ->assertMissing('[data-bazarr-mappings]')
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Bazarr"]')
+        ->assertSeeIn('#sonarr_connection_id', 'Other Sonarr');
+});
+
 test('a bazarr mapping survives switching the service type away and back', function (): void {
     ServiceConnection::factory()->sonarr()->create(['name' => 'Main Sonarr']);
 
