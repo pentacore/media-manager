@@ -32,10 +32,10 @@ final readonly class StuckImportDecider
     private const int MAX_FILES = 20;
 
     /**
-     * Each sent file's upstream rejection reasons, joined and truncated to
-     * this many characters, so a release with pathological rejection text
-     * can't blow out the classification payload even while MAX_FILES caps
-     * the file count.
+     * Each of a file's upstream rejection reasons, truncated to this many
+     * characters, so a release with pathological rejection text can't blow
+     * out the classification payload even while MAX_FILES caps the file
+     * count.
      */
     private const int MAX_REJECTION_CHARS = 300;
 
