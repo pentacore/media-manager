@@ -12,9 +12,12 @@ use App\Models\ActionTypeConfig;
 use App\Models\AgentDecision;
 use App\Models\ClassificationOutcome;
 use App\Models\ServiceConnection;
+use App\Models\User;
+use App\Notifications\DecisionAgentActed;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
@@ -187,4 +190,26 @@ test('a fully unmapped download is recorded as needing a human', function (): vo
     DecisionAgent::assertNeverPrompted();
     expect(ActionRequest::count())->toBe(0)
         ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('needs a human');
+});
+
+test('a confident import queued for auto-run notifies per the settings', function (): void {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    fakeStuckImportApis(stuckImportCandidates());
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+
+    runStuckImportJob();
+
+    Notification::assertSentTo($admin, DecisionAgentActed::class);
+});
+
+test('a confident manual call sends nothing', function (): void {
+    Notification::fake();
+    User::factory()->admin()->create();
+    fakeStuckImportApis(stuckImportCandidates());
+    Classification::fake([fastPathAnswers('manual', 0.9)]);
+
+    runStuckImportJob();
+
+    Notification::assertNothingSent();
 });

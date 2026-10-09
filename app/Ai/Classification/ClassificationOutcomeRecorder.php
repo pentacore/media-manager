@@ -49,7 +49,7 @@ final readonly class ClassificationOutcomeRecorder
 
     /**
      * Fill the outcome of the subject's open rows that carry one of the given
-     * verdicts (and the given question, when one is passed).
+     * verdicts (and the given question and/or prediction, when passed).
      *
      * @param  list<ClassificationVerdict>  $verdicts
      */
@@ -60,9 +60,10 @@ final readonly class ClassificationOutcomeRecorder
         string $detail,
         array $verdicts,
         ?string $question = null,
+        ?string $predicted = null,
     ): void {
         try {
-            $this->openRows($classificationGate, $subjectKey, $verdicts, $question)->update([
+            $this->openRows($classificationGate, $subjectKey, $verdicts, $question, $predicted)->update([
                 'outcome_positive' => $positive,
                 'outcome_detail' => Str::limit($detail, 255, ''),
                 'outcome_at' => now(),
@@ -82,7 +83,7 @@ final readonly class ClassificationOutcomeRecorder
     public function resolveAgainst(ClassificationGate $classificationGate, string $subjectKey, string $actual, array $verdicts): void
     {
         try {
-            $this->openRows($classificationGate, $subjectKey, $verdicts, null)
+            $this->openRows($classificationGate, $subjectKey, $verdicts, null, null)
                 ->get()
                 ->each(fn (ClassificationOutcome $classificationOutcome): bool => $classificationOutcome->update([
                     'outcome_positive' => $classificationOutcome->predicted === $actual,
@@ -108,14 +109,15 @@ final readonly class ClassificationOutcomeRecorder
      * @param  list<ClassificationVerdict>  $verdicts
      * @return Builder<ClassificationOutcome>
      */
-    private function openRows(ClassificationGate $classificationGate, string $subjectKey, array $verdicts, ?string $question): Builder
+    private function openRows(ClassificationGate $classificationGate, string $subjectKey, array $verdicts, ?string $question, ?string $predicted = null): Builder
     {
         return ClassificationOutcome::query()
             ->where('gate', $classificationGate)
             ->where('subject_key', $subjectKey)
             ->whereIn('verdict', $verdicts)
             ->whereNull('outcome_at')
-            ->when($question !== null, fn (Builder $builder): Builder => $builder->where('question', $question));
+            ->when($question !== null, fn (Builder $builder): Builder => $builder->where('question', $question))
+            ->when($predicted !== null, fn (Builder $builder): Builder => $builder->where('predicted', $predicted));
     }
 
     private function logFailure(string $operation, ClassificationGate $classificationGate, string $subjectKey, Throwable $throwable): void

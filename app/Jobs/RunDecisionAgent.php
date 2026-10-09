@@ -174,13 +174,16 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
-        try {
-            if ($this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder)) {
-                return;
-            }
+        $fastPathOutcome = null;
+        $summary = '';
 
-            $response = (new DecisionAgent)->prompt($this->buildPrompt());
-            $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
+        try {
+            $fastPathOutcome = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
+
+            if ($fastPathOutcome === null) {
+                $response = (new DecisionAgent)->prompt($this->buildPrompt());
+                $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
+            }
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [
                 'webhook_event_id' => $webhookEventId,
@@ -194,6 +197,17 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         } finally {
             app()->forgetInstance(DecisionRunContext::class);
+        }
+
+        // The fast path already recorded its own AgentDecision and
+        // classification outcomes above; only the notification — which can
+        // itself fail — is sent out here, safely past the try/finally.
+        if ($fastPathOutcome !== null) {
+            if ($fastPathOutcome !== '') {
+                $this->notify($decisionRunContext, $fastPathOutcome, $decisionAgentSettings);
+            }
+
+            return;
         }
 
         if ($gateVerdict === ClassificationVerdict::AuditRun) {
@@ -410,7 +424,15 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      * is queued through the same rails the agent's tools use, and a confident
      * "manual" is recorded for a human, all without an agent run. Anything
      * else — fast path off, no download id, no or unconfident answer, a
-     * failed lookup or dispatch — returns false and the agent runs as before.
+     * failed lookup or dispatch — returns null and the agent runs as before.
+     *
+     * Never sends the admin notification itself: a notification failure
+     * (DB/broadcast channel) must not be caught by handle()'s agent-failure
+     * catch and misrecord an already-resolved decision as Failed. Instead it
+     * returns the resolved outcome for handle() to notify from once the
+     * try/finally around this call has completed: null when not resolved
+     * (run the agent), '' when resolved with nothing to notify about, or the
+     * summary to notify with.
      */
     private function resolvedByFastPath(
         ?int $webhookEventId,
@@ -420,7 +442,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         StuckImportDecider $stuckImportDecider,
         StuckImportResolver $stuckImportResolver,
         ClassificationOutcomeRecorder $classificationOutcomeRecorder,
-    ): bool {
+    ): ?string {
         $service = mb_strtolower($this->service);
         $downloadId = $decisionRunContext->eventDownloadId();
 
@@ -428,25 +450,25 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             || ! $aiSettings->stuckImportFastPathEnabled()
             || $downloadId === null
             || ! in_array($service, ['sonarr', 'radarr'], true)) {
-            return false;
+            return null;
         }
 
         if (! $decisionAgentSettings->allowManualImport()) {
             $this->record($webhookEventId, AgentDecisionStatus::NoAction, 'Manual-import resolution is disabled in Decision Agent settings, so the stuck download was left for a human.', $decisionRunContext);
 
-            return true;
+            return '';
         }
 
         try {
             $connection = $decisionRunContext->resolveConnection($service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr);
         } catch (Throwable) {
-            return false;
+            return null;
         }
 
         $stuckImportDecision = $stuckImportDecider->decide($connection, $service, $downloadId);
 
         if (! $stuckImportDecision instanceof StuckImportDecision) {
-            return false;
+            return null;
         }
 
         $subjectKey = ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId));
@@ -455,7 +477,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if (! $stuckImportDecision->isConfident) {
             $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
 
-            return false;
+            return null;
         }
 
         $result = match ($stuckImportDecision->choice) {
@@ -469,7 +491,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if (in_array($reason, ['lookup_failed', 'dispatch_failed'], true)) {
             $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
 
-            return false;
+            return null;
         }
 
         $verdictLine = sprintf(
@@ -482,7 +504,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if ($reason === 'no_action_type_config') {
             $this->record($webhookEventId, AgentDecisionStatus::NoAction, sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? '')), $decisionRunContext);
 
-            return true;
+            return '';
         }
 
         $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
@@ -492,9 +514,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             : sprintf('Resolved by the classifier: needs a human (%d%% likely). A human must resolve this stuck download in Sonarr/Radarr.', (int) round($stuckImportDecision->probability * 100));
 
         $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
-        $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
 
-        return true;
+        return $summary;
     }
 
     /**

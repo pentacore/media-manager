@@ -8,6 +8,7 @@ use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Enums\ActionRequestStatus;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
+use App\Enums\StuckImportChoice;
 use App\Models\ActionRequest;
 use App\Models\ClassificationOutcome;
 use App\Services\Actions\ActionRequestActivityLogger;
@@ -64,6 +65,10 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
     /**
      * A classifier-queued stuck-import action was right when a human approved
      * it or it auto-ran to completion, and wrong when a human rejected it.
+     * Filtered to the row the action's own type predicted, so an unrelated
+     * action on the same download (e.g. a chat-queued removal while the
+     * classifier's "manual" row, or a different choice's row, is still open)
+     * never resolves the wrong outcome.
      */
     private function resolveStuckImportOutcome(ActionRequest $actionRequest): void
     {
@@ -85,12 +90,17 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
             return;
         }
 
+        $predicted = $actionRequest->type === 'resolve_manual_import'
+            ? StuckImportChoice::Import->value
+            : StuckImportChoice::Remove->value;
+
         $this->classificationOutcomeRecorder->resolve(
             ClassificationGate::StuckImport,
             ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId)),
             $positive,
             $actionRequest->status->value,
             [ClassificationVerdict::ResolvedByClassifier],
+            predicted: $predicted,
         );
     }
 }

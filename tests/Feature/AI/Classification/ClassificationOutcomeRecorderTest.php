@@ -53,6 +53,23 @@ test('resolve fills only open rows with a matching verdict', function (): void {
         ->and($other->refresh()->outcome_at)->toBeNull();
 });
 
+test('resolve with a predicted filter leaves a row with a different prediction open', function (): void {
+    $importRow = ClassificationOutcome::factory()->create(['gate' => ClassificationGate::StuckImport, 'subject_key' => 'download:sonarr:dl-1', 'verdict' => ClassificationVerdict::ResolvedByClassifier, 'predicted' => 'import']);
+    $manualRow = ClassificationOutcome::factory()->create(['gate' => ClassificationGate::StuckImport, 'subject_key' => 'download:sonarr:dl-1', 'verdict' => ClassificationVerdict::ResolvedByClassifier, 'predicted' => 'manual']);
+
+    resolve(ClassificationOutcomeRecorder::class)->resolve(
+        ClassificationGate::StuckImport,
+        'download:sonarr:dl-1',
+        true,
+        'approved',
+        [ClassificationVerdict::ResolvedByClassifier],
+        predicted: 'import',
+    );
+
+    expect($importRow->refresh())->outcome_positive->toBeTrue()->outcome_at->not->toBeNull()
+        ->and($manualRow->refresh()->outcome_at)->toBeNull();
+});
+
 test('resolve never overwrites an outcome that is already filled', function (): void {
     $row = ClassificationOutcome::factory()->resolved(false)->create(['gate' => ClassificationGate::StuckImport, 'subject_key' => 'download:sonarr:dl-1', 'verdict' => ClassificationVerdict::ResolvedByClassifier]);
 
