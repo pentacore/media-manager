@@ -12,6 +12,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\AiUsageReporting;
+use App\Services\AiUsage\ClassificationGateReporting;
 use App\Services\AiUsage\Scenario;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
@@ -31,6 +32,7 @@ class AiUsageController extends Controller
         AiUsageReporting $aiUsageReporting,
         AiSettings $aiSettings,
         UnpricedModelDetector $unpricedModelDetector,
+        ClassificationGateReporting $classificationGateReporting,
     ): Response {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
@@ -64,6 +66,9 @@ class AiUsageController extends Controller
             'rate_limits' => $aiUsageReporting->rateLimitStatus(),
             'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
             'unpricedModels' => $unpricedModelDetector->forHardCap(),
+            // Calibration per classification gate; deferred so the page
+            // paints before the aggregate runs.
+            'classification_gates' => Inertia::defer(fn (): array => $classificationGateReporting->summary($since)),
         ];
 
         if ($scenario instanceof Scenario) {

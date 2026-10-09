@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Deferred, Head, router } from '@inertiajs/vue3';
 import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import ClassificationGatesPanel from '@/components/ai/ClassificationGatesPanel.vue';
+import type { GateSummary } from '@/components/ai/ClassificationGatesPanel.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import {
     InitialsAvatar,
@@ -214,6 +216,7 @@ const props = defineProps<{
     rate_limits: RateLimitStatusRow[];
     rate_limits_enforced: boolean;
     unpricedModels: { role: string; provider: string; model: string }[];
+    classification_gates?: GateSummary[];
 }>();
 
 defineOptions({
@@ -1199,6 +1202,19 @@ function formatTimestamp(value: string): string {
                 </table>
             </div>
         </div>
+
+        <Deferred data="classification_gates">
+            <template #fallback>
+                <div
+                    class="h-48 animate-pulse rounded-xl border border-border bg-card"
+                    data-classification-gates-loading
+                />
+            </template>
+            <ClassificationGatesPanel
+                v-if="props.classification_gates"
+                :gates="props.classification_gates"
+            />
+        </Deferred>
 
         <!-- Recent calls ledger -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">

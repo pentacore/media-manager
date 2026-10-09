@@ -5,9 +5,11 @@ const props = withDefaults(
     defineProps<{
         data: Array<{ label: string; value: number }>;
         height?: number;
+        markerAt?: number | null;
     }>(),
     {
         height: 120,
+        markerAt: null,
     },
 );
 
@@ -67,6 +69,17 @@ const bars = computed(() => {
             >
                 <title>{{ bar.label }}: {{ bar.value }}</title>
             </rect>
+            <line
+                v-if="markerAt !== null && markerAt !== undefined"
+                :x1="markerAt * 100"
+                :x2="markerAt * 100"
+                y1="0"
+                y2="100"
+                class="stroke-warning"
+                stroke-dasharray="2 2"
+                vector-effect="non-scaling-stroke"
+                data-bar-chart-marker
+            />
         </svg>
         <div
             v-else
