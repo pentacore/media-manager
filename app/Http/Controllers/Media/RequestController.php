@@ -301,7 +301,10 @@ class RequestController extends Controller
      * Claims the per-status clear slot, collects matching request ids
      * (capped) and queues ClearSeerrRequests to delete them, keeping the
      * up-to-500 sequential DELETEs off this request. A clear already running
-     * for the status is refused with an info toast.
+     * for the status is refused with an info toast. Every path that queues
+     * nothing, an unexpected exception included, frees the slot in the
+     * finally; the slot's TTL restarts just before dispatch, when the job's
+     * unique lock starts.
      */
     public function clear(Request $request): RedirectResponse
     {
@@ -319,7 +322,9 @@ class RequestController extends Controller
             return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
-        if (! SeerrClearInFlight::claim($connection->id, $status)) {
+        $slotToken = SeerrClearInFlight::claim($connection->id, $status);
+
+        if ($slotToken === null) {
             Inertia::flash('toast', [
                 'type' => 'info',
                 'message' => __('Already clearing :status requests. Use Sync Seerr once it finishes to see the result.', ['status' => $status]),
@@ -329,24 +334,29 @@ class RequestController extends Controller
         }
 
         $seerrClient = new SeerrClient($connection);
+        $queued = false;
 
         try {
             $ids = $this->collectIdsForStatus($seerrClient, $status, self::CLEAR_HARD_LIMIT);
+
+            if ($ids === []) {
+                Inertia::flash('toast', ['type' => 'success', 'message' => __('Nothing to clear — no :status requests.', ['status' => $status])]);
+
+                return back();
+            }
+
+            SeerrClearInFlight::refresh($connection->id, $status, $slotToken);
+            dispatch(new ClearSeerrRequests($connection->id, $status, $ids, $request->user()?->id, $slotToken));
+            $queued = true;
         } catch (RequestException|ConnectionException) {
-            SeerrClearInFlight::release($connection->id, $status);
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to enumerate Seerr requests.')]);
 
             return back();
+        } finally {
+            if (! $queued) {
+                SeerrClearInFlight::release($connection->id, $status, $slotToken);
+            }
         }
-
-        if ($ids === []) {
-            SeerrClearInFlight::release($connection->id, $status);
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Nothing to clear — no :status requests.', ['status' => $status])]);
-
-            return back();
-        }
-
-        dispatch(new ClearSeerrRequests($connection->id, $status, $ids, $request->user()?->id));
 
         Inertia::flash('toast', [
             'type' => 'info',

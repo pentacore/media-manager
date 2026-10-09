@@ -792,7 +792,8 @@ test('bulk clear queues the deletes instead of running them in the request', fun
     Queue::assertPushed(ClearSeerrRequests::class, fn (ClearSeerrRequests $job): bool => $job->requestIds === [11, 22]
         && $job->status === 'available'
         && $job->serviceConnectionId === $this->connection->id
-        && $job->userId === $admin->id);
+        && $job->userId === $admin->id
+        && is_string($job->slotToken));
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
 });
 
@@ -826,7 +827,7 @@ test('a second bulk clear while one is still running queues nothing and says so'
 
 test('a clear running for one status does not block another status', function (): void {
     Queue::fake([ClearSeerrRequests::class]);
-    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->not->toBeNull();
     Http::fake([
         'seerr.local:5055/api/v1/request*' => Http::response([
             'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 1],
@@ -853,11 +854,50 @@ test('a clear that finds nothing or cannot list the requests frees its slot', fu
         ->assertRedirect(route('media.requests.index'));
 
     Queue::assertNotPushed(ClearSeerrRequests::class);
-    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeTrue();
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->not->toBeNull();
 })->with([
     'nothing to clear' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 0, 'pageSize' => 100, 'results' => 0], 'results' => []])])],
     'Seerr down' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('boom', 503)])],
 ]);
+
+test('an unexpected failure while listing the requests frees the clear slot', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('"not a page"')]);
+    $this->withoutExceptionHandling();
+
+    expect(fn () => $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available']))
+        ->toThrow(TypeError::class);
+
+    Queue::assertNotPushed(ClearSeerrRequests::class);
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->not->toBeNull();
+});
+
+test('the clear slot outlives the job unique lock from dispatch however long the listing took', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    Http::fake(['seerr.local:5055/api/v1/request*' => function () {
+        $this->travel(140)->seconds();
+
+        return Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 1],
+            'results' => [['id' => 11, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 1]]],
+        ]);
+    }]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertRedirect(route('media.requests.index', ['status' => 'available']));
+
+    // 610 s after dispatch (750 s after the claim) the unique lock is gone
+    // but the slot, restarted at dispatch, still refuses a second clear.
+    $this->travel(610)->seconds();
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->toBeNull();
+
+    $this->travel(SeerrClearInFlight::TTL_SECONDS - 610 + 1)->seconds();
+    expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->not->toBeNull();
+});
 
 test('bulk-clear declined uses local status filter', function (): void {
     $admin = User::factory()->admin()->create();

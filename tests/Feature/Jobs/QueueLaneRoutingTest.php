@@ -42,7 +42,7 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     'price refresh' => [fn (): RefreshAiPricesJob => new RefreshAiPricesJob(User::factory()->admin()->create()), QueueLane::Ai],
     'library embedding' => [fn (): EmbedLibraryItem => new EmbedLibraryItem(IndexedMovie::class, 1), QueueLane::Ai],
     'conversation title' => [fn (): GenerateConversationTitle => new GenerateConversationTitle('01J9ZZZZZZZZZZZZZZZZZZZZZZ', 'hello'), QueueLane::Ai],
-    'bulk seerr request clear' => [fn (): ClearSeerrRequests => new ClearSeerrRequests(1, 'pending', [1, 2, 3], null), QueueLane::Maintenance],
+    'bulk seerr request clear' => [fn (): ClearSeerrRequests => new ClearSeerrRequests(1, 'pending', [1, 2, 3], null, 'slot-token'), QueueLane::Maintenance],
     'search index reconcile' => [fn (): ReconcileSearchIndex => new ReconcileSearchIndex, QueueLane::Maintenance],
     'anime mapping sync' => [fn (): SyncAnimeMappingJob => new SyncAnimeMappingJob, QueueLane::Maintenance],
     'subtitle upload prune' => [fn (): PruneSubtitleUploads => new PruneSubtitleUploads, QueueLane::Maintenance],

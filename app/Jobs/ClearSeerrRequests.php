@@ -30,8 +30,9 @@ use Throwable;
  * the outcome in the activity feed. Runs on the maintenance lane (drained by
  * the queue-ai worker): up to 500 sequential HTTP calls would otherwise pin
  * the general worker behind webhooks and approved actions. The Requests
- * page claims SeerrClearInFlight before queueing this job; handle() and
- * failed() release it.
+ * page claims SeerrClearInFlight before queueing this job and hands it the
+ * slot's owner token; handle() and failed() release the slot with it, so a
+ * retried old job cannot free a newer clear's slot.
  */
 #[Queue(QueueLane::Maintenance)]
 #[UniqueFor(600)]
@@ -45,12 +46,14 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
 
     /**
      * @param  list<int>  $requestIds
+     * @param  string  $slotToken  the SeerrClearInFlight owner token the page claimed
      */
     public function __construct(
         public int $serviceConnectionId,
         public string $status,
         public array $requestIds,
         public ?int $userId,
+        public string $slotToken,
     ) {}
 
     public function uniqueId(): string
@@ -63,7 +66,7 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
         try {
             $this->deleteRequests();
         } finally {
-            SeerrClearInFlight::release($this->serviceConnectionId, $this->status);
+            SeerrClearInFlight::release($this->serviceConnectionId, $this->status, $this->slotToken);
         }
     }
 
@@ -73,7 +76,7 @@ final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
      */
     public function failed(?Throwable $throwable): void
     {
-        SeerrClearInFlight::release($this->serviceConnectionId, $this->status);
+        SeerrClearInFlight::release($this->serviceConnectionId, $this->status, $this->slotToken);
     }
 
     private function deleteRequests(): void

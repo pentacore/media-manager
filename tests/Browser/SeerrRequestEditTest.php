@@ -61,8 +61,8 @@ test('the edit dialog loads the profiles and root folders Radarr lists', functio
     visit(route('media.requests.index', absolute: false))
         ->assertNoSmoke()
         ->click('[data-request-card="1"] [data-request-edit]')
-        ->assertSee('Quality profile')
-        ->assertSee('HD-1080p')
+        ->assertSeeIn('[data-request-edit-options]', 'Quality profile')
+        ->assertSeeIn('[data-request-edit-options]', 'HD-1080p')
         ->assertMissing('[data-request-edit-error]')
         ->assertNoSmoke();
 });

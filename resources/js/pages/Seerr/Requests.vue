@@ -354,6 +354,8 @@ const editOptions = ref<EditOptions | null>(null);
 const editProfileId = ref<string>('');
 const editRootFolder = ref<string>('');
 const editSubmitting = ref(false);
+// Bumped by every open and close: only the latest load may write the dialog.
+let editLoadSequence = 0;
 
 function openEdit(req: SeerrRequest): void {
     editingRequest.value = req;
@@ -363,9 +365,11 @@ function openEdit(req: SeerrRequest): void {
     editProfileId.value = '';
     editRootFolder.value = '';
 
-    // The dialog may have closed or moved to another request by the time
-    // the answer lands; compare ids (the ref holds a reactive proxy).
-    const stillEditing = (): boolean => editingRequest.value?.id === req.id;
+    // The dialog may have closed, moved to another request or reopened on
+    // the same one by the time the answer lands, so a load counts only while
+    // no later open or close has happened.
+    const loadSequence = ++editLoadSequence;
+    const stillEditing = (): boolean => loadSequence === editLoadSequence;
 
     jsonRequest<EditOptions>('GET', RequestController.editOptions.url(req.id))
         .then((opts) => {
@@ -402,6 +406,7 @@ function closeEdit(): void {
         return;
     }
 
+    editLoadSequence++;
     editingRequest.value = null;
     editOptions.value = null;
     editError.value = null;
@@ -836,7 +841,11 @@ const rangeText = computed(() => {
                 >
                     {{ editError }}
                 </div>
-                <div v-else-if="editOptions" class="space-y-4">
+                <div
+                    v-else-if="editOptions"
+                    class="space-y-4"
+                    data-request-edit-options
+                >
                     <div class="space-y-2">
                         <Label>Quality profile</Label>
                         <Select v-model="editProfileId">
