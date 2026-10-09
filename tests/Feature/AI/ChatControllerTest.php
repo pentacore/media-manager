@@ -334,6 +334,18 @@ function chatRouterAnswers(array $probabilities): array
         ->all();
 }
 
+test('a chat turn with routing disabled writes and updates no outcome rows', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
+        ->assertOk();
+
+    Classification::assertNothingClassified();
+    expect(ClassificationOutcome::query()->count())->toBe(0);
+});
+
 test('a routed chat turn records which tool groups the reply used', function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([chatRouterAnswers(['playback' => 0.9])]);

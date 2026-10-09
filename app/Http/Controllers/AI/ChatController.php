@@ -53,7 +53,7 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
@@ -76,11 +76,14 @@ class ChatController extends Controller
         $messageToSend = $continuation ?? $validated['message'];
         $turnStartedAt = CarbonImmutable::now();
         $attachments = $chatAttachmentStore->store($user, $sendChatRequest->file('attachments', []));
-        $turnKey = ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7());
+        // A workflow continuation executes whichever destructive tools the
+        // approved steps name, so it always gets the full toolset and is
+        // never routed or tracked.
+        $turnKey = $continuation === null && $aiSettings->chatRoutingEnabled()
+            ? ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7())
+            : null;
 
         try {
-            // A workflow continuation executes whichever destructive tools the
-            // approved steps name, so it always gets the full toolset.
             $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
             $response = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
                 ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
@@ -88,7 +91,9 @@ class ChatController extends Controller
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
+        if ($turnKey !== null) {
+            $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
+        }
 
         $workflowPayload = $chatWorkflowContinuation->claimProposed($user, $turnStartedAt, $response->conversationId ?? null);
 
@@ -125,7 +130,7 @@ class ChatController extends Controller
      * Workflow continuations are intentionally NOT supported here — they stay on
      * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ConversationModelOverride $conversationModelOverride): JsonResponse|StreamableAgentResponse
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
 
@@ -142,7 +147,9 @@ class ChatController extends Controller
         $isNewConversation = $conversationId === null;
         $message = $validated['message'];
         $attachments = $chatAttachmentStore->store($user, $streamChatRequest->file('attachments', []));
-        $turnKey = ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7());
+        $turnKey = $aiSettings->chatRoutingEnabled()
+            ? ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7())
+            : null;
 
         try {
             $groups = $chatToolRouter->route($message, $conversationId, $turnKey);
@@ -153,7 +160,9 @@ class ChatController extends Controller
         }
 
         $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
-            $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
+            if ($turnKey !== null) {
+                $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
+            }
 
             $newConversationId = $response->conversationId ?? null;
             $chatAttachmentStore->assignConversation($attachments, $newConversationId);
