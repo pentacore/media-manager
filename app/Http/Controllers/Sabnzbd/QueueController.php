@@ -80,7 +80,12 @@ class QueueController extends Controller
             // HTTP 200 that is a refusal (a wrong API key) or not SABnzbd's
             // JSON at all (a proxy login page). Caught before its parent.
             return $this->unavailablePage($historyPage, $this->upstreamRefusedMessage(ServiceType::SABnzbd, $request->user()));
-        } catch (RequestException|ConnectionException) {
+        } catch (RequestException $requestException) {
+            // A 4xx (a reverse proxy's 401/403) is a refusal; a 5xx is an outage.
+            return $this->unavailablePage($historyPage, $requestException->response->clientError()
+                ? $this->upstreamRefusedMessage(ServiceType::SABnzbd, $request->user())
+                : __('Could not reach SABnzbd.'));
+        } catch (ConnectionException) {
             return $this->unavailablePage($historyPage, __('Could not reach SABnzbd.'));
         }
     }

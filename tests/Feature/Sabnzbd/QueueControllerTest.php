@@ -236,6 +236,34 @@ test('a queue page SABnzbd cannot be reached for still says it could not reach S
         ->assertInertia(fn ($page) => $page->where('error', 'Could not reach SABnzbd.'));
 });
 
+test('an HTTP refusal in front of SABnzbd reads as a refusal worded for the viewer', function (string $role, string $error): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::response('Forbidden', 403)]);
+
+    $this->actingAs(User::factory()->{$role}()->create())
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sabnzbd/Queue/Index')
+            ->where('queue', [])
+            ->where('error', $error));
+})->with([
+    'admin' => ['admin', 'SABnzbd refused the request — check the connection settings.'],
+    'member' => ['member', 'SABnzbd is unavailable — ask an admin to check the connection.'],
+]);
+
+test('a dropped connection to SABnzbd still says it could not reach SABnzbd for every role', function (string $role): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => fn () => throw new ConnectionException('Connection refused')]);
+
+    $this->actingAs(User::factory()->{$role}()->create())
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('error', 'Could not reach SABnzbd.'));
+})->with(['admin', 'member']);
+
 test('a priority change SABnzbd does not place in the queue is refused and writes nothing', function (): void {
     ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
     Http::fake(['sab.local:8080/api*' => Http::response(['position' => -1])]);
