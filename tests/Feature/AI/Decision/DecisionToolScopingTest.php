@@ -110,13 +110,27 @@ test('a kind exactly at the scope threshold scopes the run', function (): void {
     expect(ClassificationOutcome::sole())->verdict->toBe(ClassificationVerdict::Scoped)->predicted->toBe('media_server');
 });
 
-test('the other kind keeps every tool', function (): void {
+test('the other kind keeps every tool and is recorded as unscoped', function (): void {
     $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('other', 0.95)]]);
 
     runScopedJob();
 
-    expect($captured->tools)->toContain(NowPlayingTool::class);
+    expect($captured->tools)->toContain(NowPlayingTool::class)
+        ->and(ClassificationOutcome::sole())->verdict->toBe(ClassificationVerdict::Unscoped)->predicted->toBe('other');
+});
+
+test('a confident other run that queues an action leaves the action-kind outcome open', function (): void {
+    Classification::fake([['action_kind' => kindAnswer('other', 0.95)]]);
+    DecisionAgent::fake(function (): string {
+        resolve(DecisionRunContext::class)->recordQueued(ActionRequest::factory()->create(['type' => 'monitor_series'])->id, true);
+
+        return 'Proposed.';
+    });
+
+    runScopedJob();
+
+    expect(ClassificationOutcome::sole())->outcome_at->toBeNull();
 });
 
 test('a classifier failure keeps every tool', function (): void {

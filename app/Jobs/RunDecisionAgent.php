@@ -373,7 +373,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
     /**
      * The action kind to scope this run to, or null for the full toolset.
-     * Below SCOPE_AT, or when classification failed, the run keeps every tool.
+     * Below SCOPE_AT, when classification failed, or when the choice is
+     * "other" (the run keeps every tool either way, so "other" is never
+     * scoped), the run keeps every tool.
      */
     private function scopedActionKind(?Answer $answer, ClassificationOutcomeRecorder $classificationOutcomeRecorder): ?DecisionActionKind
     {
@@ -383,7 +385,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         $probability = $answer->probabilityOf($answer->choice);
         $actionKind = DecisionActionKind::tryFrom($answer->choice);
-        $scoped = $actionKind instanceof DecisionActionKind && $probability >= self::SCOPE_AT;
+        $scoped = $actionKind instanceof DecisionActionKind
+            && $actionKind !== DecisionActionKind::Other
+            && $probability >= self::SCOPE_AT;
 
         $classificationOutcomeRecorder->record(
             ClassificationGate::ActionKind,
@@ -400,7 +404,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
     /**
      * The kind was right when every action the run queued belongs to it.
-     * A run that queued nothing leaves the outcome open.
+     * A run that queued nothing leaves the outcome open, and so does a run
+     * predicted "other": that kind has no checkable mapping to action types,
+     * so its outcome row is resolved by nothing here and stays open.
      */
     private function resolveActionKindOutcome(DecisionRunContext $decisionRunContext, ClassificationOutcomeRecorder $classificationOutcomeRecorder): void
     {
@@ -410,13 +416,21 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         $types = ActionRequest::query()->whereKey($decisionRunContext->actionRequestIds())->pluck('type')->all();
         $kinds = array_map(static fn (string $type): ?string => DecisionActionKind::forActionType($type)?->value, $types);
+        $actual = count(array_unique($kinds)) === 1 ? (string) $kinds[0] : 'mixed';
 
-        $classificationOutcomeRecorder->resolveAgainst(
-            ClassificationGate::ActionKind,
-            $this->outcomeSubjectKey(),
-            count(array_unique($kinds)) === 1 ? (string) $kinds[0] : 'mixed',
-            [ClassificationVerdict::Scoped, ClassificationVerdict::Unscoped],
-        );
+        foreach (DecisionActionKind::cases() as $decisionActionKind) {
+            if ($decisionActionKind === DecisionActionKind::Other) {
+                continue;
+            }
+
+            $classificationOutcomeRecorder->resolveAgainst(
+                ClassificationGate::ActionKind,
+                $this->outcomeSubjectKey(),
+                $actual,
+                [ClassificationVerdict::Scoped, ClassificationVerdict::Unscoped],
+                $decisionActionKind->value,
+            );
+        }
     }
 
     /**

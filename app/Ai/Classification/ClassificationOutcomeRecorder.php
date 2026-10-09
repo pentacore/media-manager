@@ -76,14 +76,16 @@ final readonly class ClassificationOutcomeRecorder
 
     /**
      * Fill each open row's outcome by comparing its prediction with what
-     * actually happened.
+     * actually happened. An optional $predicted narrows which open rows are
+     * resolved, leaving the rest (e.g. a prediction with no checkable
+     * mapping) open.
      *
      * @param  list<ClassificationVerdict>  $verdicts
      */
-    public function resolveAgainst(ClassificationGate $classificationGate, string $subjectKey, string $actual, array $verdicts): void
+    public function resolveAgainst(ClassificationGate $classificationGate, string $subjectKey, string $actual, array $verdicts, ?string $predicted = null): void
     {
         try {
-            $this->openRows($classificationGate, $subjectKey, $verdicts, null)
+            $this->openRows($classificationGate, $subjectKey, $verdicts, null, $predicted)
                 ->get()
                 ->each(fn (ClassificationOutcome $classificationOutcome): bool => $classificationOutcome->update([
                     'outcome_positive' => $classificationOutcome->predicted === $actual,
