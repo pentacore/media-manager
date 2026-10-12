@@ -9,12 +9,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { KindOption, TierFilter, WindowKey, WindowOption } from './types';
+import type {
+    BenchmarkFilter,
+    KindOption,
+    TierFilter,
+    WindowKey,
+    WindowOption,
+} from './types';
 
 defineProps<{
     kind: string | null;
     kinds: KindOption[];
     tier: TierFilter | null;
+    benchmark: BenchmarkFilter | null;
     windowKey: WindowKey;
     windows: WindowOption[];
     exportUrl: string;
@@ -23,13 +30,14 @@ defineProps<{
 const emit = defineEmits<{
     kindChange: [value: string];
     tierChange: [value: string];
+    benchmarkChange: [value: string];
     windowChange: [value: string];
 }>();
 </script>
 
 <template>
-    <div class="flex items-end justify-between gap-3">
-        <div>
+    <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-3">
+        <div class="min-w-[16rem] flex-1">
             <div class="mb-1.5 text-[13px] text-muted-foreground">
                 Admin <span class="text-fg-subtle">/</span> AI usage
             </div>
@@ -46,7 +54,7 @@ const emit = defineEmits<{
                 >.
             </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
             <div data-usage-kind-filter>
                 <Select
                     :model-value="kind ?? 'all'"
@@ -109,6 +117,39 @@ const emit = defineEmits<{
                             value="fell_through"
                             aria-label="Fell through"
                             >Fell through</SelectItem
+                        >
+                    </SelectContent>
+                </Select>
+            </div>
+            <div data-usage-benchmark-filter>
+                <Select
+                    :model-value="benchmark ?? 'all'"
+                    @update:model-value="
+                        (value) =>
+                            emit(
+                                'benchmarkChange',
+                                typeof value === 'string' ? value : 'all',
+                            )
+                    "
+                >
+                    <SelectTrigger
+                        id="usage-benchmark"
+                        class="h-7 w-[170px] text-xs"
+                        aria-label="Benchmark runs"
+                    >
+                        <SelectValue placeholder="All runs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all" aria-label="All runs"
+                            >All runs</SelectItem
+                        >
+                        <SelectItem
+                            value="exclude"
+                            aria-label="Exclude benchmarks"
+                            >Exclude benchmarks</SelectItem
+                        >
+                        <SelectItem value="only" aria-label="Only benchmarks"
+                            >Only benchmarks</SelectItem
                         >
                     </SelectContent>
                 </Select>

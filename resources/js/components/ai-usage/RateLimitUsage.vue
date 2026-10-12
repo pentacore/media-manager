@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatNumber } from './format';
+import { formatCount } from '@/lib/format';
 import type { RateLimitStatusRow } from './types';
 
 defineProps<{
@@ -76,8 +76,8 @@ function rateLimitLabel(limit: RateLimitStatusRow['limits'][number]): string {
                                     Blocked
                                 </span>
                                 <span class="font-mono-tabular">
-                                    {{ formatNumber(limit.used) }} /
-                                    {{ formatNumber(limit.limit_value) }}
+                                    {{ formatCount(limit.used) }} /
+                                    {{ formatCount(limit.limit_value) }}
                                 </span>
                             </span>
                         </div>

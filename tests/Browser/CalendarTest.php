@@ -216,3 +216,73 @@ test('an unreachable service is named in a banner while the rest still shows', f
         ->click('[data-calendar-view="agenda"]')
         ->assertSeeIn('[data-calendar-agenda]', 'Severance');
 });
+
+test('clicking a day opens its popover with the full rows and their actions', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $popover = '[data-calendar-day-popover="2026-09-10"]';
+
+    visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-calendar-view="month"]')
+        ->assertCount('[data-calendar-day="2026-09-10"] a', 0)
+        ->assertCount('[data-calendar-day-open="2026-09-11"]', 0)
+        ->click('[data-calendar-day-open="2026-09-10"]')
+        ->assertSeeIn($popover, 'Half Loop')
+        ->assertSeeIn($popover, 'Missing')
+        ->click(sprintf('%s [data-calendar-item="sonarr:%d:70"] [data-search-now]', $popover, $this->sonarr->id))
+        ->assertSee('Search started.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'EpisodeSearch' && $request['episodeIds'] === [70]);
+});
+
+test('a day popover opens from the keyboard and Escape closes it back onto its trigger', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $trigger = '[data-calendar-day-open="2026-09-10"]';
+    $popover = '[data-calendar-day-popover="2026-09-10"]';
+
+    $webpage = visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-calendar-view="month"]')
+        ->keys($trigger, 'Enter')
+        ->assertCount(sprintf('%s [data-calendar-item]', $popover), 1)
+        ->assertSeeIn($popover, 'Half Loop')
+        ->keys($popover, 'Escape');
+
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("!document.querySelector('%s') && document.activeElement?.matches('%s')", $popover, $trigger)));
+    $webpage->assertCount($popover, 0)
+        ->assertScript(sprintf("document.activeElement?.matches('%s') === true", $trigger))
+        ->assertNoSmoke();
+});
+
+test("+N more opens the whole day with each item's own Search", function (): void {
+    // Http::fake keeps the first matching stub, so the beforeEach Sonarr
+    // stubs cannot be overridden; move Sonarr to a host with a busy day.
+    $this->sonarr->update(['url' => 'http://sonarr-busy-day.local:8989']);
+    $episodes = array_map(fn (int $number): array => [
+        'id' => 70 + $number, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => $number, 'title' => sprintf('Example Episode %d', $number),
+        'airDateUtc' => sprintf('2026-09-10T0%d:00:00Z', $number), 'hasFile' => false, 'monitored' => true,
+        'series' => ['title' => 'Example Show', 'monitored' => true, 'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/example-show.jpg']]],
+    ], [1, 2, 3, 4]);
+    Http::fake([
+        'sonarr-busy-day.local:8989/api/v3/calendar*' => Http::response($episodes),
+        'sonarr-busy-day.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
+        'sonarr-busy-day.local:8989/api/v3/series/7' => Http::response(['id' => 7, 'title' => 'Example Show', 'year' => 2024]),
+        'sonarr-busy-day.local:8989/api/v3/episode?seriesId=7*' => Http::response(array_map(fn (array $episode): array => ['id' => $episode['id'], 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => $episode['episodeNumber']], $episodes)),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+    $popover = '[data-calendar-day-popover="2026-09-10"]';
+
+    visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-calendar-view="month"]')
+        ->assertSeeIn('[data-calendar-day="2026-09-10"] [data-calendar-day-more]', '+1 more')
+        ->assertDontSeeIn('[data-calendar-day="2026-09-10"]', 'S01E04')
+        ->click('[data-calendar-day="2026-09-10"] [data-calendar-day-more]')
+        ->assertCount(sprintf('%s [data-calendar-item]', $popover), 4)
+        ->assertSeeIn($popover, 'Example Episode 4')
+        ->click(sprintf('%s [data-calendar-item="sonarr:%d:74"] [data-search-now]', $popover, $this->sonarr->id))
+        ->assertSee('Search started.');
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'EpisodeSearch' && $request['episodeIds'] === [74]);
+});

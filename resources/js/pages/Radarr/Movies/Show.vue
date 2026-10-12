@@ -8,7 +8,7 @@ import {
     Replace,
     Trash2,
 } from '@lucide/vue';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import {
     InteractiveSearchDialog,
@@ -29,6 +29,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
@@ -69,9 +70,25 @@ const props = defineProps<{
     service_connection_id: number;
     movie: MovieDetail;
     qualityProfiles?: UpstreamList<{ id: number; name: string }>;
+    /** Viewers only: the current profile's name; null when unknown. */
+    qualityProfileName?: string | null;
 }>();
 
 const { can } = useCan();
+
+// Managers read the name from the dropdown's list, viewers get only the
+// name. `undefined` while the deferred prop is still loading.
+const qualityProfileLabel = computed<string | null | undefined>(() => {
+    if (can('manage-library')) {
+        return props.qualityProfiles === undefined
+            ? undefined
+            : (props.qualityProfiles.items.find(
+                  (profile) => profile.id === props.movie.quality_profile_id,
+              )?.name ?? null);
+    }
+
+    return props.qualityProfileName;
+});
 
 defineOptions({
     layout: {
@@ -343,8 +360,17 @@ function confirmDelete() {
                             >
                                 Quality profile
                             </div>
-                            <div class="font-mono-tabular mt-0.5 text-[13px]">
-                                {{ movie.quality_profile_id ?? '-' }}
+                            <div
+                                class="mt-0.5 text-[13px]"
+                                data-quality-profile-name
+                            >
+                                <Skeleton
+                                    v-if="qualityProfileLabel === undefined"
+                                    class="h-4 w-24"
+                                />
+                                <template v-else>{{
+                                    qualityProfileLabel ?? '—'
+                                }}</template>
                             </div>
                         </div>
                         <div>

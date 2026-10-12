@@ -8,6 +8,7 @@ use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
 use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
@@ -191,13 +192,14 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
 
     /**
      * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, and force a plain answer on the final allowed step.
+     * crossed mid-run, force a plain answer on the final allowed step, and
+     * answer tools from fixtures inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenPriceRefreshOutOfTime];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenPriceRefreshOutOfTime, new ReplayBenchmarkTools];
     }
 
     /**

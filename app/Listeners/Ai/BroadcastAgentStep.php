@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Benchmark\ReplayTool;
 use App\Events\Ai\AgentStepUpdate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class BroadcastAgentStep
             return;
         }
 
-        event(new AgentStepUpdate($context['user_id'], $context['conversation_id'], $this->shortToolName($toolInvoked->tool::class), AgentStepUpdate::STATUS_FINISHED));
+        event(new AgentStepUpdate($context['user_id'], $context['conversation_id'], $this->shortToolName(ReplayTool::unwrap($toolInvoked->tool)::class), AgentStepUpdate::STATUS_FINISHED));
     }
 
     /**

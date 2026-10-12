@@ -3,6 +3,7 @@ import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import type {
+    BenchmarkFilter,
     ScenarioRates,
     TierFilter,
     WindowKey,
@@ -13,6 +14,7 @@ export type AiUsageFilterState = {
     window: WindowKey;
     kind: string | null;
     tier: TierFilter | null;
+    benchmark: BenchmarkFilter | null;
     scenario: ScenarioRates | null;
 };
 
@@ -21,6 +23,7 @@ export type UseAiUsageNavigationReturn = {
     setWindow: (value: string) => void;
     setKind: (value: string) => void;
     setTier: (value: string) => void;
+    setBenchmark: (value: string) => void;
     applyScenario: (rates: ScenarioRates) => void;
     clearScenario: () => void;
 };
@@ -68,6 +71,19 @@ export function useAiUsageNavigation(
         );
     }
 
+    function setBenchmark(value: string) {
+        router.get(
+            AiUsageController.index.url({
+                query: buildQuery({
+                    window: state().window,
+                    benchmark: value === 'all' ? undefined : value,
+                }),
+            }),
+            {},
+            { preserveScroll: true },
+        );
+    }
+
     const exportUrl = computed(() =>
         AiUsageController.exportMethod.url({
             query: buildQuery({ window: state().window }),
@@ -82,10 +98,11 @@ export function useAiUsageNavigation(
     function buildQuery(
         extra: Record<string, string | undefined>,
     ): QueryParams {
-        const { kind, tier, scenario } = state();
+        const { kind, tier, benchmark, scenario } = state();
         const merged: Record<string, string | undefined> = {
             kind: kind ?? undefined,
             tier: tier ?? undefined,
+            benchmark: benchmark ?? undefined,
             ...extra,
         };
         const query: QueryParams = {};
@@ -104,7 +121,7 @@ export function useAiUsageNavigation(
     }
 
     function applyScenario(rates: ScenarioRates) {
-        const { window: windowKey, kind, tier } = state();
+        const { window: windowKey, kind, tier, benchmark } = state();
 
         router.visit(
             AiUsageController.index.url({
@@ -112,6 +129,7 @@ export function useAiUsageNavigation(
                     window: windowKey,
                     ...(kind ? { kind } : {}),
                     ...(tier ? { tier } : {}),
+                    ...(benchmark ? { benchmark } : {}),
                     scenario: {
                         input: rates.input,
                         output: rates.output,
@@ -126,7 +144,7 @@ export function useAiUsageNavigation(
     }
 
     function clearScenario() {
-        const { window: windowKey, kind, tier } = state();
+        const { window: windowKey, kind, tier, benchmark } = state();
 
         router.visit(
             AiUsageController.index.url({
@@ -134,6 +152,7 @@ export function useAiUsageNavigation(
                     window: windowKey,
                     ...(kind ? { kind } : {}),
                     ...(tier ? { tier } : {}),
+                    ...(benchmark ? { benchmark } : {}),
                 },
             }),
             { preserveScroll: true },
@@ -145,6 +164,7 @@ export function useAiUsageNavigation(
         setWindow,
         setKind,
         setTier,
+        setBenchmark,
         applyScenario,
         clearScenario,
     };

@@ -180,3 +180,19 @@ test('a condition left on a model whose pool was unlinked can be cleared and sav
             ['model' => 'gpt-5-nano', 'min_pool_percent' => null],
         ]);
 });
+
+test('the benchmark judge is a single selection without an add tier button', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-task="chat"] [data-tier-add]')
+        ->assertPresent('[data-task="benchmark_judge"] [data-model-select]')
+        ->assertMissing('[data-task="benchmark_judge"] [data-tier-add]')
+        ->click('[data-task="benchmark_judge"] [data-model-select] button')
+        ->click('[role="option"][aria-label="gpt-5.6-luna"]')
+        ->click('Save models')
+        ->assertSee('AI models updated.');
+
+    expect(AiTaskModel::query()->forTask(AiTask::BenchmarkJudge)->pluck('model')->all())->toBe(['gpt-5.6-luna']);
+});

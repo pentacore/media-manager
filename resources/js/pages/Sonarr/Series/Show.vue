@@ -105,6 +105,8 @@ const props = defineProps<{
     series: SeriesDetail;
     episodes?: UpstreamList<Episode>;
     qualityProfiles?: UpstreamList<QualityProfile>;
+    /** Viewers only: the current profile's name; null when unknown. */
+    qualityProfileName?: string | null;
 }>();
 
 const { can } = useCan();
@@ -421,6 +423,25 @@ function sonarrSeriesUrl(): string | null {
                                 />
                             </div>
                         </div>
+                        <div v-else>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Quality profile
+                            </div>
+                            <div
+                                class="mt-0.5 text-[13px]"
+                                data-quality-profile-name
+                            >
+                                <Skeleton
+                                    v-if="qualityProfileName === undefined"
+                                    class="h-4 w-24"
+                                />
+                                <template v-else>{{
+                                    qualityProfileName ?? '—'
+                                }}</template>
+                            </div>
+                        </div>
                         <div>
                             <div
                                 class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
@@ -512,311 +533,334 @@ function sonarrSeriesUrl(): string | null {
                     {{ episodes.error }}
                 </p>
 
-                <div
-                    v-for="season in series.seasons"
-                    :key="season.season_number"
-                    class="overflow-hidden rounded-xl border border-border bg-card"
-                >
-                    <Collapsible
-                        :open="openSeasons[season.season_number] ?? false"
+                <template v-else>
+                    <div
+                        v-for="season in series.seasons"
+                        :key="season.season_number"
+                        class="overflow-hidden rounded-xl border border-border bg-card"
                     >
-                        <CollapsibleTrigger as-child>
-                            <button
-                                type="button"
-                                class="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-bg-hover"
-                                @click="toggleSeason(season.season_number)"
-                            >
-                                <div class="flex items-center gap-3">
-                                    <ChevronRight
-                                        class="size-4 text-muted-foreground transition-transform"
-                                        :class="
-                                            openSeasons[season.season_number]
-                                                ? 'rotate-90'
-                                                : ''
-                                        "
-                                    />
-                                    <span class="text-[14px] font-semibold">
-                                        {{
-                                            season.season_number === 0
-                                                ? 'Specials'
-                                                : `Season ${season.season_number}`
-                                        }}
-                                    </span>
-                                    <Pill
-                                        :data-season-pill="season.season_number"
-                                        :variant="
-                                            seasonEpisodesMonitored(
-                                                season.season_number,
-                                            )
-                                                ? 'ok'
-                                                : 'default'
-                                        "
-                                        :dot="
-                                            seasonEpisodesMonitored(
-                                                season.season_number,
-                                            )
-                                        "
-                                    >
-                                        {{
-                                            seasonEpisodesMonitored(
-                                                season.season_number,
-                                            )
-                                                ? 'Monitored'
-                                                : 'Unmonitored'
-                                        }}
-                                    </Pill>
-                                </div>
-                                <div
-                                    class="flex items-center gap-4 text-[12px] text-muted-foreground"
+                        <Collapsible
+                            :open="openSeasons[season.season_number] ?? false"
+                        >
+                            <CollapsibleTrigger as-child>
+                                <button
+                                    type="button"
+                                    class="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-bg-hover"
+                                    @click="toggleSeason(season.season_number)"
                                 >
-                                    <span class="flex items-center gap-1.5">
-                                        <Activity class="size-3.5" />
-                                        <span class="font-mono-tabular">
-                                            {{ season.episode_file_count }} /
-                                            {{ season.episode_count }}
-                                        </span>
-                                    </span>
-                                    <span class="flex items-center gap-1.5">
-                                        <HardDrive class="size-3.5" />
-                                        <span class="font-mono-tabular">
+                                    <div class="flex items-center gap-3">
+                                        <ChevronRight
+                                            class="size-4 text-muted-foreground transition-transform"
+                                            :class="
+                                                openSeasons[
+                                                    season.season_number
+                                                ]
+                                                    ? 'rotate-90'
+                                                    : ''
+                                            "
+                                        />
+                                        <span class="text-[14px] font-semibold">
                                             {{
-                                                formatBytes(season.size_on_disk)
-                                            }}
-                                        </span>
-                                    </span>
-                                </div>
-                            </button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                            <div class="border-t border-border px-4 py-3">
-                                <div
-                                    v-if="can('manage-library')"
-                                    class="mb-3 flex flex-wrap items-center gap-2"
-                                    :data-season-actions="season.season_number"
-                                >
-                                    <template
-                                        v-if="
-                                            episodeIdsForSeason(
-                                                season.season_number,
-                                            ).length > 0
-                                        "
-                                    >
-                                        <MonitorButton
-                                            service="sonarr"
-                                            :connection-id="
-                                                service_connection_id
-                                            "
-                                            :series-id="series.id"
-                                            :episode-ids="
-                                                episodeIdsForSeason(
-                                                    season.season_number,
-                                                )
-                                            "
-                                            :season-number="
-                                                season.season_number
-                                            "
-                                            :monitored="
-                                                seasonEpisodesMonitored(
-                                                    season.season_number,
-                                                )
-                                            "
-                                            :label="
-                                                seasonEpisodesMonitored(
-                                                    season.season_number,
-                                                )
-                                                    ? 'Season monitored'
-                                                    : 'Season unmonitored'
-                                            "
-                                        />
-                                        <SearchButton
-                                            service="sonarr"
-                                            :connection-id="
-                                                service_connection_id
-                                            "
-                                            command="season_search"
-                                            :series-id="series.id"
-                                            :season-number="
-                                                season.season_number
-                                            "
-                                            label="Search season"
-                                        />
-                                    </template>
-                                    <span
-                                        v-else
-                                        class="text-[12px] text-muted-foreground"
-                                        data-season-no-episodes
-                                    >
-                                        No episodes yet
-                                    </span>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        class="h-7 text-xs"
-                                        data-interactive-search
-                                        @click="
-                                            openInteractive(
                                                 season.season_number === 0
                                                     ? 'Specials'
-                                                    : `Season ${season.season_number}`,
-                                                season.season_number,
-                                                null,
-                                            )
+                                                    : `Season ${season.season_number}`
+                                            }}
+                                        </span>
+                                        <Pill
+                                            :data-season-pill="
+                                                season.season_number
+                                            "
+                                            :variant="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                                    ? 'ok'
+                                                    : 'default'
+                                            "
+                                            :dot="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                                    ? 'Monitored'
+                                                    : 'Unmonitored'
+                                            }}
+                                        </Pill>
+                                    </div>
+                                    <div
+                                        class="flex items-center gap-4 text-[12px] text-muted-foreground"
+                                    >
+                                        <span class="flex items-center gap-1.5">
+                                            <Activity class="size-3.5" />
+                                            <span class="font-mono-tabular">
+                                                {{ season.episode_file_count }}
+                                                /
+                                                {{ season.episode_count }}
+                                            </span>
+                                        </span>
+                                        <span class="flex items-center gap-1.5">
+                                            <HardDrive class="size-3.5" />
+                                            <span class="font-mono-tabular">
+                                                {{
+                                                    formatBytes(
+                                                        season.size_on_disk,
+                                                    )
+                                                }}
+                                            </span>
+                                        </span>
+                                    </div>
+                                </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                <div class="border-t border-border px-4 py-3">
+                                    <div
+                                        v-if="can('manage-library')"
+                                        class="mb-3 flex flex-wrap items-center gap-2"
+                                        :data-season-actions="
+                                            season.season_number
                                         "
                                     >
-                                        Interactive search
-                                    </Button>
-                                </div>
-                                <div class="space-y-2">
-                                    <div
-                                        v-for="episode in episodesForSeason(
-                                            season.season_number,
-                                        )"
-                                        :key="`${episode.season_number}-${episode.episode_number}`"
-                                        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover/30 px-3 py-2"
-                                    >
-                                        <div class="min-w-0 flex-1">
-                                            <p class="text-[13px] font-medium">
+                                        <template
+                                            v-if="
+                                                episodeIdsForSeason(
+                                                    season.season_number,
+                                                ).length > 0
+                                            "
+                                        >
+                                            <MonitorButton
+                                                service="sonarr"
+                                                :connection-id="
+                                                    service_connection_id
+                                                "
+                                                :series-id="series.id"
+                                                :episode-ids="
+                                                    episodeIdsForSeason(
+                                                        season.season_number,
+                                                    )
+                                                "
+                                                :season-number="
+                                                    season.season_number
+                                                "
+                                                :monitored="
+                                                    seasonEpisodesMonitored(
+                                                        season.season_number,
+                                                    )
+                                                "
+                                                :label="
+                                                    seasonEpisodesMonitored(
+                                                        season.season_number,
+                                                    )
+                                                        ? 'Season monitored'
+                                                        : 'Season unmonitored'
+                                                "
+                                            />
+                                            <SearchButton
+                                                service="sonarr"
+                                                :connection-id="
+                                                    service_connection_id
+                                                "
+                                                command="season_search"
+                                                :series-id="series.id"
+                                                :season-number="
+                                                    season.season_number
+                                                "
+                                                label="Search season"
+                                            />
+                                        </template>
+                                        <span
+                                            v-else
+                                            class="text-[12px] text-muted-foreground"
+                                            data-season-no-episodes
+                                        >
+                                            No episodes yet
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            class="h-7 text-xs"
+                                            data-interactive-search
+                                            @click="
+                                                openInteractive(
+                                                    season.season_number === 0
+                                                        ? 'Specials'
+                                                        : `Season ${season.season_number}`,
+                                                    season.season_number,
+                                                    null,
+                                                )
+                                            "
+                                        >
+                                            Interactive search
+                                        </Button>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <div
+                                            v-for="episode in episodesForSeason(
+                                                season.season_number,
+                                            )"
+                                            :key="`${episode.season_number}-${episode.episode_number}`"
+                                            class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover/30 px-3 py-2"
+                                        >
+                                            <div class="min-w-0 flex-1">
+                                                <p
+                                                    class="text-[13px] font-medium"
+                                                >
+                                                    <span
+                                                        class="font-mono-tabular text-muted-foreground"
+                                                    >
+                                                        {{
+                                                            episode.episode_number
+                                                        }}.
+                                                    </span>
+                                                    {{ episode.title ?? 'TBA' }}
+                                                </p>
+                                                <p
+                                                    v-if="episode.overview"
+                                                    class="truncate text-[12px] text-muted-foreground"
+                                                >
+                                                    {{ episode.overview }}
+                                                </p>
+                                            </div>
+                                            <div
+                                                class="flex items-center gap-3"
+                                            >
                                                 <span
-                                                    class="font-mono-tabular text-muted-foreground"
+                                                    v-if="episode.air_date"
+                                                    class="font-mono-tabular flex items-center gap-1.5 text-[12px] text-muted-foreground"
+                                                >
+                                                    <Calendar
+                                                        class="size-3.5"
+                                                    />
+                                                    {{ episode.air_date }}
+                                                </span>
+                                                <Pill
+                                                    :variant="
+                                                        episode.has_file
+                                                            ? 'ok'
+                                                            : 'warn'
+                                                    "
                                                 >
                                                     {{
-                                                        episode.episode_number
-                                                    }}.
-                                                </span>
-                                                {{ episode.title ?? 'TBA' }}
-                                            </p>
-                                            <p
-                                                v-if="episode.overview"
-                                                class="truncate text-[12px] text-muted-foreground"
-                                            >
-                                                {{ episode.overview }}
-                                            </p>
-                                        </div>
-                                        <div class="flex items-center gap-3">
-                                            <span
-                                                v-if="episode.air_date"
-                                                class="font-mono-tabular flex items-center gap-1.5 text-[12px] text-muted-foreground"
-                                            >
-                                                <Calendar class="size-3.5" />
-                                                {{ episode.air_date }}
-                                            </span>
-                                            <Pill
-                                                :variant="
-                                                    episode.has_file
-                                                        ? 'ok'
-                                                        : 'warn'
-                                                "
-                                            >
-                                                {{
-                                                    episode.has_file
-                                                        ? 'Downloaded'
-                                                        : 'Missing'
-                                                }}
-                                            </Pill>
-                                            <div
-                                                v-if="
-                                                    can('manage-library') &&
-                                                    episode.id !== null
-                                                "
-                                                class="flex items-center gap-1.5"
-                                                :data-episode-actions="
-                                                    episode.id
-                                                "
-                                            >
-                                                <MonitorButton
-                                                    service="sonarr"
-                                                    :connection-id="
-                                                        service_connection_id
+                                                        episode.has_file
+                                                            ? 'Downloaded'
+                                                            : 'Missing'
+                                                    }}
+                                                </Pill>
+                                                <div
+                                                    v-if="
+                                                        can('manage-library') &&
+                                                        episode.id !== null
                                                     "
-                                                    :series-id="series.id"
-                                                    :episode-ids="[episode.id]"
-                                                    :monitored="
-                                                        episode.monitored
-                                                    "
-                                                />
-                                                <SearchButton
-                                                    service="sonarr"
-                                                    :connection-id="
-                                                        service_connection_id
-                                                    "
-                                                    command="episode_search"
-                                                    :series-id="series.id"
-                                                    :episode-ids="[episode.id]"
-                                                />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    class="h-7 text-xs"
-                                                    data-interactive-search
-                                                    @click="
-                                                        openInteractive(
-                                                            `${episodeCode(episode)} ${episode.title ?? ''}`.trim(),
-                                                            null,
-                                                            episode.id,
-                                                        )
+                                                    class="flex items-center gap-1.5"
+                                                    :data-episode-actions="
+                                                        episode.id
                                                     "
                                                 >
-                                                    Interactive
-                                                </Button>
-                                            </div>
-                                            <TooltipProvider
-                                                v-if="
-                                                    episode.has_file &&
-                                                    can('manage-library')
-                                                "
-                                                :delay-duration="200"
-                                            >
-                                                <Tooltip>
-                                                    <TooltipTrigger as-child>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon-sm"
-                                                            data-replacement-trigger
-                                                            @click="
-                                                                openReplaceDialog(
-                                                                    episode,
-                                                                )
-                                                            "
+                                                    <MonitorButton
+                                                        service="sonarr"
+                                                        :connection-id="
+                                                            service_connection_id
+                                                        "
+                                                        :series-id="series.id"
+                                                        :episode-ids="[
+                                                            episode.id,
+                                                        ]"
+                                                        :monitored="
+                                                            episode.monitored
+                                                        "
+                                                    />
+                                                    <SearchButton
+                                                        service="sonarr"
+                                                        :connection-id="
+                                                            service_connection_id
+                                                        "
+                                                        command="episode_search"
+                                                        :series-id="series.id"
+                                                        :episode-ids="[
+                                                            episode.id,
+                                                        ]"
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        class="h-7 text-xs"
+                                                        data-interactive-search
+                                                        @click="
+                                                            openInteractive(
+                                                                `${episodeCode(episode)} ${episode.title ?? ''}`.trim(),
+                                                                null,
+                                                                episode.id,
+                                                            )
+                                                        "
+                                                    >
+                                                        Interactive
+                                                    </Button>
+                                                </div>
+                                                <TooltipProvider
+                                                    v-if="
+                                                        episode.has_file &&
+                                                        can('manage-library')
+                                                    "
+                                                    :delay-duration="200"
+                                                >
+                                                    <Tooltip>
+                                                        <TooltipTrigger
+                                                            as-child
                                                         >
-                                                            <Replace
-                                                                class="size-3.5"
-                                                            />
-                                                            <span
-                                                                class="sr-only"
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                data-replacement-trigger
+                                                                @click="
+                                                                    openReplaceDialog(
+                                                                        episode,
+                                                                    )
+                                                                "
                                                             >
-                                                                Replace file
-                                                            </span>
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        Replace file
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
+                                                                <Replace
+                                                                    class="size-3.5"
+                                                                />
+                                                                <span
+                                                                    class="sr-only"
+                                                                >
+                                                                    Replace file
+                                                                </span>
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            Replace file
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </div>
                                         </div>
+                                        <p
+                                            v-if="
+                                                episodesForSeason(
+                                                    season.season_number,
+                                                ).length === 0
+                                            "
+                                            class="py-3 text-center text-[12px] text-muted-foreground"
+                                        >
+                                            No episodes available.
+                                        </p>
                                     </div>
-                                    <p
-                                        v-if="
-                                            episodesForSeason(
-                                                season.season_number,
-                                            ).length === 0
-                                        "
-                                        class="py-3 text-center text-[12px] text-muted-foreground"
-                                    >
-                                        No episodes available.
-                                    </p>
                                 </div>
-                            </div>
-                        </CollapsibleContent>
-                    </Collapsible>
-                </div>
+                            </CollapsibleContent>
+                        </Collapsible>
+                    </div>
 
-                <p
-                    v-if="series.seasons.length === 0"
-                    class="text-[13px] text-muted-foreground"
-                >
-                    No seasons available.
-                </p>
+                    <p
+                        v-if="series.seasons.length === 0"
+                        class="text-[13px] text-muted-foreground"
+                    >
+                        No seasons available.
+                    </p>
+                </template>
             </WhenVisible>
         </div>
     </div>

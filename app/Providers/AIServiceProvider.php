@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\ChatTurnContext;
 use App\Ai\Conversations\ConversationStore;
 use App\Ai\ReasoningOptions;
@@ -51,6 +52,10 @@ class AIServiceProvider extends ServiceProvider
         // The conversation override for the chat turn in flight; scoped so it
         // never applies to the next Octane request or queued job.
         $this->app->scoped(ChatTurnContext::class);
+
+        // The benchmark job's run, candidate and fixtures; scoped so a run never
+        // pins models or replays tools in the next Octane request or queued job.
+        $this->app->scoped(BenchmarkRunContext::class);
 
         // Memoises ai_task_models for the request; scoped for the same reason.
         $this->app->scoped(TaskModelResolver::class);

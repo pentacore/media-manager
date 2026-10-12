@@ -82,8 +82,8 @@ class SeriesController extends BaseArrController
                     'overview' => $ep['overview'] ?? null,
                 ],
             )),
-            // Only the profile dropdown needs these, and only manage-library
-            // users get the dropdown — viewers trigger no upstream lookup.
+            // Managers get the whole list for the profile dropdown; viewers get
+            // only the current profile's name, read from the same cached list.
             ...$canManageLibrary ? [
                 'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                     $connection,
@@ -91,7 +91,12 @@ class SeriesController extends BaseArrController
                     fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles(),
                     $this->mapQualityProfile(...),
                 ), 'qualityProfiles'),
-            ] : [],
+            ] : [
+                'qualityProfileName' => Inertia::defer(
+                    fn (): ?string => $this->qualityProfileName($connection, $series['qualityProfileId'] ?? null),
+                    'qualityProfileName',
+                ),
+            ],
         ]);
     }
 

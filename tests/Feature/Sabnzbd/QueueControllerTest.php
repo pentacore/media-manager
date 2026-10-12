@@ -116,8 +116,60 @@ test('hidden_categories filters out matching slots from queue and history', func
             ->has('queue.slots', 2)
             ->where('queue.slots.0.nzo_id', 'a')
             ->where('queue.slots.1.nzo_id', 'c')
+            ->where('queue.hidden_by_category', 1)
             ->has('history.slots', 1)
             ->where('history.slots.0.nzo_id', 'h1')
+            ->where('history.hidden_by_category', 1)
+        );
+});
+
+test('a history page whose slots are all hidden says so and keeps the SABnzbd total', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create([
+        'url' => 'http://sab.local:8080',
+        'api_key' => 'k',
+        'settings' => ['hidden_categories' => ['adult']],
+    ]);
+
+    Http::fake([
+        'sab.local:8080/api*' => Http::sequence()
+            ->push(['queue' => ['paused' => false, 'noofslots' => 0, 'slots' => []]])
+            ->push(['history' => [
+                'noofslots' => 40,
+                'slots' => [
+                    ['nzo_id' => 'h1', 'name' => 'example-one', 'category' => 'adult'],
+                    ['nzo_id' => 'h2', 'name' => 'example-two', 'category' => 'adult'],
+                ],
+            ]]),
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('history.slots', 0)
+            ->where('history.total', 40)
+            ->where('history.hidden_by_category', 2)
+            ->where('queue.hidden_by_category', 0)
+        );
+});
+
+test('without hidden categories nothing is counted as hidden', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+
+    Http::fake([
+        'sab.local:8080/api*' => Http::sequence()
+            ->push(['queue' => ['paused' => false, 'slots' => [['nzo_id' => 'a', 'filename' => 'example.nzb', 'cat' => 'adult']]]])
+            ->push(['history' => ['noofslots' => 1, 'slots' => [['nzo_id' => 'h1', 'name' => 'example', 'category' => 'adult']]]]),
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('queue.slots', 1)
+            ->where('queue.hidden_by_category', 0)
+            ->has('history.slots', 1)
+            ->where('history.hidden_by_category', 0)
         );
 });
 

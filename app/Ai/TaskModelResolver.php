@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai;
 
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\AiTaskModel;
@@ -29,6 +30,7 @@ use LogicException;
  * - Decision → config `mediamanager.decision_agent.model`, then the Chat list;
  * - PriceUpdater → config `mediamanager.ai.pricing.updater_model`, then the
  *   Chat list;
+ * - BenchmarkJudge → the Chat list;
  * - FileInspector, StuckDownloadInvestigator → config
  *   `mediamanager.ai.sub_agent_model`, then the Chat list.
  *
@@ -45,6 +47,9 @@ use LogicException;
  * scoped) and flushed by AiTaskModelObserver whenever a row is saved or
  * deleted. The memo holds the walk only; ChatTurnContext applies on top at
  * every resolve().
+ *
+ * An active BenchmarkRunContext wins over all of it: the case task runs on
+ * the run's candidate and BenchmarkJudge on the run's judge.
  */
 final class TaskModelResolver
 {
@@ -57,11 +62,18 @@ final class TaskModelResolver
     public function __construct(
         private readonly ChatTurnContext $chatTurnContext,
         private readonly TierEligibility $tierEligibility,
+        private readonly BenchmarkRunContext $benchmarkRunContext,
     ) {}
 
     public function resolve(AiTask $aiTask, ?string $eventKey = null): ResolvedSelection
     {
         throw_if($aiTask === AiTask::Failover, InvalidArgumentException::class, 'Resolve the failover task with failover().');
+
+        $pinned = $this->benchmarkRunContext->selectionFor($aiTask);
+
+        if ($pinned instanceof ResolvedSelection) {
+            return $pinned;
+        }
 
         if ($aiTask === AiTask::Chat && $this->chatTurnContext->hasModel()) {
             return new ResolvedSelection(
@@ -220,6 +232,7 @@ final class TaskModelResolver
             AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
             AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
             AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
             AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
                 ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),

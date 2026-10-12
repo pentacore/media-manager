@@ -371,3 +371,23 @@ test('an admin blocklists one queue item from its row menu', function (): void {
         && str_contains($request->url(), '/api/v3/queue/41?')
         && str_contains($request->url(), 'blocklist=true'));
 });
+
+test('a confirmed bulk remove hands focus to select all, not the page body', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance')
+        ->click('[data-service-filter="sonarr"]')
+        ->click('[data-bulk-select="41"]')
+        ->click('[data-bulk-queue-action="remove"]')
+        ->click('[data-bulk-queue-confirm]')
+        ->assertSee('1 removed');
+
+    // Assert only after the dialog has left the DOM and Reka's restore
+    // (a zero-delay timer scheduled at unmount) has run.
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[role=\"dialog\"]')"));
+    $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
+    $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
+});
