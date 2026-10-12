@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AiModelsController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\BenchmarkCaseController;
+use App\Http\Controllers\Admin\BenchmarkRunController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
 use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
@@ -80,6 +81,17 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('{benchmarkCase}/edit', [BenchmarkCaseController::class, 'edit'])->whereNumber('benchmarkCase')->name('edit');
             Route::put('{benchmarkCase}', [BenchmarkCaseController::class, 'update'])->whereNumber('benchmarkCase')->name('update');
             Route::delete('{benchmarkCase}', [BenchmarkCaseController::class, 'destroy'])->whereNumber('benchmarkCase')->name('destroy');
+        });
+
+        Route::prefix('benchmarks')->name('benchmarks.runs.')->group(function (): void {
+            Route::get('/', [BenchmarkRunController::class, 'index'])->name('index');
+            Route::get('runs/create', [BenchmarkRunController::class, 'create'])->name('create');
+            Route::post('runs/estimate', [BenchmarkRunController::class, 'estimate'])->name('estimate');
+            Route::post('runs', [BenchmarkRunController::class, 'store'])->name('store');
+            Route::get('runs/{benchmarkRun}', [BenchmarkRunController::class, 'show'])->whereNumber('benchmarkRun')->name('show');
+            Route::post('runs/{benchmarkRun}/cancel', [BenchmarkRunController::class, 'cancel'])->whereNumber('benchmarkRun')->name('cancel');
+            Route::post('runs/{benchmarkRun}/rejudge', [BenchmarkRunController::class, 'rejudge'])->whereNumber('benchmarkRun')->name('rejudge');
+            Route::delete('runs/{benchmarkRun}', [BenchmarkRunController::class, 'destroy'])->whereNumber('benchmarkRun')->name('destroy');
         });
 
         Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
