@@ -112,8 +112,22 @@ test('series index deferred props report an outage instead of an empty library',
         );
 })->with([
     'outage' => [503, 'Sonarr is unreachable right now.'],
-    'bad api key' => [401, 'Sonarr refused the request — check the connection settings.'],
+    'bad api key' => [401, 'Sonarr is unavailable — ask an admin to check the connection.'],
 ]);
+
+test('an admin is sent to the connection settings when Sonarr refuses', function (): void {
+    Sleep::fake();
+    Http::fake(['sonarr.local:8989/*' => Http::response('Unauthorized', 401)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['series'], fn ($reload) => $reload
+                ->where('series', ['items' => [], 'error' => 'Sonarr refused the request — check the connection settings.'])
+            )
+        );
+});
 
 test('members can view a single series with deferred episodes', function (): void {
     $member = User::factory()->member()->create();
@@ -509,7 +523,7 @@ test('a series page whose episodes fail to load says so', function (): void {
         ->assertInertia(fn ($page) => $page
             ->loadDeferredProps(fn ($reload) => $reload
                 ->where('episodes', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])
-                ->where('qualityProfiles', ['items' => [], 'error' => 'Sonarr refused the request — check the connection settings.'])));
+                ->where('qualityProfiles', ['items' => [], 'error' => 'Sonarr is unavailable — ask an admin to check the connection.'])));
 });
 
 test('the add-series form reports failed lookups, profiles and root folders', function (): void {

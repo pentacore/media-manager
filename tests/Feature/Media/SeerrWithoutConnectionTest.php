@@ -61,7 +61,8 @@ test('the Seerr JSON endpoints answer 422 without an active Seerr connection', f
     $this->actingAs($admin)
         ->getJson(route('media.requests.edit-options', 42))
         ->assertUnprocessable()
-        ->assertJsonPath('error', 'no_seerr_connection');
+        ->assertJsonPath('error', 'no_seerr_connection')
+        ->assertJsonPath('message', 'No active Seerr connection configured.');
     $this->actingAs($admin)
         ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
         ->assertUnprocessable()

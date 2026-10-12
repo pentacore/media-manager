@@ -11,6 +11,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
+import {
+    ActionFailureDetails,
+    failureReasonLabel,
+    isUncertainOutcome,
+    mergeLiveResult,
+    retryConfirmation,
+} from '@/components/actions';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import {
     Field,
@@ -31,6 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
+import { useConfirm } from '@/composables/useConfirm';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
@@ -78,6 +86,7 @@ defineOptions({
 });
 
 const { isAdmin } = useCan();
+const { confirm } = useConfirm();
 
 const hasFilter = computed(() => props.filters.status !== '');
 const onFirstPage = computed(() => props.requests.meta.current_page === 1);
@@ -214,16 +223,33 @@ let statusLease: ChannelLease | null = null;
 interface StatusChangePayload {
     id: number;
     status: ActionRequestRow['status'];
-    result: { success: boolean | null; reason: string | null };
+    /** The member-safe result (null once a retry cleared it). */
+    result?: ActionRequestRow['result'];
     updated_at: string;
 }
 
 function applyStatusChange(payload: StatusChangePayload): void {
     const target = liveRequests.value.find((row) => row.id === payload.id);
 
-    if (target) {
-        target.status = payload.status;
-        target.result = payload.result;
+    if (!target) {
+        return;
+    }
+
+    const statusChanged = target.status !== payload.status;
+
+    target.result = mergeLiveResult(
+        target.result,
+        payload.result,
+        !statusChanged,
+    );
+    target.status = payload.status;
+
+    // The broadcast carries only the member-safe result. An admin's failure
+    // message and outcome flag come with the server-rendered `requests`, so
+    // every live failure reloads them: a same-status event may follow missed
+    // ones (a retry and a new failure) and carry a different outcome.
+    if (payload.status === 'failed' && isAdmin.value) {
+        scheduleRequestsReload();
     }
 }
 
@@ -395,9 +421,24 @@ function reject(id: number): void {
     );
 }
 
-function retry(id: number): void {
+async function retry(row: ActionRequestRow): Promise<void> {
+    if (isUncertainOutcome(row.result)) {
+        const confirmed = await confirm(retryConfirmation(row));
+
+        // A live event may have moved the row on while the dialog was open,
+        // and a `requests` reload may have swapped the row object, so read
+        // the row the page lists now rather than the one clicked.
+        const current = visibleRequests.value.find(
+            (listed) => listed.id === row.id,
+        );
+
+        if (!confirmed || current?.status !== 'failed') {
+            return;
+        }
+    }
+
     router.post(
-        ActionRequestController.retry.url(id),
+        ActionRequestController.retry.url(row.id),
         {},
         { preserveScroll: true },
     );
@@ -519,6 +560,11 @@ function attemptVariant(status: string): PillVariant {
         default:
             return 'info';
     }
+}
+
+/** A failed row's badge: `warn` for an unknown outcome, `danger` otherwise. */
+function failureBadgeVariant(row: ActionRequestRow): PillVariant {
+    return isUncertainOutcome(row.result) ? 'warn' : 'danger';
 }
 
 function statusCount(id: string): number {
@@ -768,7 +814,21 @@ function pipelineState(
                                     </span>
                                 </td>
                                 <td class="px-3 py-2.5 align-middle">
-                                    <StatusPill :status="row.status" />
+                                    <div
+                                        class="flex flex-wrap items-center gap-1.5"
+                                    >
+                                        <StatusPill :status="row.status" />
+                                        <Pill
+                                            v-if="row.status === 'failed'"
+                                            :variant="failureBadgeVariant(row)"
+                                            :data-action-failure-badge="row.id"
+                                            :data-action-failure-tone="
+                                                failureBadgeVariant(row)
+                                            "
+                                        >
+                                            {{ failureReasonLabel(row.result) }}
+                                        </Pill>
+                                    </div>
                                 </td>
                                 <td
                                     class="font-mono-tabular px-3 py-2.5 align-middle text-[11.5px] text-fg-subtle"
@@ -882,6 +942,11 @@ function pipelineState(
                                 >{{ rejectionReason(selected) }}</span
                             >
                         </Field>
+                        <ActionFailureDetails
+                            v-if="selected.status === 'failed'"
+                            :request="selected"
+                            :show-outcome-warning="isAdmin"
+                        />
                         <p
                             v-if="payloadDetail(selected)"
                             class="text-[13px] leading-relaxed text-muted-foreground"
@@ -1138,7 +1203,8 @@ function pipelineState(
                         <Button
                             v-else-if="selected.status === 'failed' && isAdmin"
                             variant="outline"
-                            @click="retry(selected.id)"
+                            data-action-retry
+                            @click="retry(selected)"
                         >
                             Retry
                         </Button>

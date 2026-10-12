@@ -142,13 +142,19 @@ function formatAge(days: number): string {
         <div
             v-if="!hasConnection"
             class="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
+            data-prowlarr-no-connection
         >
-            No active Prowlarr connection. Add one from
-            <Link
-                :href="ServiceConnectionController.index.url()"
-                class="underline"
-                >Admin → Connections</Link
-            >.
+            <template v-if="isAdmin">
+                No active Prowlarr connection. Add one from
+                <Link
+                    :href="ServiceConnectionController.index.url()"
+                    class="underline"
+                    >Admin → Connections</Link
+                >.
+            </template>
+            <template v-else>
+                No active Prowlarr connection — ask an admin to set one up.
+            </template>
         </div>
 
         <form v-else class="flex items-center gap-2" @submit.prevent="submit">
