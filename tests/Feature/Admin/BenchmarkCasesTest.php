@@ -162,6 +162,39 @@ test('a truncated prompt keeps only the conversation turns before the record sec
         ]));
 });
 
+test('a truncated prompt keeps only the earlier turns in a non-UTC app timezone', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => now()->subHour(), 'updated_at' => now()->subHour()]);
+
+    foreach ([
+        ['user', 'Earlier question', $turnAt->subMinutes(5)],
+        ['assistant', 'Earlier answer', $turnAt->subMinutes(4)],
+        ['user', 'A very long captured prompt that was cut', $turnAt],
+        ['assistant', 'The captured answer', $turnAt],
+    ] as [$role, $content, $at]) {
+        DB::table('agent_conversation_messages')->insert([
+            'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+            'role' => $role, 'content' => $content, 'attachments' => '[]', 'steps' => '[]', 'usage' => '[]',
+            'meta' => '[]', 'created_at' => $at, 'updated_at' => $at,
+        ]);
+    }
+
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'A very long captured prompt that was cut…', [
+        'conversation_id' => $conversationId, 'created_at' => $turnAt,
+    ]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.input.history', [
+            ['role' => 'user', 'content' => 'Earlier question'],
+            ['role' => 'assistant', 'content' => 'Earlier answer'],
+        ]));
+});
+
 test('the create form pre-fills a chat draft with the earlier conversation turns only', function (int $usageDelaySeconds): void {
     $this->actingAs(User::factory()->admin()->create());
     $conversationId = (string) Str::uuid();

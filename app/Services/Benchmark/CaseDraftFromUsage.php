@@ -179,7 +179,7 @@ final readonly class CaseDraftFromUsage
             }
         }
 
-        $earlier = array_filter($messages, static fn (object $message): bool => CarbonImmutable::parse((string) $message->created_at, 'UTC')->lessThan($secondStart));
+        $earlier = array_filter($messages, static fn (object $message): bool => CarbonImmutable::parse((string) $message->created_at, $secondStart->getTimezone())->lessThan($secondStart));
 
         return array_values(array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $earlier));
     }
