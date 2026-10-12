@@ -348,8 +348,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             :data-benchmark-matrix-row="candidate.index"
                         >
                             <TableCell class="whitespace-nowrap">
-                                {{ candidate.model }} ·
-                                {{ candidate.reasoning_label }}
+                                {{ candidateLabel(candidate) }}
                                 <Pill
                                     v-if="candidate.self_judged"
                                     variant="warn"

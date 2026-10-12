@@ -30,7 +30,9 @@ export function formatLatency(milliseconds: number | null | undefined): string {
         : `${(milliseconds / 1000).toFixed(1)}s`;
 }
 
+/** "provider · model · reasoning", leaving out an unset part and the provider default reasoning. */
 export function candidateLabel(candidate: {
+    provider?: string | null;
     model: string | null;
     reasoning?: string | null;
     reasoning_label?: string;
@@ -41,7 +43,11 @@ export function candidateLabel(candidate: {
             ? candidate.reasoning
             : null);
 
-    return reasoning && reasoning !== 'Provider default'
-        ? `${candidate.model} · ${reasoning}`
-        : String(candidate.model);
+    return [
+        candidate.provider,
+        candidate.model,
+        reasoning && reasoning !== 'Provider default' ? reasoning : null,
+    ]
+        .filter((part): part is string => Boolean(part))
+        .join(' · ');
 }
