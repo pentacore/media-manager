@@ -71,11 +71,14 @@ defineOptions({
     },
 });
 
+// WebhookEventProcessed fires after the queued handler cleared the Radarr
+// cache; WebhookReceived fires before, and a reload on it can re-read
+// stale rows.
 const { subscribe: subscribeReload } = useRealtimeReload<{
     service_type: string | null;
 }>({
     channel: 'dashboard',
-    event: 'WebhookReceived',
+    event: 'WebhookEventProcessed',
     only: ['movies'],
     filter: (event) => event.service_type === 'radarr',
 });

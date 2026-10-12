@@ -81,11 +81,14 @@ defineOptions({
     },
 });
 
+// WebhookEventProcessed fires after the queued handler cleared the Sonarr
+// cache; WebhookReceived fires before, and a reload on it can re-read
+// stale rows.
 const { subscribe: subscribeReload } = useRealtimeReload<{
     service_type: string | null;
 }>({
     channel: 'dashboard',
-    event: 'WebhookReceived',
+    event: 'WebhookEventProcessed',
     only: ['series'],
     filter: (event) => event.service_type === 'sonarr',
 });

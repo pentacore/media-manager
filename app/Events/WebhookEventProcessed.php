@@ -30,12 +30,22 @@ class WebhookEventProcessed implements ShouldBroadcast
     }
 
     /**
+     * Fired after the queued handler returned — after any cache it clears
+     * was cleared — so a page that reloads on it reads fresh rows. Pages
+     * filter on `service_type`; `WebhookReceived` fires at receipt, before
+     * processing, and is not a reload signal.
+     *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
     {
+        $this->webhookEvent->loadMissing('serviceConnection:id,type');
+
         return [
             'id' => $this->webhookEvent->id,
+            'service_connection_id' => $this->webhookEvent->service_connection_id,
+            'service_type' => $this->webhookEvent->serviceConnection->type->value,
+            'event_type' => $this->webhookEvent->event_type,
             'processed_at' => $this->webhookEvent->processed_at?->toISOString(),
         ];
     }

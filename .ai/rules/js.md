@@ -44,3 +44,6 @@ Call `focusAfterBulk()` (`@/lib/bulk`) after every successful bulk run, dialog o
 
 ## Counts render through formatCount()
 Format token budgets, call counts and other whole counts with `formatCount()` from `@/lib/format` (fixed en-US grouping, "—" for a missing or non-numeric value). Never use `new Intl.NumberFormat()` / `toLocaleString()` without a fixed locale for text the server renders too: Node's SSR locale and the browser's differ, which prints two strings and trips a hydration mismatch. `tests/Browser/PoolBudgetFormatTest.php` pins it under a German browser.
+
+## Pages reload on processed webhooks, never on received ones
+A page whose props come from a service cache that webhooks clear (the Sonarr, Radarr and Whisparr libraries, the Whisparr title page, the Seerr requests list) reloads through `useRealtimeReload({ channel: 'dashboard', event: 'WebhookEventProcessed', only, filter: (event) => event.service_type === '<service>' })`. `WebhookEventProcessed` fires from `WebhookEvent::markProcessed()` after the queued handler returned, so after its `bustAll()`; `WebhookReceived` fires when the webhook is stored, before processing, and a reload on it re-reads the stale cache. `tests/Browser/LibraryLiveReloadTest.php` pins it.

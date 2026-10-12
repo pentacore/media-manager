@@ -8,7 +8,7 @@ import {
     Search,
     Trash2,
 } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import WhisparrActionController from '@/actions/App/Http/Controllers/Whisparr/WhisparrActionController';
 import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
 import { Pill, Poster, SvcChip } from '@/components/mm';
@@ -32,6 +32,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
@@ -59,6 +60,19 @@ defineOptions({
 });
 
 const { blurPosters } = useWhisparrBlur();
+
+// WebhookEventProcessed fires after the queued handler cleared the
+// Whisparr cache, so the reload reads the fresh title and scenes.
+const { subscribe: subscribeReload } = useRealtimeReload<{
+    service_type: string | null;
+}>({
+    channel: 'dashboard',
+    event: 'WebhookEventProcessed',
+    only: ['item', 'scenes'],
+    filter: (event) => event.service_type === 'whisparr',
+});
+
+onMounted(subscribeReload);
 
 const busy = ref(false);
 const deleteDialogOpen = ref(false);

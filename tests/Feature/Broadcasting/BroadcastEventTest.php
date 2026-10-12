@@ -346,17 +346,26 @@ test('ServiceConnectionDeleted broadcasts on services channel with id only', fun
     expect($event->broadcastWith())->toBe(['id' => 42]);
 });
 
-test('WebhookEventProcessed broadcasts on dashboard channel', function (): void {
-    $webhookEvent = WebhookEvent::factory()->create(['processed_at' => now()]);
+test('WebhookEventProcessed broadcasts on dashboard channel with the service it came from', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'event_type' => 'Download',
+        'processed_at' => now(),
+    ]);
 
     $event = new WebhookEventProcessed($webhookEvent);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
     expect($event->broadcastAs())->toBe('WebhookEventProcessed');
-
-    $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'processed_at']);
+    expect($event->broadcastWith())->toBe([
+        'id' => $webhookEvent->id,
+        'service_connection_id' => $connection->id,
+        'service_type' => 'sonarr',
+        'event_type' => 'Download',
+        'processed_at' => $webhookEvent->processed_at->toISOString(),
+    ]);
 });
 
 test('DashboardStatsUpdated broadcasts on dashboard channel via the queue', function (): void {

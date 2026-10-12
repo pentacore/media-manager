@@ -104,11 +104,14 @@ defineOptions({
     },
 });
 
+// WebhookEventProcessed fires after the queued handler cleared the Seerr
+// cache; WebhookReceived fires before, and a reload on it can re-read
+// stale rows.
 const { subscribe: subscribeReload } = useRealtimeReload<{
     service_type: string | null;
 }>({
     channel: 'dashboard',
-    event: 'WebhookReceived',
+    event: 'WebhookEventProcessed',
     only: ['requests', 'summary'],
     filter: (event) => event.service_type === 'seerr',
 });
