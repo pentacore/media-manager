@@ -41,9 +41,10 @@ test('a candidate without scored results has null figures and never wins', funct
     expect($matrix['candidates'][0]['avg_score'])->toBeNull()
         ->and($matrix['candidates'][0]['pass_rate'])->toBeNull()
         ->and($matrix['candidates'][0]['latency_p50'])->toBeNull()
+        ->and($matrix['candidates'][0]['cost_per_case'])->toBeNull()
         ->and($matrix['candidates'][0]['reasoning_label'])->toBe('Provider default')
         ->and($matrix['candidates'][1]['cost_per_case'])->toBe(0.75)
-        ->and($matrix['best'])->toBe(['avg_score' => 1, 'pass_rate' => 1, 'cost_per_case' => 0, 'latency_p50' => 1]);
+        ->and($matrix['best'])->toBe(['avg_score' => 1, 'pass_rate' => 1, 'cost_per_case' => 1, 'latency_p50' => 1]);
 });
 
 test('each task present in the run gets its own matrix', function (): void {
@@ -55,4 +56,20 @@ test('each task present in the run gets its own matrix', function (): void {
 
     expect(array_column($matrix, 'task'))->toBe(['title', 'decision'])
         ->and($matrix[0]['candidates'][0]['self_judged'])->toBeFalse();
+});
+
+test('a candidate with only pending results has no cost per case', function (): void {
+    $run = BenchmarkRun::factory()->running()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
+    ])->create();
+    $case = BenchmarkCase::factory()->create();
+    BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Pending]);
+    BenchmarkResult::factory()->forCase($run, $case, 1)->scored(1.0, true)->create(['cost_usd' => 0.2]);
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['candidates'][0]['cost_per_case'])->toBeNull()
+        ->and($matrix['candidates'][1]['cost_per_case'])->toBe(0.2)
+        ->and($matrix['best']['cost_per_case'])->toBe(1);
 });

@@ -51,7 +51,7 @@ final readonly class BenchmarkMatrix
                 'best' => [
                     'avg_score' => self::best($candidates, 'avg_score', highest: true),
                     'pass_rate' => self::best($candidates, 'pass_rate', highest: true),
-                    'cost_per_case' => self::best($candidates, 'cost_per_case', highest: false, requireResults: true),
+                    'cost_per_case' => self::best($candidates, 'cost_per_case', highest: false),
                     'latency_p50' => self::best($candidates, 'latency_p50', highest: false),
                 ],
                 'cases' => self::caseRows($taskResults),
@@ -91,7 +91,7 @@ final readonly class BenchmarkMatrix
             'skipped' => $results->where('status', BenchmarkResultStatus::Skipped)->count(),
             'avg_score' => $scores->isEmpty() ? null : round((float) $scores->avg(), 4),
             'pass_rate' => $verdicts->isEmpty() ? null : round($verdicts->where('passed', true)->count() / $verdicts->count(), 4),
-            'cost_per_case' => $results->isEmpty() ? 0.0 : round($cost / $results->count(), 6),
+            'cost_per_case' => $ok->isEmpty() ? null : round($cost / $ok->count(), 6),
             'latency_p50' => self::percentile($latencies, 50),
             'latency_p95' => self::percentile($latencies, 95),
             'tool_misses' => (int) $results->sum('tool_misses'),
@@ -119,7 +119,7 @@ final readonly class BenchmarkMatrix
      *
      * @param  list<array<string, mixed>>  $candidates
      */
-    private static function best(array $candidates, string $metric, bool $highest, bool $requireResults = false): ?int
+    private static function best(array $candidates, string $metric, bool $highest): ?int
     {
         $bestIndex = null;
         $bestValue = null;
@@ -127,7 +127,7 @@ final readonly class BenchmarkMatrix
         foreach ($candidates as $candidate) {
             $value = $candidate[$metric];
 
-            if ($value === null || ($requireResults && $candidate['results'] === 0)) {
+            if ($value === null) {
                 continue;
             }
 
