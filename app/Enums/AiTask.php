@@ -71,4 +71,24 @@ enum AiTask: string
     {
         return $this !== self::Failover;
     }
+
+    /**
+     * Whether the task is a workload a benchmark case can target.
+     */
+    public function isBenchmarkable(): bool
+    {
+        return ! in_array($this, [self::Failover, self::BenchmarkJudge], true);
+    }
+
+    /**
+     * How a benchmark case for the task is graded.
+     */
+    public function benchmarkScoringType(): BenchmarkScoringType
+    {
+        return match ($this) {
+            self::Decision => BenchmarkScoringType::Actions,
+            self::PriceUpdater => BenchmarkScoringType::Prices,
+            default => BenchmarkScoringType::Judge,
+        };
+    }
 }

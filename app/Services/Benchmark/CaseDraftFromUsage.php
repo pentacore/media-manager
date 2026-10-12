@@ -1,0 +1,234 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Benchmark;
+
+use App\Ai\Benchmark\WriteToolDetector;
+use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
+use App\Enums\AiTask;
+use App\Enums\AiUsageKind;
+use App\Enums\BenchmarkScoringType;
+use App\Models\AiToolInvocation;
+use App\Models\AiUsageRecord;
+use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\AiSettings;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Laravel\Ai\Contracts\Tool;
+
+/**
+ * Pre-fills a benchmark case from a recorded AI usage row and the tool calls
+ * it made. Capture is an admin convenience: the draft is edited before saving.
+ */
+final readonly class CaseDraftFromUsage
+{
+    private const string ATTACHMENTS_MARKER = "\n\nAttachments: ";
+
+    private const int NAME_PROMPT_CHARS = 60;
+
+    public function __construct(private AiSettings $aiSettings) {}
+
+    /**
+     * @return array{draft: array<string, mixed>, warnings: list<string>}
+     *
+     * @throws CaseDraftRefused
+     */
+    public function draft(AiUsageRecord $aiUsageRecord): array
+    {
+        $prompt = $aiUsageRecord->prompt_text;
+
+        if ($aiUsageRecord->kind !== AiUsageKind::Text) {
+            throw new CaseDraftRefused('Only text invocations can become benchmark cases.');
+        }
+
+        if (blank($prompt)) {
+            throw new CaseDraftRefused('This invocation has no recorded prompt.');
+        }
+
+        if (str_contains($prompt, self::ATTACHMENTS_MARKER)) {
+            throw new CaseDraftRefused('Invocations with attachments cannot become benchmark cases.');
+        }
+
+        $aiTask = $this->taskFor($aiUsageRecord);
+        $warnings = [];
+
+        if (str_ends_with($prompt, '…')) {
+            $warnings[] = 'The recorded prompt was cut short; complete it before saving.';
+        }
+
+        $invocations = AiToolInvocation::query()
+            ->where('invocation_id', $aiUsageRecord->invocation_id)
+            ->orderBy('id')
+            ->get();
+
+        if ($invocations->contains(fn (AiToolInvocation $invocation): bool => $invocation->io_truncated)) {
+            $warnings[] = 'Some tool calls were recorded truncated; their fixtures are incomplete.';
+        }
+
+        if ($invocations->contains(fn (AiToolInvocation $invocation): bool => $invocation->arguments === null || $invocation->result === null)) {
+            $warnings[] = 'Some tool calls were recorded without arguments or results; fill the fixtures in by hand.';
+        }
+
+        $fixtures = [];
+
+        foreach ($invocations as $invocation) {
+            $fixtures[] = [
+                'tool' => $invocation->tool_name ?? class_basename($invocation->tool_class),
+                'arguments' => $invocation->arguments ?? [],
+                'result' => $invocation->result ?? '',
+                'writes' => $this->writes($invocation->tool_class),
+                'tool_class' => $invocation->tool_class,
+            ];
+        }
+
+        $input = ['prompt' => $prompt];
+
+        if ($aiTask === AiTask::Chat) {
+            $input['history'] = $this->history($aiUsageRecord);
+            $input['mode'] = $this->aiSettings->mode()->value;
+        }
+
+        if ($aiTask === AiTask::PriceUpdater) {
+            $input['providers'] = $this->providersIn($prompt);
+
+            if ($input['providers'] === []) {
+                $warnings[] = 'No provider was recognised in the prompt; fill in the providers.';
+            }
+        }
+
+        return [
+            'draft' => [
+                'task' => $aiTask->value,
+                'name' => sprintf('%s: %s', $aiTask->label(), Str::limit(Str::squish($prompt), self::NAME_PROMPT_CHARS)),
+                'tags' => [],
+                'notes' => null,
+                'input' => $input,
+                'fixtures' => array_map(
+                    static fn (array $fixture): array => ['tool' => $fixture['tool'], 'arguments' => $fixture['arguments'], 'result' => $fixture['result']],
+                    $fixtures,
+                ),
+                'scoring' => $this->scoring($aiTask, $fixtures),
+                'source_invocation_id' => $aiUsageRecord->invocation_id,
+                'source_prompt_tokens' => $aiUsageRecord->prompt_tokens,
+                'source_completion_tokens' => $aiUsageRecord->completion_tokens,
+                'source_truncated' => $warnings !== [],
+            ],
+            'warnings' => $warnings,
+        ];
+    }
+
+    private function taskFor(AiUsageRecord $aiUsageRecord): AiTask
+    {
+        $agentClass = $aiUsageRecord->agent_class;
+
+        if ($agentClass === null || ! class_exists($agentClass) || ! method_exists($agentClass, 'aiTask')) {
+            throw new CaseDraftRefused('This invocation was not made by a benchmarkable agent.');
+        }
+
+        $aiTask = resolve($agentClass)->aiTask();
+
+        if (! $aiTask instanceof AiTask || ! $aiTask->isBenchmarkable()) {
+            throw new CaseDraftRefused('This invocation was not made by a benchmarkable agent.');
+        }
+
+        return $aiTask;
+    }
+
+    /**
+     * @return list<array{role: string, content: string}>
+     */
+    private function history(AiUsageRecord $aiUsageRecord): array
+    {
+        if ($aiUsageRecord->conversation_id === null || $aiUsageRecord->created_at === null) {
+            return [];
+        }
+
+        return DB::table('agent_conversation_messages')
+            ->where('conversation_id', $aiUsageRecord->conversation_id)
+            ->whereIn('role', ['user', 'assistant'])
+            ->where('created_at', '<', $aiUsageRecord->created_at)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['role', 'content'])
+            ->map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function providersIn(string $prompt): array
+    {
+        preg_match_all('/[a-z0-9]+/', strtolower($prompt), $matches);
+
+        $providers = [];
+
+        foreach ($matches[0] as $word) {
+            $canonical = RefreshScope::canonicalProvider($word);
+
+            if ($canonical !== null && ! in_array($canonical, $providers, true)) {
+                $providers[] = $canonical;
+            }
+        }
+
+        return $providers;
+    }
+
+    private function writes(string $toolClass): bool
+    {
+        if (! str_starts_with($toolClass, 'App\\') || ! class_exists($toolClass) || ! is_subclass_of($toolClass, Tool::class)) {
+            return false;
+        }
+
+        return WriteToolDetector::writes(resolve($toolClass));
+    }
+
+    /**
+     * @param  list<array{tool: string, arguments: array<string, mixed>, result: string, writes: bool, tool_class: string}>  $fixtures
+     * @return array<string, mixed>
+     */
+    private function scoring(AiTask $aiTask, array $fixtures): array
+    {
+        return match ($aiTask->benchmarkScoringType()) {
+            BenchmarkScoringType::Actions => [
+                'type' => BenchmarkScoringType::Actions->value,
+                'expected' => array_values(array_map(
+                    static fn (array $fixture): array => ['tool' => $fixture['tool'], 'arguments' => $fixture['arguments']],
+                    array_filter($fixtures, static fn (array $fixture): bool => $fixture['writes']),
+                )),
+            ],
+            BenchmarkScoringType::Prices => [
+                'type' => BenchmarkScoringType::Prices->value,
+                'tolerance_percent' => 1,
+                'expected' => array_values(array_map(
+                    fn (array $fixture): array => $this->priceExpectation($fixture['arguments']),
+                    array_filter($fixtures, static fn (array $fixture): bool => $fixture['tool_class'] === UpsertModelPriceTool::class),
+                )),
+            ],
+            BenchmarkScoringType::Judge => [
+                'type' => BenchmarkScoringType::Judge->value,
+                'rubric_note' => null,
+                'pass_threshold' => 7,
+            ],
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function priceExpectation(array $arguments): array
+    {
+        $provider = (string) ($arguments['provider'] ?? '');
+
+        return [
+            'provider' => RefreshScope::canonicalProvider($provider) ?? $provider,
+            'model' => (string) ($arguments['model'] ?? ''),
+            'input_per_mtok' => $arguments['input_per_mtok'] ?? null,
+            'output_per_mtok' => $arguments['output_per_mtok'] ?? null,
+            'cache_read_per_mtok' => $arguments['cache_read_per_mtok'] ?? null,
+            'cache_write_per_mtok' => $arguments['cache_write_per_mtok'] ?? null,
+        ];
+    }
+}
