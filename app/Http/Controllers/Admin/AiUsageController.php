@@ -155,9 +155,9 @@ class AiUsageController extends Controller
     }
 
     /**
-     * The Recent invocations tier filter: `first`, `fell_through`, or null
-     * for every row (unknown values too). Totals are never tier-filtered —
-     * the free-pool discount cannot be split by tier.
+     * The Recent invocations tier filter: `first` = did not fall through (tier 1, or a run without tiers),
+     * `fell_through` = fell through to a lower tier, or null for every row
+     * (unknown values too). Totals are never tier-filtered — the free-pool discount cannot be split by tier.
      */
     private function fellThrough(Request $request): ?bool
     {

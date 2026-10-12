@@ -626,9 +626,9 @@ test('the AI usage page defers the classification gate summary', function (): vo
 });
 
 test('recent invocations carry their tier and can be filtered by it', function (): void {
-    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1]);
-    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2]);
-    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1, 'created_at' => now()->subSeconds(3)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null, 'created_at' => now()->subSeconds(1)]);
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -641,7 +641,13 @@ test('recent invocations carry their tier and can be filtered by it', function (
 
     $this->actingAs($admin)
         ->get(route('admin.ai-usage.index', ['tier' => 'first']))
-        ->assertInertia(fn ($page) => $page->has('recent', 1)->where('recent.0.model', 'gpt-tier-one'));
+        ->assertInertia(fn ($page) => $page
+            ->where('tier', 'first')
+            ->has('recent', 2)
+            ->where('recent.0.model', 'gpt-no-tier')
+            ->where('recent.0.tier_position', null)
+            ->where('recent.1.model', 'gpt-tier-one')
+            ->where('recent.1.tier_position', 1));
 
     $this->actingAs($admin)
         ->get(route('admin.ai-usage.index', ['tier' => 'bogus']))
@@ -649,7 +655,8 @@ test('recent invocations carry their tier and can be filtered by it', function (
 });
 
 test('the csv export has a tier column and honours the tier filter', function (): void {
-    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2, 'created_at' => now()->subSeconds(1)]);
     AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null]);
 
     $csv = $this->actingAs(User::factory()->admin()->create())
@@ -657,6 +664,38 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->streamedContent();
 
     expect($csv)->toContain(',tier')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
+
+    // Verify header and data row column counts match
+    $lines = array_filter(explode("\n", trim($csv)));
+    $headerCount = count(str_getcsv($lines[0]));
+    foreach (array_slice($lines, 1) as $line) {
+        $rowCount = count(str_getcsv($line));
+        expect($rowCount)->toBe($headerCount);
+    }
+
+    // Verify tier column contains expected values: 1, 2, and empty
+    $tierValues = [];
+    foreach (array_slice($lines, 1) as $line) {
+        $row = str_getcsv($line);
+        $tierValues[] = end($row); // tier is the last column
+    }
+    expect($tierValues)->toContain('2')
+        ->toHaveCount(1); // Only fell_through (tier 2) records
+
+    // Test first tier filter includes null tiers
+    $firstTierCsv = $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.export', ['tier' => 'first']))
+        ->streamedContent();
+
+    $firstTierLines = array_filter(explode("\n", trim($firstTierCsv)));
+    $firstTierValues = [];
+    foreach (array_slice($firstTierLines, 1) as $line) {
+        $row = str_getcsv($line);
+        $firstTierValues[] = end($row); // tier is the last column
+    }
+    expect($firstTierValues)->toContain('')
+        ->toContain('1')
+        ->toHaveCount(2); // tier 1 and untiered
 });
 
 test('recent invocations carry their benchmark run and can be filtered by it', function (): void {
