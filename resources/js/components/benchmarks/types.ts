@@ -186,6 +186,10 @@ export type BenchmarkMatrixCell = {
     score: number | null;
     passed: boolean | null;
     judge_status: BenchmarkJudgeStatus;
+    /** A queued or pending re-judge untouched past the stale window. */
+    judge_stale: boolean;
+    /** A running result whose claim went stale (its worker died). */
+    stale: boolean;
 };
 
 export type BenchmarkMatrixTask = {
@@ -230,6 +234,8 @@ export type BenchmarkResultDetail = {
         score: number | null;
         passed: boolean | null;
         judge_status: BenchmarkJudgeStatus;
+        judge_stale: boolean;
+        stale: boolean;
         score_detail: {
             score_10?: number;
             rationale?: string;

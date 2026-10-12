@@ -10,7 +10,8 @@ import {
     formatPercent,
     formatScore,
     formatUsd,
-    isRejudging,
+    isJudgeFailed,
+    isRejudgingLive,
 } from '@/components/benchmarks';
 import type {
     BenchmarkMatrixCell,
@@ -63,13 +64,22 @@ const allCells = computed(() =>
 );
 
 const hasFailedJudge = computed(() =>
-    allCells.value.some((cell) => cell.judge_status === 'failed'),
+    allCells.value.some((cell) => cell.status === 'ok' && isJudgeFailed(cell)),
 );
 
+/**
+ * Poll while the run goes, a re-judge is in flight or a result still runs
+ * (a cancelled run's running case finishes and keeps its result). A stale
+ * re-judge or running claim lost its worker, so it never keeps polling alive.
+ */
 const needsPolling = computed(
     () =>
         isActive.value ||
-        allCells.value.some((cell) => isRejudging(cell.judge_status)),
+        allCells.value.some(isRejudgingLive) ||
+        (props.run.counts.running > 0 &&
+            allCells.value.some(
+                (cell) => cell.status === 'running' && !cell.stale,
+            )),
 );
 
 watch(
@@ -194,7 +204,11 @@ function cellFor(
 
 function cellText(cell: BenchmarkMatrixCell): string {
     if (cell.status === 'ok') {
-        if (isRejudging(cell.judge_status)) {
+        if (cell.judge_stale) {
+            return 'judge failed — stalled';
+        }
+
+        if (isRejudgingLive(cell)) {
             return 're-judging…';
         }
 
@@ -222,9 +236,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
     }
 
     if (cell.passed === null) {
-        return cell.judge_status === 'failed'
-            ? 'text-destructive'
-            : 'text-warning';
+        return isJudgeFailed(cell) ? 'text-destructive' : 'text-warning';
     }
 
     return cell.passed ? 'text-success' : 'text-destructive';

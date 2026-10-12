@@ -283,6 +283,37 @@ test('the drawer partial returns every candidate result for the clicked case', f
         ->assertJsonPath('props.resultDetail.results.1.judge_status', 'none');
 });
 
+test('the run page flags a stalled re-judge and a running result whose claim went stale', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->cancelled()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
+    ])->create();
+    $case = BenchmarkCase::factory()->create();
+    $stalled = BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Queued]);
+    $running = BenchmarkResult::factory()->forCase($run, $case, 1)->running()->create();
+    BenchmarkResult::query()->whereKey([$stalled->id, $running->id])->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    $this->get(route('admin.benchmarks.runs.show', $run))
+        ->assertInertia(fn ($page) => $page
+            ->where('matrix.0.cases.0.cells.0.judge_stale', true)
+            ->where('matrix.0.cases.0.cells.0.stale', false)
+            ->where('matrix.0.cases.0.cells.1.judge_stale', false)
+            ->where('matrix.0.cases.0.cells.1.stale', true));
+
+    $this->get(route('admin.benchmarks.runs.show', ['benchmarkRun' => $run, 'result' => $stalled->id]), [
+        'X-Inertia' => 'true',
+        'X-Inertia-Partial-Component' => 'Admin/Benchmarks/Runs/Show',
+        'X-Inertia-Partial-Data' => 'resultDetail',
+        'X-Inertia-Version' => benchmarkInertiaVersion($this, $run),
+    ])
+        ->assertOk()
+        ->assertJsonPath('props.resultDetail.results.0.judge_status', 'queued')
+        ->assertJsonPath('props.resultDetail.results.0.judge_stale', true)
+        ->assertJsonPath('props.resultDetail.results.1.judge_stale', false)
+        ->assertJsonPath('props.resultDetail.results.1.stale', true);
+});
+
 test('a result from another run is not found', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     [$run] = seedBenchmarkRun();

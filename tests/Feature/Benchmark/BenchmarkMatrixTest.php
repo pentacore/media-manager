@@ -89,3 +89,23 @@ test('each cell carries its judge status', function (): void {
     expect($cells[0]['judge_status'])->toBe('failed')
         ->and($cells[1]['judge_status'])->toBe('pending');
 });
+
+test('each cell flags a stalled re-judge and a running result whose claim went stale', function (): void {
+    $run = BenchmarkRun::factory()->cancelled()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'c', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'd', 'reasoning' => null],
+    ])->create();
+    $case = BenchmarkCase::factory()->create();
+    $staleJudge = BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
+    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Queued]);
+    $staleRun = BenchmarkResult::factory()->forCase($run, $case, 2)->running()->create();
+    BenchmarkResult::factory()->forCase($run, $case, 3)->running()->create();
+    BenchmarkResult::query()->whereKey([$staleJudge->id, $staleRun->id])->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    $cells = BenchmarkMatrix::for($run)[0]['cases'][0]['cells'];
+
+    expect(array_column($cells, 'judge_stale'))->toBe([true, false, false, false])
+        ->and(array_column($cells, 'stale'))->toBe([false, false, true, false]);
+});

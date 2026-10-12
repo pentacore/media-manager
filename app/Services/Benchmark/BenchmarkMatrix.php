@@ -24,13 +24,13 @@ final readonly class BenchmarkMatrix
      *     task_label: string,
      *     candidates: list<array<string, mixed>>,
      *     best: array{avg_score: int|null, pass_rate: int|null, cost_per_case: int|null, latency_p50: int|null},
-     *     cases: list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string}>}>
+     *     cases: list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string, judge_stale: bool, stale: bool}>}>
      * }>
      */
     public static function for(BenchmarkRun $benchmarkRun): array
     {
         $results = $benchmarkRun->results()
-            ->select(['id', 'benchmark_case_id', 'case_name', 'case_task', 'candidate_index', 'status', 'cost_usd', 'judge_cost_usd', 'latency_ms', 'tool_misses', 'score', 'passed', 'judge_status'])
+            ->select(['id', 'benchmark_case_id', 'case_name', 'case_task', 'candidate_index', 'status', 'cost_usd', 'judge_cost_usd', 'latency_ms', 'tool_misses', 'score', 'passed', 'judge_status', 'updated_at'])
             ->orderBy('id')
             ->get()
             ->groupBy('case_task');
@@ -142,7 +142,7 @@ final readonly class BenchmarkMatrix
 
     /**
      * @param  Collection<int, BenchmarkResult>  $results
-     * @return list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string}>}>
+     * @return list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string, judge_stale: bool, stale: bool}>}>
      */
     private static function caseRows(Collection $results): array
     {
@@ -160,6 +160,8 @@ final readonly class BenchmarkMatrix
                     'score' => $benchmarkResult->score,
                     'passed' => $benchmarkResult->passed,
                     'judge_status' => $benchmarkResult->judge_status->value,
+                    'judge_stale' => $benchmarkResult->isJudgeStale(),
+                    'stale' => $benchmarkResult->isRunStale(),
                 ])->values()->all(),
             ])
             ->values()

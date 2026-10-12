@@ -12,6 +12,7 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -119,15 +120,19 @@ final readonly class BenchmarkRunLauncher
     /**
      * Mark every unscored result whose case still exists `queued` and queue a
      * judge-only job for it, so the run page shows (and polls) the re-judge
-     * at once. Only `failed` results are flipped, under a row lock, so a
-     * double submit queues each result once. Returns how many were queued.
+     * at once. Only `failed` results and re-judges that stalled (queued or
+     * pending past the stale window: a dropped dispatch or a dead worker)
+     * are flipped, under a row lock, so a double submit queues each result
+     * once. Returns how many were queued.
      */
     public function rejudge(BenchmarkRun $benchmarkRun): int
     {
         return DB::transaction(function () use ($benchmarkRun): int {
             $resultIds = $benchmarkRun->results()
                 ->where('status', BenchmarkResultStatus::Ok)
-                ->where('judge_status', BenchmarkJudgeStatus::Failed)
+                ->where(fn (Builder $builder): Builder => $builder
+                    ->where('judge_status', BenchmarkJudgeStatus::Failed)
+                    ->orWhere(fn (Builder $stale): Builder => $stale->judgeStale()))
                 ->whereNotNull('benchmark_case_id')
                 ->lockForUpdate()
                 ->pluck('id');

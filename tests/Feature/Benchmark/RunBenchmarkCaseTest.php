@@ -100,6 +100,14 @@ function jobSpend(BenchmarkRun $benchmarkRun, int $promptTokens, int $completion
     ]);
 }
 
+/**
+ * Age a result's claim past the stale window, as if its worker died.
+ */
+function jobStaleClaim(BenchmarkResult $benchmarkResult): void
+{
+    BenchmarkResult::query()->whereKey($benchmarkResult->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+}
+
 function jobContextActive(): bool
 {
     return resolve(BenchmarkRunContext::class)->active();
@@ -486,6 +494,44 @@ test('a job of a cancelled run does nothing', function (): void {
     TitleAgent::assertNeverPrompted();
 });
 
+test('a retried job of a cancelled run fails its result whose claim went stale', function (BenchmarkRunStatus $benchmarkRunStatus): void {
+    $benchmarkRun = jobRun(['status' => $benchmarkRunStatus, 'finished_at' => now()]);
+    $benchmarkCase = jobTitleCase();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->running()->create();
+    $finishing = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->running()->create();
+    jobStaleClaim($benchmarkResult);
+    jobSpend($benchmarkRun, 100_000, 10_000);
+    jobFakeTitle();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->fresh()->error)->toBe('Stopped before finishing')
+        ->and($finishing->fresh()->status)->toBe(BenchmarkResultStatus::Running)
+        ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.28)
+        ->and($benchmarkRun->fresh()->status)->toBe($benchmarkRunStatus);
+    TitleAgent::assertNeverPrompted();
+})->with([BenchmarkRunStatus::Cancelled, BenchmarkRunStatus::StoppedCostCap]);
+
+test('settling a finished run fails every result whose claim went stale', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
+    $benchmarkCase = jobTitleCase();
+    $stale = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->running()->create();
+    jobStaleClaim($stale);
+    $queued = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($queued->id, judgeOnly: true));
+
+    expect($queued->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($stale->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($stale->fresh()->error)->toBe('Stopped before finishing');
+});
+
 test('a result that already finished is not run again', function (): void {
     $benchmarkRun = jobRun();
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->scored(0.7, true)->create();
@@ -747,6 +793,50 @@ test('a judge-only job that dies queued or mid-judge hands the result back to re
     expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
 })->with([BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending]);
+
+test('a judge-only job that times out settles the run cost its judge already spent', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => BenchmarkJudgeStatus::Pending,
+    ]);
+    jobSpend($benchmarkRun, 200_000, 50_000, 'gpt-judge');
+
+    new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true)->failed(new RuntimeException('timed out'));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.4);
+});
+
+test('a judge-only job takes over a re-judge whose claim or dispatch went stale', function (BenchmarkJudgeStatus $benchmarkJudgeStatus): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => $benchmarkJudgeStatus,
+    ]);
+    jobStaleClaim($benchmarkResult);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($benchmarkResult->fresh()->score)->toBe(0.8);
+})->with([BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending]);
+
+test('a judge-only job leaves a re-judge another job is judging alone', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => BenchmarkJudgeStatus::Pending,
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Pending);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
 
 test('a judge-only job only claims a result queued for re-judging', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);

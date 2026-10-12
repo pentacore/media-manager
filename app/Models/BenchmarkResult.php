@@ -51,6 +51,8 @@ use Override;
  * @method static Builder<static>|BenchmarkResult query()
  * @method static Builder<static>|BenchmarkResult claimable()
  * @method static Builder<static>|BenchmarkResult inFlight()
+ * @method static Builder<static>|BenchmarkResult runStale()
+ * @method static Builder<static>|BenchmarkResult judgeStale()
  *
  * @mixin \Eloquent
  */
@@ -107,6 +109,23 @@ class BenchmarkResult extends Model
     }
 
     /**
+     * Whether the result is running under a claim whose worker died.
+     */
+    public function isRunStale(): bool
+    {
+        return $this->status === BenchmarkResultStatus::Running && $this->claimOutlived();
+    }
+
+    /**
+     * Whether the result's re-judge stalled: queued with its dispatch lost,
+     * or claimed by a judge-only job whose worker died.
+     */
+    public function isJudgeStale(): bool
+    {
+        return $this->judge_status->isRejudging() && $this->claimOutlived();
+    }
+
+    /**
      * Results a job may claim to run: pending, or running under a stale claim.
      *
      * @param  Builder<static>  $query
@@ -116,9 +135,35 @@ class BenchmarkResult extends Model
     {
         return $query->where(fn (Builder $builder): Builder => $builder
             ->where('status', BenchmarkResultStatus::Pending)
-            ->orWhere(fn (Builder $stale): Builder => $stale
-                ->where('status', BenchmarkResultStatus::Running)
-                ->where('updated_at', '<=', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS))));
+            ->orWhere(fn (Builder $stale): Builder => $stale->runStale()));
+    }
+
+    /**
+     * Results running under a claim untouched for the stale window.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeRunStale(Builder $query): Builder
+    {
+        return $query
+            ->where('status', BenchmarkResultStatus::Running)
+            ->where('updated_at', '<=', $this->staleBefore());
+    }
+
+    /**
+     * Results queued for or claimed by a re-judge untouched for the stale
+     * window: a judge-only job may take them over and they may be re-judged
+     * again.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeJudgeStale(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
+            ->where('updated_at', '<=', $this->staleBefore());
     }
 
     /**
@@ -135,7 +180,17 @@ class BenchmarkResult extends Model
             ->where(fn (Builder $builder): Builder => $builder
                 ->where('status', BenchmarkResultStatus::Running)
                 ->orWhere('judge_status', BenchmarkJudgeStatus::Pending))
-            ->where('updated_at', '>', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS));
+            ->where('updated_at', '>', $this->staleBefore());
+    }
+
+    private function claimOutlived(): bool
+    {
+        return ! $this->updated_at instanceof CarbonImmutable || $this->updated_at->lessThanOrEqualTo($this->staleBefore());
+    }
+
+    private function staleBefore(): CarbonImmutable
+    {
+        return now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS);
     }
 
     /**

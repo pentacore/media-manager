@@ -14,7 +14,8 @@ import {
     formatLatency,
     formatScore,
     formatUsd,
-    isRejudging,
+    isJudgeFailed,
+    isRejudgingLive,
 } from './format';
 import type {
     BenchmarkResultDetail,
@@ -143,7 +144,7 @@ function toolBadgeVariant(
                                 <Pill
                                     v-else-if="
                                         result.status === 'ok' &&
-                                        isRejudging(result.judge_status)
+                                        isRejudgingLive(result)
                                     "
                                     variant="warn"
                                     data-benchmark-drawer-rejudging
@@ -152,11 +153,15 @@ function toolBadgeVariant(
                                 <Pill
                                     v-else-if="
                                         result.status === 'ok' &&
-                                        result.judge_status === 'failed'
+                                        isJudgeFailed(result)
                                     "
                                     variant="danger"
                                     data-benchmark-drawer-judge-failed
-                                    >judge failed</Pill
+                                    >{{
+                                        result.judge_stale
+                                            ? 'judge failed — stalled'
+                                            : 'judge failed'
+                                    }}</Pill
                                 >
                             </header>
 

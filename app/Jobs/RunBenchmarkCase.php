@@ -28,6 +28,7 @@ use App\Support\UpstreamErrorText;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\FailOnTimeout;
 use Illuminate\Queue\Attributes\MaxExceptions;
@@ -57,7 +58,9 @@ use Throwable;
  * as an attempt. One exception or a timeout fails the job (failed() then
  * fails the result). Unique per result and mode for the whole wait window, and
  * both modes claim their result atomically (pending → running, queued →
- * pending judge), so a result is never run or judged twice. The monthly hard
+ * pending judge), so a result is never run or judged twice; a claim (or a
+ * queued re-judge) untouched for BenchmarkResult::CLAIM_STALE_AFTER_SECONDS
+ * lost its worker or its dispatch and may be taken over. The monthly hard
  * cap is enforced before every agent call.
  */
 #[Queue(QueueLane::Ai)]
@@ -74,6 +77,9 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     private const int MAX_WAIT_HOURS = 12;
 
     private const int ERROR_LIMIT = 2000;
+
+    /** The error of a result whose job died after its run had already ended. */
+    private const string STOPPED_ERROR = 'Stopped before finishing';
 
     public function __construct(public readonly int $resultId, public readonly bool $judgeOnly = false) {}
 
@@ -116,7 +122,13 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
         $benchmarkRun = $benchmarkResult->run;
 
-        if ($benchmarkRun->isTerminal() || ! $benchmarkResult->status->isInProgress()) {
+        if ($benchmarkRun->isTerminal()) {
+            $this->settle($benchmarkRun->id);
+
+            return;
+        }
+
+        if (! $benchmarkResult->status->isInProgress()) {
             return;
         }
 
@@ -147,22 +159,24 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
      * The job itself failed (an exception escaped, it timed out or it waited
      * too long for a slot): fail its pending or running result (the job is
      * unique per result, so a running one is this job's claim) and settle the run; a
-     * judge-only job hands its queued or claimed result back to re-judging.
+     * judge-only job hands its queued or claimed result back to re-judging
+     * and settles the run, so what its judge already spent reaches its cost.
      */
     public function failed(?Throwable $throwable): void
     {
+        $benchmarkResult = BenchmarkResult::query()->find($this->resultId);
+
+        if (! $benchmarkResult instanceof BenchmarkResult) {
+            return;
+        }
+
         if ($this->judgeOnly) {
             BenchmarkResult::query()
                 ->whereKey($this->resultId)
                 ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
                 ->update(['judge_status' => BenchmarkJudgeStatus::Failed]);
+            $this->settle($benchmarkResult->benchmark_run_id);
 
-            return;
-        }
-
-        $benchmarkResult = BenchmarkResult::query()->find($this->resultId);
-
-        if (! $benchmarkResult instanceof BenchmarkResult) {
             return;
         }
 
@@ -325,10 +339,11 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Atomically move a result queued for re-judging from `queued` to the
+     * Atomically move a result queued for re-judging (or whose re-judge went
+     * stale: a dropped dispatch, a judge-only worker that died) to the
      * transient `pending` judge status, under a lock on the run so a delete
      * can't slip between its in-flight check and this claim; false when
-     * another job claimed it first or it is not queued.
+     * another live job claimed it first or it is not queued.
      */
     private function claimForJudging(BenchmarkResult $benchmarkResult): bool
     {
@@ -338,7 +353,9 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             return BenchmarkResult::query()
                 ->whereKey($benchmarkResult->id)
                 ->where('status', BenchmarkResultStatus::Ok)
-                ->where('judge_status', BenchmarkJudgeStatus::Queued)
+                ->where(fn (Builder $builder): Builder => $builder
+                    ->where('judge_status', BenchmarkJudgeStatus::Queued)
+                    ->orWhere(fn (Builder $stale): Builder => $stale->judgeStale()))
                 ->update(['judge_status' => BenchmarkJudgeStatus::Pending]) === 1;
         });
 
@@ -525,7 +542,9 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
      * so pruned usage rows can't shrink it — then, unless it already ended,
      * complete it once no result is pending or running, or stop it at its
      * cost cap (skipping every pending result; a running one finishes and
-     * keeps its result) once the total reached the cap.
+     * keeps its result) once the total reached the cap. In a run that already
+     * ended, a result still running under a stale claim lost its worker and
+     * will never finish: it fails with a fixed reason.
      */
     private function settle(int $runId): void
     {
@@ -543,6 +562,11 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             }
 
             if ($benchmarkRun->isTerminal()) {
+                $benchmarkRun->results()->runStale()->update([
+                    'status' => BenchmarkResultStatus::Failed,
+                    'error' => self::STOPPED_ERROR,
+                ]);
+
                 return;
             }
 
