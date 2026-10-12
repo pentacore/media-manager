@@ -148,6 +148,7 @@ class InvocationDrillDown
                 'parent_invocation_id' => $aiUsageRecord->parent_invocation_id,
                 'search_units' => (float) $aiUsageRecord->search_units,
                 'benchmark_run_id' => $aiUsageRecord->benchmark_run_id,
+                'is_benchmark' => $aiUsageRecord->is_benchmark,
                 'created_at' => $aiUsageRecord->created_at?->toIso8601String(),
             ],
             'capturable' => $captureBlocker === null,

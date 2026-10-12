@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs\Middleware;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Jobs\RunBenchmarkCase;
 use App\Models\BenchmarkResult;
 use Closure;
@@ -14,6 +15,11 @@ use Illuminate\Support\Facades\Cache;
  * one of the run's two slot locks for its lifetime; a job finding both taken
  * goes back on the queue. The lock TTL outlives the job timeout, so a killed
  * worker frees its slot on its own.
+ *
+ * Re-judging queues every unscored result at once, so a judge-only job may
+ * wait for a slot longer than the stale window: each release touches its
+ * still-queued result, so a waiting re-judge never reads as stalled. A case
+ * job's waiting result stays `pending`, which never goes stale.
  */
 final readonly class LimitBenchmarkConcurrency
 {
@@ -45,6 +51,13 @@ final readonly class LimitBenchmarkConcurrency
             } finally {
                 $lock->release();
             }
+        }
+
+        if ($runBenchmarkCase->judgeOnly) {
+            BenchmarkResult::query()
+                ->whereKey($this->resultId)
+                ->where('judge_status', BenchmarkJudgeStatus::Queued)
+                ->touch();
         }
 
         $runBenchmarkCase->release(self::RETRY_AFTER_SECONDS);

@@ -662,7 +662,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
 test('recent invocations carry their benchmark run and can be filtered by it', function (): void {
     $run = BenchmarkRun::factory()->create();
     AiUsageRecord::factory()->create(['model' => 'gpt-live']);
-    AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-benchmarked']);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
@@ -688,7 +688,7 @@ test('recent invocations carry their benchmark run and can be filtered by it', f
 test('the csv export honours the benchmark filter', function (): void {
     $run = BenchmarkRun::factory()->create();
     AiUsageRecord::factory()->create(['model' => 'gpt-live']);
-    AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-benchmarked']);
 
     $csv = $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-usage.export', ['benchmark' => 'exclude']))
@@ -699,7 +699,7 @@ test('the csv export honours the benchmark filter', function (): void {
 
 test('tool stats leave out the tool calls of benchmark runs', function (): void {
     $run = BenchmarkRun::factory()->create();
-    $benchmarked = AiUsageRecord::factory()->create(['benchmark_run_id' => $run->id]);
+    $benchmarked = AiUsageRecord::factory()->benchmarked($run->id)->create();
     $live = AiUsageRecord::factory()->create();
     AiToolInvocation::factory()->create(['invocation_id' => $benchmarked->invocation_id]);
     AiToolInvocation::factory()->create(['invocation_id' => $live->invocation_id]);
@@ -727,10 +727,41 @@ test('show flags whether an invocation can become a benchmark case', function (s
 ]);
 
 test('an invocation of a benchmark run is not capturable', function (): void {
-    $record = AiUsageRecord::factory()->create(['prompt_text' => 'Find severance.', 'benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+    $record = AiUsageRecord::factory()->benchmarked(BenchmarkRun::factory()->create()->id)->create(['prompt_text' => 'Find severance.']);
 
     $this->actingAs(User::factory()->admin()->create())
         ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('capturable', false)
+        ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");
+});
+
+test('usage rows of a deleted run stay benchmark-tagged', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    $orphan = AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-orphaned', 'prompt_text' => 'Find severance.']);
+    AiUsageRecord::factory()->create(['model' => 'gpt-live']);
+    AiToolInvocation::factory()->create(['invocation_id' => $orphan->invocation_id]);
+    $run->delete();
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-live')
+            ->where('tool_stats', []));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-orphaned')
+            ->where('recent.0.benchmark_run_id', null)
+            ->where('recent.0.is_benchmark', true));
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', $orphan))
         ->assertOk()
         ->assertJsonPath('capturable', false)
         ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");

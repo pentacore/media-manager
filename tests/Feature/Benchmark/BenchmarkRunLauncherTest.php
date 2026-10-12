@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\RunBenchmarkCase;
@@ -126,18 +127,18 @@ test('cancelling a finished run changes nothing', function (): void {
 test('re-judging marks unscored results queued and dispatches a judge-only job for each', function (): void {
     $benchmarkRun = BenchmarkRun::factory()->completed()->create();
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
-    $unscored = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
-    $scored = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 1)->scored(0.8, true)->create(['judge_status' => 'ok']);
-    $otherRun = BenchmarkResult::factory()->forCase(BenchmarkRun::factory()->completed()->create(), $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
-    $caseDeleted = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 2)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed', 'benchmark_case_id' => null]);
+    $unscored = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
+    $scored = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 1)->scored(0.8, true)->create(['judge_status' => BenchmarkJudgeStatus::Ok]);
+    $otherRun = BenchmarkResult::factory()->forCase(BenchmarkRun::factory()->completed()->create(), $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
+    $caseDeleted = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 2)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed, 'benchmark_case_id' => null]);
 
     $queued = resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun);
 
     expect($queued)->toBe(1)
-        ->and($unscored->fresh()->judge_status)->toBe('queued')
-        ->and($scored->fresh()->judge_status)->toBe('ok')
-        ->and($otherRun->fresh()->judge_status)->toBe('failed')
-        ->and($caseDeleted->fresh()->judge_status)->toBe('failed');
+        ->and($unscored->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($scored->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($otherRun->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($caseDeleted->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed);
     Queue::assertPushed(RunBenchmarkCase::class, 1);
     Queue::assertPushed(RunBenchmarkCase::class, fn (RunBenchmarkCase $runBenchmarkCase): bool => $runBenchmarkCase->resultId === $unscored->id
         && $runBenchmarkCase->judgeOnly);
@@ -160,10 +161,29 @@ test('a launch without cases or candidates is refused and creates nothing', func
     'no candidates' => [fn (): Collection => collect([BenchmarkCase::factory()->create()]), []],
 ]);
 
+test('re-judging also re-queues a re-judge that stalled, but not one still in flight', function (): void {
+    $benchmarkRun = BenchmarkRun::factory()->completed()->create();
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    $staleQueued = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Queued]);
+    $stalePending = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
+    $freshPending = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 2)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
+    BenchmarkResult::query()->whereKey([$staleQueued->id, $stalePending->id])->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    $queued = resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun);
+
+    expect($queued)->toBe(2)
+        ->and($staleQueued->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($staleQueued->fresh()->isJudgeStale())->toBeFalse()
+        ->and($stalePending->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($freshPending->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Pending);
+    Queue::assertPushed(RunBenchmarkCase::class, 2);
+    Queue::assertNotPushed(RunBenchmarkCase::class, fn (RunBenchmarkCase $runBenchmarkCase): bool => $runBenchmarkCase->resultId === $freshPending->id);
+});
+
 test('re-judging twice queues one judge-only job per result', function (): void {
     $benchmarkRun = BenchmarkRun::factory()->completed()->create();
     BenchmarkResult::factory()->forCase($benchmarkRun, BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(), 0)
-        ->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
+        ->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
 
     expect(resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun))->toBe(1)
         ->and(resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun))->toBe(0);

@@ -16,6 +16,27 @@ test('normalise turns numeric strings into numbers', function (): void {
         ->toBe(['a' => 5, 'b' => 2.5, 'c' => 5]);
 });
 
+test('normalise converts only plain decimal strings that round-trip exactly', function (string $value, int|float|string $normalised): void {
+    expect(ToolArguments::normalise(['v' => $value]))->toBe(['v' => $normalised]);
+})->with([
+    'an integer' => ['5', 5],
+    'a decimal with a trailing zero' => ['2.50', 2.5],
+    'a negative decimal' => ['-0.25', -0.25],
+    'zero' => ['0', 0],
+    'a fraction below one' => ['0.5', 0.5],
+    'surrounding whitespace' => [' 42 ', 42],
+    'fifteen significant digits' => ['123456789012345', 123456789012345],
+    'leading zeros' => ['007', '007'],
+    'an exponent' => ['1e3', '1e3'],
+    'an upper-case exponent' => ['2E5', '2e5'],
+    'a plus sign' => ['+5', '+5'],
+    'a 19-digit id' => ['1234567890123456789', '1234567890123456789'],
+    'sixteen significant digits' => ['1234567890.123456', '1234567890.123456'],
+    'a bare decimal point' => ['.5', '.5'],
+    'a trailing decimal point' => ['5.', '5.'],
+    'hexadecimal' => ['0x1a', '0x1a'],
+]);
+
 test('normalise trims, collapses whitespace and lower-cases strings', function (): void {
     expect(ToolArguments::normalise(['q' => "  Dune   Part\tTwo "]))->toBe(['q' => 'dune part two']);
 });

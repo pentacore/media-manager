@@ -14,7 +14,8 @@ import {
     formatLatency,
     formatScore,
     formatUsd,
-    isRejudging,
+    isJudgeFailed,
+    isRejudgingLive,
 } from './format';
 import type {
     BenchmarkResultDetail,
@@ -128,11 +129,18 @@ function toolBadgeVariant(
                                     :variant="
                                         result.status === 'ok'
                                             ? 'ok'
-                                            : result.status === 'failed'
+                                            : result.status === 'failed' ||
+                                                result.stale
                                               ? 'danger'
                                               : 'default'
                                     "
-                                    >{{ result.status }}</Pill
+                                    data-benchmark-drawer-status
+                                    >{{
+                                        result.status === 'running' &&
+                                        result.stale
+                                            ? 'stalled'
+                                            : result.status
+                                    }}</Pill
                                 >
                                 <Pill
                                     v-if="result.score !== null"
@@ -143,7 +151,7 @@ function toolBadgeVariant(
                                 <Pill
                                     v-else-if="
                                         result.status === 'ok' &&
-                                        isRejudging(result.judge_status)
+                                        isRejudgingLive(result)
                                     "
                                     variant="warn"
                                     data-benchmark-drawer-rejudging
@@ -152,11 +160,15 @@ function toolBadgeVariant(
                                 <Pill
                                     v-else-if="
                                         result.status === 'ok' &&
-                                        result.judge_status === 'failed'
+                                        isJudgeFailed(result)
                                     "
                                     variant="danger"
                                     data-benchmark-drawer-judge-failed
-                                    >judge failed</Pill
+                                    >{{
+                                        result.judge_stale
+                                            ? 'judge failed — stalled'
+                                            : 'judge failed'
+                                    }}</Pill
                                 >
                             </header>
 
@@ -195,7 +207,7 @@ function toolBadgeVariant(
                             </p>
                             <p
                                 v-if="
-                                    result.judge_status === 'failed' &&
+                                    isJudgeFailed(result) &&
                                     result.score_detail.error
                                 "
                                 class="text-[12.5px] text-destructive"

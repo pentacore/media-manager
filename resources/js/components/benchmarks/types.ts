@@ -1,4 +1,4 @@
-import type { AiReasoningLevel } from '@/typefinder';
+import type { AiReasoningLevel, BenchmarkJudgeStatus } from '@/typefinder';
 
 export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge';
 
@@ -154,15 +154,13 @@ export type BenchmarkRunDetail = {
         total: number;
         pending: number;
         running: number;
+        /** Running results whose claim went stale (their worker died). */
+        stalled: number;
         ok: number;
         failed: number;
         skipped: number;
     };
 };
-
-/** `queued` and `pending` are the transient re-judging states. */
-export type BenchmarkJudgeStatus =
-    'none' | 'ok' | 'failed' | 'queued' | 'pending';
 
 export type BenchmarkMatrixCandidate = {
     index: number;
@@ -175,6 +173,8 @@ export type BenchmarkMatrixCandidate = {
     ok: number;
     failed: number;
     skipped: number;
+    /** Results with a score; avg score and pass rate cover only these. */
+    scored: number;
     avg_score: number | null;
     pass_rate: number | null;
     cost_per_case: number | null;
@@ -190,12 +190,18 @@ export type BenchmarkMatrixCell = {
     score: number | null;
     passed: boolean | null;
     judge_status: BenchmarkJudgeStatus;
+    /** A queued or pending re-judge untouched past the stale window. */
+    judge_stale: boolean;
+    /** A running result whose claim went stale (its worker died). */
+    stale: boolean;
 };
 
 export type BenchmarkMatrixTask = {
     task: string;
     task_label: string;
     candidates: BenchmarkMatrixCandidate[];
+    /** The most results any candidate has scored; only candidates at it can be best by score or pass rate. */
+    max_scored: number;
     best: {
         avg_score: number | null;
         pass_rate: number | null;
@@ -234,6 +240,8 @@ export type BenchmarkResultDetail = {
         score: number | null;
         passed: boolean | null;
         judge_status: BenchmarkJudgeStatus;
+        judge_stale: boolean;
+        stale: boolean;
         score_detail: {
             score_10?: number;
             rationale?: string;

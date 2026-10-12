@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
@@ -80,11 +81,72 @@ test('each cell carries its judge status', function (): void {
         ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
     ])->create();
     $case = BenchmarkCase::factory()->create();
-    BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
-    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'pending']);
+    BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
+    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
 
     $cells = BenchmarkMatrix::for($run)[0]['cases'][0]['cells'];
 
     expect($cells[0]['judge_status'])->toBe('failed')
         ->and($cells[1]['judge_status'])->toBe('pending');
+});
+
+test('each cell flags a stalled re-judge and a running result whose claim went stale', function (): void {
+    $run = BenchmarkRun::factory()->cancelled()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'c', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'd', 'reasoning' => null],
+    ])->create();
+    $case = BenchmarkCase::factory()->create();
+    $staleJudge = BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
+    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Queued]);
+    $staleRun = BenchmarkResult::factory()->forCase($run, $case, 2)->running()->create();
+    BenchmarkResult::factory()->forCase($run, $case, 3)->running()->create();
+    BenchmarkResult::query()->whereKey([$staleJudge->id, $staleRun->id])->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    $cells = BenchmarkMatrix::for($run)[0]['cases'][0]['cells'];
+
+    expect(array_column($cells, 'judge_stale'))->toBe([true, false, false, false])
+        ->and(array_column($cells, 'stale'))->toBe([false, false, true, false]);
+});
+
+test('only candidates scored on every scored case can be best by score or pass rate', function (): void {
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'full', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'partial', 'reasoning' => null],
+    ])->create();
+
+    foreach (range(1, 4) as $index) {
+        $case = BenchmarkCase::factory()->create();
+        BenchmarkResult::factory()->forCase($run, $case, 0)->scored(0.6, $index > 2)->create();
+
+        if ($index === 4) {
+            BenchmarkResult::factory()->forCase($run, $case, 1)->failed('boom')->create();
+
+            continue;
+        }
+
+        BenchmarkResult::factory()->forCase($run, $case, 1)->scored(0.9, true)->create();
+    }
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['max_scored'])->toBe(4)
+        ->and($matrix['candidates'][0]['scored'])->toBe(4)
+        ->and($matrix['candidates'][1]['scored'])->toBe(3)
+        ->and($matrix['candidates'][1]['avg_score'])->toBe(0.9)
+        ->and($matrix['best']['avg_score'])->toBe(0)
+        ->and($matrix['best']['pass_rate'])->toBe(0);
+});
+
+test('a task without any scored result has no best score', function (): void {
+    $run = BenchmarkRun::factory()->completed()->create();
+    BenchmarkResult::factory()->forCase($run, BenchmarkCase::factory()->create(), 0)->failed('boom')->create();
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['max_scored'])->toBe(0)
+        ->and($matrix['candidates'][0]['scored'])->toBe(0)
+        ->and($matrix['best']['avg_score'])->toBeNull()
+        ->and($matrix['best']['pass_rate'])->toBeNull();
 });

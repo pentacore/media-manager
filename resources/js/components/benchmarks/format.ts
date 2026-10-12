@@ -1,6 +1,24 @@
-/** Whether a judge status is a re-judge still waiting for or getting its score. */
-export function isRejudging(judgeStatus: string): boolean {
+import type { BenchmarkJudgeStatus } from '@/typefinder';
+
+/** Whether a judge status is a re-judge still waiting for or getting its score (`queued` and `pending` are transient). */
+export function isRejudging(judgeStatus: BenchmarkJudgeStatus): boolean {
     return judgeStatus === 'queued' || judgeStatus === 'pending';
+}
+
+/** A re-judge still in flight: queued or pending, and not stalled. */
+export function isRejudgingLive(result: {
+    judge_status: BenchmarkJudgeStatus;
+    judge_stale: boolean;
+}): boolean {
+    return isRejudging(result.judge_status) && !result.judge_stale;
+}
+
+/** A judge that failed, or a re-judge that stalled (shown as failed and re-judgeable). */
+export function isJudgeFailed(result: {
+    judge_status: BenchmarkJudgeStatus;
+    judge_stale: boolean;
+}): boolean {
+    return result.judge_status === 'failed' || result.judge_stale;
 }
 
 /** A 0–1 score as the 0–10 figure shown in the UI. */

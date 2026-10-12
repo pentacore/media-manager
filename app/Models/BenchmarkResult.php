@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
-use App\Services\Benchmark\BenchmarkScorer;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,7 +38,7 @@ use Override;
  * @property float|null $score
  * @property bool|null $passed
  * @property array<string, mixed>|null $score_detail
- * @property string $judge_status
+ * @property BenchmarkJudgeStatus $judge_status
  * @property string $judge_cost_usd
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -51,6 +51,8 @@ use Override;
  * @method static Builder<static>|BenchmarkResult query()
  * @method static Builder<static>|BenchmarkResult claimable()
  * @method static Builder<static>|BenchmarkResult inFlight()
+ * @method static Builder<static>|BenchmarkResult runStale()
+ * @method static Builder<static>|BenchmarkResult judgeStale()
  *
  * @mixin \Eloquent
  */
@@ -84,7 +86,11 @@ class BenchmarkResult extends Model
     /**
      * A job runs for at most 280 s (its timeout), so a result still claimed
      * this long after the claim lost its worker (killed mid-run): it may be
-     * claimed again and no longer blocks deleting the run.
+     * claimed again and no longer blocks deleting the run. Kept below the
+     * queue's `retry_after` (330 s), so a retried job always finds the dead
+     * claim stale. A job that vanished from the queue still holds its unique
+     * lock (UniqueFor) until that expires, so a re-dispatch for the same
+     * result and mode is dropped until then.
      */
     public const int CLAIM_STALE_AFTER_SECONDS = 300;
 
@@ -96,6 +102,7 @@ class BenchmarkResult extends Model
     {
         return [
             'status' => BenchmarkResultStatus::class,
+            'judge_status' => BenchmarkJudgeStatus::class,
             'intended_actions' => 'array',
             'score_detail' => 'array',
             'score' => 'float',
@@ -103,6 +110,23 @@ class BenchmarkResult extends Model
             'cost_usd' => 'decimal:6',
             'judge_cost_usd' => 'decimal:6',
         ];
+    }
+
+    /**
+     * Whether the result is running under a claim whose worker died.
+     */
+    public function isRunStale(): bool
+    {
+        return $this->status === BenchmarkResultStatus::Running && $this->claimOutlived();
+    }
+
+    /**
+     * Whether the result's re-judge stalled: queued with its dispatch lost,
+     * or claimed by a judge-only job whose worker died.
+     */
+    public function isJudgeStale(): bool
+    {
+        return $this->judge_status->isRejudging() && $this->claimOutlived();
     }
 
     /**
@@ -115,9 +139,35 @@ class BenchmarkResult extends Model
     {
         return $query->where(fn (Builder $builder): Builder => $builder
             ->where('status', BenchmarkResultStatus::Pending)
-            ->orWhere(fn (Builder $stale): Builder => $stale
-                ->where('status', BenchmarkResultStatus::Running)
-                ->where('updated_at', '<=', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS))));
+            ->orWhere(fn (Builder $stale): Builder => $stale->runStale()));
+    }
+
+    /**
+     * Results running under a claim untouched for the stale window.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeRunStale(Builder $query): Builder
+    {
+        return $query
+            ->where('status', BenchmarkResultStatus::Running)
+            ->where('updated_at', '<=', $this->staleBefore());
+    }
+
+    /**
+     * Results queued for or claimed by a re-judge untouched for the stale
+     * window: a judge-only job may take them over and they may be re-judged
+     * again.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeJudgeStale(Builder $query): Builder
+    {
+        return $query
+            ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
+            ->where('updated_at', '<=', $this->staleBefore());
     }
 
     /**
@@ -133,8 +183,18 @@ class BenchmarkResult extends Model
         return $query
             ->where(fn (Builder $builder): Builder => $builder
                 ->where('status', BenchmarkResultStatus::Running)
-                ->orWhere('judge_status', BenchmarkScorer::JUDGE_PENDING))
-            ->where('updated_at', '>', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS));
+                ->orWhere('judge_status', BenchmarkJudgeStatus::Pending))
+            ->where('updated_at', '>', $this->staleBefore());
+    }
+
+    private function claimOutlived(): bool
+    {
+        return ! $this->updated_at instanceof CarbonImmutable || $this->updated_at->lessThanOrEqualTo($this->staleBefore());
+    }
+
+    private function staleBefore(): CarbonImmutable
+    {
+        return now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS);
     }
 
     /**

@@ -19,10 +19,6 @@ function fakeDiscoverPageSeerr(): void
         ]]),
         'seerr.local:5055/api/v1/discover/movies/upcoming*' => Http::response(['results' => []]),
         'seerr.local:5055/api/v1/discover/tv/upcoming*' => Http::response(['results' => []]),
-        // posterPath keeps each card an <img> instead of Poster's text-hint
-        // fallback — without it the hint (the title, lowercased) and the
-        // card's own title span both carry the same text, so Playwright's
-        // strict-mode text locator resolves two matches instead of one.
         'seerr.local:5055/api/v1/discover/movies' => Http::response(['results' => [['id' => 438631, 'mediaType' => 'movie', 'title' => 'Dune', 'posterPath' => '/dune.jpg']]]),
         'seerr.local:5055/api/v1/discover/tv' => Http::response(['results' => []]),
         'seerr.local:5055/api/v1/tv/95396' => Http::response([
@@ -45,8 +41,11 @@ test('a viewer browses discover rows, opens a show and requests the missing seas
 
     visit(route('media.discover.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-discover-row="trending"]', 'Severance')
-        ->assertSeeIn('[data-discover-row="popularMovies"]', 'Dune')
+        // Scoped to the title span: once the TMDB poster fails to load, Poster
+        // falls back to a text hint (the title, lowercased), and Playwright's
+        // case-insensitive text locator would match both in strict mode.
+        ->assertSeeIn('[data-discover-row="trending"] [data-title-card-name]', 'Severance')
+        ->assertSeeIn('[data-discover-row="popularMovies"] [data-title-card-name]', 'Dune')
         ->click('[data-title-card="tv-95396"]')
         ->assertSeeIn('[data-title-sheet]', 'Work-life balance.')
         ->assertSeeIn('[data-title-sheet]', 'Season 2')

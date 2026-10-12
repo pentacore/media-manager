@@ -10,7 +10,8 @@ import {
     formatPercent,
     formatScore,
     formatUsd,
-    isRejudging,
+    isJudgeFailed,
+    isRejudgingLive,
 } from '@/components/benchmarks';
 import type {
     BenchmarkMatrixCell,
@@ -63,13 +64,20 @@ const allCells = computed(() =>
 );
 
 const hasFailedJudge = computed(() =>
-    allCells.value.some((cell) => cell.judge_status === 'failed'),
+    allCells.value.some((cell) => cell.status === 'ok' && isJudgeFailed(cell)),
 );
 
+/**
+ * Poll while the run goes, a re-judge is in flight or a result still runs
+ * (a cancelled run's running case finishes and keeps its result). A stale
+ * re-judge or a stalled running result lost its worker, so it never keeps
+ * polling alive.
+ */
 const needsPolling = computed(
     () =>
         isActive.value ||
-        allCells.value.some((cell) => isRejudging(cell.judge_status)),
+        allCells.value.some(isRejudgingLive) ||
+        props.run.counts.running - props.run.counts.stalled > 0,
 );
 
 watch(
@@ -150,6 +158,7 @@ async function remove(): Promise<void> {
 }
 
 type Metric = keyof BenchmarkMatrixTask['best'];
+type MatrixCandidate = BenchmarkMatrixTask['candidates'][number];
 
 function best(
     task: BenchmarkMatrixTask,
@@ -157,6 +166,16 @@ function best(
     index: number,
 ): string {
     return task.best[metric] === index ? 'font-semibold text-success' : '';
+}
+
+/** " (3/4)" when the candidate was scored on fewer cases than the best-covered one. */
+function coverage(
+    task: BenchmarkMatrixTask,
+    candidate: MatrixCandidate,
+): string {
+    return candidate.scored > 0 && candidate.scored < task.max_scored
+        ? ` (${candidate.scored}/${task.max_scored})`
+        : '';
 }
 
 const drawerOpen = ref(false);
@@ -194,7 +213,11 @@ function cellFor(
 
 function cellText(cell: BenchmarkMatrixCell): string {
     if (cell.status === 'ok') {
-        if (isRejudging(cell.judge_status)) {
+        if (cell.judge_stale) {
+            return 'judge failed — stalled';
+        }
+
+        if (isRejudgingLive(cell)) {
             return 're-judging…';
         }
 
@@ -209,11 +232,15 @@ function cellText(cell: BenchmarkMatrixCell): string {
         return cell.passed === null ? 'unscored' : cell.passed ? '✓' : '✗';
     }
 
+    if (cell.status === 'running' && cell.stale) {
+        return 'stalled';
+    }
+
     return cell.status;
 }
 
 function cellClass(cell: BenchmarkMatrixCell): string {
-    if (cell.status === 'failed') {
+    if (cell.status === 'failed' || (cell.status === 'running' && cell.stale)) {
         return 'text-destructive';
     }
 
@@ -222,9 +249,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
     }
 
     if (cell.passed === null) {
-        return cell.judge_status === 'failed'
-            ? 'text-destructive'
-            : 'text-warning';
+        return isJudgeFailed(cell) ? 'text-destructive' : 'text-warning';
     }
 
     return cell.passed ? 'text-success' : 'text-destructive';
@@ -254,9 +279,18 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                         ></span
                     >
                     <span
-                        v-if="run.counts.running > 0"
+                        v-if="run.counts.running - run.counts.stalled > 0"
                         data-benchmark-running-count
-                        >{{ run.counts.running }} running</span
+                        >{{
+                            run.counts.running - run.counts.stalled
+                        }}
+                        running</span
+                    >
+                    <span
+                        v-if="run.counts.stalled > 0"
+                        class="text-destructive"
+                        data-benchmark-stalled-count
+                        >{{ run.counts.stalled }} stalled</span
                     >
                     <span v-if="run.counts.failed > 0"
                         >{{ run.counts.failed }} failed</span
@@ -362,18 +396,18 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                                     'text-right tabular-nums',
                                     best(task, 'avg_score', candidate.index),
                                 ]"
-                                >{{
-                                    formatScore(candidate.avg_score)
-                                }}</TableCell
+                                data-benchmark-avg-score
+                                >{{ formatScore(candidate.avg_score)
+                                }}{{ coverage(task, candidate) }}</TableCell
                             >
                             <TableCell
                                 :class="[
                                     'text-right tabular-nums',
                                     best(task, 'pass_rate', candidate.index),
                                 ]"
-                                >{{
-                                    formatPercent(candidate.pass_rate)
-                                }}</TableCell
+                                data-benchmark-pass-rate
+                                >{{ formatPercent(candidate.pass_rate)
+                                }}{{ coverage(task, candidate) }}</TableCell
                             >
                             <TableCell
                                 :class="[

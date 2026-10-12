@@ -6,11 +6,19 @@ namespace App\Ai\Benchmark;
 
 final class ToolArguments
 {
+    /** A plain decimal: an optional minus, no leading zeros, no exponent. */
+    private const string PLAIN_DECIMAL = '/^-?(0|[1-9]\d*)(?:\.(\d+))?$/';
+
+    /** Beyond this a float no longer holds every digit, so the string stays a string. */
+    private const int MAX_SIGNIFICANT_DIGITS = 15;
+
     /**
      * Canonical form for matching: keys sorted recursively; strings trimmed,
-     * whitespace-collapsed and lower-cased; numeric strings become numbers
-     * ("5" → 5, "2.50" → 2.5) and whole floats become integers; null values
-     * and empty-string values are dropped (null ≡ missing); lists keep their order.
+     * whitespace-collapsed and lower-cased; plain decimal strings that
+     * round-trip exactly become numbers ("5" → 5, "2.50" → 2.5) while
+     * identifier-like ones stay strings ("007", "1e3", "+5", a 19-digit id);
+     * whole floats become integers; null values and empty-string values are
+     * dropped (null ≡ missing); lists keep their order.
      *
      * @param  array<array-key, mixed>  $arguments
      * @return array<array-key, mixed>
@@ -105,7 +113,7 @@ final class ToolArguments
         if (is_string($value)) {
             $value = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $value)));
 
-            return is_numeric($value) ? self::normaliseNumber($value + 0) : $value;
+            return self::exactNumber($value) ?? $value;
         }
 
         if (is_float($value) || is_int($value)) {
@@ -113,6 +121,25 @@ final class ToolArguments
         }
 
         return $value;
+    }
+
+    /**
+     * The number a plain decimal string of at most 15 significant digits
+     * stands for (converting it loses nothing); null for any other string.
+     */
+    private static function exactNumber(string $value): int|float|null
+    {
+        if (preg_match(self::PLAIN_DECIMAL, $value, $matches) !== 1) {
+            return null;
+        }
+
+        $fraction = rtrim($matches[2] ?? '', '0');
+
+        if (strlen(ltrim($matches[1].$fraction, '0')) > self::MAX_SIGNIFICANT_DIGITS) {
+            return null;
+        }
+
+        return $fraction === '' ? (int) $value : (float) $value;
     }
 
     private static function normaliseNumber(int|float $number): int|float
