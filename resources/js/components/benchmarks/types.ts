@@ -162,11 +162,7 @@ export type BenchmarkRunDetail = {
 
 /** `queued` and `pending` are the transient re-judging states. */
 export type BenchmarkJudgeStatus =
-    | 'none'
-    | 'ok'
-    | 'failed'
-    | 'queued'
-    | 'pending';
+    'none' | 'ok' | 'failed' | 'queued' | 'pending';
 
 export type BenchmarkMatrixCandidate = {
     index: number;
