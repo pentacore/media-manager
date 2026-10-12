@@ -293,3 +293,142 @@ test('a live failure after missed events replaces the old outcome with the new o
     expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Failed);
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
+
+/**
+ * Waits until the page has bound its ActionRequestStatusChanged listener on
+ * members.actions (pusher-js keeps bound callbacks under `_<event>`), so an
+ * emit cannot run before the page listens.
+ */
+function actionQueueFailureWaitForListenerScript(): string
+{
+    return confirmDialogWaitUntilScript("(window.Pusher?.instances?.[0]?.channel('private-members.actions')?.callbacks?._callbacks?._ActionRequestStatusChanged ?? []).length > 0");
+}
+
+/**
+ * Counts the Action Queue's finished partial reloads that include
+ * `requests` (the debounced reload a live failure schedules for admins).
+ */
+function actionQueueFailureReloadRecorderScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmRequestsReloads = 0;
+            document.addEventListener('inertia:finish', (event) => {
+                if (event.detail.visit.only.includes('requests')) {
+                    window.__mmRequestsReloads += 1;
+                }
+            });
+        })()
+    JS;
+}
+
+function actionQueueFailureWaitForReloadScript(): string
+{
+    return confirmDialogWaitUntilScript('window.__mmRequestsReloads > 0');
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function actionQueueFailureLiveStatus(ActionRequest $actionRequest, string $status, int $secondsAfterRow): array
+{
+    return [
+        'id' => $actionRequest->id,
+        'status' => $status,
+        'result' => $status === 'failed' ? ['success' => false, 'reason' => 'execution_failed', 'rejection_reason' => null] : null,
+        'updated_at' => $actionRequest->updated_at->addSeconds($secondsAfterRow)->toISOString(),
+    ];
+}
+
+test('a reload read before a live failure does not roll the row back', function (int $secondsAfterRow): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id));
+    $webpage->script(actionQueueFailureWaitForListenerScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // The database row stays Executing, so the reload this failure schedules
+    // reads a row older than the broadcast — as a late approve redirect does.
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'failed', $secondsAfterRow)));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+})->with([
+    'a later second' => [60],
+    'the same second, a later step' => [0],
+]);
+
+test('a live status older than the row a reload brings yields to it', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->completed()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(actionQueueFailureWaitForListenerScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'failed', -3600)));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test('an older live event arriving late does not undo a newer one', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Approved]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(actionQueueFailureWaitForListenerScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'failed', 60)));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'executing', 30)));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'executing'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'executing'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test('a status for an unlisted request is not remembered for a later reload', function (): void {
+    $listed = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(actionQueueFailureWaitForListenerScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // Created after the page loaded: not listed now, listed by the next reload.
+    $unlisted = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending]);
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($unlisted, 'failed', 60)));
+    $webpage->script(actionQueueFailureWaitForToastScript($unlisted->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $unlisted->id, 'failed'));
+    $webpage->script(actionQueueFailureEmitScript('ActionRequestStatusChanged', actionQueueFailureLiveStatus($listed, 'failed', 60)));
+    $webpage->script(actionQueueFailureWaitForToastScript($listed->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $listed->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertVisible(sprintf('[data-action-row="%d"]', $unlisted->id))
+        ->assertMissing(sprintf('[data-action-failure-badge="%d"]', $unlisted->id))
+        ->assertVisible(sprintf('[data-action-failure-badge="%d"]', $listed->id))
+        ->assertNoSmoke();
+});
