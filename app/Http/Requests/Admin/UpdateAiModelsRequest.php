@@ -48,7 +48,7 @@ class UpdateAiModelsRequest extends FormRequest
 
         foreach (self::defaultTasks() as $task) {
             $rules[sprintf('tasks.%s', $task)] = ['required', 'array:tiers'];
-            $rules[sprintf('tasks.%s.tiers', $task)] = ['required', 'array', 'list', 'min:1'];
+            $rules[sprintf('tasks.%s.tiers', $task)] = ['required', 'array', 'list', 'min:1', ...(AiTask::from($task)->allowsTiers() ? [] : ['max:1'])];
             $rules = [...$rules, ...$this->tierRules(sprintf('tasks.%s.tiers.*', $task))];
         }
 

@@ -41,6 +41,7 @@ class AiUsageController extends Controller
         // an unknown window falls back to the default.
         $kind = AiUsageKind::tryFrom($request->string('kind')->value());
         $fellThrough = $this->fellThrough($request);
+        $benchmark = $this->benchmark($request);
 
         $page = [
             'window' => $timeWindow->value,
@@ -50,11 +51,16 @@ class AiUsageController extends Controller
                 false => 'first',
                 null => null,
             },
+            'benchmark' => match ($benchmark) {
+                true => 'only',
+                false => 'exclude',
+                null => null,
+            },
             'kinds' => AiUsageKind::mapForSelect(labelKey: 'label'),
             'totals' => $aiUsageReporting->totals($since, kind: $kind),
             'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind),
-            'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind, fellThrough: $fellThrough),
+            'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind, fellThrough: $fellThrough, benchmark: $benchmark),
             'tool_stats' => $aiUsageReporting->toolStats($since),
             'priced_models' => AiModelPrice::query()
                 ->orderBy('provider')
@@ -81,7 +87,7 @@ class AiUsageController extends Controller
             $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind);
             $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario, $kind);
             $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario, $kind);
-            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind, fellThrough: $fellThrough);
+            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind, fellThrough: $fellThrough, benchmark: $benchmark);
         }
 
         return Inertia::render('Admin/AiUsage/Index', $page);
@@ -163,6 +169,20 @@ class AiUsageController extends Controller
     }
 
     /**
+     * The Recent invocations benchmark filter: `only`, `exclude`, or null
+     * for every row (unknown values too). Like the tier filter, totals are
+     * never filtered by it.
+     */
+    private function benchmark(Request $request): ?bool
+    {
+        return match ($request->string('benchmark')->value()) {
+            'only' => true,
+            'exclude' => false,
+            default => null,
+        };
+    }
+
+    /**
      * Stream the priced invocation rows for the active window as CSV.
      * Honours the same window, kind and optional scenario as index() so the
      * file mirrors the on-screen totals.
@@ -174,7 +194,7 @@ class AiUsageController extends Controller
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
         $kind = AiUsageKind::tryFrom($request->string('kind')->value());
 
-        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind, $this->fellThrough($request));
+        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind, $this->fellThrough($request), $this->benchmark($request));
 
         $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 

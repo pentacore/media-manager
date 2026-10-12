@@ -124,6 +124,7 @@ test('an AI Models save records its changes once and a repeat save records nothi
             'file_inspector' => $blank,
             'stuck_download_investigator' => $blank,
             'price_updater' => $blank,
+            'benchmark_judge' => $blank,
         ],
         'failover' => ['provider' => null, 'model' => null],
         'event_overrides' => [],

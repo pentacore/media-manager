@@ -21,6 +21,7 @@ enum AiTask: string
     case FileInspector = 'file_inspector';
     case StuckDownloadInvestigator = 'stuck_download_investigator';
     case PriceUpdater = 'price_updater';
+    case BenchmarkJudge = 'benchmark_judge';
     case Failover = 'failover';
 
     public function label(): string
@@ -32,6 +33,7 @@ enum AiTask: string
             self::FileInspector => 'File inspector',
             self::StuckDownloadInvestigator => 'Stuck download investigator',
             self::PriceUpdater => 'Price updater',
+            self::BenchmarkJudge => 'Benchmark judge',
             self::Failover => 'Failover',
         };
     }
@@ -49,7 +51,16 @@ enum AiTask: string
      */
     public function inheritsChatModel(): bool
     {
-        return in_array($this, [self::Decision, self::FileInspector, self::StuckDownloadInvestigator, self::PriceUpdater], true);
+        return in_array($this, [self::Decision, self::FileInspector, self::StuckDownloadInvestigator, self::PriceUpdater, self::BenchmarkJudge], true);
+    }
+
+    /**
+     * Whether the task's tier list may hold more than one tier. The benchmark
+     * judge is a single selection so every run is judged by the same model.
+     */
+    public function allowsTiers(): bool
+    {
+        return $this !== self::BenchmarkJudge;
     }
 
     /**
@@ -59,5 +70,25 @@ enum AiTask: string
     public function hasReasoning(): bool
     {
         return $this !== self::Failover;
+    }
+
+    /**
+     * Whether the task is a workload a benchmark case can target.
+     */
+    public function isBenchmarkable(): bool
+    {
+        return ! in_array($this, [self::Failover, self::BenchmarkJudge], true);
+    }
+
+    /**
+     * How a benchmark case for the task is graded.
+     */
+    public function benchmarkScoringType(): BenchmarkScoringType
+    {
+        return match ($this) {
+            self::Decision => BenchmarkScoringType::Actions,
+            self::PriceUpdater => BenchmarkScoringType::Prices,
+            default => BenchmarkScoringType::Judge,
+        };
     }
 }

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
+import BenchmarkCaseController from '@/actions/App/Http/Controllers/Admin/BenchmarkCaseController';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -194,6 +196,31 @@ function rateSourceVariant(
                             >{{ io.text }}</pre>
                     </div>
                 </template>
+
+                <!-- Benchmark case capture -->
+                <div
+                    class="flex items-center justify-between rounded-md border border-border bg-bg-elev px-3 py-2 text-[12px]"
+                >
+                    <Link
+                        v-if="detail.capturable"
+                        :href="
+                            BenchmarkCaseController.create.url({
+                                query: { from_usage: detail.record.id },
+                            })
+                        "
+                        class="font-medium text-accent hover:underline"
+                        data-usage-capture
+                    >
+                        Save as benchmark case
+                    </Link>
+                    <span
+                        v-else
+                        class="text-muted-foreground"
+                        data-usage-capture-blocked
+                    >
+                        Can't capture: {{ detail.capture_blocker }}
+                    </span>
+                </div>
 
                 <!-- Pricing source banner -->
                 <div
