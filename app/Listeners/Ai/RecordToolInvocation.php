@@ -6,12 +6,14 @@ namespace App\Listeners\Ai;
 
 use App\Models\AiToolInvocation;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Tools\ToolNameResolver;
 
 class RecordToolInvocation
 {
     public function handle(ToolInvoked $toolInvoked): void
     {
         $errorCode = $this->errorCodeFrom($toolInvoked->result);
+        [$arguments, $result, $truncated] = $this->io($toolInvoked);
 
         AiToolInvocation::create([
             'invocation_id' => $toolInvoked->invocationId,
@@ -21,7 +23,38 @@ class RecordToolInvocation
             'status' => $errorCode === null ? 'success' : 'failed',
             'error_code' => $errorCode,
             'duration_ms' => (int) round($toolInvoked->time),
+            'tool_name' => ToolNameResolver::resolve($toolInvoked->tool),
+            'arguments' => $arguments,
+            'result' => $result,
+            'io_truncated' => $truncated,
         ]);
+    }
+
+    /**
+     * The call's arguments and result for benchmark capture, each capped at
+     * AiToolInvocation::MAX_IO_BYTES. Oversized arguments become a marker
+     * object (a cut JSON object can't be matched); an oversized result is cut
+     * and suffixed.
+     *
+     * @return array{0: array<string, mixed>|null, 1: string|null, 2: bool}
+     */
+    private function io(ToolInvoked $toolInvoked): array
+    {
+        $arguments = $toolInvoked->arguments;
+        $result = is_string($toolInvoked->result) ? $toolInvoked->result : json_encode($toolInvoked->result, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $truncated = false;
+
+        if (strlen((string) json_encode($arguments)) > AiToolInvocation::MAX_IO_BYTES) {
+            $arguments = ['_truncated' => true];
+            $truncated = true;
+        }
+
+        if (is_string($result) && strlen($result) > AiToolInvocation::MAX_IO_BYTES) {
+            $result = mb_strcut($result, 0, AiToolInvocation::MAX_IO_BYTES, 'UTF-8').'…[truncated]';
+            $truncated = true;
+        }
+
+        return [$arguments, $result === false ? null : $result, $truncated];
     }
 
     /**
