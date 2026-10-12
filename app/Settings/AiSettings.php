@@ -157,17 +157,28 @@ class AiSettings
     }
 
     /**
+     * The chat timeout an admin configured: the saved value, or the
+     * `mediamanager.ai.chat_timeout` config default when nothing is saved,
+     * before chatTimeout() caps it. The settings form edits this value, so
+     * saving the form never persists the cap.
+     */
+    public function configuredChatTimeout(): int
+    {
+        $stored = $this->appSettings->get(self::CHAT_TIMEOUT_KEY);
+
+        return $stored === null ? (int) config('mediamanager.ai.chat_timeout', 120) : (int) $stored;
+    }
+
+    /**
      * Seconds MediaAgent waits for a provider response before aborting a chat
-     * turn. A saved value overrides the `mediamanager.ai.chat_timeout` config
-     * default; when nothing is persisted the config default applies. Either
-     * way the result stays OCTANE_TIMEOUT_MARGIN_SECONDS below
-     * `octane.max_execution_time` (0 means no ceiling): past it Octane aborts
-     * the request mid-stream instead of letting this timeout apply.
+     * turn: configuredChatTimeout(), kept OCTANE_TIMEOUT_MARGIN_SECONDS below
+     * `octane.max_execution_time` (0 means no ceiling), because past it
+     * Octane aborts the request mid-stream instead of letting this timeout
+     * apply.
      */
     public function chatTimeout(): int
     {
-        $stored = $this->appSettings->get(self::CHAT_TIMEOUT_KEY);
-        $timeout = $stored === null ? (int) config('mediamanager.ai.chat_timeout', 120) : (int) $stored;
+        $timeout = $this->configuredChatTimeout();
         $requestCeiling = (int) config('octane.max_execution_time', 0);
 
         if ($requestCeiling <= 0) {

@@ -33,20 +33,15 @@ class ActionRequestCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
 
     /**
      * Mirrors ActionRequestResource so the frontend can upsert realtime rows
-     * into the table without missing fields. Result is narrowed to safe keys
-     * (no exception/message text leaking off-server).
+     * into the table without missing fields. The result is narrowed to
+     * ActionRequestBrowserPayload::safeResult() (no exception or message
+     * text leaves the server).
      *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
     {
         $this->actionRequest->loadMissing(['approvedByUser', 'webhookEvent.serviceConnection']);
-
-        $result = $this->actionRequest->result;
-        $safeResult = $result === null ? null : [
-            'success' => $result['success'] ?? null,
-            'reason' => $result['reason'] ?? null,
-        ];
 
         return [
             'id' => $this->actionRequest->id,
@@ -58,7 +53,7 @@ class ActionRequestCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
             'status' => $this->actionRequest->status->value,
             'requires_approval' => $this->actionRequest->requires_approval,
             'payload' => resolve(ActionRequestBrowserPayload::class)->for($this->actionRequest),
-            'result' => $safeResult,
+            'result' => resolve(ActionRequestBrowserPayload::class)->safeResult($this->actionRequest),
             'approved_by' => $this->actionRequest->approvedByUser?->name,
             'webhook_source' => $this->actionRequest->webhookEvent?->serviceConnection?->name,
             'created_at' => $this->actionRequest->created_at?->toISOString(),

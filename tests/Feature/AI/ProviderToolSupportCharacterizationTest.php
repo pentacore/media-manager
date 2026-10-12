@@ -5,23 +5,20 @@ declare(strict_types=1);
 namespace Tests\Feature\AI;
 
 use App\Ai\Tools\System\GetServiceStatusTool;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
-use Laravel\Ai\Exceptions\FailoverableException;
 use Laravel\Ai\Promptable;
 use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\ToolSearch;
-use Laravel\Ai\Responses\AgentResponse;
-use LogicException;
-use RuntimeException;
-use Throwable;
 
 /**
- * Pins the laravel/ai behaviour ProviderCapabilities / ToolPayload exist to
- * avoid: sending ToolSearch or CodeExecution to a provider that lacks them
- * fails hard and does NOT fail over. If a future SDK release degrades
- * gracefully instead, these tests break and the gating can be revisited.
+ * Pins the laravel/ai behaviour ProviderCapabilities / ToolPayload gate on:
+ * a provider that lacks ToolSearch gets every deferred tool inlined, and one
+ * that lacks CodeExecution has it silently dropped. Neither fails, so an
+ * ungated agent would quietly lose the payload saving or a promised tool on
+ * a failover. If the SDK changes this again, these tests break.
  */
 class ToolSearchCharacterizationAgent implements Agent, HasTools
 {
@@ -53,37 +50,30 @@ class CodeExecutionCharacterizationAgent implements Agent, HasTools
     }
 }
 
-function characterizationFailure(callable $prompt): Throwable
-{
-    try {
-        $prompt();
-    } catch (Throwable $throwable) {
-        return $throwable;
-    }
-
-    throw new RuntimeException('Expected the SDK to reject the provider tool.');
-}
-
 beforeEach(function (): void {
+    config()->set('ai.providers.mistral.key', 'mistral-test-key');
+
     Http::preventStrayRequests();
+    Http::fake([
+        'api.mistral.ai/v1/chat/completions' => Http::response([
+            'id' => 'chat-1',
+            'model' => 'mistral-small-latest',
+            'choices' => [['index' => 0, 'finish_reason' => 'stop', 'message' => ['role' => 'assistant', 'content' => 'ok']]],
+            'usage' => ['prompt_tokens' => 5, 'completion_tokens' => 1, 'total_tokens' => 6],
+        ]),
+    ]);
 });
 
-test('sdk behaviour: ToolSearch on a provider without tool search throws a non-failoverable LogicException', function (): void {
-    $throwable = characterizationFailure(fn (): AgentResponse => (new ToolSearchCharacterizationAgent)->prompt('hi', provider: 'gemini', model: 'gemini-3.7-flash'));
+test('sdk behaviour: ToolSearch on a provider without tool search inlines the deferred tools', function (): void {
+    (new ToolSearchCharacterizationAgent)->prompt('hi', provider: 'mistral', model: 'mistral-small-latest');
 
-    expect($throwable)->toBeInstanceOf(LogicException::class)
-        ->and($throwable->getMessage())->toContain('does not support tool search')
-        ->and($throwable)->not->toBeInstanceOf(FailoverableException::class);
-
-    Http::assertNothingSent();
+    Http::assertSent(fn (Request $request): bool => count($request['tools'] ?? []) === 1
+        && $request['tools'][0]['type'] === 'function'
+        && $request['tools'][0]['function']['description'] === resolve(GetServiceStatusTool::class)->description());
 })->group('characterization');
 
-test('sdk behaviour: CodeExecution on a chat-completions provider throws a non-failoverable error before any request', function (): void {
-    $throwable = characterizationFailure(fn (): AgentResponse => (new CodeExecutionCharacterizationAgent)->prompt('hi', provider: 'groq', model: 'llama-4-scout'));
+test('sdk behaviour: CodeExecution on a provider without it is silently dropped', function (): void {
+    (new CodeExecutionCharacterizationAgent)->prompt('hi', provider: 'mistral', model: 'mistral-small-latest');
 
-    expect($throwable)->toBeInstanceOf(RuntimeException::class)
-        ->and($throwable->getMessage())->toContain('does not support [CodeExecution] provider tools')
-        ->and($throwable)->not->toBeInstanceOf(FailoverableException::class);
-
-    Http::assertNothingSent();
+    Http::assertSent(fn (Request $request): bool => ($request['tools'] ?? []) === []);
 })->group('characterization');

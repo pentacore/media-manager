@@ -216,7 +216,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
                 'message' => $permanent->getMessage(),
                 'exception' => $permanent::class,
                 'indeterminate' => false,
-            ]);
+            ], UpstreamErrorText::ACTION_EMPTY_FALLBACK);
 
             return;
         }
@@ -270,20 +270,22 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         $this->markFailed([
             'reason' => 'job_failed',
             'message' => $throwable?->getMessage() ?? 'Job failed',
-        ]);
+        ], UpstreamErrorText::ACTION_EMPTY_FALLBACK);
     }
 
     /**
      * Executor exception text embeds upstream response bodies
      * (RequestException) and file paths, and result.message is shown on the
-     * Action Queue — so it is stored reduced, never raw.
+     * Action Queue — so it is stored reduced, never raw. A message with
+     * nothing usable left becomes $emptyFallback: the upstream sentence for a
+     * media service's failure, a neutral one for a local exception.
      *
      * @param  array<string, mixed>  $result
      */
-    private function markFailed(array $result): void
+    private function markFailed(array $result, string $emptyFallback = UpstreamErrorText::UPSTREAM_EMPTY_FALLBACK): void
     {
         if (is_string($result['message'] ?? null)) {
-            $result['message'] = UpstreamErrorText::sanitize($result['message']);
+            $result['message'] = UpstreamErrorText::sanitize($result['message'], emptyFallback: $emptyFallback);
         }
 
         $this->actionRequest->update([

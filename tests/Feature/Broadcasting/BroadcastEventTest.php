@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestCreated;
 use App\Events\ActionRequestStatusChanged;
 use App\Events\ActivityLogCreated;
@@ -14,6 +15,7 @@ use App\Events\ServiceHealthChanged;
 use App\Events\ServiceLatestVersionFetched;
 use App\Events\WebhookEventProcessed;
 use App\Events\WebhookReceived;
+use App\Http\Resources\ActionRequestResource;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
@@ -26,6 +28,7 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
 
 test('ActionRequestCreated broadcasts on the shared members.actions channel', function (): void {
@@ -79,6 +82,7 @@ test('ActionRequestCreated strips sensitive detail from broadcast payload', func
     expect($payload['result'])->toEqual([
         'success' => false,
         'reason' => 'execution_failed',
+        'rejection_reason' => null,
     ]);
 });
 
@@ -183,7 +187,45 @@ test('ActionRequestStatusChanged strips sensitive detail from broadcast payload'
     expect($payload['result'])->toEqual([
         'success' => false,
         'reason' => 'execution_failed',
+        'rejection_reason' => null,
     ]);
+});
+
+test('both action broadcasts send exactly the result a member reads from the action queue', function (): void {
+    $member = User::factory()->member()->create();
+    $actionRequest = ActionRequest::factory()->needsReconciliation()->create();
+    $request = Request::create('/actions/requests');
+    $request->setUserResolver(fn (): User => $member);
+
+    $memberResult = new ActionRequestResource($actionRequest)->toArray($request)['result'];
+
+    expect($memberResult)->toBe([
+        'success' => false,
+        'reason' => 'needs_reconciliation',
+        'rejection_reason' => null,
+    ])
+        ->and(new ActionRequestCreated($actionRequest)->broadcastWith()['result'])->toBe($memberResult)
+        ->and(new ActionRequestStatusChanged($actionRequest)->broadcastWith()['result'])->toBe($memberResult);
+});
+
+test('action broadcasts carry the reviewer rejection reason a member may read', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Rejected,
+        'result' => ['rejection_reason' => 'Already on disk in 4K.'],
+    ]);
+    $expected = ['success' => null, 'reason' => null, 'rejection_reason' => 'Already on disk in 4K.'];
+
+    expect(new ActionRequestStatusChanged($actionRequest)->broadcastWith()['result'])->toBe($expected)
+        ->and(new ActionRequestCreated($actionRequest)->broadcastWith()['result'])->toBe($expected);
+});
+
+test('action broadcasts send a null result while nothing is recorded', function (): void {
+    // A retry sets result to null; the page must clear the old failure, not
+    // merge a {success: null, reason: null} stub into it.
+    $actionRequest = ActionRequest::factory()->autoExecute()->create();
+
+    expect(new ActionRequestStatusChanged($actionRequest)->broadcastWith()['result'])->toBeNull()
+        ->and(new ActionRequestCreated($actionRequest)->broadcastWith()['result'])->toBeNull();
 });
 
 test('WebhookReceived broadcasts on dashboard channel with service info', function (): void {

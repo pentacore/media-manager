@@ -196,9 +196,10 @@ test('a failed poll keeps the selection; the next good poll still has it', funct
         if (($query['mode'] ?? null) === 'queue') {
             $queueReads++;
 
-            // The second page load (the first poll) hits a SABnzbd restart.
-            if ($queueReads === 2) {
-                return Http::response(['error' => 'restarting'], 401);
+            // The first poll hits a SABnzbd restart: a 503 on all three of the
+            // client's attempts (reads 2-4), so the poll itself fails.
+            if ($queueReads >= 2 && $queueReads <= 4) {
+                return Http::response(['error' => 'restarting'], 503);
             }
 
             return Http::response(['queue' => ['paused' => false, 'speed' => '10 M', 'speedlimit' => '', 'speedlimit_abs' => '', 'slots' => [

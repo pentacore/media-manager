@@ -12,6 +12,7 @@ use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
+use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
@@ -150,26 +151,33 @@ class RequestController extends Controller
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return new JsonResponse(['error' => 'no_seerr_connection'], 422);
+            return $this->editOptionsError('no_seerr_connection', $this->noActiveConnectionMessage(ServiceType::Seerr), 422);
         }
 
         try {
             $request = new SeerrClient($connection)->getRequestById($id);
         } catch (RequestException|ConnectionException $throwable) {
-            return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
+            return $this->editOptionsError('seerr_unreachable', __('Seerr could not load this request: :detail', ['detail' => UpstreamErrorText::sanitize($throwable->getMessage())]), 502);
         }
 
         $mediaType = (string) ($request['media']['mediaType'] ?? $request['type'] ?? '');
-        $arrClient = $this->resolveArrFor($mediaType, $arrConnections);
+        $arrType = $this->arrTypeFor($mediaType);
+
+        if (! $arrType instanceof ServiceType) {
+            return $this->editOptionsError('no_arr_for_media_type', __('Only TV and movie requests have a quality profile and root folder to edit.'), 422);
+        }
+
+        $arrClient = $arrConnections->activeClient($arrType);
+
         if (! $arrClient instanceof ArrClient) {
-            return new JsonResponse(['error' => 'no_arr_for_media_type'], 422);
+            return $this->editOptionsError('no_arr_for_media_type', $this->noActiveConnectionMessage($arrType), 422);
         }
 
         try {
             $profiles = $arrClient->getQualityProfiles();
             $rootFolders = $arrClient->getRootFolders();
         } catch (RequestException|ConnectionException $throwable) {
-            return new JsonResponse(['error' => sprintf('arr_unreachable: %s', UpstreamErrorText::sanitize($throwable->getMessage()))], 502);
+            return $this->editOptionsError('arr_unreachable', __(':service could not list its quality profiles and root folders: :detail', ['service' => $arrType->label(), 'detail' => UpstreamErrorText::sanitize($throwable->getMessage())]), 502);
         }
 
         return new JsonResponse([
@@ -264,15 +272,23 @@ class RequestController extends Controller
         return back();
     }
 
-    private function resolveArrFor(string $mediaType, ArrConnections $arrConnections): ?ArrClient
+    /** The arr that owns a Seerr media type; null for anything but TV and movies. */
+    private function arrTypeFor(string $mediaType): ?ServiceType
     {
-        $arrType = match ($mediaType) {
+        return match ($mediaType) {
             'tv' => ServiceType::Sonarr,
             'movie' => ServiceType::Radarr,
             default => null,
         };
+    }
 
-        return $arrType === null ? null : $arrConnections->activeClient($arrType);
+    /**
+     * An edit-options failure: a stable `error` code plus a `message` the
+     * edit dialog shows as is (jsonRequest() throws with it).
+     */
+    private function editOptionsError(string $code, string $message, int $status): JsonResponse
+    {
+        return new JsonResponse(['error' => $code, 'message' => $message], $status);
     }
 
     /** Statuses the bulk-clear UI is allowed to target. */
@@ -282,9 +298,13 @@ class RequestController extends Controller
     private const int CLEAR_HARD_LIMIT = 500;
 
     /**
-     * Collects matching request ids (capped) and queues ClearSeerrRequests
-     * to delete them, keeping the up-to-500 sequential DELETEs off this
-     * request. Returns to the page with an info toast.
+     * Claims the per-status clear slot, collects matching request ids
+     * (capped) and queues ClearSeerrRequests to delete them, keeping the
+     * up-to-500 sequential DELETEs off this request. A clear already running
+     * for the status is refused with an info toast. Every path that queues
+     * nothing, an unexpected exception included, frees the slot in the
+     * finally; the slot's TTL restarts just before dispatch, when the job's
+     * unique lock starts.
      */
     public function clear(Request $request): RedirectResponse
     {
@@ -302,23 +322,41 @@ class RequestController extends Controller
             return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
+        $slotToken = SeerrClearInFlight::claim($connection->id, $status);
+
+        if ($slotToken === null) {
+            Inertia::flash('toast', [
+                'type' => 'info',
+                'message' => __('Already clearing :status requests. Use Sync Seerr once it finishes to see the result.', ['status' => $status]),
+            ]);
+
+            return back();
+        }
+
         $seerrClient = new SeerrClient($connection);
+        $queued = false;
 
         try {
             $ids = $this->collectIdsForStatus($seerrClient, $status, self::CLEAR_HARD_LIMIT);
+
+            if ($ids === []) {
+                Inertia::flash('toast', ['type' => 'success', 'message' => __('Nothing to clear — no :status requests.', ['status' => $status])]);
+
+                return back();
+            }
+
+            SeerrClearInFlight::refresh($connection->id, $status, $slotToken);
+            dispatch(new ClearSeerrRequests($connection->id, $status, $ids, $request->user()?->id, $slotToken));
+            $queued = true;
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to enumerate Seerr requests.')]);
 
             return back();
+        } finally {
+            if (! $queued) {
+                SeerrClearInFlight::release($connection->id, $status, $slotToken);
+            }
         }
-
-        if ($ids === []) {
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Nothing to clear — no :status requests.', ['status' => $status])]);
-
-            return back();
-        }
-
-        dispatch(new ClearSeerrRequests($connection->id, $status, $ids, $request->user()?->id));
 
         Inertia::flash('toast', [
             'type' => 'info',

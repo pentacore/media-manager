@@ -6,8 +6,10 @@ use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
 use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
+use Rector\DeadCode\Rector\Property\RemoveDefaultValueFromAssignedPropertyRector;
 use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
 use Rector\Naming\Rector\ClassMethod\RenameParamToMatchTypeRector;
+use Rector\Php80\Rector\Class_\ClassPropertyAssignToConstructorPromotionRector;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
 
@@ -86,6 +88,16 @@ return RectorConfig::configure()
         // one silently unbinds the listener instead of just tidying dead code.
         RemoveUnusedPublicMethodParameterRector::class => [
             __DIR__.'/app/Listeners',
+        ],
+        // A promoted property has no default, so a job queued before a new
+        // constructor field existed unserializes with it uninitialized and
+        // throws on first read. The field stays a declared nullable property
+        // with a default (see .ai/rules/jobs.md), which both rules would undo.
+        ClassPropertyAssignToConstructorPromotionRector::class => [
+            __DIR__.'/app/Jobs/ClearSeerrRequests.php',
+        ],
+        RemoveDefaultValueFromAssignedPropertyRector::class => [
+            __DIR__.'/app/Jobs/ClearSeerrRequests.php',
         ],
         // Splitting a grouped trait `use` drops its `insteadof` block, which
         // structured sub-agents need to resolve the stream() collision with Promptable.

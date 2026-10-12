@@ -82,3 +82,12 @@ test('an abandoned provider attempt stores its error without upstream paths or c
     expect(AiUsageRecord::where('provider', 'anthropic')->sole()->error_message)
         ->toBe('overloaded at [redacted path] via https://gw.example/v1?[redacted]');
 });
+
+test('an abandoned provider attempt with an empty error blames the agent, not an upstream service', function (): void {
+    resolve(RunUsageAccumulator::class)->add('inv-empty', 'anthropic', 'claude-sonnet-4-5', new TextUsage(100, 10));
+
+    event(new AgentFailedOver('inv-empty', new DecisionAgent, Ai::textProvider('anthropic'), 'claude-sonnet-4-5', new ProviderOverloadedException('')));
+
+    expect(AiUsageRecord::where('provider', 'anthropic')->sole()->error_message)
+        ->toBe('The agent failed without a usable description.');
+});

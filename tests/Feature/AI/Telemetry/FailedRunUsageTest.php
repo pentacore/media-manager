@@ -104,3 +104,16 @@ test('a failed run stores its error message without upstream paths or credential
     expect(AiUsageRecord::where('invocation_id', 'inv-redact')->sole()->error_message)
         ->toBe('read [redacted path] from https://gw.example/v1?[redacted]');
 });
+
+test('a failed run with an empty error message blames the agent, not an upstream service', function (): void {
+    resolve(RunUsageAccumulator::class)->add('inv-empty', 'openai', 'gpt-5-mini', new TextUsage(10, 5));
+
+    (new RecordFailedAgentRun)->handle(new AgentFailed(
+        'inv-empty',
+        makeFailedRunPrompt(new DecisionAgent),
+        new RuntimeException(''),
+    ));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-empty')->sole()->error_message)
+        ->toBe('The agent failed without a usable description.');
+});

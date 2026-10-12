@@ -1,3 +1,24 @@
+# [1.39.0](https://github.com/pentacore/media-manager/compare/v1.38.0...v1.39.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **actions:** reload on every live admin failure and store only the member-safe result ([e1709f0](https://github.com/pentacore/media-manager/commit/e1709f0473dc4b5c9cd016799402c4a6b86a13d9))
+* **actions:** share one member-safe action result across the resource and broadcasts ([b5a016f](https://github.com/pentacore/media-manager/commit/b5a016fbabc26beee490833879a95fffb08c81c6))
+* **ai:** show the configured chat timeout and note when the server caps it ([4b188cc](https://github.com/pentacore/media-manager/commit/4b188cc750fa95374a5af9433cc26024e8a6f37e))
+* **ai:** stop blaming an upstream service for agent failures without a message ([5c6fd12](https://github.com/pentacore/media-manager/commit/5c6fd1232df80762bfdc920ab88137acf6f49f96))
+* **copy:** tell non-admins to ask an admin when a service refuses ([e56a92b](https://github.com/pentacore/media-manager/commit/e56a92bd0483eccb27416af4040060b228ea3691))
+* **copy:** word missing and refused connections for who can fix them ([49fb019](https://github.com/pentacore/media-manager/commit/49fb0196fe1991a3f19e6b1e70a8cb67afdf169c))
+* **seerr:** let a clear queued before slot tokens run after the deploy ([4df1095](https://github.com/pentacore/media-manager/commit/4df109536a17154448859631195611d5d2c6d95f))
+* **seerr:** own the bulk-clear slot by token and restart it at dispatch ([75227b8](https://github.com/pentacore/media-manager/commit/75227b84f68c7fd1a568cbb1bb8838c4f2b0be04))
+* **seerr:** word edit-options failures and refuse a second bulk clear while one runs ([5b54c7b](https://github.com/pentacore/media-manager/commit/5b54c7b09880d2d1b8d6f04de3ed696ffdea89eb))
+* **ui:** toast Bazarr drawer server and network failures and drop the bare colon on untitled queue messages ([f19cf67](https://github.com/pentacore/media-manager/commit/f19cf67716d3fbab22a36f1ccee5119136f8a339))
+
+
+### Features
+
+* **actions:** show why an action failed and confirm before retrying an unknown outcome ([bbaf139](https://github.com/pentacore/media-manager/commit/bbaf139e8682a65e8a9455a0c3731abff6885532))
+
 # [1.38.0](https://github.com/pentacore/media-manager/compare/v1.37.0...v1.38.0) (2026-10-09)
 
 

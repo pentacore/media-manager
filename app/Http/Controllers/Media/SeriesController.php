@@ -35,11 +35,13 @@ class SeriesController extends BaseArrController
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
             'series' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getSeries(),
                 fn (array $item): array => $this->mapSeries($item),
             )),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
             ), 'qualityProfiles'),
@@ -67,6 +69,7 @@ class SeriesController extends BaseArrController
             'series' => $this->mapSeries($series, detailed: true, canManageLibrary: $canManageLibrary),
             'episodes' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getEpisodesBySeries($id),
                 fn (array $ep): array => [
                     'id' => $ep['id'] ?? null,
@@ -84,6 +87,7 @@ class SeriesController extends BaseArrController
             ...$canManageLibrary ? [
                 'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                     $connection,
+                    $request->user(),
                     fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles(),
                     $this->mapQualityProfile(...),
                 ), 'qualityProfiles'),
@@ -105,11 +109,13 @@ class SeriesController extends BaseArrController
             'searchTerm' => $term,
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
             )),
             'rootFolders' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getRootFolders(),
                 fn (array $f): array => [
                     'id' => $f['id'] ?? null,
@@ -121,6 +127,7 @@ class SeriesController extends BaseArrController
                 ? ['items' => [], 'error' => null]
                 : $this->tryClientList(
                     $connection,
+                    $request->user(),
                     fn (SonarrClient $sonarrClient): array => $sonarrClient->searchSeries($term),
                     fn (array $item): array => [
                         'tvdb_id' => $item['tvdbId'] ?? null,
