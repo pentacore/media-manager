@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\UpdateSeerrRequestRequest;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClearInFlight;
@@ -17,6 +18,7 @@ use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitleResolver;
+use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Support\UpstreamErrorText;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -81,7 +83,7 @@ class RequestController extends Controller
         return Inertia::render('Seerr/Requests', [
             'connection' => ['url' => $connection->linkUrl()],
             'filters' => ['page' => $page, 'status' => $status],
-            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
+            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status, $request->user())),
             'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection), 'summary'),
         ]);
     }
@@ -433,12 +435,12 @@ class RequestController extends Controller
     }
 
     /**
-     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
+     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>, error: string|null}
      */
-    private function loadRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status = 'pending'): array
+    private function loadRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status, ?User $user): array
     {
         if (array_key_exists($status, self::LOCAL_STATUS_VALUES)) {
-            return $this->loadLocallyFilteredRequests($serviceConnection, $page, $perPage, $status);
+            return $this->loadLocallyFilteredRequests($serviceConnection, $page, $perPage, $status, $user);
         }
 
         $seerrClient = new SeerrClient($serviceConnection);
@@ -456,10 +458,11 @@ class RequestController extends Controller
 
         try {
             $response = $seerrClient->getRequests($params);
-        } catch (RequestException|ConnectionException) {
+        } catch (RequestException|ConnectionException $throwable) {
             return [
                 'data' => [],
                 'meta' => ['current_page' => $page, 'last_page' => 1, 'total' => 0, 'per_page' => $perPage],
+                'error' => $this->requestsFailureMessage($throwable, $user),
             ];
         }
 
@@ -476,6 +479,7 @@ class RequestController extends Controller
                 'total' => (int) ($pageInfo['results'] ?? count($results)),
                 'per_page' => (int) ($pageInfo['pageSize'] ?? $perPage),
             ],
+            'error' => null,
         ];
     }
 
@@ -487,9 +491,9 @@ class RequestController extends Controller
      * /request/count so pagination still reports accurate bounds even
      * when we short-circuit before walking everything.
      *
-     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
+     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>, error: string|null}
      */
-    private function loadLocallyFilteredRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status): array
+    private function loadLocallyFilteredRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status, ?User $user): array
     {
         $statusValue = self::LOCAL_STATUS_VALUES[$status];
         $seerrClient = new SeerrClient($serviceConnection);
@@ -503,7 +507,17 @@ class RequestController extends Controller
                     'skip' => $pageIndex * self::LOCAL_FILTER_PAGE_SIZE,
                     'sort' => 'added',
                 ]);
-            } catch (RequestException|ConnectionException) {
+            } catch (RequestException|ConnectionException $throwable) {
+                // Nothing read yet: the tab has no rows to show, only the
+                // failure. A later page failing keeps the rows already matched.
+                if ($pageIndex === 0) {
+                    return [
+                        'data' => [],
+                        'meta' => ['current_page' => $page, 'last_page' => 1, 'total' => 0, 'per_page' => $perPage],
+                        'error' => $this->requestsFailureMessage($throwable, $user),
+                    ];
+                }
+
                 break;
             }
 
@@ -548,7 +562,23 @@ class RequestController extends Controller
                 'total' => $total,
                 'per_page' => $perPage,
             ],
+            'error' => null,
         ];
+    }
+
+    /**
+     * What the requests list says when Seerr could not be read. A refusal —
+     * a 4xx, or a 200 that is not JSON data (a login page in front of
+     * Seerr) — is worded for who can fix it; anything else is an outage.
+     */
+    private function requestsFailureMessage(RequestException|ConnectionException $throwable, ?User $user): string
+    {
+        $refused = $throwable instanceof SeerrUnexpectedResponse
+            || ($throwable instanceof RequestException && $throwable->response->clientError());
+
+        return $refused
+            ? $this->upstreamRefusedMessage(ServiceType::Seerr, $user)
+            : __(':service is unreachable right now.', ['service' => ServiceType::Seerr->label()]);
     }
 
     /**

@@ -485,7 +485,8 @@ test('declined filter paginates locally using the count endpoint as the total', 
         );
 });
 
-test('requests list falls back to empty when list endpoint fails', function (): void {
+test('requests list reports an outage when the list endpoint fails', function (): void {
+    Sleep::fake();
     $member = User::factory()->member()->create();
 
     Http::fake([
@@ -502,7 +503,43 @@ test('requests list falls back to empty when list endpoint fails', function (): 
             ->loadDeferredProps('default', function ($page): void {
                 $page
                     ->has('requests.data', 0)
-                    ->where('requests.meta.total', 0);
+                    ->where('requests.meta.total', 0)
+                    ->where('requests.error', 'Seerr is unreachable right now.');
+            })
+        );
+});
+
+test('a Seerr outage or refusal on the requests list is an error, not an empty list', function (Closure $fakeSeerr, string $status, string $error): void {
+    Sleep::fake();
+    $fakeSeerr();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.requests.index', ['status' => $status]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page) use ($error): void {
+                $page
+                    ->has('requests.data', 0)
+                    ->where('requests.error', $error);
+            })
+        );
+})->with([
+    'a login page on HTTP 200' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('<html><body>Sign in</body></html>')]), 'pending', 'Seerr is unavailable — ask an admin to check the connection.'],
+    'a JSON scalar on HTTP 200' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('"ok"')]), 'pending', 'Seerr is unavailable — ask an admin to check the connection.'],
+    'a refused API key' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('Unauthorized', 401)]), 'pending', 'Seerr is unavailable — ask an admin to check the connection.'],
+    'an outage' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('boom', 503)]), 'pending', 'Seerr is unreachable right now.'],
+    'a login page on a locally filtered tab' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('<html><body>Sign in</body></html>')]), 'approved', 'Seerr is unavailable — ask an admin to check the connection.'],
+]);
+
+test('an admin is told to check the Seerr connection settings', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page->where('requests.error', 'Seerr refused the request — check the connection settings.');
             })
         );
 });
@@ -858,17 +895,18 @@ test('a clear that finds nothing or cannot list the requests frees its slot', fu
 })->with([
     'nothing to clear' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 0, 'pageSize' => 100, 'results' => 0], 'results' => []])])],
     'Seerr down' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('boom', 503)])],
+    'a login page' => [fn () => Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('<html><body>Sign in</body></html>')])],
 ]);
 
 test('an unexpected failure while listing the requests frees the clear slot', function (): void {
     Queue::fake([ClearSeerrRequests::class]);
-    Http::fake(['seerr.local:5055/api/v1/request*' => Http::response('"not a page"')]);
+    Http::fake(['seerr.local:5055/api/v1/request*' => fn (): never => throw new RuntimeException('Unexpected listing failure.')]);
     $this->withoutExceptionHandling();
 
     expect(fn () => $this->actingAs(User::factory()->admin()->create())
         ->from(route('media.requests.index'))
         ->post(route('media.requests.clear'), ['status' => 'available']))
-        ->toThrow(TypeError::class);
+        ->toThrow(RuntimeException::class, 'Unexpected listing failure.');
 
     Queue::assertNotPushed(ClearSeerrRequests::class);
     expect(SeerrClearInFlight::claim($this->connection->id, 'available'))->not->toBeNull();

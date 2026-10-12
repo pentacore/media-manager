@@ -69,7 +69,7 @@ class SeerrClient implements Warmable
      */
     public function getStatus(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/status', $this->apiVersion))->throw()->json() ?? [];
+        return $this->getJson('status');
     }
 
     /**
@@ -95,7 +95,7 @@ class SeerrClient implements Warmable
     {
         return $this->cache()->rememberEntity(
             'request:'.$id,
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+            fn (): array => $this->getJson(sprintf('request/%d', $id)),
         );
     }
 
@@ -109,7 +109,7 @@ class SeerrClient implements Warmable
      */
     public function getRequestByIdUncached(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->getJson(sprintf('request/%d', $id));
     }
 
     /**
@@ -224,10 +224,7 @@ class SeerrClient implements Warmable
     {
         return $this->cache()->rememberEntity(
             'movie-details:'.$tmdbId,
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $tmdbId))
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->getJson(sprintf('movie/%d', $tmdbId)),
         );
     }
 
@@ -242,10 +239,7 @@ class SeerrClient implements Warmable
     {
         return $this->cache()->rememberEntity(
             'tv-details:'.$tmdbId,
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/tv/%d', $this->apiVersion, $tmdbId))
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->getJson(sprintf('tv/%d', $tmdbId)),
         );
     }
 
@@ -330,7 +324,13 @@ class SeerrClient implements Warmable
                 continue;
             }
 
-            $detail = $response->json() ?? [];
+            // A login page or scalar is a failed fetch: omitted, never cached.
+            $detail = $response->json();
+
+            if (! is_array($detail)) {
+                continue;
+            }
+
             $results[$key] = $detail;
             $cache->putEntity(($mediaType === 'movie' ? 'movie-details:' : 'tv-details:').$tmdbId, $detail);
         }
@@ -362,7 +362,7 @@ class SeerrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'search:'.md5($query),
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/search', $this->apiVersion), ['query' => $query])->throw()->json() ?? [],
+            fn (): array => $this->getJson('search', ['query' => $query]),
         );
     }
 
@@ -373,7 +373,7 @@ class SeerrClient implements Warmable
      */
     public function getUsers(array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/user', $this->apiVersion), $params)->throw()->json() ?? [];
+        return $this->getJson('user', $params);
     }
 
     /**
@@ -419,10 +419,7 @@ class SeerrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'discover:trending:'.$page,
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/discover/trending', $this->apiVersion), ['page' => $page])
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->getJson('discover/trending', ['page' => $page]),
         );
     }
 
@@ -443,10 +440,7 @@ class SeerrClient implements Warmable
 
         return $this->cache()->rememberList(
             sprintf('discover:upcoming:%s:%d', $mediaType, $page),
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/%s', $this->apiVersion, $path), ['page' => $page])
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->getJson($path, ['page' => $page]),
         );
     }
 
@@ -520,7 +514,7 @@ class SeerrClient implements Warmable
      */
     private function fetchRequests(array $params): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request', $this->apiVersion), $params)->throw()->json() ?? [];
+        return $this->getJson('request', $params);
     }
 
     /**
@@ -530,10 +524,7 @@ class SeerrClient implements Warmable
      */
     private function fetchRequestCount(): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/request/count', $this->apiVersion))
-            ->throw()
-            ->json() ?? [];
+        return $this->getJson('request/count');
     }
 
     /**
@@ -544,7 +535,7 @@ class SeerrClient implements Warmable
      */
     private function fetchDiscoverMovies(array $options): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/discover/movies', $this->apiVersion), $options)->throw()->json() ?? [];
+        return $this->getJson('discover/movies', $options);
     }
 
     /**
@@ -555,7 +546,41 @@ class SeerrClient implements Warmable
      */
     private function fetchDiscoverTv(array $options): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/discover/tv', $this->apiVersion), $options)->throw()->json() ?? [];
+        return $this->getJson('discover/tv', $options);
+    }
+
+    /**
+     * GET a Seerr API path (relative to `/api/{version}/`) and decode it
+     * through jsonData().
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function getJson(string $path, array $query = []): array
+    {
+        return $this->jsonData($this->buildClient()->get(sprintf('/api/%s/%s', $this->apiVersion, $path), $query)->throw());
+    }
+
+    /**
+     * The decoded body of a read. A 200 whose body is not a JSON object or
+     * list — an SSO or reverse-proxy login page, an HTML error page, a bare
+     * scalar — is a refusal, never an empty result; thrown inside a cache
+     * closure, it is never cached either.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws SeerrUnexpectedResponse
+     */
+    private function jsonData(Response $response): array
+    {
+        $body = $response->json();
+
+        throw_unless(is_array($body), SeerrUnexpectedResponse::class, $response);
+
+        /** @var array<string, mixed> $body */
+        return $body;
     }
 
     private function cache(): SeerrCache
