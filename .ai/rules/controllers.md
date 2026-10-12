@@ -46,3 +46,6 @@ A page that shows managers a picker (quality profiles, root folders) sends the o
 
 ## Refusal copy depends on who can fix it
 When an upstream service answers but refuses (a 4xx: bad API key, wrong base URL), word it with `$this->upstreamRefusedMessage(ServiceType, $request->user())` from the base `Controller`: admins read "<Service> refused the request — check the connection settings.", everyone else "<Service> is unavailable — ask an admin to check the connection." Never tell a non-admin to check settings they cannot open. `BaseArrController::tryClientList()` takes the viewer as its second argument for this. Admin-only pages (Whisparr) may keep the admin sentence inline. An outage (5xx, connection failure) stays "<Service> is unreachable right now." for everyone.
+
+## SABnzbd hidden categories are counted, not re-paged
+SABnzbd pages history before `QueueController::filterByCategory()` drops the connection's `hidden_categories` (its API can include one category, not exclude one). Keep SABnzbd's paging and `total`; the filter records `hidden_by_category`, the queue and history props carry it, and the page says "N hidden by category filter" and words an all-hidden page as such. Do not over-fetch to fill pages.

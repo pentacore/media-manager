@@ -58,6 +58,7 @@ interface Queue {
     speedlimit?: string | null;
     speedlimit_abs?: string | null;
     noofslots?: number;
+    hidden_by_category?: number;
     slots?: QueueSlot[];
 }
 
@@ -70,6 +71,7 @@ interface SabnzbdConnection {
 interface History {
     slots: HistorySlot[];
     total: number;
+    hidden_by_category: number;
     page: number;
     page_size: number;
 }
@@ -444,9 +446,19 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                 class="overflow-hidden rounded-xl border border-border bg-card"
             >
                 <div
-                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                    class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
                 >
-                    Active queue
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        >Active queue</span
+                    >
+                    <span
+                        v-if="(queue.hidden_by_category ?? 0) > 0"
+                        class="text-[11.5px] text-muted-foreground"
+                        data-queue-hidden
+                        >{{ queue.hidden_by_category }} hidden by category
+                        filter</span
+                    >
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse text-[13px]">
@@ -591,7 +603,11 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     :colspan="isAdmin ? 8 : 7"
                                     class="px-3 py-8 text-center text-sm text-fg-subtle"
                                 >
-                                    Queue is empty.
+                                    {{
+                                        (queue.hidden_by_category ?? 0) > 0
+                                            ? 'Every download in the queue is in a hidden category.'
+                                            : 'Queue is empty.'
+                                    }}
                                 </td>
                             </tr>
                         </tbody>
@@ -681,10 +697,18 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                         >History</span
                     >
-                    <span
-                        class="font-mono-tabular text-[11.5px] text-muted-foreground"
-                        >{{ history.total }} jobs</span
-                    >
+                    <span class="text-[11.5px] text-muted-foreground">
+                        <span class="font-mono-tabular"
+                            >{{ history.total }} jobs</span
+                        >
+                        <span
+                            v-if="history.hidden_by_category > 0"
+                            data-history-hidden
+                        >
+                            · {{ history.hidden_by_category }} hidden by
+                            category filter</span
+                        >
+                    </span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse text-[13px]">
@@ -767,9 +791,11 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     class="px-3 py-8 text-center text-sm text-fg-subtle"
                                 >
                                     {{
-                                        history.total > 0
-                                            ? 'No downloads on this page.'
-                                            : 'No recent downloads.'
+                                        history.hidden_by_category > 0
+                                            ? 'Every download on this page is in a hidden category.'
+                                            : history.total > 0
+                                              ? 'No downloads on this page.'
+                                              : 'No recent downloads.'
                                     }}
                                 </td>
                             </tr>
