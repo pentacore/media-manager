@@ -1229,12 +1229,14 @@ function pipelineState(
                         >
                             <Button
                                 class="flex-1"
+                                data-action-approve
                                 @click="approve(selected.id)"
                             >
                                 Approve &amp; execute
                             </Button>
                             <Button
                                 variant="destructive"
+                                data-action-decline
                                 @click="reject(selected.id)"
                             >
                                 Decline

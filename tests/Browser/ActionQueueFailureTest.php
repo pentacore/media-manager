@@ -401,3 +401,89 @@ test('a status for an unlisted request is not remembered for a later reload', fu
         ->assertVisible(sprintf('[data-action-failure-badge="%d"]', $listed->id))
         ->assertNoSmoke();
 });
+
+test("an admin's retry is not undone by a failure remembered from a live event", function (): void {
+    $actionRequest = ActionRequest::factory()->described()->failed()->create();
+    // Faked after the factories: a later Queue::fake replaces the Browser
+    // beforeEach fake, and the WebhookEvent factory creates a connection.
+    Queue::fake([ExecuteActionRequest::class]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id));
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // Newer than the server row, so the reload it schedules keeps it in memory.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'failed', 60), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    // The redirect's row (approved, written now) is older than the remembered
+    // failure: only forgetting it on the click lets the retry show.
+    $webpage->click('[data-action-retry]')
+        ->assertSee('Action requeued for execution.')
+        ->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
+    Queue::assertPushed(ExecuteActionRequest::class);
+});
+
+test("an admin's review of a pending row is not undone by a status remembered from a live event", function (string $button, string $toast, ActionRequestStatus $status): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
+    Queue::fake([ExecuteActionRequest::class]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible(sprintf('[data-bulk-select="%d"]', $actionRequest->id));
+
+    // A pending status a minute newer than the row: remembered, row unchanged.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'pending', 60), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'pending'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'pending'));
+
+    // The redirect's row is older than the remembered pending status: only
+    // forgetting it on the click lets the review show.
+    $webpage->click($button)
+        ->assertSee($toast)
+        ->assertMissing(sprintf('[data-bulk-select="%d"]', $actionRequest->id))
+        ->assertMissing($button)
+        ->assertNoSmoke();
+
+    expect($actionRequest->fresh()->status)->toBe($status);
+})->with([
+    'approve' => ['[data-action-approve]', 'Action approved and queued.', ActionRequestStatus::Approved],
+    'decline' => ['[data-action-decline]', 'Action rejected.', ActionRequestStatus::Rejected],
+]);
+
+test('a live status with an unreadable timestamp still applies over a remembered one', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'failed', 60), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+    $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id));
+
+    // Cannot be ordered against the remembered failure: a tie, so it applies.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        ...actionQueueFailureLiveStatus($actionRequest, 'executing', 0),
+        'updated_at' => 'not-a-timestamp',
+    ], 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'executing'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'executing'));
+
+    $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});

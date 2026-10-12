@@ -33,8 +33,9 @@ function wholeSeconds(iso: string | null): number {
  * when the live change is newer, below 0 when it is older, 0 when they
  * cannot be told apart. `updated_at` is stored to the second, so a pair in
  * the same second is ordered by lifecycle step (pending < approved <
- * executing < completed/failed/rejected). An unreadable live timestamp
- * counts as older, an unreadable other one as newer.
+ * executing < completed/failed/rejected). An unreadable timestamp on
+ * either side is a tie: the live path then applies the event, as it did
+ * before statuses were remembered, and a reseed lets the server row win.
  */
 export function compareLiveStatus(
     live: LiveStatusChange,
@@ -43,12 +44,8 @@ export function compareLiveStatus(
     const liveAt = wholeSeconds(live.updated_at);
     const otherAt = wholeSeconds(other.updated_at);
 
-    if (Number.isNaN(liveAt)) {
-        return -1;
-    }
-
-    if (Number.isNaN(otherAt)) {
-        return 1;
+    if (Number.isNaN(liveAt) || Number.isNaN(otherAt)) {
+        return 0;
     }
 
     if (liveAt !== otherAt) {
