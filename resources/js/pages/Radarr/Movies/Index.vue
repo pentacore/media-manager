@@ -88,18 +88,26 @@ const yearFilter = ref<string>('all');
 const studioFilter = ref<string>('all');
 const syncing = ref(false);
 
+// The POST busts the cached Radarr reads (at most once per 30 s per
+// connection, LibraryCacheSync) and redirects back; `only` turns that
+// redirect into a reload of the two lists, and the toast says which it was.
 function syncMovies(): void {
     if (syncing.value) {
         return;
     }
 
     syncing.value = true;
-    router.reload({
-        only: ['movies', 'qualityProfiles'],
-        onFinish: () => {
-            syncing.value = false;
+    router.post(
+        MovieController.sync.url(),
+        {},
+        {
+            only: ['movies', 'qualityProfiles'],
+            preserveScroll: true,
+            onFinish: () => {
+                syncing.value = false;
+            },
         },
-    });
+    );
 }
 
 const yearOptions = computed<number[]>(() => {
@@ -270,6 +278,7 @@ function is4k(movie: Movie): boolean {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-library-sync
                     :disabled="syncing"
                     @click="syncMovies"
                 >

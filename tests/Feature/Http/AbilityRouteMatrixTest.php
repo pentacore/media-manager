@@ -106,6 +106,7 @@ dataset('admin-only routes', [
     'whisparr search' => ['POST', 'media.whisparr.actions.search', []],
     'whisparr delete' => ['POST', 'media.whisparr.actions.delete', []],
     'whisparr bulk' => ['POST', 'media.whisparr.bulk', []],
+    'whisparr sync' => ['POST', 'media.whisparr.sync', []],
     'sabnzbd bulk' => ['POST', 'sabnzbd.queue.bulk', []],
     'queue bulk' => ['POST', 'media.library.activity.queue.bulk', []],
 ]);

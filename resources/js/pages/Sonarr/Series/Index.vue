@@ -98,18 +98,26 @@ const profileFilter = ref<string>('all');
 const query = ref('');
 const syncing = ref(false);
 
+// The POST busts the cached Sonarr reads (at most once per 30 s per
+// connection, LibraryCacheSync) and redirects back; `only` turns that
+// redirect into a reload of the two lists, and the toast says which it was.
 function syncSeries(): void {
     if (syncing.value) {
         return;
     }
 
     syncing.value = true;
-    router.reload({
-        only: ['series', 'qualityProfiles'],
-        onFinish: () => {
-            syncing.value = false;
+    router.post(
+        SeriesController.sync.url(),
+        {},
+        {
+            only: ['series', 'qualityProfiles'],
+            preserveScroll: true,
+            onFinish: () => {
+                syncing.value = false;
+            },
         },
-    });
+    );
 }
 
 const visible = computed<Series[]>(() => {
@@ -263,6 +271,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-library-sync
                     :disabled="syncing"
                     @click="syncSeries"
                 >

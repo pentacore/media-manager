@@ -163,18 +163,26 @@ function bulkDone(summary: BulkSummary): void {
     }
 }
 
+// The POST busts the cached Whisparr reads (at most once per 30 s per
+// connection, LibraryCacheSync) and redirects back; `only` turns that
+// redirect into a reload of the two lists, and the toast says which it was.
 function sync(): void {
     if (syncing.value) {
         return;
     }
 
     syncing.value = true;
-    router.reload({
-        only: ['library', 'qualityProfiles'],
-        onFinish: () => {
-            syncing.value = false;
+    router.post(
+        WhisparrController.sync.url(),
+        {},
+        {
+            only: ['library', 'qualityProfiles'],
+            preserveScroll: true,
+            onFinish: () => {
+                syncing.value = false;
+            },
         },
-    });
+    );
 }
 </script>
 
@@ -213,6 +221,7 @@ function sync(): void {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-library-sync
                     :disabled="syncing"
                     @click="sync"
                 >
