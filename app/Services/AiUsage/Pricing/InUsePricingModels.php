@@ -107,9 +107,21 @@ final class InUsePricingModels
             }
         }
 
-        foreach ($taskModelResolver->rows() as $aiTaskModel) {
-            if ($aiTaskModel->task === AiTask::Decision && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE && filled($aiTaskModel->model)) {
-                $pairs[] = [(string) ($aiTaskModel->provider ?? $this->aiSettings->defaultTextProvider()), (string) $aiTaskModel->model];
+        foreach (AiTask::cases() as $aiTask) {
+            if ($aiTask === AiTask::Failover) {
+                continue;
+            }
+
+            $scopes = $taskModelResolver->rows()
+                ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask)
+                ->pluck('scope')
+                ->push(AiTaskModel::DEFAULT_SCOPE)
+                ->unique();
+
+            foreach ($scopes as $scope) {
+                foreach ($taskModelResolver->configuredSelections($aiTask, $scope) as $configured) {
+                    $pairs[] = [$configured['provider'], $configured['model']];
+                }
             }
         }
 

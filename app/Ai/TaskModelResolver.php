@@ -136,6 +136,30 @@ final class TaskModelResolver
     }
 
     /**
+     * Every tier in the scope that names a model, with the pair it would run
+     * on (positions are one-based, like TierOutcome) — for checks (pricing,
+     * hard-cap warnings) that must cover tiers that are not live right now.
+     * Inherit tiers are left out: resolve() covers them.
+     *
+     * @return list<array{position: int, provider: string, model: string}>
+     */
+    public function configuredSelections(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): array
+    {
+        $selections = [];
+
+        foreach ($this->tiers($aiTask, $scope)->values() as $index => $aiTaskModel) {
+            if (blank($aiTaskModel->model)) {
+                continue;
+            }
+
+            [$provider, $model] = $this->tierPair($aiTask, $aiTaskModel);
+            $selections[] = ['position' => $index + 1, 'provider' => $provider, 'model' => $model];
+        }
+
+        return $selections;
+    }
+
+    /**
      * The scope's first tier.
      */
     public function row(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ?AiTaskModel

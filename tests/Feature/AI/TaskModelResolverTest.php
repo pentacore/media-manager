@@ -223,3 +223,25 @@ test('saving a row flushes the memoised rows', function (): void {
 
     expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
 });
+
+test('configured selections list every tier that names a model, one-based, leaving inherit tiers out', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-a')->conditions(20)->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('anthropic', 'claude-b')->position(1)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->position(0)->create();
+
+    expect(resolver()->configuredSelections(AiTask::Chat))->toBe([
+        ['position' => 1, 'provider' => 'openai', 'model' => 'gpt-a'],
+        ['position' => 2, 'provider' => 'anthropic', 'model' => 'claude-b'],
+    ])->and(resolver()->configuredSelections(AiTask::Title))->toBe([]);
+});
+
+test('configured selections resolve a tier like a run would', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'auto')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->state(['model' => 'gpt-no-provider'])->position(1)->create();
+
+    expect(resolver()->configuredSelections(AiTask::Title))->toBe([
+        ['position' => 1, 'provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5'],
+        ['position' => 2, 'provider' => 'openai', 'model' => 'gpt-no-provider'],
+    ]);
+});

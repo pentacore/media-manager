@@ -78,3 +78,30 @@ test('a decision event override with its own model is reported under its event',
         ['role' => 'Decision agent (radarr:Grab)', 'provider' => 'openai', 'model' => 'event-model'],
     ]);
 });
+
+test('unpriced lower tiers are reported with their tier number, live picks keep their role', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('chat-model', 'title-model', 'sub-agent-model', 'decision-model', 'chat-one');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-two')->position(1)->create();
+    AiTaskModel::factory()->event('some_event')->selecting('openai', 'event-one')->position(0)->create();
+    AiTaskModel::factory()->event('some_event')->selecting('openai', 'event-two')->position(1)->create();
+
+    $unpriced = resolve(UnpricedModelDetector::class)->forHardCap();
+
+    expect($unpriced)->toContain(
+        ['role' => 'Chat (tier 2)', 'provider' => 'openai', 'model' => 'chat-two'],
+        ['role' => 'Decision agent (some_event)', 'provider' => 'openai', 'model' => 'event-one'],
+        ['role' => 'Decision agent (some_event, tier 2)', 'provider' => 'openai', 'model' => 'event-two'],
+    )->and(array_column($unpriced, 'role'))->not->toContain('Chat (tier 1)', 'Decision agent (some_event, tier 1)');
+});
+
+test('a tier equal to the live pick of its role is not listed twice', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('title-model', 'sub-agent-model', 'decision-model');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(1)->create();
+
+    expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
+        ->toContain('Chat')->not->toContain('Chat (tier 2)');
+});
