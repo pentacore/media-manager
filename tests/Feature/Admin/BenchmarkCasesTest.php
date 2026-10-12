@@ -16,6 +16,7 @@ use App\Models\ActivityLog;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkRun;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
@@ -130,21 +131,26 @@ test('the create form has the option props and default rubrics', function (): vo
             ->missing('defaultRubrics.decision'));
 });
 
-test('the create form pre-fills a chat draft with the earlier conversation turns only', function (): void {
+test('the create form pre-fills a chat draft with the earlier conversation turns only', function (int $usageDelaySeconds): void {
     $this->actingAs(User::factory()->admin()->create());
     $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
     DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => now()->subHour(), 'updated_at' => now()->subHour()]);
 
+    // The SDK stores the captured turn's own messages before its usage row.
     $messages = [
-        ['user', 'First question', now()->subMinutes(30)],
-        ['assistant', 'First answer', now()->subMinutes(29)],
-        ['user', 'Second question', now()->subMinutes(5)],
-        ['assistant', 'Later answer', now()->addMinutes(5)],
+        ['user', 'First question', $turnAt->subMinutes(30)],
+        ['assistant', 'First answer', $turnAt->subMinutes(29)],
+        ['user', 'Second question', $turnAt->subMinutes(5)],
+        ['assistant', 'Second answer', $turnAt->subMinutes(4)],
+        ['user', 'Third question', $turnAt],
+        ['assistant', 'Third answer', $turnAt],
+        ['user', 'Later question', $turnAt->addMinutes(5)],
     ];
 
     foreach ($messages as [$role, $content, $at]) {
         DB::table('agent_conversation_messages')->insert([
-            'id' => (string) Str::uuid(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+            'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
             'role' => $role, 'content' => $content, 'attachments' => '[]', 'steps' => '[]', 'usage' => '[]',
             'meta' => '[]', 'created_at' => $at, 'updated_at' => $at,
         ]);
@@ -152,6 +158,7 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
 
     $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Third question', [
         'conversation_id' => $conversationId, 'prompt_tokens' => 321, 'completion_tokens' => 45,
+        'created_at' => $turnAt->addSeconds($usageDelaySeconds),
     ]);
     benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Dune'], 'result' => '[]']);
     benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Arrival'], 'result' => '[1]']);
@@ -166,6 +173,7 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
                 ['role' => 'user', 'content' => 'First question'],
                 ['role' => 'assistant', 'content' => 'First answer'],
                 ['role' => 'user', 'content' => 'Second question'],
+                ['role' => 'assistant', 'content' => 'Second answer'],
             ])
             ->where('draft.input.mode', resolve(AiSettings::class)->mode()->value)
             ->where('draft.fixtures.0.arguments.query', 'Dune')
@@ -177,7 +185,10 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
             ->where('draft.source_completion_tokens', 45)
             ->where('draft.source_truncated', false)
             ->where('draftWarnings', []));
-});
+})->with([
+    'usage row in the same second' => [0],
+    'usage row in the next second' => [1],
+]);
 
 test('a decision draft expects the write tool calls', function (): void {
     $this->actingAs(User::factory()->admin()->create());
@@ -253,6 +264,17 @@ test('records that cannot become a case redirect back with an error toast', func
     'unknown agent' => [['agent_class' => 'App\\Nope']],
     'not benchmarkable' => [['agent_class' => BenchmarkJudgeAgent::class]],
 ]);
+
+test('a usage row of a benchmark run cannot become a case', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $record = benchmarkTextUsage(MediaAgent::class, 'Hi', ['benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+
+    $this->from(route('admin.ai-usage.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+        ->assertRedirect(route('admin.ai-usage.index'))
+        ->assertInertiaFlash('toast.type', 'error')
+        ->assertInertiaFlash('toast.message', "Benchmark runs can't be captured as cases.");
+});
 
 test('store persists a case with the source fields and audits it', function (): void {
     $admin = User::factory()->admin()->create();

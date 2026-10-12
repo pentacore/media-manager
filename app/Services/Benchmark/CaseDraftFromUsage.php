@@ -115,12 +115,13 @@ final readonly class CaseDraftFromUsage
     }
 
     /**
-     * Why a usage row cannot become a case, or null when its kind and
+     * Why a usage row cannot become a case, or null when its origin, kind and
      * recorded prompt allow it (the agent is checked when drafting).
      */
     public static function captureBlocker(AiUsageRecord $aiUsageRecord): ?string
     {
         return match (true) {
+            $aiUsageRecord->benchmark_run_id !== null => "Benchmark runs can't be captured as cases.",
             $aiUsageRecord->kind !== AiUsageKind::Text => 'Only text invocations can become benchmark cases.',
             blank($aiUsageRecord->prompt_text) => 'This invocation has no recorded prompt.',
             str_contains((string) $aiUsageRecord->prompt_text, self::ATTACHMENTS_MARKER) => 'Invocations with attachments cannot become benchmark cases.',
@@ -142,6 +143,12 @@ final readonly class CaseDraftFromUsage
     }
 
     /**
+     * The conversation turns before the captured one. The SDK stores a turn's
+     * messages before its usage row and timestamps are second-precise, so
+     * every message up to the end of the record's second is read and the
+     * captured turn (the last user message that is the recorded prompt, and
+     * everything after it) is cut off.
+     *
      * @return list<array{role: string, content: string}>
      */
     private function history(AiUsageRecord $aiUsageRecord): array
@@ -150,14 +157,23 @@ final readonly class CaseDraftFromUsage
             return [];
         }
 
-        return DB::table('agent_conversation_messages')
+        $messages = DB::table('agent_conversation_messages')
             ->where('conversation_id', $aiUsageRecord->conversation_id)
             ->whereIn('role', ['user', 'assistant'])
-            ->where('created_at', '<', $aiUsageRecord->created_at)->oldest()
+            ->where('created_at', '<', $aiUsageRecord->created_at->startOfSecond()->addSecond())
+            ->orderBy('created_at')
             ->orderBy('id')
             ->get(['role', 'content'])
             ->map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])
             ->all();
+
+        for ($index = count($messages) - 1; $index >= 0; $index--) {
+            if ($messages[$index]['role'] === 'user' && $messages[$index]['content'] === $aiUsageRecord->prompt_text) {
+                return array_slice($messages, 0, $index);
+            }
+        }
+
+        return $messages;
     }
 
     /**

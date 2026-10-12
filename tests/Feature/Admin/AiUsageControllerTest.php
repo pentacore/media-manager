@@ -725,3 +725,13 @@ test('show flags whether an invocation can become a benchmark case', function (s
     'no prompt' => ['no prompt', ['prompt_text' => null], false],
     'non-text kind' => ['kind', ['prompt_text' => 'Embed me', 'kind' => AiUsageKind::Embeddings], false],
 ]);
+
+test('an invocation of a benchmark run is not capturable', function (): void {
+    $record = AiUsageRecord::factory()->create(['prompt_text' => 'Find severance.', 'benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('capturable', false)
+        ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");
+});
