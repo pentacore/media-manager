@@ -7,7 +7,6 @@ namespace App\Http\Controllers\AI;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\AnsweredBy;
 use App\Ai\ChatFailure;
-use App\Ai\ChatTurnContext;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Routing\ToolPayload;
@@ -182,7 +181,7 @@ class ChatController extends Controller
             }
         });
 
-        return $stream->usingProtocol((new ChatStreamProtocol)->forTurn(resolve(ChatTurnContext::class)));
+        return $stream->usingProtocol(new ChatStreamProtocol);
     }
 
     /**

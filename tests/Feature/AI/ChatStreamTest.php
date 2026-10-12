@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Events\AgentStreamed;
@@ -114,6 +115,7 @@ test('a resolver failure at the end of a stream leaves answeredBy off without br
     MediaAgent::fake(['Hello from the stream.']);
     $taskModelResolver = resolve(TaskModelResolver::class);
     // Everything resolves normally except the lookup made for the closing frame.
+    Exceptions::fake();
     app()->bind(function () use ($taskModelResolver): TaskModelResolver {
         $closingFrame = array_filter(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), fn (array $frame): bool => ($frame['function'] ?? '') === 'completionAttributes');
 
@@ -127,6 +129,8 @@ test('a resolver failure at the end of a stream leaves answeredBy off without br
 
     expect(chatStreamFrame($body, 'RUN_FINISHED'))->toContain('"threadId"')
         ->and(chatStreamFrame($body, 'RUN_FINISHED'))->not->toContain('answeredBy');
+
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'boom');
 });
 
 test('streaming a first turn reports the minted conversation id as the run thread', function (): void {

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\FreePoolOverflowBehavior;
@@ -169,9 +168,8 @@ test('the label names the tier that answered even when it changed after the page
 
     // Tier 1 is healthy at page load; the pool runs dry before the turn is sent.
     AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
-    // The in-process test server keeps scoped state between requests; a real request starts fresh.
+    // Pool headroom is cached for a short while; drop it so this turn sees the new usage.
     resolve(PoolHeadroom::class)->flush();
-    resolve(TaskModelResolver::class)->flush();
 
     $webpage->fill('[data-chat-input]', 'Hi')
         ->keys('[data-chat-input]', 'Enter')

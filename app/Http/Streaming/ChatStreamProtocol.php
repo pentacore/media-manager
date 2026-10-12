@@ -6,7 +6,6 @@ namespace App\Http\Streaming;
 
 use App\Ai\AnsweredBy;
 use App\Ai\ChatFailure;
-use App\Ai\ChatTurnContext;
 use Closure;
 use Generator;
 use Illuminate\Support\Facades\DB;
@@ -32,21 +31,6 @@ use Throwable;
  */
 final class ChatStreamProtocol extends AgentUserInteractionProtocol
 {
-    private ?ChatTurnContext $turnOverride = null;
-
-    /**
-     * Remember the turn's model/reasoning override. The frames are written
-     * after the controller returns, by which point a host may already have
-     * torn down the request's scoped state, so the closing frame re-applies it.
-     */
-    public function forTurn(ChatTurnContext $chatTurnContext): self
-    {
-        $this->turnOverride = new ChatTurnContext;
-        $this->turnOverride->apply($chatTurnContext->provider, $chatTurnContext->model, $chatTurnContext->reasoning);
-
-        return $this;
-    }
-
     #[Override]
     public function response(StreamableAgentResponse $response): Response
     {
@@ -123,10 +107,6 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
         $attributes = parent::completionAttributes($usage, $reason, $provider, $model);
 
         try {
-            if ($this->turnOverride instanceof ChatTurnContext) {
-                resolve(ChatTurnContext::class)->apply($this->turnOverride->provider, $this->turnOverride->model, $this->turnOverride->reasoning);
-            }
-
             $attributes['answeredBy'] = AnsweredBy::forChat($provider, $model);
         } catch (Throwable $throwable) {
             report($throwable);

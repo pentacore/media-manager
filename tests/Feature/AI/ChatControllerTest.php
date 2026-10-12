@@ -238,7 +238,9 @@ test('send names who answered with the resolved reasoning and tier', function ()
 
     expect($answeredBy)->toHaveKeys(['provider', 'model', 'reasoning_label', 'tier'])
         ->and($answeredBy['provider'])->toBe('openai')
-        ->and($answeredBy['model'])->toBe('gpt-5.6-luna');
+        ->and($answeredBy['model'])->toBe('gpt-5.6-luna')
+        ->and($answeredBy['reasoning_label'])->toBeString()
+        ->and($answeredBy['tier'])->toBeNull();
 });
 
 test('send refuses with 429 when the chat model has exhausted its rate limit and no failover is configured', function (): void {
