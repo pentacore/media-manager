@@ -62,11 +62,11 @@ test('an admin sets up a run, estimates it and starts it', function (): void {
         ->assertSeeIn('[data-benchmark-matrix]', 'gpt-5-mini')
         ->assertSeeIn('[data-benchmark-matrix-row="0"]', '8.0');
 
-    $run = BenchmarkRun::query()->sole();
+    $benchmarkRun = BenchmarkRun::query()->sole();
 
-    expect($run->name)->toBe('Title bake-off')
-        ->and($run->status)->toBe(BenchmarkRunStatus::Completed)
-        ->and($run->candidates)->toHaveCount(2);
+    expect($benchmarkRun->name)->toBe('Title bake-off')
+        ->and($benchmarkRun->status)->toBe(BenchmarkRunStatus::Completed)
+        ->and($benchmarkRun->candidates)->toHaveCount(2);
 });
 
 test('a finished run shows the matrix and the drawer compares both candidates', function (): void {
@@ -86,7 +86,7 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
         'latency_ms' => 1200,
         'score_detail' => ['score_10' => 4, 'rationale' => 'Missed Tenet', 'tool_log' => [['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'Nolan'], 'result' => null, 'hit' => false]]],
     ]);
-    $cell = BenchmarkResult::query()->where('candidate_index', 0)->sole();
+    $benchmarkResult = BenchmarkResult::query()->where('candidate_index', 0)->sole();
 
     visit(route('admin.benchmarks.runs.show', $run, absolute: false))
         ->assertNoSmoke()
@@ -96,7 +96,7 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
         ->assertSeeIn('[data-benchmark-matrix-row="1"]', 'self-judged')
         ->assertSeeIn('[data-benchmark-case-grid]', 'Nolan chat')
         ->assertMissing('[data-benchmark-rejudge]')
-        ->click(sprintf('[data-benchmark-cell="%d"]', $cell->id))
+        ->click(sprintf('[data-benchmark-cell="%d"]', $benchmarkResult->id))
         ->assertVisible('[data-benchmark-drawer]')
         ->assertSeeIn('[data-benchmark-drawer-candidate="0"]', 'Nolan Films Nano')
         ->assertSeeIn('[data-benchmark-drawer-candidate="0"]', 'Very accurate')

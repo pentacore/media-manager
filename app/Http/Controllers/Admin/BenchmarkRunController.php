@@ -38,7 +38,7 @@ class BenchmarkRunController extends Controller
 
     public function index(): Response
     {
-        $paginator = BenchmarkRun::query()
+        $lengthAwarePaginator = BenchmarkRun::query()
             ->with('creator:id,name')
             ->latest()
             ->latest('id')
@@ -47,7 +47,7 @@ class BenchmarkRunController extends Controller
 
         return Inertia::render('Admin/Benchmarks/Runs/Index', [
             'runs' => [
-                'data' => $paginator->getCollection()->map(static fn (BenchmarkRun $benchmarkRun): array => [
+                'data' => $lengthAwarePaginator->getCollection()->map(static fn (BenchmarkRun $benchmarkRun): array => [
                     'id' => $benchmarkRun->id,
                     'name' => $benchmarkRun->name,
                     'status' => $benchmarkRun->status->value,
@@ -59,12 +59,12 @@ class BenchmarkRunController extends Controller
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
                 ])->all(),
-                'links' => $paginator->linkCollection()->toArray(),
+                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                    'total' => $paginator->total(),
-                    'per_page' => $paginator->perPage(),
+                    'current_page' => $lengthAwarePaginator->currentPage(),
+                    'last_page' => $lengthAwarePaginator->lastPage(),
+                    'total' => $lengthAwarePaginator->total(),
+                    'per_page' => $lengthAwarePaginator->perPage(),
                 ],
             ],
         ]);
@@ -72,7 +72,7 @@ class BenchmarkRunController extends Controller
 
     public function create(TaskModelResolver $taskModelResolver, ModelCatalog $modelCatalog): Response
     {
-        $judge = $taskModelResolver->resolve(AiTask::BenchmarkJudge);
+        $resolvedSelection = $taskModelResolver->resolve(AiTask::BenchmarkJudge);
 
         return Inertia::render('Admin/Benchmarks/Runs/Create', [
             'cases' => BenchmarkCase::query()
@@ -93,9 +93,9 @@ class BenchmarkRunController extends Controller
             'modelCapabilities' => $modelCatalog->reasoningCapabilities(),
             'reasoningProviders' => array_values(array_filter($modelCatalog->textProviders(), ReasoningOptions::supportsProvider(...))),
             'judgeDefault' => [
-                'provider' => $judge->provider,
-                'model' => $judge->model,
-                'reasoning' => $judge->reasoning->value,
+                'provider' => $resolvedSelection->provider,
+                'model' => $resolvedSelection->model,
+                'reasoning' => $resolvedSelection->reasoning->value,
             ],
             'currentTiers' => $this->currentTiers($taskModelResolver),
         ]);

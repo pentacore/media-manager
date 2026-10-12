@@ -261,9 +261,9 @@ test('show returns the run, counts and the aggregated matrix', function (): void
 test('the drawer partial returns every candidate result for the clicked case', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     [$run, $stuck] = seedBenchmarkRun();
-    $clicked = $run->results()->where('benchmark_case_id', $stuck->id)->where('candidate_index', 1)->firstOrFail();
+    $benchmarkResult = $run->results()->where('benchmark_case_id', $stuck->id)->where('candidate_index', 1)->firstOrFail();
 
-    $this->get(route('admin.benchmarks.runs.show', ['benchmarkRun' => $run, 'result' => $clicked->id]), [
+    $this->get(route('admin.benchmarks.runs.show', ['benchmarkRun' => $run, 'result' => $benchmarkResult->id]), [
         'X-Inertia' => 'true',
         'X-Inertia-Partial-Component' => 'Admin/Benchmarks/Runs/Show',
         'X-Inertia-Partial-Data' => 'resultDetail',

@@ -42,11 +42,11 @@ class BenchmarkCaseController extends Controller
         $task = AiTask::tryFrom($request->string('task')->value());
         $tag = $request->string('tag')->trim()->value();
 
-        $paginator = $this->casesQuery($task, $tag)->paginate(self::PER_PAGE)->withQueryString();
+        $lengthAwarePaginator = $this->casesQuery($task, $tag)->paginate(self::PER_PAGE)->withQueryString();
 
         return Inertia::render('Admin/Benchmarks/Cases/Index', [
             'cases' => [
-                'data' => $paginator->getCollection()->map(static fn (BenchmarkCase $benchmarkCase): array => [
+                'data' => $lengthAwarePaginator->getCollection()->map(static fn (BenchmarkCase $benchmarkCase): array => [
                     'id' => $benchmarkCase->id,
                     'task' => $benchmarkCase->task->value,
                     'task_label' => $benchmarkCase->task->label(),
@@ -57,12 +57,12 @@ class BenchmarkCaseController extends Controller
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
-                'links' => $paginator->linkCollection()->toArray(),
+                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                    'total' => $paginator->total(),
-                    'per_page' => $paginator->perPage(),
+                    'current_page' => $lengthAwarePaginator->currentPage(),
+                    'last_page' => $lengthAwarePaginator->lastPage(),
+                    'total' => $lengthAwarePaginator->total(),
+                    'per_page' => $lengthAwarePaginator->perPage(),
                 ],
             ],
             'tasks' => $this->taskOptions(),

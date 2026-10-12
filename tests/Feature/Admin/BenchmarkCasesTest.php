@@ -124,7 +124,7 @@ test('the create form has the option props and default rubrics', function (): vo
             ->has('writeTools')
             ->where('writeTools', fn ($tools): bool => collect($tools)->contains(ToolNameResolver::resolve(resolve(ProposeActionTool::class)))
                 && collect($tools)->contains(ToolNameResolver::resolve(resolve(UpsertModelPriceTool::class)))
-                && ! collect($tools)->contains(ToolNameResolver::resolve(resolve(SearchMediaTool::class))))
+                && collect($tools)->doesntContain(ToolNameResolver::resolve(resolve(SearchMediaTool::class))))
             ->has('defaultRubrics.chat')
             ->has('defaultRubrics.title')
             ->missing('defaultRubrics.decision'));
@@ -150,13 +150,13 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
         ]);
     }
 
-    $record = benchmarkTextUsage(MediaAgent::class, 'Third question', [
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Third question', [
         'conversation_id' => $conversationId, 'prompt_tokens' => 321, 'completion_tokens' => 45,
     ]);
-    benchmarkToolCall($record, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Dune'], 'result' => '[]']);
-    benchmarkToolCall($record, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Arrival'], 'result' => '[1]']);
+    benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Dune'], 'result' => '[]']);
+    benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Arrival'], 'result' => '[1]']);
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Admin/Benchmarks/Cases/Form')
@@ -172,7 +172,7 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
             ->where('draft.fixtures.1.arguments.query', 'Arrival')
             ->where('draft.scoring.type', 'judge')
             ->where('draft.scoring.pass_threshold', 7)
-            ->where('draft.source_invocation_id', $record->invocation_id)
+            ->where('draft.source_invocation_id', $aiUsageRecord->invocation_id)
             ->where('draft.source_prompt_tokens', 321)
             ->where('draft.source_completion_tokens', 45)
             ->where('draft.source_truncated', false)
@@ -181,11 +181,11 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
 
 test('a decision draft expects the write tool calls', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
-    benchmarkToolCall($record, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Dune']]);
-    benchmarkToolCall($record, ProposeActionTool::class, 'ProposeActionTool', ['arguments' => ['action' => 'retry', 'id' => 4]]);
+    $aiUsageRecord = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
+    benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => ['query' => 'Dune']]);
+    benchmarkToolCall($aiUsageRecord, ProposeActionTool::class, 'ProposeActionTool', ['arguments' => ['action' => 'retry', 'id' => 4]]);
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page
             ->where('draft.task', 'decision')
             ->has('draft.fixtures', 2)
@@ -197,13 +197,13 @@ test('a decision draft expects the write tool calls', function (): void {
 
 test('a price updater draft takes providers from the prompt and prices from upsert calls', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh prices for Google and OpenAI models');
-    benchmarkToolCall($record, UpsertModelPriceTool::class, 'UpsertModelPriceTool', ['arguments' => [
+    $aiUsageRecord = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh prices for Google and OpenAI models');
+    benchmarkToolCall($aiUsageRecord, UpsertModelPriceTool::class, 'UpsertModelPriceTool', ['arguments' => [
         'provider' => 'google', 'model' => 'gemini-2.5-pro', 'input_per_mtok' => 1.25, 'output_per_mtok' => 10,
         'cache_read_per_mtok' => null, 'cache_write_per_mtok' => null, 'source_url' => 'https://x',
     ]]);
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page
             ->where('draft.task', 'price_updater')
             ->where('draft.input.providers', ['gemini', 'openai'])
@@ -217,19 +217,19 @@ test('a price updater draft takes providers from the prompt and prices from upse
 
 test('a price updater draft without a recognisable provider warns', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh the catalogue');
+    $aiUsageRecord = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh the catalogue');
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page->where('draft.input.providers', [])->has('draftWarnings', 1));
 });
 
 test('truncated or legacy invocations and a cut prompt are warned about', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(TitleAgent::class, 'A cut prompt…');
-    benchmarkToolCall($record, SearchMediaTool::class, 'SearchMediaTool', ['io_truncated' => true]);
-    benchmarkToolCall($record, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => null, 'result' => null, 'tool_name' => null]);
+    $aiUsageRecord = benchmarkTextUsage(TitleAgent::class, 'A cut prompt…');
+    benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['io_truncated' => true]);
+    benchmarkToolCall($aiUsageRecord, SearchMediaTool::class, 'SearchMediaTool', ['arguments' => null, 'result' => null, 'tool_name' => null]);
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page
             ->has('draftWarnings', 3)
             ->where('draft.source_truncated', true)
@@ -263,19 +263,19 @@ test('store persists a case with the source fields and audits it', function (): 
         'source_invocation_id' => 'inv-1', 'source_prompt_tokens' => 10, 'source_completion_tokens' => 5, 'source_truncated' => true,
     ]))->assertRedirect(route('admin.benchmarks.cases.index'));
 
-    $case = BenchmarkCase::query()->firstOrFail();
-    expect($case->task)->toBe(AiTask::Title)
-        ->and($case->name)->toBe('Title for a short chat')
-        ->and($case->tags)->toBe(['smoke'])
-        ->and($case->input)->toEqual(['prompt' => 'Which films did Nolan direct?'])
-        ->and($case->fixtures)->toEqual([['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'Dune'], 'result' => '[]']])
-        ->and($case->scoring)->toEqual(['type' => 'judge', 'rubric_note' => null, 'pass_threshold' => 7])
-        ->and($case->source_invocation_id)->toBe('inv-1')
-        ->and($case->source_prompt_tokens)->toBe(10)
-        ->and($case->source_truncated)->toBeTrue();
+    $benchmarkCase = BenchmarkCase::query()->firstOrFail();
+    expect($benchmarkCase->task)->toBe(AiTask::Title)
+        ->and($benchmarkCase->name)->toBe('Title for a short chat')
+        ->and($benchmarkCase->tags)->toBe(['smoke'])
+        ->and($benchmarkCase->input)->toEqual(['prompt' => 'Which films did Nolan direct?'])
+        ->and($benchmarkCase->fixtures)->toEqual([['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'Dune'], 'result' => '[]']])
+        ->and($benchmarkCase->scoring)->toEqual(['type' => 'judge', 'rubric_note' => null, 'pass_threshold' => 7])
+        ->and($benchmarkCase->source_invocation_id)->toBe('inv-1')
+        ->and($benchmarkCase->source_prompt_tokens)->toBe(10)
+        ->and($benchmarkCase->source_truncated)->toBeTrue();
 
-    $log = ActivityLog::query()->where('action', 'benchmark_case.created')->firstOrFail();
-    expect($log->subject_id)->toBe($case->id);
+    $activityLog = ActivityLog::query()->where('action', 'benchmark_case.created')->firstOrFail();
+    expect($activityLog->subject_id)->toBe($benchmarkCase->id);
 });
 
 test('store accepts decision, price updater and chat payload shapes', function (): void {
@@ -303,8 +303,8 @@ test('store accepts decision, price updater and chat payload shapes', function (
     ]))->assertRedirect();
 
     expect(BenchmarkCase::query()->count())->toBe(3);
-    $decision = BenchmarkCase::query()->where('name', 'D')->firstOrFail();
-    expect($decision->input)->toEqual(['prompt' => 'Which films did Nolan direct?', 'event_key' => $eventKey]);
+    $benchmarkCase = BenchmarkCase::query()->where('name', 'D')->firstOrFail();
+    expect($benchmarkCase->input)->toEqual(['prompt' => 'Which films did Nolan direct?', 'event_key' => $eventKey]);
     $chat = BenchmarkCase::query()->where('name', 'C')->firstOrFail();
     expect($chat->input['mode'])->toBe('advisory')->and($chat->scoring['pass_threshold'])->toBe(9);
 });
@@ -396,9 +396,9 @@ test('a tool class the container cannot build does not break the draft', functio
     };
     class_alias($tool::class, 'App\\Fake\\UnresolvableBenchmarkTool');
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
-    benchmarkToolCall($record, 'App\\Fake\\UnresolvableBenchmarkTool', 'Odd');
+    $aiUsageRecord = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
+    benchmarkToolCall($aiUsageRecord, 'App\\Fake\\UnresolvableBenchmarkTool', 'Odd');
 
-    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page->has('draft.fixtures', 1)->has('draft.scoring.expected', 0));
 });

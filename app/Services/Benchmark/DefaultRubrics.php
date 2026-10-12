@@ -25,7 +25,7 @@ final class DefaultRubrics
     {
         return match ($aiTask) {
             AiTask::Title => "Concise (at most 6 words), no quotes or trailing punctuation, accurately describes the user's request.",
-            AiTask::Chat => 'Correct according to the tool results, answers the user\'s question, invents no facts, follows the mode (in advisory mode it never claims to have performed an action).',
+            AiTask::Chat => "Correct according to the tool results, answers the user's question, invents no facts, follows the mode (in advisory mode it never claims to have performed an action).",
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => 'Accurate diagnosis according to the tool results, actionable, invents no facts.',
             default => throw new InvalidArgumentException(sprintf('The %s task has no benchmark rubric.', $aiTask->value)),
         };

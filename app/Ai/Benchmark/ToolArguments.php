@@ -18,7 +18,7 @@ final class ToolArguments
     public static function normalise(array $arguments): array
     {
         if (array_is_list($arguments)) {
-            return array_map(static fn (mixed $value): mixed => self::normaliseValue($value), $arguments);
+            return array_map(self::normaliseValue(...), $arguments);
         }
 
         $normalised = [];

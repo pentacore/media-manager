@@ -16,10 +16,10 @@ beforeEach(function (): void {
 test('the judge task follows the chat default pair without a row', function (): void {
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
 
-    $selection = resolve(TaskModelResolver::class)->resolve(AiTask::BenchmarkJudge);
+    $resolvedSelection = resolve(TaskModelResolver::class)->resolve(AiTask::BenchmarkJudge);
 
-    expect($selection->provider)->toBe('openai')
-        ->and($selection->model)->toBe('gpt-5.6-luna');
+    expect($resolvedSelection->provider)->toBe('openai')
+        ->and($resolvedSelection->model)->toBe('gpt-5.6-luna');
 });
 
 test('a saved judge row wins over the chat default', function (): void {
@@ -96,9 +96,9 @@ test('the judge prompt carries no provider or model of the configured selections
 test('the judge agent returns its structured score', function (): void {
     BenchmarkJudgeAgent::fake([['score' => 8, 'rationale' => 'Good']]);
 
-    $response = BenchmarkJudgeAgent::make()->prompt('judge this');
+    $agentResponse = BenchmarkJudgeAgent::make()->prompt('judge this');
 
-    expect($response['score'])->toBe(8)
-        ->and($response['rationale'])->toBe('Good')
+    expect($agentResponse['score'])->toBe(8)
+        ->and($agentResponse['rationale'])->toBe('Good')
         ->and(BenchmarkJudgeAgent::make()->aiTask())->toBe(AiTask::BenchmarkJudge);
 });

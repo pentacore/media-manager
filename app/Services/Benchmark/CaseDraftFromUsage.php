@@ -41,9 +41,7 @@ final readonly class CaseDraftFromUsage
 
         $blocker = self::captureBlocker($aiUsageRecord);
 
-        if ($blocker !== null) {
-            throw new CaseDraftRefused($blocker);
-        }
+        throw_if($blocker !== null, CaseDraftRefused::class, $blocker);
 
         $prompt = (string) $prompt;
         $aiTask = $this->taskFor($aiUsageRecord);
@@ -134,15 +132,11 @@ final readonly class CaseDraftFromUsage
     {
         $agentClass = $aiUsageRecord->agent_class;
 
-        if ($agentClass === null || ! class_exists($agentClass) || ! method_exists($agentClass, 'aiTask')) {
-            throw new CaseDraftRefused('This invocation was not made by a benchmarkable agent.');
-        }
+        throw_if($agentClass === null || ! class_exists($agentClass) || ! method_exists($agentClass, 'aiTask'), CaseDraftRefused::class, 'This invocation was not made by a benchmarkable agent.');
 
         $aiTask = resolve($agentClass)->aiTask();
 
-        if (! $aiTask instanceof AiTask || ! $aiTask->isBenchmarkable()) {
-            throw new CaseDraftRefused('This invocation was not made by a benchmarkable agent.');
-        }
+        throw_if(! $aiTask instanceof AiTask || ! $aiTask->isBenchmarkable(), CaseDraftRefused::class, 'This invocation was not made by a benchmarkable agent.');
 
         return $aiTask;
     }
@@ -159,8 +153,7 @@ final readonly class CaseDraftFromUsage
         return DB::table('agent_conversation_messages')
             ->where('conversation_id', $aiUsageRecord->conversation_id)
             ->whereIn('role', ['user', 'assistant'])
-            ->where('created_at', '<', $aiUsageRecord->created_at)
-            ->orderBy('created_at')
+            ->where('created_at', '<', $aiUsageRecord->created_at)->oldest()
             ->orderBy('id')
             ->get(['role', 'content'])
             ->map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])

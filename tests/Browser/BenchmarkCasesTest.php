@@ -35,12 +35,12 @@ test('an admin writes a title case with judge scoring and sees it in the list', 
         ->assertSeeIn('[data-benchmark-case-row]', 'Judge')
         ->assertSeeIn('[data-benchmark-case-row]', 'hand-written');
 
-    $case = BenchmarkCase::query()->sole();
+    $benchmarkCase = BenchmarkCase::query()->sole();
 
-    expect($case->task)->toBe(AiTask::Title)
-        ->and($case->tags)->toBe(['smoke', 'titles'])
-        ->and($case->input['prompt'])->toBe('Which films did Nolan direct?')
-        ->and($case->scoring['type'])->toBe('judge');
+    expect($benchmarkCase->task)->toBe(AiTask::Title)
+        ->and($benchmarkCase->tags)->toBe(['smoke', 'titles'])
+        ->and($benchmarkCase->input['prompt'])->toBe('Which films did Nolan direct?')
+        ->and($benchmarkCase->scoring['type'])->toBe('judge');
 });
 
 test('the form opens pre-filled from a usage record and warns about truncated data', function (): void {
@@ -105,11 +105,11 @@ test('a decision case takes expected write actions from the tool list', function
         ->click('[data-benchmark-save]')
         ->assertSee('Benchmark case created.');
 
-    $case = BenchmarkCase::query()->sole();
+    $benchmarkCase = BenchmarkCase::query()->sole();
 
-    expect($case->scoring['type'])->toBe('actions')
-        ->and($case->scoring['expected'])->toHaveCount(1)
-        ->and($case->scoring['expected'][0]['arguments'])->toBe(['action' => 'retry']);
+    expect($benchmarkCase->scoring['type'])->toBe('actions')
+        ->and($benchmarkCase->scoring['expected'])->toHaveCount(1)
+        ->and($benchmarkCase->scoring['expected'][0]['arguments'])->toBe(['action' => 'retry']);
 });
 
 test('an admin edits a case and deletes it after confirming', function (): void {
@@ -154,15 +154,15 @@ test('a price updater case saves its providers and numeric expected prices', fun
         ->click('[data-benchmark-save]')
         ->assertSee('Benchmark case created.');
 
-    $case = BenchmarkCase::query()->sole();
+    $benchmarkCase = BenchmarkCase::query()->sole();
 
-    expect($case->input['providers'])->toBe(['gemini'])
-        ->and($case->scoring['type'])->toBe('prices')
-        ->and($case->scoring['tolerance_percent'])->toEqual(2)
-        ->and($case->scoring['expected'][0]['model'])->toBe('gemini-2.5-pro')
-        ->and($case->scoring['expected'][0]['input_per_mtok'])->toEqual(1.25)
-        ->and($case->scoring['expected'][0]['output_per_mtok'])->toEqual(10)
-        ->and($case->scoring['expected'][0]['cache_read_per_mtok'])->toBeNull();
+    expect($benchmarkCase->input['providers'])->toBe(['gemini'])
+        ->and($benchmarkCase->scoring['type'])->toBe('prices')
+        ->and($benchmarkCase->scoring['tolerance_percent'])->toEqual(2)
+        ->and($benchmarkCase->scoring['expected'][0]['model'])->toBe('gemini-2.5-pro')
+        ->and($benchmarkCase->scoring['expected'][0]['input_per_mtok'])->toEqual(1.25)
+        ->and($benchmarkCase->scoring['expected'][0]['output_per_mtok'])->toEqual(10)
+        ->and($benchmarkCase->scoring['expected'][0]['cache_read_per_mtok'])->toBeNull();
 });
 
 test('saving a draft keeps the usage record it came from', function (): void {
@@ -182,11 +182,11 @@ test('saving a draft keeps the usage record it came from', function (): void {
         ->click('[data-benchmark-save]')
         ->assertSee('Benchmark case created.');
 
-    $case = BenchmarkCase::query()->sole();
+    $benchmarkCase = BenchmarkCase::query()->sole();
 
-    expect($case->source_invocation_id)->toBe($record->invocation_id)
-        ->and($case->source_prompt_tokens)->toBe(321)
-        ->and($case->source_completion_tokens)->toBe(45);
+    expect($benchmarkCase->source_invocation_id)->toBe($record->invocation_id)
+        ->and($benchmarkCase->source_prompt_tokens)->toBe(321)
+        ->and($benchmarkCase->source_completion_tokens)->toBe(45);
 });
 
 test('a server validation error is shown next to the nested row it belongs to', function (): void {
