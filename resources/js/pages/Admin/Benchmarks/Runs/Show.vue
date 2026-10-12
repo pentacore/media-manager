@@ -57,8 +57,22 @@ const { start: startPolling, stop: stopPolling } = usePoll(
     { autoStart: false },
 );
 
+const allCells = computed(() =>
+    props.matrix.flatMap((task) => task.cases.flatMap((row) => row.cells)),
+);
+
+const hasFailedJudge = computed(() =>
+    allCells.value.some((cell) => cell.judge_status === 'failed'),
+);
+
+const needsPolling = computed(
+    () =>
+        isActive.value ||
+        allCells.value.some((cell) => cell.judge_status === 'pending'),
+);
+
 watch(
-    isActive,
+    needsPolling,
     (active) => {
         if (active) {
             startPolling();
@@ -179,6 +193,14 @@ function cellFor(
 
 function cellText(cell: BenchmarkMatrixCell): string {
     if (cell.status === 'ok') {
+        if (cell.judge_status === 'pending') {
+            return 're-judging…';
+        }
+
+        if (cell.judge_status === 'failed') {
+            return 'judge failed';
+        }
+
         if (cell.score !== null) {
             return formatScore(cell.score);
         }
@@ -199,7 +221,9 @@ function cellClass(cell: BenchmarkMatrixCell): string {
     }
 
     if (cell.passed === null) {
-        return 'text-warning';
+        return cell.judge_status === 'failed'
+            ? 'text-destructive'
+            : 'text-warning';
     }
 
     return cell.passed ? 'text-success' : 'text-destructive';
@@ -257,26 +281,26 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                 >
                     <Ban class="size-3.5" />Cancel
                 </Button>
-                <template v-else>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-1.5"
-                        data-benchmark-rejudge
-                        @click="rejudge"
-                    >
-                        <RefreshCw class="size-3.5" />Re-judge unscored
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        class="gap-1.5 text-destructive"
-                        data-benchmark-delete
-                        @click="remove"
-                    >
-                        <Trash2 class="size-3.5" />Delete
-                    </Button>
-                </template>
+                <Button
+                    v-if="hasFailedJudge"
+                    variant="outline"
+                    size="sm"
+                    class="gap-1.5"
+                    data-benchmark-rejudge
+                    @click="rejudge"
+                >
+                    <RefreshCw class="size-3.5" />Re-judge unscored
+                </Button>
+                <Button
+                    v-if="!isActive"
+                    variant="outline"
+                    size="sm"
+                    class="gap-1.5 text-destructive"
+                    data-benchmark-delete
+                    @click="remove"
+                >
+                    <Trash2 class="size-3.5" />Delete
+                </Button>
             </div>
         </div>
 

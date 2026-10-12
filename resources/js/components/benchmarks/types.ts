@@ -1,3 +1,5 @@
+import type { AiReasoningLevel } from '@/typefinder';
+
 export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge';
 
 type JsonScalar = string | number | boolean | null;
@@ -157,6 +159,8 @@ export type BenchmarkRunDetail = {
     };
 };
 
+export type BenchmarkJudgeStatus = 'none' | 'ok' | 'failed' | 'pending';
+
 export type BenchmarkMatrixCandidate = {
     index: number;
     provider: string | null;
@@ -182,6 +186,7 @@ export type BenchmarkMatrixCell = {
     status: string;
     score: number | null;
     passed: boolean | null;
+    judge_status: BenchmarkJudgeStatus;
 };
 
 export type BenchmarkMatrixTask = {
@@ -223,6 +228,7 @@ export type BenchmarkResultDetail = {
         intended_actions: BenchmarkExpectedAction[];
         score: number | null;
         passed: boolean | null;
+        judge_status: BenchmarkJudgeStatus;
         score_detail: {
             score_10?: number;
             rationale?: string;
@@ -238,3 +244,18 @@ export type BenchmarkResultDetail = {
         cost_usd: number;
     }>;
 };
+
+/** A model picker row's value: the reasoning level is a typed enum value. */
+export type BenchmarkSelectionForm = {
+    provider: string;
+    model: string;
+    reasoning: AiReasoningLevel | null;
+};
+
+export type BenchmarkModelCapabilities = Record<
+    string,
+    {
+        supports_reasoning: boolean | null;
+        levels: AiReasoningLevel[] | null;
+    }
+>;

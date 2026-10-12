@@ -126,11 +126,22 @@ function toolBadge(entry: BenchmarkToolLogEntry): string {
                                     >{{ formatScore(result.score) }} / 10</Pill
                                 >
                                 <Pill
-                                    v-else-if="result.status === 'ok'"
+                                    v-else-if="
+                                        result.status === 'ok' &&
+                                        result.judge_status === 'pending'
+                                    "
                                     variant="warn"
-                                    data-benchmark-drawer-unscored
-                                    >Unscored — judge failed or
-                                    re-judging…</Pill
+                                    data-benchmark-drawer-rejudging
+                                    >re-judging…</Pill
+                                >
+                                <Pill
+                                    v-else-if="
+                                        result.status === 'ok' &&
+                                        result.judge_status === 'failed'
+                                    "
+                                    variant="danger"
+                                    data-benchmark-drawer-judge-failed
+                                    >judge failed</Pill
                                 >
                             </header>
 
@@ -168,8 +179,12 @@ function toolBadge(entry: BenchmarkToolLogEntry): string {
                                 {{ result.score_detail.rationale }}
                             </p>
                             <p
-                                v-if="result.score_detail.error"
-                                class="text-[12.5px] text-warning"
+                                v-if="
+                                    result.judge_status === 'failed' &&
+                                    result.score_detail.error
+                                "
+                                class="text-[12.5px] text-destructive"
+                                data-benchmark-drawer-judge-error
                             >
                                 Judge failed: {{ result.score_detail.error }}
                             </p>

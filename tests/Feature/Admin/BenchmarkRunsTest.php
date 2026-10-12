@@ -254,6 +254,7 @@ test('show returns the run, counts and the aggregated matrix', function (): void
             ->where('matrix.1.best.latency_p50', 0)
             ->where('matrix.1.cases.0.case_id', $stuck->id)
             ->has('matrix.1.cases.0.cells', 2)
+            ->where('matrix.1.cases.0.cells.0.judge_status', 'none')
             ->missing('resultDetail'));
 });
 
@@ -278,7 +279,8 @@ test('the drawer partial returns every candidate result for the clicked case', f
         ->assertJsonPath('props.resultDetail.results.0.tool_log.0.tool', 'search')
         ->assertJsonPath('props.resultDetail.results.0.score_detail.matched', ['retry'])
         ->assertJsonPath('props.resultDetail.results.1.candidate_index', 1)
-        ->assertJsonPath('props.resultDetail.results.1.score', 0.5);
+        ->assertJsonPath('props.resultDetail.results.1.score', 0.5)
+        ->assertJsonPath('props.resultDetail.results.1.judge_status', 'none');
 });
 
 test('a result from another run is not found', function (): void {

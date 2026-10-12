@@ -1,4 +1,7 @@
+export { default as CandidateRows } from './CandidateRows.vue';
 export { default as CaseInputFields } from './CaseInputFields.vue';
+export { default as CaseSelector } from './CaseSelector.vue';
+export { default as EstimateSummary } from './EstimateSummary.vue';
 export { default as ExpectedActionsEditor } from './ExpectedActionsEditor.vue';
 export { default as FixtureEditor } from './FixtureEditor.vue';
 export * from './format';
@@ -6,4 +9,5 @@ export * from './jsonObject';
 export { default as JudgeScoringFields } from './JudgeScoringFields.vue';
 export { default as PriceExpectationsEditor } from './PriceExpectationsEditor.vue';
 export { default as ResultDrawer } from './ResultDrawer.vue';
+export { default as SelectionRow } from './SelectionRow.vue';
 export type * from './types';

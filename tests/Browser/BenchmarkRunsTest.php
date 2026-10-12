@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
@@ -94,6 +95,7 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
         ->assertSeeIn('[data-benchmark-matrix-row="0"]', '9.0')
         ->assertSeeIn('[data-benchmark-matrix-row="1"]', 'self-judged')
         ->assertSeeIn('[data-benchmark-case-grid]', 'Nolan chat')
+        ->assertMissing('[data-benchmark-rejudge]')
         ->click(sprintf('[data-benchmark-cell="%d"]', $cell->id))
         ->assertVisible('[data-benchmark-drawer]')
         ->assertSeeIn('[data-benchmark-drawer-candidate="0"]', 'Nolan Films Nano')
@@ -139,4 +141,24 @@ test('the runs index links to a run and deletes a finished one', function (): vo
         ->assertMissing('[data-benchmark-run-row]');
 
     expect(BenchmarkRun::query()->find($run->id))->toBeNull();
+});
+
+test('a result whose judge failed is flagged and offers a re-judge', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->completed()->create(['case_ids' => [$benchmarkCase->id]]);
+    $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Nolan Films',
+        'judge_status' => 'failed',
+        'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
+    ]);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-benchmark-rejudge]')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), 'judge failed')
+        ->click(sprintf('[data-benchmark-cell="%d"]', $result->id))
+        ->assertSeeIn('[data-benchmark-drawer-judge-failed]', 'judge failed')
+        ->assertSeeIn('[data-benchmark-drawer-judge-error]', 'judge timed out');
 });
