@@ -39,18 +39,13 @@ final readonly class CaseDraftFromUsage
     {
         $prompt = $aiUsageRecord->prompt_text;
 
-        if ($aiUsageRecord->kind !== AiUsageKind::Text) {
-            throw new CaseDraftRefused('Only text invocations can become benchmark cases.');
+        $blocker = self::captureBlocker($aiUsageRecord);
+
+        if ($blocker !== null) {
+            throw new CaseDraftRefused($blocker);
         }
 
-        if (blank($prompt)) {
-            throw new CaseDraftRefused('This invocation has no recorded prompt.');
-        }
-
-        if (str_contains($prompt, self::ATTACHMENTS_MARKER)) {
-            throw new CaseDraftRefused('Invocations with attachments cannot become benchmark cases.');
-        }
-
+        $prompt = (string) $prompt;
         $aiTask = $this->taskFor($aiUsageRecord);
         $warnings = [];
 
@@ -119,6 +114,20 @@ final readonly class CaseDraftFromUsage
             ],
             'warnings' => $warnings,
         ];
+    }
+
+    /**
+     * Why a usage row cannot become a case, or null when its kind and
+     * recorded prompt allow it (the agent is checked when drafting).
+     */
+    public static function captureBlocker(AiUsageRecord $aiUsageRecord): ?string
+    {
+        return match (true) {
+            $aiUsageRecord->kind !== AiUsageKind::Text => 'Only text invocations can become benchmark cases.',
+            blank($aiUsageRecord->prompt_text) => 'This invocation has no recorded prompt.',
+            str_contains((string) $aiUsageRecord->prompt_text, self::ATTACHMENTS_MARKER) => 'Invocations with attachments cannot become benchmark cases.',
+            default => null,
+        };
     }
 
     private function taskFor(AiUsageRecord $aiUsageRecord): AiTask

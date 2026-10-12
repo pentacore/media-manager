@@ -9,12 +9,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { KindOption, TierFilter, WindowKey, WindowOption } from './types';
+import type {
+    BenchmarkFilter,
+    KindOption,
+    TierFilter,
+    WindowKey,
+    WindowOption,
+} from './types';
 
 defineProps<{
     kind: string | null;
     kinds: KindOption[];
     tier: TierFilter | null;
+    benchmark: BenchmarkFilter | null;
     windowKey: WindowKey;
     windows: WindowOption[];
     exportUrl: string;
@@ -23,6 +30,7 @@ defineProps<{
 const emit = defineEmits<{
     kindChange: [value: string];
     tierChange: [value: string];
+    benchmarkChange: [value: string];
     windowChange: [value: string];
 }>();
 </script>
@@ -109,6 +117,39 @@ const emit = defineEmits<{
                             value="fell_through"
                             aria-label="Fell through"
                             >Fell through</SelectItem
+                        >
+                    </SelectContent>
+                </Select>
+            </div>
+            <div data-usage-benchmark-filter>
+                <Select
+                    :model-value="benchmark ?? 'all'"
+                    @update:model-value="
+                        (value) =>
+                            emit(
+                                'benchmarkChange',
+                                typeof value === 'string' ? value : 'all',
+                            )
+                    "
+                >
+                    <SelectTrigger
+                        id="usage-benchmark"
+                        class="h-7 w-[170px] text-xs"
+                        aria-label="Benchmark runs"
+                    >
+                        <SelectValue placeholder="All runs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all" aria-label="All runs"
+                            >All runs</SelectItem
+                        >
+                        <SelectItem
+                            value="exclude"
+                            aria-label="Exclude benchmarks"
+                            >Exclude benchmarks</SelectItem
+                        >
+                        <SelectItem value="only" aria-label="Only benchmarks"
+                            >Only benchmarks</SelectItem
                         >
                     </SelectContent>
                 </Select>

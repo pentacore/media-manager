@@ -26,6 +26,7 @@ export interface RecentRow {
     status: string;
     kind: string;
     tier_position: number | null;
+    benchmark_run_id: number | null;
     error_message: string | null;
     user_name: string | null;
 }
@@ -96,8 +97,11 @@ export interface InvocationDetail {
         status: string;
         kind: string;
         error_message: string | null;
+        benchmark_run_id: number | null;
         created_at: string | null;
     };
+    capturable: boolean;
+    capture_blocker: string | null;
     user: { id: number; name: string } | null;
     tools: Array<{
         id: number;
@@ -128,6 +132,9 @@ export type WindowKey =
 
 /** The AI usage ledger's model-tier filter; null shows every run. */
 export type TierFilter = 'first' | 'fell_through';
+
+/** The ledger's benchmark filter; null shows every run. */
+export type BenchmarkFilter = 'only' | 'exclude';
 
 export interface WindowOption {
     value: WindowKey;
