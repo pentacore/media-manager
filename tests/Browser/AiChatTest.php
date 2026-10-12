@@ -398,14 +398,20 @@ test('long conversations load earlier messages on demand', function (): void {
 
     // The newest page holds messages 6–35; "message 5" is the only older text
     // that isn't a prefix of a newer one.
-    visit('/ai/chat')
+    $webpage = visit('/ai/chat')
         ->assertNoSmoke()
         ->click('[data-conversation-picker]')
         ->click("[data-conversation-id=\"{$conversationId}\"]")
         ->assertSee('message 35')
         ->assertDontSee('message 5')
-        ->click('[data-load-earlier]')
-        ->assertSee('message 5');
+        ->assertVisible('[data-load-earlier]');
+
+    // A DOM click, not ->click(): Playwright would first scroll the button
+    // into view, and that upward scroll to the top of the thread starts the
+    // scroll-to-top auto-load, which loads the last page and removes the
+    // button before the click lands.
+    $webpage->script("document.querySelector('[data-load-earlier]').click()");
+    $webpage->assertSee('message 5');
 });
 
 function aiChatInsertConversation(User $user, string $conversationId, string $title): void
