@@ -12,6 +12,7 @@ use App\Models\BenchmarkRun;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 /**
  * Starts, cancels and re-judges benchmark runs: one pending result and one
@@ -28,6 +29,9 @@ final readonly class BenchmarkRunLauncher
      */
     public function launch(string $name, Collection $cases, array $candidates, array $judge, ?float $costCap, User $user): BenchmarkRun
     {
+        throw_if($cases->isEmpty(), InvalidArgumentException::class, 'A benchmark run needs at least one case.');
+        throw_if($candidates === [], InvalidArgumentException::class, 'A benchmark run needs at least one candidate.');
+
         $estimate = $this->benchmarkEstimator->estimate($cases, $candidates, $judge);
 
         return DB::transaction(function () use ($name, $cases, $candidates, $judge, $costCap, $user, $estimate): BenchmarkRun {

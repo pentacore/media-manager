@@ -35,6 +35,9 @@ final readonly class BenchmarkScorer
 
     public const string JUDGE_FAILED = 'failed';
 
+    /** Transient: a judge-only job has claimed the result and is judging it. */
+    public const string JUDGE_PENDING = 'pending';
+
     private const int DEFAULT_PASS_THRESHOLD = 7;
 
     private const float DEFAULT_TOLERANCE_PERCENT = 1.0;

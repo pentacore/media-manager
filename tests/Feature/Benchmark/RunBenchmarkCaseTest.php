@@ -18,6 +18,11 @@ use App\Models\AiModelPrice;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\Attributes\UniqueFor;
+use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Messages\AssistantMessage;
@@ -494,4 +499,106 @@ test('a job that fails outside the case run fails its pending result and settles
     expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
         ->and($benchmarkResult->fresh()->error)->toBe('App\Jobs\RunBenchmarkCase has timed out.')
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+});
+
+test('a refused monthly hard cap fails the result with the guard message before any agent runs', function (): void {
+    $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new AiBudgetExceededException(10.0, 5.0));
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->fresh()->error)->toBe('Monthly AI hard cap reached (spend $10.00 / cap $5.00).')
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed)
+        ->and(jobContextActive())->toBeFalse();
+    TitleAgent::assertNeverPrompted();
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('a refused monthly hard cap leaves a re-judge unscored with the guard message', function (): void {
+    $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new AiBudgetExceededException(10.0, 5.0));
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => 'failed',
+        'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+
+    expect($benchmarkResult->judge_status)->toBe('failed')
+        ->and($benchmarkResult->score)->toBeNull()
+        ->and($benchmarkResult->score_detail)->toEqual(['error' => 'Monthly AI hard cap reached (spend $10.00 / cap $5.00).', 'tool_log' => []])
+        ->and(jobContextActive())->toBeFalse();
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('two judge-only jobs racing on one result judge it once and add its cost once', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => 'failed',
+        'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
+    ]);
+    $judgeCalls = 0;
+    BenchmarkJudgeAgent::fake(function () use (&$judgeCalls, $benchmarkResult): StructuredTextResponse {
+        $judgeCalls++;
+
+        if ($judgeCalls === 1) {
+            dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+        }
+
+        return new StructuredTextResponse(['score' => 9, 'rationale' => 'Good'], '{"score":9,"rationale":"Good"}', new TextUsage(200_000, 50_000), new Meta('openai', 'gpt-judge'));
+    });
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    expect($judgeCalls)->toBe(1)
+        ->and($benchmarkResult->fresh()->judge_status)->toBe('ok')
+        ->and((float) $benchmarkResult->fresh()->judge_cost_usd)->toBe(0.4)
+        ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.4);
+});
+
+test('a judge-only job that dies mid-judge hands the result back to re-judging', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => 'pending',
+    ]);
+
+    new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true)->failed(new RuntimeException('timed out'));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+        ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
+});
+
+test('the job is unique per result and mode', function (): void {
+    expect(new RunBenchmarkCase(7))->toBeInstanceOf(ShouldBeUnique::class)
+        ->and(new RunBenchmarkCase(7)->uniqueId())->toBe('benchmark-result:7:run')
+        ->and(new RunBenchmarkCase(7, judgeOnly: true)->uniqueId())->toBe('benchmark-result:7:judge');
+});
+
+test('the job waits for a slot without burning tries but fails on its first exception or timeout', function (): void {
+    $this->freezeTime();
+    $runBenchmarkCase = new RunBenchmarkCase(7);
+    $syncQueue = new SyncQueue;
+    $syncQueue->setContainer(app());
+
+    $payload = json_decode((fn (): string => $this->createPayload($runBenchmarkCase, 'ai'))->call($syncQueue), true);
+
+    expect($payload['maxTries'])->toBe(0)
+        ->and($payload['maxExceptions'])->toBe(1)
+        ->and($payload['failOnTimeout'])->toBeTrue()
+        ->and($payload['timeout'])->toBe(280)
+        ->and($payload['retryUntil'])->toBe(now()->addHours(12)->getTimestamp())
+        ->and(new ReflectionClass(RunBenchmarkCase::class)->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)
+        ->toBeGreaterThan(12 * 3600);
 });

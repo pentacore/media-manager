@@ -12,6 +12,7 @@ use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
 use App\Services\Benchmark\BenchmarkRunLauncher;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -124,4 +125,32 @@ test('re-judging dispatches judge-only jobs for unscored results only', function
     Queue::assertPushed(RunBenchmarkCase::class, 1);
     Queue::assertPushed(RunBenchmarkCase::class, fn (RunBenchmarkCase $runBenchmarkCase): bool => $runBenchmarkCase->resultId === $unscored->id
         && $runBenchmarkCase->judgeOnly);
+});
+
+test('a launch without cases or candidates is refused and creates nothing', function (Closure $makeCases, array $candidates): void {
+    expect(fn (): BenchmarkRun => resolve(BenchmarkRunLauncher::class)->launch(
+        'Empty',
+        $makeCases(),
+        $candidates,
+        ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => 'provider_default'],
+        null,
+        User::factory()->admin()->create(),
+    ))->toThrow(InvalidArgumentException::class);
+
+    expect(BenchmarkRun::count())->toBe(0);
+    Queue::assertNothingPushed();
+})->with([
+    'no cases' => [fn (): Collection => collect(), launcherCandidates()],
+    'no candidates' => [fn (): Collection => collect([BenchmarkCase::factory()->create()]), []],
+]);
+
+test('re-judging twice queues one judge-only job per result', function (): void {
+    $benchmarkRun = BenchmarkRun::factory()->completed()->create();
+    BenchmarkResult::factory()->forCase($benchmarkRun, BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(), 0)
+        ->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
+
+    resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun);
+    resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun);
+
+    Queue::assertPushed(RunBenchmarkCase::class, 1);
 });

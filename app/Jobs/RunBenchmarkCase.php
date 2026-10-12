@@ -16,12 +16,15 @@ use App\Jobs\Middleware\LimitBenchmarkConcurrency;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\BenchmarkScorer;
 use App\Services\Benchmark\CaseOutcome;
 use App\Support\UpstreamErrorText;
 use DateTimeInterface;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\FailOnTimeout;
@@ -29,6 +32,7 @@ use Illuminate\Queue\Attributes\MaxExceptions;
 use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
@@ -48,22 +52,31 @@ use Throwable;
  * Unlimited tries bounded by retryUntil(): the concurrency middleware
  * releases a job while the run's two slots are busy, and every release counts
  * as an attempt. One exception or a timeout fails the job (failed() then
- * fails the result).
+ * fails the result). Unique per result and mode for the whole wait window, and
+ * a judge-only job claims its result atomically, so a result is never run or
+ * judged twice. The monthly hard cap is enforced before every agent call.
  */
 #[Queue(QueueLane::Ai)]
 #[Timeout(280)]
 #[Tries(0)]
 #[MaxExceptions(1)]
 #[FailOnTimeout]
-final class RunBenchmarkCase implements ShouldQueue
+#[UniqueFor(46800)]
+final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    /** Kept below the 13 h UniqueFor window. */
     private const int MAX_WAIT_HOURS = 12;
 
     private const int ERROR_LIMIT = 2000;
 
     public function __construct(public readonly int $resultId, public readonly bool $judgeOnly = false) {}
+
+    public function uniqueId(): string
+    {
+        return sprintf('benchmark-result:%d:%s', $this->resultId, $this->judgeOnly ? 'judge' : 'run');
+    }
 
     /**
      * @return list<object>
@@ -83,6 +96,7 @@ final class RunBenchmarkCase implements ShouldQueue
         BenchmarkCaseRunner $benchmarkCaseRunner,
         BenchmarkScorer $benchmarkScorer,
         ModelPriceLookup $modelPriceLookup,
+        AiBudgetGuard $aiBudgetGuard,
     ): void {
         $benchmarkResult = BenchmarkResult::query()->with(['run', 'benchmarkCase'])->find($this->resultId);
 
@@ -91,7 +105,7 @@ final class RunBenchmarkCase implements ShouldQueue
         }
 
         if ($this->judgeOnly) {
-            $this->rejudge($benchmarkResult, $benchmarkRunContext, $benchmarkScorer);
+            $this->rejudge($benchmarkResult, $benchmarkRunContext, $benchmarkScorer, $aiBudgetGuard);
 
             return;
         }
@@ -117,17 +131,23 @@ final class RunBenchmarkCase implements ShouldQueue
             return;
         }
 
-        $this->runCase($benchmarkResult, $benchmarkRun, $benchmarkCase, $benchmarkRunContext, $benchmarkCaseRunner, $benchmarkScorer, $modelPriceLookup);
+        $this->runCase($benchmarkResult, $benchmarkRun, $benchmarkCase, $benchmarkRunContext, $benchmarkCaseRunner, $benchmarkScorer, $modelPriceLookup, $aiBudgetGuard);
         $this->settle($benchmarkRun->id);
     }
 
     /**
      * The job itself failed (an exception escaped, it timed out or it waited
-     * too long for a slot): fail a still-pending result and settle the run.
+     * too long for a slot): fail a still-pending result and settle the run; a
+     * judge-only job hands its claimed result back to re-judging.
      */
     public function failed(?Throwable $throwable): void
     {
         if ($this->judgeOnly) {
+            BenchmarkResult::query()
+                ->whereKey($this->resultId)
+                ->where('judge_status', BenchmarkScorer::JUDGE_PENDING)
+                ->update(['judge_status' => BenchmarkScorer::JUDGE_FAILED]);
+
             return;
         }
 
@@ -155,6 +175,7 @@ final class RunBenchmarkCase implements ShouldQueue
         BenchmarkCaseRunner $benchmarkCaseRunner,
         BenchmarkScorer $benchmarkScorer,
         ModelPriceLookup $modelPriceLookup,
+        AiBudgetGuard $aiBudgetGuard,
     ): void {
         $caseOutcome = null;
         $costUsd = 0.0;
@@ -162,13 +183,14 @@ final class RunBenchmarkCase implements ShouldQueue
         try {
             $candidate = $this->candidate($benchmarkRun, $benchmarkResult->candidate_index);
             $this->ensureProviderReady($candidate->provider);
+            $aiBudgetGuard->enforce();
             $this->startContext($benchmarkRunContext, $benchmarkRun, $benchmarkCase, $candidate);
 
             $caseOutcome = $benchmarkCaseRunner->run($benchmarkCase);
             $costUsd = $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup);
             $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
         } catch (Throwable $throwable) {
-            report($throwable);
+            $this->reportUnexpected($throwable);
             $this->recordFailure($benchmarkResult, $throwable, $caseOutcome, $costUsd);
 
             return;
@@ -219,13 +241,11 @@ final class RunBenchmarkCase implements ShouldQueue
      * stored outcome. The case must still exist (its prompt and rubric feed
      * the judge).
      */
-    private function rejudge(BenchmarkResult $benchmarkResult, BenchmarkRunContext $benchmarkRunContext, BenchmarkScorer $benchmarkScorer): void
+    private function rejudge(BenchmarkResult $benchmarkResult, BenchmarkRunContext $benchmarkRunContext, BenchmarkScorer $benchmarkScorer, AiBudgetGuard $aiBudgetGuard): void
     {
         $benchmarkCase = $benchmarkResult->benchmarkCase;
 
-        if ($benchmarkResult->status !== BenchmarkResultStatus::Ok
-            || $benchmarkResult->judge_status !== BenchmarkScorer::JUDGE_FAILED
-            || ! $benchmarkCase instanceof BenchmarkCase) {
+        if (! $benchmarkCase instanceof BenchmarkCase || ! $this->claimForJudging($benchmarkResult)) {
             return;
         }
 
@@ -238,14 +258,18 @@ final class RunBenchmarkCase implements ShouldQueue
                 $benchmarkCase,
                 $this->candidate($benchmarkResult->run, $benchmarkResult->candidate_index),
             );
+            $aiBudgetGuard->enforce();
 
             $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
         } catch (Throwable $throwable) {
-            report($throwable);
-            $benchmarkResult->update(['score_detail' => [
-                'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
-                'tool_log' => $caseOutcome->toolLog,
-            ]]);
+            $this->reportUnexpected($throwable);
+            $benchmarkResult->update([
+                'judge_status' => BenchmarkScorer::JUDGE_FAILED,
+                'score_detail' => [
+                    'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
+                    'tool_log' => $caseOutcome->toolLog,
+                ],
+            ]);
 
             return;
         } finally {
@@ -263,6 +287,38 @@ final class RunBenchmarkCase implements ShouldQueue
 
             $this->addRunCost($benchmarkResult->benchmark_run_id, $scores['judge_cost_usd']);
         });
+    }
+
+    /**
+     * Atomically move an unscored result from `failed` to the transient
+     * `pending` judge status; false when another job claimed it first or it
+     * is not re-judgeable.
+     */
+    private function claimForJudging(BenchmarkResult $benchmarkResult): bool
+    {
+        $claimed = BenchmarkResult::query()
+            ->whereKey($benchmarkResult->id)
+            ->where('status', BenchmarkResultStatus::Ok)
+            ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
+            ->update(['judge_status' => BenchmarkScorer::JUDGE_PENDING]);
+
+        if ($claimed === 0) {
+            return false;
+        }
+
+        $benchmarkResult->judge_status = BenchmarkScorer::JUDGE_PENDING;
+        $benchmarkResult->syncOriginalAttribute('judge_status');
+
+        return true;
+    }
+
+    /**
+     * A refused hard cap is an expected outcome, stored on the result; every
+     * other failure is reported.
+     */
+    private function reportUnexpected(Throwable $throwable): void
+    {
+        report_unless($throwable instanceof AiBudgetExceededException, $throwable);
     }
 
     private function startContext(BenchmarkRunContext $benchmarkRunContext, BenchmarkRun $benchmarkRun, BenchmarkCase $benchmarkCase, ResolvedSelection $candidate): void
