@@ -36,8 +36,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <div class="flex items-end justify-between gap-3">
-        <div>
+    <div class="flex flex-wrap items-end justify-between gap-x-3 gap-y-3">
+        <div class="min-w-[16rem] flex-1">
             <div class="mb-1.5 text-[13px] text-muted-foreground">
                 Admin <span class="text-fg-subtle">/</span> AI usage
             </div>
@@ -54,7 +54,7 @@ const emit = defineEmits<{
                 >.
             </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
             <div data-usage-kind-filter>
                 <Select
                     :model-value="kind ?? 'all'"

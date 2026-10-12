@@ -174,3 +174,14 @@ test('the drill-down explains why an invocation cannot be captured', function ()
         ->assertSeeIn('[data-usage-capture-blocked]', 'attachments')
         ->assertMissing('[data-usage-capture]');
 });
+
+test('the header keeps a readable title next to the three filters on a wide screen', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->resize(1400, 1000)
+        ->assertNoSmoke()
+        ->assertPresent('[data-usage-benchmark-filter]')
+        ->assertScript('document.querySelector("h1").getBoundingClientRect().width > 200')
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth');
+});
