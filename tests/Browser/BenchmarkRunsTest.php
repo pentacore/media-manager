@@ -255,3 +255,27 @@ test('a cancelled run keeps polling while a case still runs and shows its result
     $webpage->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $running->id), '9.0')
         ->assertMissing('[data-benchmark-running-count]');
 });
+
+test('a candidate scored on fewer cases shows its coverage and is never highlighted as best', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $first = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $second = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Villeneuve chat']);
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => 'provider_default'],
+        ['provider' => 'openai', 'model' => 'gpt-5-mini', 'reasoning' => 'provider_default'],
+    ])->create(['case_ids' => [$first->id, $second->id]]);
+    BenchmarkResult::factory()->forCase($run, $first, 0)->scored(0.6, false)->create();
+    BenchmarkResult::factory()->forCase($run, $second, 0)->scored(0.6, false)->create();
+    BenchmarkResult::factory()->forCase($run, $first, 1)->scored(0.9, true)->create();
+    BenchmarkResult::factory()->forCase($run, $second, 1)->failed('Provider timeout')->create();
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', '6.0')
+        ->assertDontSeeIn('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', '/')
+        ->assertSeeIn('[data-benchmark-matrix-row="1"] [data-benchmark-avg-score]', '9.0 (1/2)')
+        ->assertSeeIn('[data-benchmark-matrix-row="1"] [data-benchmark-pass-rate]', '100% (1/2)')
+        ->assertAttributeContains('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', 'class', 'text-success')
+        ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-avg-score]', 'class', 'text-success')
+        ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-pass-rate]', 'class', 'text-success');
+});

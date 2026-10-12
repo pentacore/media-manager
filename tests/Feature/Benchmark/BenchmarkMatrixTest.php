@@ -109,3 +109,44 @@ test('each cell flags a stalled re-judge and a running result whose claim went s
     expect(array_column($cells, 'judge_stale'))->toBe([true, false, false, false])
         ->and(array_column($cells, 'stale'))->toBe([false, false, true, false]);
 });
+
+test('only candidates scored on every scored case can be best by score or pass rate', function (): void {
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'full', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'partial', 'reasoning' => null],
+    ])->create();
+
+    foreach (range(1, 4) as $index) {
+        $case = BenchmarkCase::factory()->create();
+        BenchmarkResult::factory()->forCase($run, $case, 0)->scored(0.6, $index > 2)->create();
+
+        if ($index === 4) {
+            BenchmarkResult::factory()->forCase($run, $case, 1)->failed('boom')->create();
+
+            continue;
+        }
+
+        BenchmarkResult::factory()->forCase($run, $case, 1)->scored(0.9, true)->create();
+    }
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['max_scored'])->toBe(4)
+        ->and($matrix['candidates'][0]['scored'])->toBe(4)
+        ->and($matrix['candidates'][1]['scored'])->toBe(3)
+        ->and($matrix['candidates'][1]['avg_score'])->toBe(0.9)
+        ->and($matrix['best']['avg_score'])->toBe(0)
+        ->and($matrix['best']['pass_rate'])->toBe(0);
+});
+
+test('a task without any scored result has no best score', function (): void {
+    $run = BenchmarkRun::factory()->completed()->create();
+    BenchmarkResult::factory()->forCase($run, BenchmarkCase::factory()->create(), 0)->failed('boom')->create();
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['max_scored'])->toBe(0)
+        ->and($matrix['candidates'][0]['scored'])->toBe(0)
+        ->and($matrix['best']['avg_score'])->toBeNull()
+        ->and($matrix['best']['pass_rate'])->toBeNull();
+});

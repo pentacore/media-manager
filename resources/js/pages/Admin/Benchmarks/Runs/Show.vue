@@ -160,6 +160,7 @@ async function remove(): Promise<void> {
 }
 
 type Metric = keyof BenchmarkMatrixTask['best'];
+type MatrixCandidate = BenchmarkMatrixTask['candidates'][number];
 
 function best(
     task: BenchmarkMatrixTask,
@@ -167,6 +168,16 @@ function best(
     index: number,
 ): string {
     return task.best[metric] === index ? 'font-semibold text-success' : '';
+}
+
+/** " (3/4)" when the candidate was scored on fewer cases than the best-covered one. */
+function coverage(
+    task: BenchmarkMatrixTask,
+    candidate: MatrixCandidate,
+): string {
+    return candidate.scored > 0 && candidate.scored < task.max_scored
+        ? ` (${candidate.scored}/${task.max_scored})`
+        : '';
 }
 
 const drawerOpen = ref(false);
@@ -374,18 +385,18 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                                     'text-right tabular-nums',
                                     best(task, 'avg_score', candidate.index),
                                 ]"
-                                >{{
-                                    formatScore(candidate.avg_score)
-                                }}</TableCell
+                                data-benchmark-avg-score
+                                >{{ formatScore(candidate.avg_score)
+                                }}{{ coverage(task, candidate) }}</TableCell
                             >
                             <TableCell
                                 :class="[
                                     'text-right tabular-nums',
                                     best(task, 'pass_rate', candidate.index),
                                 ]"
-                                >{{
-                                    formatPercent(candidate.pass_rate)
-                                }}</TableCell
+                                data-benchmark-pass-rate
+                                >{{ formatPercent(candidate.pass_rate)
+                                }}{{ coverage(task, candidate) }}</TableCell
                             >
                             <TableCell
                                 :class="[

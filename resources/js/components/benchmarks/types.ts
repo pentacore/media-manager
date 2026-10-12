@@ -171,6 +171,8 @@ export type BenchmarkMatrixCandidate = {
     ok: number;
     failed: number;
     skipped: number;
+    /** Results with a score; avg score and pass rate cover only these. */
+    scored: number;
     avg_score: number | null;
     pass_rate: number | null;
     cost_per_case: number | null;
@@ -196,6 +198,8 @@ export type BenchmarkMatrixTask = {
     task: string;
     task_label: string;
     candidates: BenchmarkMatrixCandidate[];
+    /** The most results any candidate has scored; only candidates at it can be best by score or pass rate. */
+    max_scored: number;
     best: {
         avg_score: number | null;
         pass_rate: number | null;
