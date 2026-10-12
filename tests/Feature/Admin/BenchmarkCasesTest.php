@@ -19,8 +19,11 @@ use App\Models\BenchmarkCase;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
 use Laravel\Ai\Tools\ToolNameResolver;
 
 beforeEach(function (): void {
@@ -369,4 +372,33 @@ test('update and destroy change the case and are audited', function (): void {
 
     expect(BenchmarkCase::query()->count())->toBe(0)
         ->and(ActivityLog::query()->where('action', 'benchmark_case.deleted')->where('subject_id', $case->id)->exists())->toBeTrue();
+});
+
+test('a tool class the container cannot build does not break the draft', function (): void {
+    $tool = new class(1) implements Tool
+    {
+        public function __construct(public int $required) {}
+
+        public function description(): string
+        {
+            return 'x';
+        }
+
+        public function schema(JsonSchema $schema): array
+        {
+            return [];
+        }
+
+        public function handle(Request $request): string
+        {
+            return '';
+        }
+    };
+    class_alias($tool::class, 'App\\Fake\\UnresolvableBenchmarkTool');
+    $this->actingAs(User::factory()->admin()->create());
+    $record = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
+    benchmarkToolCall($record, 'App\\Fake\\UnresolvableBenchmarkTool', 'Odd');
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+        ->assertInertia(fn ($page) => $page->has('draft.fixtures', 1)->has('draft.scoring.expected', 0));
 });

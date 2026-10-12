@@ -16,6 +16,7 @@ use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
+use Throwable;
 
 /**
  * Pre-fills a benchmark case from a recorded AI usage row and the tool calls
@@ -82,6 +83,8 @@ final readonly class CaseDraftFromUsage
             ];
         }
 
+        $sourceTruncated = $warnings !== [];
+
         $input = ['prompt' => $prompt];
 
         if ($aiTask === AiTask::Chat) {
@@ -112,7 +115,7 @@ final readonly class CaseDraftFromUsage
                 'source_invocation_id' => $aiUsageRecord->invocation_id,
                 'source_prompt_tokens' => $aiUsageRecord->prompt_tokens,
                 'source_completion_tokens' => $aiUsageRecord->completion_tokens,
-                'source_truncated' => $warnings !== [],
+                'source_truncated' => $sourceTruncated,
             ],
             'warnings' => $warnings,
         ];
@@ -181,7 +184,11 @@ final readonly class CaseDraftFromUsage
             return false;
         }
 
-        return WriteToolDetector::writes(resolve($toolClass));
+        try {
+            return WriteToolDetector::writes(resolve($toolClass));
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

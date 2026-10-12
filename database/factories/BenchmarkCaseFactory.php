@@ -39,7 +39,7 @@ class BenchmarkCaseFactory extends Factory
     public function judged(?string $note = null): static
     {
         return $this->state(fn (array $attributes): array => [
-            'scoring' => ['type' => BenchmarkScoringType::Judge->value, 'note' => $note],
+            'scoring' => ['type' => BenchmarkScoringType::Judge->value, 'rubric_note' => $note, 'pass_threshold' => 7],
         ]);
     }
 
