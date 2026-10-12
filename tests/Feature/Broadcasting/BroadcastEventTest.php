@@ -19,6 +19,7 @@ use App\Http\Resources\ActionRequestResource;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
+use App\Models\EmbyUserLink;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -266,7 +267,7 @@ test('EmbyPlaybackUpdated broadcasts on emby activity channel', function (): voi
     expect($event->broadcastAs())->toBe('EmbyPlaybackUpdated');
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'created_at', 'updated_at']);
+    expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'user_id', 'created_at', 'updated_at']);
 });
 
 test('ActivityLogCreated broadcasts on activity channel with full payload', function (): void {
@@ -280,7 +281,10 @@ test('ActivityLogCreated broadcasts on activity channel with full payload', func
     $event = new ActivityLogCreated($log);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
-    expect($event->broadcastOn())->toEqual(new PrivateChannel('activity'));
+    expect($event->broadcastOn())->toEqual([
+        new PrivateChannel('activity'),
+        new PrivateChannel(sprintf('App.Models.User.%d', $user->id)),
+    ]);
     expect($event->broadcastAs())->toBe('ActivityLogCreated');
 
     $payload = $event->broadcastWith();
@@ -437,4 +441,30 @@ test('MediaReplacementAttemptChanged broadcasts a scalar summary on the admin ch
     expect($payload['attention_unacknowledged'])->toBe(2);
     // JSON columns never leave the server through the socket.
     expect($payload)->not->toHaveKeys(['target', 'candidate', 'verification']);
+});
+
+test('EmbyPlaybackUpdated names the app user who owns the Emby link', function (): void {
+    $owner = User::factory()->create();
+    $link = EmbyUserLink::factory()->create(['user_id' => $owner->id]);
+    $activity = EmbyActivity::factory()->create(['emby_user_link_id' => $link->id]);
+
+    expect(new EmbyPlaybackUpdated($activity)->broadcastWith()['user_id'])->toBe($owner->id);
+});
+
+test("activity rows go to their owner's channel, audit rows never", function (): void {
+    $owner = User::factory()->create();
+    $admin = User::factory()->admin()->create();
+    $owned = ActivityLog::factory()->create([
+        'user_id' => $owner->id,
+        'metadata' => ['actor' => ['id' => $admin->id, 'name' => $admin->name]],
+    ]);
+    $unowned = ActivityLog::factory()->create(['user_id' => null]);
+    $audit = ActivityLog::factory()->audit()->create(['user_id' => $admin->id]);
+
+    expect(new ActivityLogCreated($owned)->broadcastOn())->toEqual([
+        new PrivateChannel('activity'),
+        new PrivateChannel(sprintf('App.Models.User.%d', $owner->id)),
+    ])
+        ->and(new ActivityLogCreated($unowned)->broadcastOn())->toEqual([new PrivateChannel('activity')])
+        ->and(new ActivityLogCreated($audit)->broadcastOn())->toEqual([new PrivateChannel('activity.audit')]);
 });

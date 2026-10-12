@@ -131,8 +131,11 @@ test('audit rows broadcast only on the admin audit channel', function (): void {
     $auditEvent = new ActivityLogCreated($audit);
     $activityEvent = new ActivityLogCreated($activity);
 
-    expect($auditEvent->broadcastOn())->toEqual(new PrivateChannel('activity.audit'))
+    expect($auditEvent->broadcastOn())->toEqual([new PrivateChannel('activity.audit')])
         ->and($auditEvent->broadcastWith()['category'])->toBe('audit')
-        ->and($activityEvent->broadcastOn())->toEqual(new PrivateChannel('activity'))
+        ->and($activityEvent->broadcastOn())->toEqual([
+            new PrivateChannel('activity'),
+            new PrivateChannel(sprintf('App.Models.User.%d', $activity->user_id)),
+        ])
         ->and($activityEvent->broadcastWith()['category'])->toBe('activity');
 });

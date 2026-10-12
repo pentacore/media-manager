@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
@@ -26,6 +26,11 @@ import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
 type Activity = EmbyActivityResource;
+
+/** An EmbyPlaybackUpdated payload: the row, minus the per-reader permission, plus its link's owner. */
+type PlaybackPayload = Omit<Activity, 'can_toggle_played'> & {
+    user_id: number | null;
+};
 
 interface PaginatorLink {
     url: string | null;
@@ -71,6 +76,7 @@ defineOptions({
     },
 });
 
+const page = usePage();
 const { can } = useCan();
 const isViewer = computed(() => !can('manage-library'));
 
@@ -80,6 +86,22 @@ const merge = computed(
     () => !hasFilter.value && onFirstPage.value && !isViewer.value,
 );
 
+/**
+ * The broadcast goes to every reader, so it cannot say whether this reader
+ * may toggle the played state. Apply EmbyActivity::playedStateEditableBy():
+ * admins, or the owner of the row's Emby link. The server re-checks.
+ */
+function liveActivityRow(payload: PlaybackPayload): Activity {
+    const { user_id: ownerId, ...row } = payload;
+
+    return {
+        ...row,
+        can_toggle_played:
+            can('admin') ||
+            (ownerId !== null && ownerId === page.props.auth.user.id),
+    };
+}
+
 const {
     items: liveActivities,
     staleCount,
@@ -87,12 +109,13 @@ const {
     resume,
     reseed,
     subscribe,
-} = useRealtimeList<Activity>({
+} = useRealtimeList<Activity, PlaybackPayload>({
     channel: 'emby.activity',
     event: 'EmbyPlaybackUpdated',
     keyField: 'id',
     initial: props.activities.data,
     cap: props.activities.meta.per_page,
+    map: liveActivityRow,
 });
 
 watch(
