@@ -384,6 +384,8 @@ function browserSmokeAdminRouteNames(): array
         'admin.ai-usage.index',
         'admin.ai-prices.index',
         'admin.ai-conversations.index',
+        'admin.benchmarks.cases.index',
+        'admin.benchmarks.cases.create',
         'admin.webhook-log.index',
         'admin.jobs.index',
         'ai.chat',

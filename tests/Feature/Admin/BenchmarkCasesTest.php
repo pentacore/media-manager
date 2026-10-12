@@ -88,7 +88,7 @@ test('the index lists cases and filters by task and tag', function (): void {
     $this->get(route('admin.benchmarks.cases.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Cases/Index', false)
+            ->component('Admin/Benchmarks/Cases/Index')
             ->has('cases.data', 2)
             ->has('cases.meta')
             ->has('tasks', count(AiTask::cases()) - 2)
@@ -116,7 +116,7 @@ test('the create form has the option props and default rubrics', function (): vo
     $this->get(route('admin.benchmarks.cases.create'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Cases/Form', false)
+            ->component('Admin/Benchmarks/Cases/Form')
             ->where('case', null)
             ->where('draft', null)
             ->where('draftWarnings', [])
@@ -159,7 +159,7 @@ test('the create form pre-fills a chat draft with the earlier conversation turns
     $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Cases/Form', false)
+            ->component('Admin/Benchmarks/Cases/Form')
             ->where('draft.task', 'chat')
             ->where('draft.input.prompt', 'Third question')
             ->where('draft.input.history', [
@@ -353,7 +353,7 @@ test('update and destroy change the case and are audited', function (): void {
     $this->get(route('admin.benchmarks.cases.edit', $case))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Cases/Form', false)
+            ->component('Admin/Benchmarks/Cases/Form')
             ->where('case.id', $case->id)
             ->where('case.name', 'Old')
             ->has('case.input')
