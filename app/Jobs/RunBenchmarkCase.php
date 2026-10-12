@@ -138,14 +138,14 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     /**
      * The job itself failed (an exception escaped, it timed out or it waited
      * too long for a slot): fail a still-pending result and settle the run; a
-     * judge-only job hands its claimed result back to re-judging.
+     * judge-only job hands its queued or claimed result back to re-judging.
      */
     public function failed(?Throwable $throwable): void
     {
         if ($this->judgeOnly) {
             BenchmarkResult::query()
                 ->whereKey($this->resultId)
-                ->where('judge_status', BenchmarkScorer::JUDGE_PENDING)
+                ->whereIn('judge_status', [BenchmarkScorer::JUDGE_QUEUED, BenchmarkScorer::JUDGE_PENDING])
                 ->update(['judge_status' => BenchmarkScorer::JUDGE_FAILED]);
 
             return;
@@ -237,19 +237,27 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Re-score a result whose judge failed, under the run's judge, from the
+     * Re-score a result queued for re-judging, under the run's judge, from the
      * stored outcome. The case must still exist (its prompt and rubric feed
-     * the judge).
+     * the judge); without it the result goes back to `failed`.
      */
     private function rejudge(BenchmarkResult $benchmarkResult, BenchmarkRunContext $benchmarkRunContext, BenchmarkScorer $benchmarkScorer, AiBudgetGuard $aiBudgetGuard): void
     {
-        $benchmarkCase = $benchmarkResult->benchmarkCase;
-
-        if (! $benchmarkCase instanceof BenchmarkCase || ! $this->claimForJudging($benchmarkResult)) {
+        if (! $this->claimForJudging($benchmarkResult)) {
             return;
         }
 
         $caseOutcome = $this->storedOutcome($benchmarkResult);
+        $benchmarkCase = $benchmarkResult->benchmarkCase;
+
+        if (! $benchmarkCase instanceof BenchmarkCase) {
+            $benchmarkResult->update([
+                'judge_status' => BenchmarkScorer::JUDGE_FAILED,
+                'score_detail' => ['error' => 'Case was deleted', 'tool_log' => $caseOutcome->toolLog],
+            ]);
+
+            return;
+        }
 
         try {
             $this->startContext(
@@ -290,16 +298,16 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Atomically move an unscored result from `failed` to the transient
-     * `pending` judge status; false when another job claimed it first or it
-     * is not re-judgeable.
+     * Atomically move a result queued for re-judging from `queued` to the
+     * transient `pending` judge status; false when another job claimed it
+     * first or it is not queued.
      */
     private function claimForJudging(BenchmarkResult $benchmarkResult): bool
     {
         $claimed = BenchmarkResult::query()
             ->whereKey($benchmarkResult->id)
             ->where('status', BenchmarkResultStatus::Ok)
-            ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
+            ->where('judge_status', BenchmarkScorer::JUDGE_QUEUED)
             ->update(['judge_status' => BenchmarkScorer::JUDGE_PENDING]);
 
         if ($claimed === 0) {

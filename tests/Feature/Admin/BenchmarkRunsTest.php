@@ -355,6 +355,22 @@ test('re-judging queues a judge-only job per unscored result', function (): void
     Queue::assertPushed(RunBenchmarkCase::class, fn (RunBenchmarkCase $job): bool => $job->resultId === $unscored->id && $job->judgeOnly);
 });
 
+test('after re-judging on an async queue the run page shows the result queued so it keeps polling', function (): void {
+    Queue::fake();
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->completed()->create();
+    $unscored = BenchmarkResult::factory()->for($run, 'run')->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkScorer::JUDGE_FAILED]);
+
+    $this->from(route('admin.benchmarks.runs.show', $run))
+        ->post(route('admin.benchmarks.runs.rejudge', $run))
+        ->assertRedirect(route('admin.benchmarks.runs.show', $run));
+
+    $this->get(route('admin.benchmarks.runs.show', $run))
+        ->assertInertia(fn ($page) => $page
+            ->where('matrix.0.cases.0.cells.0.result_id', $unscored->id)
+            ->where('matrix.0.cases.0.cells.0.judge_status', BenchmarkScorer::JUDGE_QUEUED));
+});
+
 test('re-judging with nothing unscored queues nothing', function (): void {
     Queue::fake();
     $this->actingAs(User::factory()->admin()->create());

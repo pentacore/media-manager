@@ -8,6 +8,7 @@ use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\RunBenchmarkCase;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -87,17 +88,28 @@ final readonly class BenchmarkRunLauncher
     }
 
     /**
-     * Queue a judge-only job for every result whose judge failed.
+     * Mark every unscored result whose case still exists `queued` and queue a
+     * judge-only job for it, so the run page shows (and polls) the re-judge
+     * at once. Only `failed` results are flipped, under a row lock, so a
+     * double submit queues each result once. Returns how many were queued.
      */
-    public function rejudge(BenchmarkRun $benchmarkRun): void
+    public function rejudge(BenchmarkRun $benchmarkRun): int
     {
-        $resultIds = $benchmarkRun->results()
-            ->where('status', BenchmarkResultStatus::Ok)
-            ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
-            ->pluck('id');
+        return DB::transaction(function () use ($benchmarkRun): int {
+            $resultIds = $benchmarkRun->results()
+                ->where('status', BenchmarkResultStatus::Ok)
+                ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
+                ->whereNotNull('benchmark_case_id')
+                ->lockForUpdate()
+                ->pluck('id');
 
-        foreach ($resultIds as $resultId) {
-            dispatch(new RunBenchmarkCase($resultId, judgeOnly: true));
-        }
+            BenchmarkResult::query()->whereKey($resultIds)->update(['judge_status' => BenchmarkScorer::JUDGE_QUEUED]);
+
+            foreach ($resultIds as $resultId) {
+                dispatch(new RunBenchmarkCase($resultId, judgeOnly: true))->afterCommit();
+            }
+
+            return $resultIds->count();
+        });
     }
 }

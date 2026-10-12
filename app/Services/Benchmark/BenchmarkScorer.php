@@ -35,6 +35,9 @@ final readonly class BenchmarkScorer
 
     public const string JUDGE_FAILED = 'failed';
 
+    /** Transient: re-judging was requested and a judge-only job is queued for the result. */
+    public const string JUDGE_QUEUED = 'queued';
+
     /** Transient: a judge-only job has claimed the result and is judging it. */
     public const string JUDGE_PENDING = 'pending';
 

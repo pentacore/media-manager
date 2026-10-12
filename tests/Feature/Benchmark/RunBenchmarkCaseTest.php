@@ -398,7 +398,7 @@ test('judge-only mode re-scores an unscored result from its stored outcome under
         'cost_usd' => 0.28,
         'latency_ms' => 420,
         'tool_calls' => 1,
-        'judge_status' => 'failed',
+        'judge_status' => 'queued',
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => $toolLog],
     ]);
     jobFakeTitle();
@@ -524,7 +524,7 @@ test('a refused monthly hard cap leaves a re-judge unscored with the guard messa
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Expanse Season Three',
-        'judge_status' => 'failed',
+        'judge_status' => 'queued',
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
     ]);
     jobFakeJudge();
@@ -545,7 +545,7 @@ test('two judge-only jobs racing on one result judge it once and add its cost on
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Expanse Season Three',
-        'judge_status' => 'failed',
+        'judge_status' => 'queued',
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
     ]);
     $judgeCalls = 0;
@@ -567,17 +567,49 @@ test('two judge-only jobs racing on one result judge it once and add its cost on
         ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.4);
 });
 
-test('a judge-only job that dies mid-judge hands the result back to re-judging', function (): void {
+test('a judge-only job that dies queued or mid-judge hands the result back to re-judging', function (string $judgeStatus): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
-        'judge_status' => 'pending',
+        'judge_status' => $judgeStatus,
     ]);
 
     new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true)->failed(new RuntimeException('timed out'));
 
     expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
         ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
+})->with(['queued', 'pending']);
+
+test('a judge-only job only claims a result queued for re-judging', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => 'failed',
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe('failed');
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('a judge-only job whose case was deleted hands the result back to re-judging', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkCase = jobTitleCase();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => 'queued',
+        'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
+    ]);
+    $benchmarkCase->delete();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+        ->and($benchmarkResult->fresh()->score_detail)->toEqual(['error' => 'Case was deleted', 'tool_log' => []]);
+    BenchmarkJudgeAgent::assertNeverPrompted();
 });
 
 test('the job is unique per result and mode', function (): void {

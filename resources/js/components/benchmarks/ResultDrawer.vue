@@ -14,6 +14,7 @@ import {
     formatLatency,
     formatScore,
     formatUsd,
+    isRejudging,
 } from './format';
 import type {
     BenchmarkResultDetail,
@@ -128,7 +129,7 @@ function toolBadge(entry: BenchmarkToolLogEntry): string {
                                 <Pill
                                     v-else-if="
                                         result.status === 'ok' &&
-                                        result.judge_status === 'pending'
+                                        isRejudging(result.judge_status)
                                     "
                                     variant="warn"
                                     data-benchmark-drawer-rejudging

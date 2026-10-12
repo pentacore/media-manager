@@ -10,6 +10,7 @@ import {
     formatPercent,
     formatScore,
     formatUsd,
+    isRejudging,
 } from '@/components/benchmarks';
 import type {
     BenchmarkMatrixCell,
@@ -68,7 +69,7 @@ const hasFailedJudge = computed(() =>
 const needsPolling = computed(
     () =>
         isActive.value ||
-        allCells.value.some((cell) => cell.judge_status === 'pending'),
+        allCells.value.some((cell) => isRejudging(cell.judge_status)),
 );
 
 watch(
@@ -193,7 +194,7 @@ function cellFor(
 
 function cellText(cell: BenchmarkMatrixCell): string {
     if (cell.status === 'ok') {
-        if (cell.judge_status === 'pending') {
+        if (isRejudging(cell.judge_status)) {
             return 're-judging…';
         }
 

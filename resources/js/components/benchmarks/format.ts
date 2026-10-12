@@ -1,3 +1,8 @@
+/** Whether a judge status is a re-judge still waiting for or getting its score. */
+export function isRejudging(judgeStatus: string): boolean {
+    return judgeStatus === 'queued' || judgeStatus === 'pending';
+}
+
 /** A 0–1 score as the 0–10 figure shown in the UI. */
 export function formatScore(score: number | null | undefined): string {
     return score === null || score === undefined

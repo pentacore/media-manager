@@ -20,7 +20,6 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkEstimator;
 use App\Services\Benchmark\BenchmarkMatrix;
 use App\Services\Benchmark\BenchmarkRunLauncher;
-use App\Services\Benchmark\BenchmarkScorer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -194,20 +193,15 @@ class BenchmarkRunController extends Controller
 
     public function rejudge(BenchmarkRun $benchmarkRun, BenchmarkRunLauncher $benchmarkRunLauncher): RedirectResponse
     {
-        $unscored = $benchmarkRun->results()
-            ->where('status', BenchmarkResultStatus::Ok)
-            ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
-            ->count();
+        $queued = $benchmarkRunLauncher->rejudge($benchmarkRun);
 
-        if ($unscored === 0) {
+        if ($queued === 0) {
             Inertia::flash('toast', ['type' => 'info', 'message' => __('No unscored results to re-judge.')]);
 
             return back();
         }
 
-        $benchmarkRunLauncher->rejudge($benchmarkRun);
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('Re-judging :count result.|Re-judging :count results.', $unscored, ['count' => $unscored])]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => trans_choice('Re-judging :count result.|Re-judging :count results.', $queued, ['count' => $queued])]);
 
         return back();
     }
