@@ -19,7 +19,7 @@ use Stringable;
  * tool's name, description and schema, but the inner tool never runs. A read
  * call answers its recorded fixture (or the miss result, counted); a write
  * call is captured as an intended action and answers its recorded result or
- * the canned queued result, without counting a miss.
+ * the canned queued result, and is logged as a write (a call, never a miss).
  */
 final readonly class ReplayTool implements Tool
 {
@@ -57,8 +57,10 @@ final readonly class ReplayTool implements Tool
         }
 
         $this->fixtureBook->intend($name, $arguments);
+        $result = $this->fixtureBook->peek($name, $arguments) ?? self::QUEUED_RESULT;
+        $this->fixtureBook->recordWrite($name, $arguments, $result);
 
-        return $this->fixtureBook->peek($name, $arguments) ?? self::QUEUED_RESULT;
+        return $result;
     }
 
     /**
@@ -72,5 +74,14 @@ final readonly class ReplayTool implements Tool
     public function inner(): Tool
     {
         return $this->inner;
+    }
+
+    /**
+     * The tool a call really targets: a replayed tool's inner tool, otherwise
+     * the tool itself. Telemetry records this class, not the replay wrapper.
+     */
+    public static function unwrap(Tool $tool): Tool
+    {
+        return $tool instanceof self ? $tool->inner : $tool;
     }
 }

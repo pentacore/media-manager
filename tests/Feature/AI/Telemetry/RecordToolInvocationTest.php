@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Benchmark\FixtureBook;
+use App\Ai\Benchmark\ReplayTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
@@ -120,4 +122,30 @@ test('ToolFailed writes a failed row with the exception code', function (): void
         ->status->toBe('failed')
         ->error_code->toBe('runtime_exception')
         ->duration_ms->toBe(5);
+});
+
+test('a benchmark replay records the tool it stands in for', function (): void {
+    $replayTool = new ReplayTool(resolve(SearchMediaTool::class), false, new FixtureBook([]), null);
+
+    (new RecordToolInvocation)->handle(new ToolInvoked(
+        invocationId: 'inv-replay',
+        toolInvocationId: 'r1',
+        agent: new MediaAgent,
+        tool: $replayTool,
+        arguments: [],
+        result: FixtureBook::MISS_RESULT,
+        time: 1.0,
+    ));
+    (new RecordToolFailure)->handle(new ToolFailed(
+        invocationId: 'inv-replay',
+        toolInvocationId: 'r2',
+        agent: new MediaAgent,
+        tool: $replayTool,
+        arguments: [],
+        exception: new RuntimeException('boom'),
+        time: 1.0,
+    ));
+
+    expect(AiToolInvocation::where('invocation_id', 'inv-replay')->orderBy('id')->pluck('tool_class')->all())
+        ->toBe([SearchMediaTool::class, SearchMediaTool::class]);
 });

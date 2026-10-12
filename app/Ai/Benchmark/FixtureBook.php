@@ -15,7 +15,7 @@ final class FixtureBook
     /** @var list<array{tool: string, arguments: array<string, mixed>}> */
     private array $intended = [];
 
-    /** @var list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool}> */
+    /** @var list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}> */
     private array $log = [];
 
     /** @param list<array{tool: string, arguments: array<string, mixed>, result: string}> $fixtures */
@@ -67,6 +67,19 @@ final class FixtureBook
         $this->intended[] = ['tool' => $tool, 'arguments' => $arguments];
     }
 
+    /**
+     * Log a write tool's call with the result it answered, in call order, so
+     * the drill-down and the judge see it. It counts as a call, never a miss.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    public function recordWrite(string $tool, array $arguments, string $result): void
+    {
+        $this->calls++;
+
+        $this->log[] = ['tool' => $tool, 'arguments' => $arguments, 'result' => $result, 'hit' => true, 'write' => true];
+    }
+
     public function calls(): int
     {
         return $this->calls;
@@ -83,7 +96,7 @@ final class FixtureBook
         return $this->intended;
     }
 
-    /** @return list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool}> */
+    /** @return list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}> */
     public function log(): array
     {
         return $this->log;

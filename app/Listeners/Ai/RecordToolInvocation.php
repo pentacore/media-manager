@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Listeners\Ai;
 
+use App\Ai\Benchmark\ReplayTool;
 use App\Models\AiToolInvocation;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Tools\ToolNameResolver;
@@ -19,7 +20,7 @@ class RecordToolInvocation
         AiToolInvocation::create([
             'invocation_id' => $toolInvoked->invocationId,
             'tool_invocation_id' => $toolInvoked->toolInvocationId,
-            'tool_class' => $toolInvoked->tool::class,
+            'tool_class' => ReplayTool::unwrap($toolInvoked->tool)::class,
             'agent_class' => $toolInvoked->agent::class,
             'status' => $errorCode === null ? 'success' : 'failed',
             'error_code' => $errorCode,

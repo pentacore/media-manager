@@ -19,6 +19,7 @@ use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\ActionRequest;
+use App\Models\AiToolInvocation;
 use App\Models\BenchmarkRun;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -231,6 +232,11 @@ test('a write tool records every call as an intended action and returns the queu
             ['tool' => 'ReplayThrowingDestructiveTool', 'arguments' => ['id' => 3]],
             ['tool' => 'ReplayThrowingDestructiveTool', 'arguments' => ['id' => 3]],
         ])
+        ->and($fixtureBook->log())->toBe([
+            ['tool' => 'ReplayThrowingDestructiveTool', 'arguments' => ['id' => 3], 'result' => ReplayTool::QUEUED_RESULT, 'hit' => true, 'write' => true],
+            ['tool' => 'ReplayThrowingDestructiveTool', 'arguments' => ['id' => 3], 'result' => ReplayTool::QUEUED_RESULT, 'hit' => true, 'write' => true],
+        ])
+        ->and($fixtureBook->calls())->toBe(2)
         ->and($fixtureBook->misses())->toBe(0)
         ->and(ActionRequest::count())->toBe(0);
 });
@@ -242,6 +248,7 @@ test('a write tool replays its recorded result when one exists', function (): vo
 
     expect($result)->toBe('{"marked":true}')
         ->and($fixtureBook->intendedActions())->toHaveCount(1)
+        ->and($fixtureBook->log())->toBe([['tool' => 'ReplayThrowingSafeWriteTool', 'arguments' => ['id' => 7], 'result' => '{"marked":true}', 'hit' => true, 'write' => true]])
         ->and($fixtureBook->misses())->toBe(0);
 });
 
@@ -251,13 +258,19 @@ test('advisory mode refuses destructive tools without an intended action', funct
     $result = new ReplayTool(new ReplayThrowingDestructiveTool, true, $fixtureBook, AiMode::Advisory)->handle(new Request(['id' => 3]));
 
     expect($result)->toBe(BaseTool::ADVISORY_REFUSAL)
-        ->and($fixtureBook->intendedActions())->toBe([]);
+        ->and($fixtureBook->intendedActions())->toBe([])
+        ->and($fixtureBook->log())->toBe([]);
 });
 
-test('the advisory refusal constant is what BaseTool returns in advisory mode', function (): void {
+test('the advisory refusal is the advisory_mode_blocks_destructive error BaseTool returns', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
+    $expected = [
+        'error' => 'advisory_mode_blocks_destructive',
+        'message' => 'The system is in Advisory mode. Tell the user to switch to Executive mode (Admin → AI Settings) if they want this action executed.',
+    ];
 
-    expect((new ReplayThrowingDestructiveTool)->handle(new Request(['id' => 3])))->toBe(BaseTool::ADVISORY_REFUSAL);
+    expect(json_decode(BaseTool::ADVISORY_REFUSAL, true))->toBe($expected)
+        ->and(json_decode((new ReplayThrowingDestructiveTool)->handle(new Request(['id' => 3])), true))->toBe($expected);
 });
 
 test('read-only tools and sub-agents are not detected as writes', function (Tool $tool): void {
@@ -321,9 +334,13 @@ test('a benchmark run answers every tool call from fixtures and never runs a too
     $agentResponse = (new ReplayProbeAgent)->prompt('Delete Dune');
 
     expect($agentResponse->text)->toBe('Done.')
-        ->and($fixtureBook->calls())->toBe(2)
+        ->and($fixtureBook->calls())->toBe(3)
+        ->and(array_column($fixtureBook->log(), 'tool'))->toBe(['ReplayThrowingReadTool', 'InspectMediaFile', 'ReplayThrowingDestructiveTool'])
+        ->and($fixtureBook->log()[2]['write'] ?? false)->toBeTrue()
         ->and($fixtureBook->misses())->toBe(0)
         ->and($fixtureBook->intendedActions())->toBe([['tool' => 'ReplayThrowingDestructiveTool', 'arguments' => ['id' => 3]]])
-        ->and(ActionRequest::count())->toBe(0);
+        ->and(ActionRequest::count())->toBe(0)
+        ->and(AiToolInvocation::query()->orderBy('id')->pluck('tool_class')->all())
+        ->toBe([ReplayThrowingReadTool::class, AgentTool::class, ReplayThrowingDestructiveTool::class]);
     MediaFileInspectorAgent::assertNeverPrompted();
 });

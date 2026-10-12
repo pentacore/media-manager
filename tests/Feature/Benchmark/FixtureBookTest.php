@@ -14,61 +14,77 @@ function fixtureBookFor(): FixtureBook
 }
 
 test('answer returns the recorded result for a normalised match', function (): void {
-    $book = fixtureBookFor();
+    $fixtureBook = fixtureBookFor();
 
-    expect($book->answer('search', ['query' => ' Dune ']))->toBe('R1')
-        ->and($book->answer('lookup', ['id' => '5']))->toBe('R2')
-        ->and($book->calls())->toBe(2)
-        ->and($book->misses())->toBe(0);
+    expect($fixtureBook->answer('search', ['query' => ' Dune ']))->toBe('R1')
+        ->and($fixtureBook->answer('lookup', ['id' => '5']))->toBe('R2')
+        ->and($fixtureBook->calls())->toBe(2)
+        ->and($fixtureBook->misses())->toBe(0);
 });
 
 test('answer returns null and counts a miss for unrecorded calls', function (): void {
-    $book = fixtureBookFor();
+    $fixtureBook = fixtureBookFor();
 
-    expect($book->answer('search', ['query' => 'other']))->toBeNull()
-        ->and($book->answer('lookup', ['query' => 'dune']))->toBeNull()
-        ->and($book->calls())->toBe(2)
-        ->and($book->misses())->toBe(2);
+    expect($fixtureBook->answer('search', ['query' => 'other']))->toBeNull()
+        ->and($fixtureBook->answer('lookup', ['query' => 'dune']))->toBeNull()
+        ->and($fixtureBook->calls())->toBe(2)
+        ->and($fixtureBook->misses())->toBe(2);
 });
 
 test('a repeated call hits the same fixture again', function (): void {
-    $book = fixtureBookFor();
+    $fixtureBook = fixtureBookFor();
 
-    expect($book->answer('lookup', ['id' => 5]))->toBe('R2')
-        ->and($book->answer('lookup', ['id' => 5]))->toBe('R2')
-        ->and($book->misses())->toBe(0);
+    expect($fixtureBook->answer('lookup', ['id' => 5]))->toBe('R2')
+        ->and($fixtureBook->answer('lookup', ['id' => 5]))->toBe('R2')
+        ->and($fixtureBook->misses())->toBe(0);
 });
 
 test('peek looks up without counting or logging', function (): void {
-    $book = fixtureBookFor();
+    $fixtureBook = fixtureBookFor();
 
-    expect($book->peek('lookup', ['id' => 5]))->toBe('R2')
-        ->and($book->peek('lookup', ['id' => 9]))->toBeNull()
-        ->and($book->calls())->toBe(0)
-        ->and($book->misses())->toBe(0)
-        ->and($book->log())->toBe([]);
+    expect($fixtureBook->peek('lookup', ['id' => 5]))->toBe('R2')
+        ->and($fixtureBook->peek('lookup', ['id' => 9]))->toBeNull()
+        ->and($fixtureBook->calls())->toBe(0)
+        ->and($fixtureBook->misses())->toBe(0)
+        ->and($fixtureBook->log())->toBe([]);
 });
 
 test('intend records each write call as an intended action', function (): void {
-    $book = fixtureBookFor();
-    $book->intend('add_movie', ['tmdb_id' => 1]);
-    $book->intend('add_movie', ['tmdb_id' => 1]);
+    $fixtureBook = fixtureBookFor();
+    $fixtureBook->intend('add_movie', ['tmdb_id' => 1]);
+    $fixtureBook->intend('add_movie', ['tmdb_id' => 1]);
 
-    expect($book->intendedActions())->toBe([
+    expect($fixtureBook->intendedActions())->toBe([
         ['tool' => 'add_movie', 'arguments' => ['tmdb_id' => 1]],
         ['tool' => 'add_movie', 'arguments' => ['tmdb_id' => 1]],
-    ])->and($book->calls())->toBe(0);
+    ])->and($fixtureBook->calls())->toBe(0);
 });
 
 test('log lists every answer call in order', function (): void {
-    $book = fixtureBookFor();
-    $book->answer('search', ['query' => 'dune']);
-    $book->answer('search', ['query' => 'nope']);
+    $fixtureBook = fixtureBookFor();
+    $fixtureBook->answer('search', ['query' => 'dune']);
+    $fixtureBook->answer('search', ['query' => 'nope']);
 
-    expect($book->log())->toBe([
+    expect($fixtureBook->log())->toBe([
         ['tool' => 'search', 'arguments' => ['query' => 'dune'], 'result' => 'R1', 'hit' => true],
         ['tool' => 'search', 'arguments' => ['query' => 'nope'], 'result' => null, 'hit' => false],
     ]);
+});
+
+test('a recorded write joins the log in call order as a call but never a miss', function (): void {
+    $fixtureBook = fixtureBookFor();
+    $fixtureBook->answer('search', ['query' => 'dune']);
+    $fixtureBook->recordWrite('delete', ['id' => 3], '{"queued":true}');
+    $fixtureBook->answer('lookup', ['id' => 5]);
+
+    expect($fixtureBook->log())->toBe([
+        ['tool' => 'search', 'arguments' => ['query' => 'dune'], 'result' => 'R1', 'hit' => true],
+        ['tool' => 'delete', 'arguments' => ['id' => 3], 'result' => '{"queued":true}', 'hit' => true, 'write' => true],
+        ['tool' => 'lookup', 'arguments' => ['id' => 5], 'result' => 'R2', 'hit' => true],
+    ])
+        ->and($fixtureBook->calls())->toBe(3)
+        ->and($fixtureBook->misses())->toBe(0)
+        ->and($fixtureBook->intendedActions())->toBe([]);
 });
 
 test('the miss result constant is the not_recorded error', function (): void {
