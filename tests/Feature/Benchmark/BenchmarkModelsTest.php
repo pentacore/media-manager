@@ -21,8 +21,8 @@ test('a case round-trips its json columns and task enum', function (): void {
     expect($fresh->task)->toBe(AiTask::Decision)
         ->and($fresh->tags)->toBe(['smoke', 'tv'])
         ->and($fresh->fixtures)->toBe([['tool' => 'x', 'result' => ['a' => 1]]])
-        ->and($fresh->input)->toBeArray()
-        ->and($fresh->scoring)->toBeArray()
+        ->and($fresh->input)->toBe(['prompt' => 'Download stuck at 99% for two days'])
+        ->and($fresh->scoring)->toBe(['type' => 'actions', 'expected' => [['type' => 'search']]])
         ->and($fresh->source_truncated)->toBeFalse();
 });
 

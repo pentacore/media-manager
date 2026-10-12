@@ -11,7 +11,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('ai_usage_records', function (Blueprint $blueprint): void {
-            $blueprint->foreignId('benchmark_run_id')->nullable()->constrained()->nullOnDelete();
+            $blueprint->foreignId('benchmark_run_id')->nullable()->index()->constrained()->nullOnDelete();
         });
     }
 
