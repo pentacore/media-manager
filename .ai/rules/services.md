@@ -40,3 +40,6 @@ Each `*WebhookHandler` lists, in `private const array CACHE_CLEARING_EVENTS`, th
 
 ## Seerr blocklisted and deleted titles
 `SeerrTitlePresenter` maps Seerr's MediaStatus 6 to `blocklisted`: never requestable, and on a blocklisted show every season is `blocklisted` too (the title sheet requests the selected requestable seasons, so flagging only the title would not stop a TV request). Status 7 (deleted) falls to `none`, requestable again, and a season Seerr reports as deleted ignores older requests for it (they belonged to the deleted copy). The frontend `TitleStatus` union and `titleStatusPill()` (`@/lib/seerr`) carry the same states; `SeerrTitlePresenterTest` pins the mapping.
+
+## A coalesced Emby scan says how many triggers and the latest one
+`EmbyLibraryScanScheduler::fold()` rewrites the waiting scan's `description` on every fold to "`<N> imports · latest: <the newest trigger's description>`" ("changes" instead of "imports" once any recorded trigger is not `sonarr_download`/`radarr_download`; a folded manual refresh uses its own sentence), capped at `ActionDescription::DESCRIPTION_LIMIT`. Title and details stay the first trigger's. `EmbyLibraryScanSchedulerTest` pins it.

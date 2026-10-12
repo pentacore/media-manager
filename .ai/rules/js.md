@@ -41,3 +41,6 @@ A library grid card is a `<Link>` (it keeps every `data-*-card` hook and the hov
 
 ## Focus after a dialog-confirmed bulk run
 Call `focusAfterBulk()` (`@/lib/bulk`) after every successful bulk run, dialog or not. When focus is still inside a closing `[role="dialog"]`, it waits for the dialog to leave the DOM and for Reka's zero-delay focus restore, then moves focus to the enabled select-all (else the `h1`) only if it fell to `<body>`. Do not add per-dialog `@close-auto-focus` handlers for this. `SabnzbdBulkTest`, `GrabQueueBulkTest` and `ActionQueueBulkTest` pin it.
+
+## Counts render through formatCount()
+Format token budgets, call counts and other whole counts with `formatCount()` from `@/lib/format` (fixed en-US grouping, "—" for a missing or non-numeric value). Never use `new Intl.NumberFormat()` / `toLocaleString()` without a fixed locale for text the server renders too: Node's SSR locale and the browser's differ, which prints two strings and trips a hydration mismatch. `tests/Browser/PoolBudgetFormatTest.php` pins it under a German browser.

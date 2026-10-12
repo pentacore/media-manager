@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatNumber } from './format';
+import { formatCount } from '@/lib/format';
 import type { FreePoolRow } from './types';
 
 defineProps<{
@@ -93,10 +93,10 @@ function poolBars(pool: FreePoolRow): Array<{
                                 bar.label
                             }}</span>
                             <span class="font-mono-tabular">
-                                {{ formatNumber(bar.used) }} /
+                                {{ formatCount(bar.used) }} /
                                 {{
                                     bar.cap > 0
-                                        ? formatNumber(bar.cap)
+                                        ? formatCount(bar.cap)
                                         : '— no cap'
                                 }}
                             </span>

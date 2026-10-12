@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Pill } from '@/components/mm';
-import { formatNumber, shortClass } from './format';
+import { formatCount } from '@/lib/format';
+import { shortClass } from './format';
 import type { ChildRun } from './types';
 
 defineProps<{
@@ -34,7 +35,7 @@ defineProps<{
                     <span
                         class="font-mono-tabular text-[11px] text-muted-foreground"
                     >
-                        {{ formatNumber(child.total_tokens) }}
+                        {{ formatCount(child.total_tokens) }}
                         tok
                     </span>
                     <Pill
