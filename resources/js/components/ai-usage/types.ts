@@ -27,6 +27,7 @@ export interface RecentRow {
     kind: string;
     tier_position: number | null;
     benchmark_run_id: number | null;
+    is_benchmark: boolean;
     error_message: string | null;
     user_name: string | null;
 }
@@ -98,6 +99,7 @@ export interface InvocationDetail {
         kind: string;
         error_message: string | null;
         benchmark_run_id: number | null;
+        is_benchmark: boolean;
         created_at: string | null;
     };
     capturable: boolean;

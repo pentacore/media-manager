@@ -182,14 +182,15 @@ class AiUsageReporting
                 ai_usage_records.error_message,
                 ai_usage_records.tier_position,
                 ai_usage_records.benchmark_run_id,
+                ai_usage_records.is_benchmark,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
             ', $costBindings)
             ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
             ->when($fellThrough === false, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', 1))
-            ->when($benchmark === true, fn (Builder $builder) => $builder->whereNotNull('ai_usage_records.benchmark_run_id'))
-            ->when($benchmark === false, fn (Builder $builder) => $builder->whereNull('ai_usage_records.benchmark_run_id'))
+            ->when($benchmark === true, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', true))
+            ->when($benchmark === false, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', false))
             ->latest('ai_usage_records.created_at')
             ->limit($limit)
             ->get()
@@ -220,7 +221,7 @@ class AiUsageReporting
         return DB::table('ai_tool_invocations')
             ->whereNotExists(fn (Builder $builder) => $builder->from('ai_usage_records')
                 ->whereColumn('ai_usage_records.invocation_id', 'ai_tool_invocations.invocation_id')
-                ->whereNotNull('ai_usage_records.benchmark_run_id'))
+                ->where('ai_usage_records.is_benchmark', true))
             ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_tool_invocations.created_at', '>=', $since))
             ->selectRaw("
                 ai_tool_invocations.tool_class,

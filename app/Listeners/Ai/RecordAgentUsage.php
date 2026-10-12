@@ -26,6 +26,7 @@ class RecordAgentUsage
         // the DB unique constraint) so a double dispatch never double-bills.
         $response = $agentPrompted->response;
         $meta = $response->meta;
+        $benchmarkRunId = resolve(BenchmarkRunContext::class)->runId();
 
         resolve(UsageRecordWriter::class)->record([
             'invocation_id' => $agentPrompted->invocationId,
@@ -49,7 +50,8 @@ class RecordAgentUsage
             // Set when this run is a sub-agent invoked as a tool; its usage is
             // not folded into the parent's response, so each row bills once.
             'parent_invocation_id' => $agentPrompted->prompt->parentInvocationId ?? null,
-            'benchmark_run_id' => resolve(BenchmarkRunContext::class)->runId(),
+            'benchmark_run_id' => $benchmarkRunId,
+            'is_benchmark' => $benchmarkRunId !== null,
         ]);
 
         // The run finished; its step totals were only needed had it failed.

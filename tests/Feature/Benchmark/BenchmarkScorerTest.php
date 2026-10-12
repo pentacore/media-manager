@@ -8,6 +8,7 @@ use App\Ai\Benchmark\FixtureBook;
 use App\Ai\ResolvedSelection;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Models\AiModelPrice;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkRun;
@@ -85,7 +86,7 @@ test('an exact action match passes with a full score', function (): void {
 
     expect($scores['score'])->toBe(1.0)
         ->and($scores['passed'])->toBeTrue()
-        ->and($scores['judge_status'])->toBe('none')
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::None)
         ->and($scores['judge_cost_usd'])->toBe(0.0)
         ->and($scores['detail']['matched'])->toHaveCount(1)
         ->and($scores['detail']['missing'])->toBe([])
@@ -175,7 +176,7 @@ test('prices within the tolerance pass', function (): void {
 
     expect($scores['score'])->toBe(1.0)
         ->and($scores['passed'])->toBeTrue()
-        ->and($scores['judge_status'])->toBe('none')
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::None)
         ->and($scores['detail']['mismatches'])->toBe([]);
 });
 
@@ -240,7 +241,7 @@ test('the judge score is normalised and passes at the threshold', function (int 
 
     expect($scores['score'])->toBe(0.8)
         ->and($scores['passed'])->toBe($passed)
-        ->and($scores['judge_status'])->toBe('ok')
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Ok)
         ->and($scores['detail'])->toBe(['score_10' => 8, 'rationale' => 'Accurate']);
 })->with([
     'threshold 7' => [7, true],
@@ -268,7 +269,7 @@ test('a failing judge leaves the result unscored', function (): void {
 
     expect($scores['score'])->toBeNull()
         ->and($scores['passed'])->toBeNull()
-        ->and($scores['judge_status'])->toBe('failed')
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Failed)
         ->and($scores['judge_cost_usd'])->toBe(0.0)
         ->and($scores['detail'])->toBe(['error' => 'judge overloaded']);
 });
@@ -280,7 +281,7 @@ test('a judge failure message is sanitised before it is stored', function (): vo
 
     $scores = resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'Some answer'));
 
-    expect($scores['judge_status'])->toBe('failed')
+    expect($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Failed)
         ->and($scores['detail']['error'])->toContain('failed reading')
         ->and($scores['detail']['error'])->not->toContain('sk-secret-123')
         ->and($scores['detail']['error'])->not->toContain('/var/www/storage');

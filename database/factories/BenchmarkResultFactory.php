@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
@@ -28,7 +29,7 @@ class BenchmarkResultFactory extends Factory
             'candidate_index' => 0,
             'status' => BenchmarkResultStatus::Pending,
             'intended_actions' => [],
-            'judge_status' => 'none',
+            'judge_status' => BenchmarkJudgeStatus::None,
         ];
     }
 

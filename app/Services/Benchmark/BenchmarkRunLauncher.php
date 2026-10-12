@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\RunBenchmarkCase;
@@ -11,6 +12,7 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -58,7 +60,7 @@ final readonly class BenchmarkRunLauncher
                         'candidate_index' => $candidateIndex,
                         'status' => BenchmarkResultStatus::Pending,
                         'intended_actions' => [],
-                        'judge_status' => BenchmarkScorer::JUDGE_NONE,
+                        'judge_status' => BenchmarkJudgeStatus::None,
                     ]);
 
                     dispatch(new RunBenchmarkCase($benchmarkResult->id))->afterCommit();
@@ -118,20 +120,27 @@ final readonly class BenchmarkRunLauncher
     /**
      * Mark every unscored result whose case still exists `queued` and queue a
      * judge-only job for it, so the run page shows (and polls) the re-judge
-     * at once. Only `failed` results are flipped, under a row lock, so a
-     * double submit queues each result once. Returns how many were queued.
+     * at once. Only `failed` results and re-judges that stalled (queued or
+     * pending past the stale window: a dropped dispatch or a dead worker)
+     * are flipped, under a row lock, so a double submit queues each result
+     * once. A judge-only job that vanished from the queue still holds its
+     * unique lock until UniqueFor expires, so re-queueing its result is
+     * dropped until then and the result goes stale again. Returns how many
+     * were queued.
      */
     public function rejudge(BenchmarkRun $benchmarkRun): int
     {
         return DB::transaction(function () use ($benchmarkRun): int {
             $resultIds = $benchmarkRun->results()
                 ->where('status', BenchmarkResultStatus::Ok)
-                ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
+                ->where(fn (Builder $builder): Builder => $builder
+                    ->where('judge_status', BenchmarkJudgeStatus::Failed)
+                    ->orWhere(fn (Builder $stale): Builder => $stale->judgeStale()))
                 ->whereNotNull('benchmark_case_id')
                 ->lockForUpdate()
                 ->pluck('id');
 
-            BenchmarkResult::query()->whereKey($resultIds)->update(['judge_status' => BenchmarkScorer::JUDGE_QUEUED]);
+            BenchmarkResult::query()->whereKey($resultIds)->update(['judge_status' => BenchmarkJudgeStatus::Queued]);
 
             foreach ($resultIds as $resultId) {
                 dispatch(new RunBenchmarkCase($resultId, judgeOnly: true))->afterCommit();

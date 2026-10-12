@@ -1,3 +1,17 @@
+## [1.41.1](https://github.com/pentacore/media-manager/compare/v1.41.0...v1.41.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **ai-usage:** keep benchmark usage rows tagged after their run is deleted ([a3cc063](https://github.com/pentacore/media-manager/commit/a3cc06371e842afa7f4e2b3d73970409ce68fa7f))
+* **ai:** keep a re-judge waiting for a run slot from reading as stalled ([458261d](https://github.com/pentacore/media-manager/commit/458261d3575d77b315081ec388e0cdc31a938df0))
+* **ai:** keep identifier-like numeric strings as strings in benchmark arguments ([fdc3b6e](https://github.com/pentacore/media-manager/commit/fdc3b6e7e369d6ce4035159b92f4572a8eff0d23))
+* **ai:** pick the best benchmark score only among fully scored candidates ([ec8ed78](https://github.com/pentacore/media-manager/commit/ec8ed78fab5511892e7ebb792aafebd44194ea0d))
+* **ai:** recover stalled benchmark re-judges and running results ([133dab0](https://github.com/pentacore/media-manager/commit/133dab0fb22cc3c0782fb6a40833bbd1f946b4dd))
+* **ai:** show stalled benchmark results and stop polling on them ([c8ca78a](https://github.com/pentacore/media-manager/commit/c8ca78a5c519e91cf28496e3ff698650ef50a611))
+* **benchmark:** compare captured message times in the app timezone ([e02596f](https://github.com/pentacore/media-manager/commit/e02596fa26ddc01d6185832db381ced30fb8b8be))
+* **benchmark:** drop same-second messages from captured history when the prompt was truncated ([b852a0d](https://github.com/pentacore/media-manager/commit/b852a0dd99bce29364fe5dad61349b29537172c9))
+
 # [1.41.0](https://github.com/pentacore/media-manager/compare/v1.40.0...v1.41.0) (2026-10-12)
 
 

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
@@ -42,14 +43,15 @@ test('deleting a run deletes its results and nulls usage record links', function
     $run = BenchmarkRun::factory()->create();
     $case = BenchmarkCase::factory()->create();
     $result = BenchmarkResult::factory()->forCase($run, $case, 0)->create();
-    $usage = AiUsageRecord::factory()->create(['benchmark_run_id' => $run->id]);
+    $usage = AiUsageRecord::factory()->benchmarked($run->id)->create();
 
     expect($usage->benchmarkRun->is($run))->toBeTrue();
 
     $run->delete();
 
     expect(BenchmarkResult::query()->whereKey($result->id)->exists())->toBeFalse()
-        ->and($usage->fresh()->benchmark_run_id)->toBeNull();
+        ->and($usage->fresh()->benchmark_run_id)->toBeNull()
+        ->and($usage->fresh()->is_benchmark)->toBeTrue();
 });
 
 test('a run reports whether it is terminal', function (BenchmarkRunStatus $status, bool $terminal): void {
@@ -62,3 +64,10 @@ test('a run reports whether it is terminal', function (BenchmarkRunStatus $statu
     [BenchmarkRunStatus::Cancelled, true],
     [BenchmarkRunStatus::Failed, true],
 ]);
+
+test('a result casts its judge status to the enum', function (): void {
+    $result = BenchmarkResult::factory()->create(['judge_status' => BenchmarkJudgeStatus::Queued]);
+
+    expect($result->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and(BenchmarkResult::factory()->create()->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::None);
+});

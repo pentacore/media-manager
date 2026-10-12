@@ -123,7 +123,8 @@ test('usage rows written during a run carry the run id', function (): void {
     (new TitleAgent)->prompt('Hello there');
 
     $usage = AiUsageRecord::query()->where('agent_class', TitleAgent::class)->latest('id')->first();
-    expect($usage?->benchmark_run_id)->toBe($benchmarkRunContext->runId());
+    expect($usage?->benchmark_run_id)->toBe($benchmarkRunContext->runId())
+        ->and($usage?->is_benchmark)->toBeTrue();
 });
 
 test('failed run rows written during a run carry the run id', function (): void {
@@ -134,7 +135,8 @@ test('failed run rows written during a run carry the run id', function (): void 
 
     $usage = AiUsageRecord::query()->where('agent_class', TitleAgent::class)->latest('id')->first();
     expect($usage?->status)->toBe('failed')
-        ->and($usage?->benchmark_run_id)->toBe($benchmarkRunContext->runId());
+        ->and($usage?->benchmark_run_id)->toBe($benchmarkRunContext->runId())
+        ->and($usage?->is_benchmark)->toBeTrue();
 });
 
 test('usage rows outside a run carry no run id', function (): void {
@@ -142,7 +144,10 @@ test('usage rows outside a run carry no run id', function (): void {
 
     (new TitleAgent)->prompt('Hello there');
 
-    expect(AiUsageRecord::query()->where('agent_class', TitleAgent::class)->latest('id')->first()?->benchmark_run_id)->toBeNull();
+    $usage = AiUsageRecord::query()->where('agent_class', TitleAgent::class)->latest('id')->first();
+
+    expect($usage?->benchmark_run_id)->toBeNull()
+        ->and($usage?->is_benchmark)->toBeFalse();
 });
 
 test('the context exposes the case fixtures, history and mode', function (): void {
