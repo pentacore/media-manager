@@ -114,3 +114,23 @@ test('the reject dialog closes when the selection empties under it', function ()
 
     expect($pending->fresh()->status)->toBe(ActionRequestStatus::Pending);
 });
+
+test('a confirmed bulk reject hands focus to select all, not the page body', function (): void {
+    $actionRequests = ActionRequest::factory()->count(3)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    // Rows are picked by id: the three share a created_at second, so their
+    // order on the page is not fixed.
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-bulk-select="%d"]', $actionRequests[0]->id))
+        ->click(sprintf('[data-bulk-select="%d"]', $actionRequests[1]->id))
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-reject]')
+        ->fill('[data-bulk-reject-reason]', 'Not wanted')
+        ->click('[data-bulk-reject-confirm]')
+        ->assertSee('2 rejected');
+
+    $webpage->script(confirmDialogWaitUntilScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null"));
+    $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
+});

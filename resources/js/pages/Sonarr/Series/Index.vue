@@ -417,29 +417,59 @@ function sonarrSeriesUrl(slug: string | null): string | null {
             class="grid gap-[18px]"
             style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr))"
         >
-            <Link
-                v-for="item in visible"
-                :key="item.id"
-                :href="SeriesController.show.url(item.id)"
-                :data-series-card="item.id"
-                prefetch
-                class="group flex flex-col gap-2"
-            >
-                <div class="relative">
-                    <Poster
-                        :hint="item.title.toLowerCase().slice(0, 12)"
-                        :src="arrPosterUrl(item.images)"
-                        size="full"
-                    />
-                    <Pill
-                        v-if="!item.monitored"
-                        class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
-                    >
-                        Unmonitored
-                    </Pill>
+            <div v-for="item in visible" :key="item.id" class="group relative">
+                <Link
+                    :href="SeriesController.show.url(item.id)"
+                    :data-series-card="item.id"
+                    prefetch
+                    class="flex flex-col gap-2"
+                >
+                    <div class="relative">
+                        <Poster
+                            :hint="item.title.toLowerCase().slice(0, 12)"
+                            :src="arrPosterUrl(item.images)"
+                            size="full"
+                        />
+                        <Pill
+                            v-if="!item.monitored"
+                            class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
+                        >
+                            Unmonitored
+                        </Pill>
+                    </div>
+                    <div>
+                        <div
+                            class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
+                        >
+                            {{ item.title }}
+                        </div>
+                        <div
+                            class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
+                        >
+                            <span>{{ item.year ?? '—' }}</span>
+                            <span
+                                >{{ item.episode_file_count }} /
+                                {{ item.episode_count }}</span
+                            >
+                        </div>
+                        <div
+                            class="mt-1.5 h-1 overflow-hidden rounded-full bg-bg-elev"
+                        >
+                            <div
+                                class="h-full rounded-full bg-accent"
+                                :style="{ width: `${progressPct(item)}%` }"
+                            />
+                        </div>
+                    </div>
+                </Link>
+                <!-- Beside the card link, over the poster: an anchor may not
+                     contain interactive content. -->
+                <div
+                    v-if="canBulk"
+                    class="pointer-events-none absolute inset-x-0 top-0 aspect-[2/3]"
+                >
                     <BulkCheckbox
-                        v-if="canBulk"
-                        class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
+                        class="pointer-events-auto absolute right-2 bottom-2 rounded bg-black/55 p-1"
                         :checked="isSelected(item.id)"
                         :disabled="bulkBusy"
                         :label="`Select ${item.title}`"
@@ -449,31 +479,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         "
                     />
                 </div>
-                <div>
-                    <div
-                        class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
-                    >
-                        {{ item.title }}
-                    </div>
-                    <div
-                        class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
-                    >
-                        <span>{{ item.year ?? '—' }}</span>
-                        <span
-                            >{{ item.episode_file_count }} /
-                            {{ item.episode_count }}</span
-                        >
-                    </div>
-                    <div
-                        class="mt-1.5 h-1 overflow-hidden rounded-full bg-bg-elev"
-                    >
-                        <div
-                            class="h-full rounded-full bg-accent"
-                            :style="{ width: `${progressPct(item)}%` }"
-                        />
-                    </div>
-                </div>
-            </Link>
+            </div>
             <div
                 v-if="visible.length === 0"
                 class="col-span-full py-8 text-center text-sm text-fg-subtle"
