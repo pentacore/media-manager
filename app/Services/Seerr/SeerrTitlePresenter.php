@@ -138,6 +138,9 @@ final readonly class SeerrTitlePresenter
         // The blocklist is per title: on a blocklisted show no season can be
         // requested, whatever its own row says.
         $blocklisted = $this->status($mediaInfo) === self::BLOCKLISTED;
+        // A deleted title frees every season: older requests and season rows
+        // belonged to the deleted copy, so each season can be requested again.
+        $titleDeleted = (int) ($mediaInfo['status'] ?? 0) === self::DELETED_MEDIA;
         $libraryStatus = [];
         $deletedSeasons = [];
         $requestStatus = [];
@@ -180,6 +183,7 @@ final readonly class SeerrTitlePresenter
             $library = $libraryStatus[$number] ?? self::NONE;
             $status = match (true) {
                 $blocklisted => self::BLOCKLISTED,
+                $titleDeleted => self::NONE,
                 $library !== self::NONE => $library,
                 // Deleted from the library: an older request belonged to the
                 // deleted copy, so the season can be requested again.

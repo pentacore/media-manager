@@ -142,9 +142,9 @@ const bulkBusy = ref(false);
 // request never names a title the user can no longer see.
 watch(visibleIds, (ids) => retainSelection(ids));
 
-// A blurred poster sits inside the card link with overlays (checkbox, pill)
-// as its siblings: the card reveals it while the link has focus or the
-// pointer is anywhere over the poster area, overlays included.
+// The blurred poster reveals while anything in the card wrapper has focus
+// (the link or the checkbox) or the pointer is over the poster or the
+// checkbox.
 const focusedCard = ref<number | null>(null);
 const hoveredCard = ref<number | null>(null);
 

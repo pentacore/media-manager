@@ -300,6 +300,7 @@ onBeforeUnmount(() => {
                                 v-if="pill"
                                 :status="pill.status"
                                 :label="pill.label"
+                                data-title-status
                             />
                             <p
                                 v-if="detail.overview"

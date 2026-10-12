@@ -184,6 +184,7 @@ test('a blocklisted movie shows its badge and offers no request', function (): v
         ->assertSeeIn('[data-title-card="movie-438631"]', 'Blocklisted')
         ->click('[data-title-card="movie-438631"]')
         ->assertSeeIn('[data-title-sheet]', 'An example overview.')
+        ->assertSeeIn('[data-title-status]', 'Blocklisted')
         ->assertSeeIn('[data-title-blocklisted]', "Blocklisted in Seerr — it can't be requested.")
         ->assertCount('[data-request-submit]', 0)
         ->assertNoSmoke();

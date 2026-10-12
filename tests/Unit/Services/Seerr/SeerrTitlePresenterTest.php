@@ -102,7 +102,7 @@ test('a blocklisted show makes every season unrequestable', function (): void {
         ]);
 });
 
-test('a deleted season is requestable again even with an old request on it', function (): void {
+test('a deleted show frees every season even when only one season row is deleted', function (): void {
     $detail = new SeerrTitlePresenter()->detail('tv', [
         'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
         'seasons' => [
@@ -119,6 +119,46 @@ test('a deleted season is requestable again even with an old request on it', fun
     expect($detail['status'])->toBe('none')
         ->and($detail['seasons'])->toBe([
             ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'none', 'requestable' => true],
-            ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'requested', 'requestable' => false],
+            ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'none', 'requestable' => true],
         ]);
+});
+
+test('a deleted show ignores stale season rows and a pending request from the deleted copy', function (): void {
+    $detail = new SeerrTitlePresenter()->detail('tv', [
+        'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
+        'seasons' => [
+            ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
+            ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+        ],
+        'mediaInfo' => [
+            'status' => 7,
+            'seasons' => [['seasonNumber' => 1, 'status' => 5]],
+            'requests' => [['status' => 1, 'seasons' => [['seasonNumber' => 2]]]],
+        ],
+    ]);
+
+    expect($detail['seasons'])->toBe([
+        ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'none', 'requestable' => true],
+        ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'none', 'requestable' => true],
+    ]);
+});
+
+test('a deleted season on a live show is requestable again even with an old request on it', function (): void {
+    $detail = new SeerrTitlePresenter()->detail('tv', [
+        'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
+        'seasons' => [
+            ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
+            ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+        ],
+        'mediaInfo' => [
+            'status' => 4,
+            'seasons' => [['seasonNumber' => 1, 'status' => 7]],
+            'requests' => [['status' => 5, 'seasons' => [['seasonNumber' => 1], ['seasonNumber' => 2]]]],
+        ],
+    ]);
+
+    expect($detail['seasons'])->toBe([
+        ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'none', 'requestable' => true],
+        ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'requested', 'requestable' => false],
+    ]);
 });

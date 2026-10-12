@@ -236,6 +236,25 @@ test('clicking a day opens its popover with the full rows and their actions', fu
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'EpisodeSearch' && $request['episodeIds'] === [70]);
 });
 
+test('a day popover opens from the keyboard and Escape closes it back onto its trigger', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $trigger = '[data-calendar-day-open="2026-09-10"]';
+    $popover = '[data-calendar-day-popover="2026-09-10"]';
+
+    $webpage = visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-calendar-view="month"]')
+        ->keys($trigger, 'Enter')
+        ->assertCount(sprintf('%s [data-calendar-item]', $popover), 1)
+        ->assertSeeIn($popover, 'Half Loop')
+        ->keys($popover, 'Escape');
+
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("!document.querySelector('%s') && document.activeElement?.matches('%s')", $popover, $trigger)));
+    $webpage->assertCount($popover, 0)
+        ->assertScript(sprintf("document.activeElement?.matches('%s') === true", $trigger))
+        ->assertNoSmoke();
+});
+
 test("+N more opens the whole day with each item's own Search", function (): void {
     // Http::fake keeps the first matching stub, so the beforeEach Sonarr
     // stubs cannot be overridden; move Sonarr to a host with a busy day.
