@@ -352,7 +352,7 @@ test('a card checkbox sits beside the card link, and focusing it still reveals t
     $webpage = visit(route('media.whisparr.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-card="11"] [data-whisparr-title]', 'Aurora Scene')
-        ->assertCount('[data-whisparr-card="11"] [data-bulk-select]', 0)
+        ->assertCount('[data-whisparr-card="11"] a, [data-whisparr-card="11"] button, [data-whisparr-card="11"] [data-bulk-select]', 0)
         ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="true"]');
 
     $webpage->script("document.querySelector('[data-bulk-select=\"11\"] button').focus()");

@@ -385,6 +385,9 @@ test('a confirmed bulk remove hands focus to select all, not the page body', fun
         ->click('[data-bulk-queue-confirm]')
         ->assertSee('1 removed');
 
-    $webpage->script(confirmDialogWaitUntilScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null"));
+    // Assert only after the dialog has left the DOM and Reka's restore
+    // (a zero-delay timer scheduled at unmount) has run.
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[role=\"dialog\"]')"));
+    $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });

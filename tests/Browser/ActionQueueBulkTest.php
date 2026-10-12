@@ -131,6 +131,36 @@ test('a confirmed bulk reject hands focus to select all, not the page body', fun
         ->click('[data-bulk-reject-confirm]')
         ->assertSee('2 rejected');
 
-    $webpage->script(confirmDialogWaitUntilScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null"));
+    // Assert only after the dialog has left the DOM and Reka's restore
+    // (a zero-delay timer scheduled at unmount) has run.
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[role=\"dialog\"]')"));
+    $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
+    $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
+});
+
+test('a bulk reject that resolves with focus still in the dialog hands focus to select all once the dialog has gone', function (): void {
+    $actionRequests = ActionRequest::factory()->count(2)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-bulk-select="%d"]', $actionRequests[0]->id))
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->click('[data-bulk-reject]')
+        ->fill('[data-bulk-reject-reason]', 'Not wanted');
+
+    // Click Confirm and, in the same task, park focus on the reason field. Vue
+    // disables the button on its next flush; with focus still on it Chromium
+    // would drop it to <body> and skip the dialog-wait branch under test.
+    $webpage->script(<<<'JS'
+        document.querySelector('[data-bulk-reject-confirm]').click();
+        document.querySelector('[data-bulk-reject-reason]').focus();
+    JS);
+    $webpage->assertSee('1 rejected');
+
+    // Assert only after the dialog has left the DOM and Reka's restore
+    // (a zero-delay timer scheduled at unmount) has run.
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[role=\"dialog\"]')"));
+    $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });
