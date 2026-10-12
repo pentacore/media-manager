@@ -14,7 +14,9 @@ use Illuminate\Support\Collection;
 /**
  * Aggregates a run's results into one comparison matrix per task: a row of
  * figures per candidate, the best candidate per metric and a cell per case ×
- * candidate for the drill-down.
+ * candidate for the drill-down. A candidate is best by score or pass rate
+ * only when it was scored on as many cases as the most-covered candidate, so
+ * a high average over fewer cases never wins.
  */
 final readonly class BenchmarkMatrix
 {
@@ -23,14 +25,15 @@ final readonly class BenchmarkMatrix
      *     task: string,
      *     task_label: string,
      *     candidates: list<array<string, mixed>>,
+     *     max_scored: int,
      *     best: array{avg_score: int|null, pass_rate: int|null, cost_per_case: int|null, latency_p50: int|null},
-     *     cases: list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string}>}>
+     *     cases: list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string, judge_stale: bool, stale: bool}>}>
      * }>
      */
     public static function for(BenchmarkRun $benchmarkRun): array
     {
         $results = $benchmarkRun->results()
-            ->select(['id', 'benchmark_case_id', 'case_name', 'case_task', 'candidate_index', 'status', 'cost_usd', 'judge_cost_usd', 'latency_ms', 'tool_misses', 'score', 'passed', 'judge_status'])
+            ->select(['id', 'benchmark_case_id', 'case_name', 'case_task', 'candidate_index', 'status', 'cost_usd', 'judge_cost_usd', 'latency_ms', 'tool_misses', 'score', 'passed', 'judge_status', 'updated_at'])
             ->orderBy('id')
             ->get()
             ->groupBy('case_task');
@@ -44,13 +47,17 @@ final readonly class BenchmarkMatrix
                 $candidates[] = self::candidateRow($benchmarkRun, $index, $candidate, $taskResults->where('candidate_index', $index));
             }
 
+            $maxScored = $candidates === [] ? 0 : (int) max(array_column($candidates, 'scored'));
+            $fullyScored = array_values(array_filter($candidates, static fn (array $candidate): bool => $candidate['scored'] === $maxScored));
+
             $matrix[] = [
                 'task' => (string) $task,
                 'task_label' => AiTask::tryFrom((string) $task)?->label() ?? (string) $task,
                 'candidates' => $candidates,
+                'max_scored' => $maxScored,
                 'best' => [
-                    'avg_score' => self::best($candidates, 'avg_score', highest: true),
-                    'pass_rate' => self::best($candidates, 'pass_rate', highest: true),
+                    'avg_score' => self::best($fullyScored, 'avg_score', highest: true),
+                    'pass_rate' => self::best($fullyScored, 'pass_rate', highest: true),
                     'cost_per_case' => self::best($candidates, 'cost_per_case', highest: false),
                     'latency_p50' => self::best($candidates, 'latency_p50', highest: false),
                 ],
@@ -89,6 +96,7 @@ final readonly class BenchmarkMatrix
             'ok' => $ok->count(),
             'failed' => $results->where('status', BenchmarkResultStatus::Failed)->count(),
             'skipped' => $results->where('status', BenchmarkResultStatus::Skipped)->count(),
+            'scored' => $scores->count(),
             'avg_score' => $scores->isEmpty() ? null : round((float) $scores->avg(), 4),
             'pass_rate' => $verdicts->isEmpty() ? null : round($verdicts->where('passed', true)->count() / $verdicts->count(), 4),
             'cost_per_case' => $ok->isEmpty() ? null : round($cost / $ok->count(), 6),
@@ -142,7 +150,7 @@ final readonly class BenchmarkMatrix
 
     /**
      * @param  Collection<int, BenchmarkResult>  $results
-     * @return list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string}>}>
+     * @return list<array{case_id: int|null, case_name: string, cells: list<array{candidate_index: int, result_id: int, status: string, score: float|null, passed: bool|null, judge_status: string, judge_stale: bool, stale: bool}>}>
      */
     private static function caseRows(Collection $results): array
     {
@@ -159,7 +167,9 @@ final readonly class BenchmarkMatrix
                     'status' => $benchmarkResult->status->value,
                     'score' => $benchmarkResult->score,
                     'passed' => $benchmarkResult->passed,
-                    'judge_status' => $benchmarkResult->judge_status,
+                    'judge_status' => $benchmarkResult->judge_status->value,
+                    'judge_stale' => $benchmarkResult->isJudgeStale(),
+                    'stale' => $benchmarkResult->isRunStale(),
                 ])->values()->all(),
             ])
             ->values()

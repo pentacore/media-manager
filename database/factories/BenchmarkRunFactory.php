@@ -55,4 +55,13 @@ class BenchmarkRunFactory extends Factory
             'finished_at' => now(),
         ]);
     }
+
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => BenchmarkRunStatus::Cancelled,
+            'started_at' => now()->subMinutes(5),
+            'finished_at' => now(),
+        ]);
+    }
 }

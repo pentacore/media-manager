@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\AiModelPrice;
@@ -157,7 +158,7 @@ test('a result whose judge failed is flagged and offers a re-judge', function ()
     $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'failed',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
         'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
     ]);
 
@@ -177,7 +178,7 @@ test('an admin re-judges an unscored result and the cell shows its new score', f
     $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'failed',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
         'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
     ]);
     BenchmarkJudgeAgent::fake(fn (): array => ['score' => 8, 'rationale' => 'Accurate']);
@@ -190,7 +191,7 @@ test('an admin re-judges an unscored result and the cell shows its new score', f
         ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), '8.0')
         ->assertMissing('[data-benchmark-rejudge]');
 
-    expect($result->fresh()->judge_status)->toBe('ok');
+    expect($result->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok);
 });
 
 test('queued re-judges and running cases show as in progress', function (): void {
@@ -203,7 +204,7 @@ test('queued re-judges and running cases show as in progress', function (): void
     $queued = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
     ]);
     $running = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 1)->running()->create();
 
@@ -214,4 +215,88 @@ test('queued re-judges and running cases show as in progress', function (): void
         ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $running->id), 'running')
         ->click(sprintf('[data-benchmark-cell="%d"]', $queued->id))
         ->assertVisible('[data-benchmark-drawer-rejudging]');
+});
+
+test('a re-judge that stalled shows as a failed judge and offers a re-judge', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->completed()->create(['case_ids' => [$benchmarkCase->id]]);
+    $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Nolan Films',
+        'judge_status' => BenchmarkJudgeStatus::Pending,
+        'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
+    ]);
+    BenchmarkResult::query()->whereKey($result->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+    BenchmarkJudgeAgent::fake(fn (): array => ['score' => 7, 'rationale' => 'Fine']);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), 'judge failed — stalled')
+        ->assertVisible('[data-benchmark-rejudge]')
+        ->click(sprintf('[data-benchmark-cell="%d"]', $result->id))
+        ->assertSeeIn('[data-benchmark-drawer-judge-failed]', 'judge failed — stalled')
+        ->assertSeeIn('[data-benchmark-drawer-judge-error]', 'judge timed out')
+        ->assertMissing('[data-benchmark-drawer-rejudging]');
+});
+
+test('a running result whose worker died shows as stalled and stops the polling count', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->cancelled()->create(['case_ids' => [$benchmarkCase->id]]);
+    $stalled = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->running()->create();
+    BenchmarkResult::query()->whereKey($stalled->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-stalled-count]', '1 stalled')
+        ->assertMissing('[data-benchmark-running-count]')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $stalled->id), 'stalled')
+        ->assertAttributeContains(sprintf('[data-benchmark-cell="%d"]', $stalled->id), 'class', 'text-destructive')
+        ->click(sprintf('[data-benchmark-cell="%d"]', $stalled->id))
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-status]', 'stalled');
+
+    expect($stalled->fresh()->status)->toBe(BenchmarkResultStatus::Running);
+});
+
+test('a cancelled run keeps polling while a case still runs and shows its result', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->cancelled()->create(['case_ids' => [$benchmarkCase->id]]);
+    $running = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->running()->create();
+
+    $webpage = visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-status]', 'Cancelled')
+        ->assertSeeIn('[data-benchmark-running-count]', '1 running')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $running->id), 'running');
+
+    $running->update(['status' => BenchmarkResultStatus::Ok, 'score' => 0.9, 'passed' => true]);
+
+    $webpage->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $running->id), '9.0')
+        ->assertMissing('[data-benchmark-running-count]');
+});
+
+test('a candidate scored on fewer cases shows its coverage and is never highlighted as best', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $first = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $second = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Villeneuve chat']);
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => 'provider_default'],
+        ['provider' => 'openai', 'model' => 'gpt-5-mini', 'reasoning' => 'provider_default'],
+    ])->create(['case_ids' => [$first->id, $second->id]]);
+    BenchmarkResult::factory()->forCase($run, $first, 0)->scored(0.6, false)->create();
+    BenchmarkResult::factory()->forCase($run, $second, 0)->scored(0.6, false)->create();
+    BenchmarkResult::factory()->forCase($run, $first, 1)->scored(0.9, true)->create();
+    BenchmarkResult::factory()->forCase($run, $second, 1)->failed('Provider timeout')->create();
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', '6.0')
+        ->assertDontSeeIn('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', '/')
+        ->assertSeeIn('[data-benchmark-matrix-row="1"] [data-benchmark-avg-score]', '9.0 (1/2)')
+        ->assertSeeIn('[data-benchmark-matrix-row="1"] [data-benchmark-pass-rate]', '100% (1/2)')
+        ->assertAttributeContains('[data-benchmark-matrix-row="0"] [data-benchmark-avg-score]', 'class', 'text-success')
+        ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-avg-score]', 'class', 'text-success')
+        ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-pass-rate]', 'class', 'text-success');
 });

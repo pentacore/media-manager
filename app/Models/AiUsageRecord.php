@@ -44,6 +44,7 @@ use Override;
  * @property string|null $parent_invocation_id
  * @property int|null $tier_position
  * @property int|null $benchmark_run_id
+ * @property bool $is_benchmark
  * @property string $search_units
  * @property string|null $search_unit_per_k
  * @property CarbonImmutable|null $created_at
@@ -70,6 +71,7 @@ use Override;
     'tool_calls_count',
     'tier_position',
     'benchmark_run_id',
+    'is_benchmark',
     'input_per_mtok',
     'output_per_mtok',
     'cache_read_per_mtok',
@@ -108,6 +110,7 @@ class AiUsageRecord extends Model
             'is_batch' => 'boolean',
             'tier_position' => 'integer',
             'benchmark_run_id' => 'integer',
+            'is_benchmark' => 'boolean',
             'kind' => AiUsageKind::class,
             'search_units' => 'decimal:3',
             'search_unit_per_k' => 'decimal:4',
