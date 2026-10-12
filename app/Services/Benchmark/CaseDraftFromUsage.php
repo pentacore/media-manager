@@ -161,7 +161,7 @@ final readonly class CaseDraftFromUsage
             ->where('conversation_id', $aiUsageRecord->conversation_id)
             ->whereIn('role', ['user', 'assistant'])
             ->where('created_at', '<', $aiUsageRecord->created_at->startOfSecond()->addSecond())
-            ->orderBy('created_at')
+            ->oldest()
             ->orderBy('id')
             ->get(['role', 'content'])
             ->map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])

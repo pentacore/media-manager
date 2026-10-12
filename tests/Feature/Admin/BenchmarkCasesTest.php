@@ -267,10 +267,10 @@ test('records that cannot become a case redirect back with an error toast', func
 
 test('a usage row of a benchmark run cannot become a case', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $record = benchmarkTextUsage(MediaAgent::class, 'Hi', ['benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Hi', ['benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
 
     $this->from(route('admin.ai-usage.index'))
-        ->get(route('admin.benchmarks.cases.create', ['from_usage' => $record->id]))
+        ->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertRedirect(route('admin.ai-usage.index'))
         ->assertInertiaFlash('toast.type', 'error')
         ->assertInertiaFlash('toast.message', "Benchmark runs can't be captured as cases.");
