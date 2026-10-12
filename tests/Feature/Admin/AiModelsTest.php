@@ -48,6 +48,7 @@ function aiModelsPayload(array $overrides = []): array
             'file_inspector' => $blank,
             'stuck_download_investigator' => $blank,
             'price_updater' => $blank,
+            'benchmark_judge' => $blank,
         ],
         'failover' => ['provider' => null, 'model' => null],
         'event_overrides' => [],
@@ -92,7 +93,7 @@ test('the index shows each task with its resolved selection', function (): void 
             ->where('tasks.2.resolved.model', 'gpt-5.6-luna')
             ->has('models.openai')
             ->has('reasoningLevels')
-            ->has('tasks', 6));
+            ->has('tasks', 7));
 });
 
 test('the index exposes what an inherit tier runs on beside the live resolution', function (): void {
@@ -669,4 +670,27 @@ test('the index still renders without model pools when pool status fails', funct
         ->assertInertia(fn ($page) => $page->where('modelPools', []));
 
     Exceptions::assertReported(RuntimeException::class);
+});
+
+test('the index marks the benchmark judge as a single selection', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.6.task', 'benchmark_judge')
+            ->where('tasks.6.allow_tiers', false)
+            ->where('tasks.0.allow_tiers', true)
+            ->where('tasks.6.inherits_chat', true)
+            ->where('tasks.6.resolved.model', 'gpt-5.6-luna'));
+});
+
+test('the benchmark judge accepts only one tier', function (): void {
+    $tier = ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => null, 'min_pool_percent' => null, 'min_pool_tokens' => null];
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload([
+            'tasks' => ['benchmark_judge' => ['tiers' => [$tier, [...$tier, 'model' => null, 'provider' => null]]]],
+        ]))
+        ->assertSessionHasErrors('tasks.benchmark_judge.tiers');
 });
