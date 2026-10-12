@@ -46,11 +46,7 @@ final readonly class UnpricedModelDetector
                 continue;
             }
 
-            $scopes = $this->taskModelResolver->rows()
-                ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask)
-                ->pluck('scope')
-                ->push(AiTaskModel::DEFAULT_SCOPE)
-                ->unique();
+            $scopes = $this->taskModelResolver->scopes($aiTask);
 
             foreach ($scopes as $scope) {
                 $configuredSelections = $this->taskModelResolver->configuredSelections($aiTask, $scope);

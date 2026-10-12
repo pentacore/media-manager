@@ -245,3 +245,12 @@ test('configured selections resolve a tier like a run would', function (): void 
         ['position' => 2, 'provider' => 'openai', 'model' => 'gpt-no-provider'],
     ]);
 });
+
+test('scopes lists the default scope and every event scope the task has rows in', function (): void {
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-a')->create();
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-b')->position(1)->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('openai', 'gpt-c')->create();
+
+    expect(resolver()->scopes(AiTask::Decision)->all())->toBe(['radarr:Grab', 'sonarr:Download', 'default'])
+        ->and(resolver()->scopes(AiTask::Chat)->all())->toBe(['default']);
+});

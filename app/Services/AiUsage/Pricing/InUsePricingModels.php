@@ -6,7 +6,6 @@ namespace App\Services\AiUsage\Pricing;
 
 use App\Ai\TaskModelResolver;
 use App\Enums\AiTask;
-use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Settings\AiSettings;
 use InvalidArgumentException;
@@ -112,11 +111,7 @@ final class InUsePricingModels
                 continue;
             }
 
-            $scopes = $taskModelResolver->rows()
-                ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask)
-                ->pluck('scope')
-                ->push(AiTaskModel::DEFAULT_SCOPE)
-                ->unique();
+            $scopes = $taskModelResolver->scopes($aiTask);
 
             foreach ($scopes as $scope) {
                 foreach ($taskModelResolver->configuredSelections($aiTask, $scope) as $configured) {

@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Ai\TaskModelResolver;
+use App\Ai\TierEligibility;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Services\AiBudget\UnpricedModelDetector;
+use App\Services\AiUsage\PoolHeadroom;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
     config()->set('ai.default', 'openai');
@@ -104,4 +108,19 @@ test('a tier equal to the live pick of its role is not listed twice', function (
 
     expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
         ->toContain('Chat')->not->toContain('Chat (tier 2)');
+});
+
+test('a skipped tier one with an unpriced model is still reported as tier one', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('title-model', 'sub-agent-model', 'decision-model', 'chat-two');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->conditions(50)->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-two')->position(1)->create();
+    Exceptions::fake();
+    $this->mock(PoolHeadroom::class)->shouldReceive('forModel')->andThrow(new RuntimeException('pool unavailable'));
+    app()->forgetInstance(TaskModelResolver::class);
+    app()->forgetInstance(TierEligibility::class);
+
+    expect(resolve(UnpricedModelDetector::class)->forHardCap())->toBe([
+        ['role' => 'Chat (tier 1)', 'provider' => 'openai', 'model' => 'chat-one'],
+    ]);
 });

@@ -160,6 +160,21 @@ final class TaskModelResolver
     }
 
     /**
+     * Every scope the task has rows in, always including the default scope.
+     *
+     * @return Collection<int, string>
+     */
+    public function scopes(AiTask $aiTask): Collection
+    {
+        return $this->rows()
+            ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask)
+            ->pluck('scope')
+            ->push(AiTaskModel::DEFAULT_SCOPE)
+            ->unique()
+            ->values();
+    }
+
+    /**
      * The scope's first tier.
      */
     public function row(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ?AiTaskModel
