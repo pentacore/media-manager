@@ -196,7 +196,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
             $caseOutcome = $benchmarkCaseRunner->run($benchmarkCase);
             $costUsd = $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup);
-            $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome, $costUsd);
+            $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
         } catch (Throwable $throwable) {
             $this->reportUnexpected($throwable);
             $this->recordFailure($benchmarkResult, $throwable, $caseOutcome, $costUsd);

@@ -441,7 +441,7 @@ test('a failing judge counts what it spent towards the run cost', function (): v
 });
 
 test('the judge is refused when the candidate spend reaches the monthly hard cap', function (): void {
-    resolve(AiSettings::class)->setHardBudgetUsd(0.5);
+    resolve(AiSettings::class)->setHardBudgetUsd(0.28);
     $benchmarkRun = jobRun();
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
     jobFakeTitle();
@@ -458,6 +458,19 @@ test('the judge is refused when the candidate spend reaches the monthly hard cap
         ->and($benchmarkResult->score_detail['error'])->toStartWith('Monthly AI hard cap reached')
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
     BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('the judge still runs when the candidate spend stays under the monthly hard cap', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(0.5);
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+    jobFakeJudge(8);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe('ok')
+        ->and($benchmarkResult->fresh()->score)->toBe(0.8);
 });
 
 test('a job of a cancelled run does nothing', function (): void {

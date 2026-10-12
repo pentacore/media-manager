@@ -61,10 +61,9 @@ final readonly class BenchmarkScorer
     ) {}
 
     /**
-     * @param  float  $candidateSpendUsd  what the candidate just spent, counted against the monthly hard cap before the judge runs
      * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
      */
-    public function score(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome, float $candidateSpendUsd = 0.0): array
+    public function score(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
     {
         $scoring = $benchmarkCase->scoring;
         $scoringType = BenchmarkScoringType::tryFrom((string) ($scoring['type'] ?? '')) ?? $benchmarkCase->task->benchmarkScoringType();
@@ -72,7 +71,7 @@ final readonly class BenchmarkScorer
         return match ($scoringType) {
             BenchmarkScoringType::Actions => $this->scoreActions($scoring, $caseOutcome),
             BenchmarkScoringType::Prices => $this->scorePrices($scoring, $caseOutcome),
-            BenchmarkScoringType::Judge => $this->judge($benchmarkCase, $caseOutcome, $candidateSpendUsd),
+            BenchmarkScoringType::Judge => $this->judge($benchmarkCase, $caseOutcome),
         };
     }
 
@@ -208,13 +207,14 @@ final readonly class BenchmarkScorer
 
     /**
      * Ask the blind judge to grade the output against the task rubric, after
-     * the monthly hard cap (counting the candidate's spend) allows it. A
+     * the monthly hard cap allows it (the candidate's usage row is already in
+     * the month's spend). A
      * refusal or judge failure leaves the result unscored (re-judgeable);
      * a judge failure is reported.
      *
      * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
      */
-    private function judge(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome, float $candidateSpendUsd): array
+    private function judge(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
     {
         $scoring = $benchmarkCase->scoring;
         $threshold = (int) ($scoring['pass_threshold'] ?? self::DEFAULT_PASS_THRESHOLD);
@@ -230,7 +230,7 @@ final readonly class BenchmarkScorer
         );
 
         try {
-            $this->aiBudgetGuard->enforceIncluding($candidateSpendUsd);
+            $this->aiBudgetGuard->enforce();
 
             $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt);
 
