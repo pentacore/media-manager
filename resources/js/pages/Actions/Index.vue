@@ -213,7 +213,9 @@ async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
         focusAfterBulk();
         rejectDialogOpen.value = false;
         rejectReason.value = '';
-        router.reload({ only: ['requests', 'statusCounts'] });
+        // `nav` too: the bulk run is a JSON request, not a visit, so the
+        // sidebar badges would otherwise wait for the broadcasts.
+        router.reload({ only: ['requests', 'statusCounts', 'nav'] });
     }
 }
 

@@ -164,3 +164,61 @@ test('a bulk reject that resolves with focus still in the dialog hands focus to 
     $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });
+
+/**
+ * Hands an ActionRequestStatusChanged broadcast to the page's members.actions
+ * listeners. Tests broadcast through the null driver, so this emits on the
+ * pusher-js channel Echo subscribed to; it throws when nothing subscribed.
+ *
+ * @param  array<string, mixed>  $payload
+ */
+function actionQueueBulkEmitStatusScript(array $payload): string
+{
+    $json = json_encode($payload, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const channel = window.Pusher?.instances?.[0]?.channel('private-members.actions');
+            if (!channel) {
+                throw new Error('The page has not subscribed to members.actions.');
+            }
+            channel.emit('ActionRequestStatusChanged', {$json});
+        })()
+    JS;
+}
+
+test('the sidebar pending badge drops by the requests a bulk review settled', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3')
+        ->click(sprintf('[data-bulk-select="%d"]', $pending[0]->id))
+        ->click(sprintf('[data-bulk-select="%d"]', $pending[1]->id))
+        ->click('[data-bulk-approve]')
+        ->assertSee('2 approved')
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '1')
+        ->assertNoSmoke();
+});
+
+test('a request settled elsewhere lowers the badge although this tab never saw it created', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+
+    $webpage->script(actionQueueBulkEmitStatusScript([
+        'id' => $pending[0]->id,
+        'status' => 'approved',
+        'result' => null,
+        'updated_at' => $pending[0]->updated_at->addSeconds(5)->toISOString(),
+        'pending_count' => 2,
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-nav-badge=\"Action Queue\"]')?.innerText.trim() === '2'"));
+
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
+});

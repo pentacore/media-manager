@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -261,4 +263,76 @@ test('hovering a Whisparr card prefetches the title page and the click reuses it
     $webpage->assertPathIs($showPath)->assertNoSmoke();
     expect($webpage->script(prefetchCountScript($showPath, true)))->toBe(1)
         ->and($webpage->script(prefetchCountScript($showPath, false)))->toBe(0);
+});
+
+/**
+ * Records the path of every hover prefetch that has landed (Inertia fires
+ * `inertia:prefetched` with the response, before any click reuses it).
+ */
+function prefetchLandedRecorderScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmPrefetched = [];
+            document.addEventListener('inertia:prefetched', (event) => {
+                window.__mmPrefetched.push(event.detail.visit.url.pathname);
+            });
+        })()
+    JS;
+}
+
+/**
+ * Hands an ActionRequestStatusChanged broadcast to the layout's
+ * members.actions listener (the sidebar badges); throws when nothing
+ * subscribed.
+ *
+ * @param  array<string, mixed>  $payload
+ */
+function prefetchEmitActionStatusScript(array $payload): string
+{
+    $json = json_encode($payload, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const channel = window.Pusher?.instances?.[0]?.channel('private-members.actions');
+            if (!channel) {
+                throw new Error('The page has not subscribed to members.actions.');
+            }
+            channel.emit('ActionRequestStatusChanged', {$json});
+        })()
+    JS;
+}
+
+test('a click that reuses a prefetch keeps a badge count that changed live after the hover', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(prefetchRecorderScript());
+    $webpage->script(prefetchLandedRecorderScript());
+
+    $webpage->hover('[data-nav-item="Action Queue"]');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("window.__mmPrefetched.includes('%s')", $actionQueuePath)));
+
+    // Settled elsewhere after the prefetch was fetched: its `nav` still says 3.
+    $webpage->script(prefetchEmitActionStatusScript([
+        'id' => $pending[0]->id,
+        'status' => 'approved',
+        'result' => null,
+        'updated_at' => $pending[0]->updated_at->addSeconds(5)->toISOString(),
+        'pending_count' => 2,
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-nav-badge=\"Action Queue\"]')?.innerText.trim() === '2'"));
+
+    $webpage->click('[data-nav-item="Action Queue"]');
+    $webpage->script(prefetchWaitForPathScript($actionQueuePath));
+
+    $webpage->assertPathIs($actionQueuePath)
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
+    // The click reused the prefetch (no fresh visit), so the stale `nav` was offered.
+    expect($webpage->script(prefetchCountScript($actionQueuePath, false)))->toBe(0);
 });

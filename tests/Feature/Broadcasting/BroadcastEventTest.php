@@ -477,3 +477,11 @@ test("activity rows go to their owner's channel, audit rows never", function ():
         ->and(new ActivityLogCreated($unowned)->broadcastOn())->toEqual([new PrivateChannel('activity')])
         ->and(new ActivityLogCreated($audit)->broadcastOn())->toEqual([new PrivateChannel('activity.audit')]);
 });
+
+test('both action broadcasts carry the number of pending requests when they are sent', function (): void {
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
+    $approved = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved]);
+
+    expect(new ActionRequestCreated($approved)->broadcastWith()['pending_count'])->toBe(2)
+        ->and(new ActionRequestStatusChanged($approved)->broadcastWith()['pending_count'])->toBe(2);
+});
