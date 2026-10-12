@@ -12,6 +12,7 @@ use App\Ai\ResolvedSelection;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Enums\AiMode;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkCase;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -33,18 +34,6 @@ use Throwable;
  */
 final readonly class BenchmarkScorer
 {
-    public const string JUDGE_NONE = 'none';
-
-    public const string JUDGE_OK = 'ok';
-
-    public const string JUDGE_FAILED = 'failed';
-
-    /** Transient: re-judging was requested and a judge-only job is queued for the result. */
-    public const string JUDGE_QUEUED = 'queued';
-
-    /** Transient: a judge-only job has claimed the result and is judging it. */
-    public const string JUDGE_PENDING = 'pending';
-
     private const int DEFAULT_PASS_THRESHOLD = 7;
 
     private const int ERROR_LIMIT = 2000;
@@ -61,7 +50,7 @@ final readonly class BenchmarkScorer
     ) {}
 
     /**
-     * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
+     * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: BenchmarkJudgeStatus, judge_cost_usd: float}
      */
     public function score(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
     {
@@ -82,7 +71,7 @@ final readonly class BenchmarkScorer
      * extra action.
      *
      * @param  array<string, mixed>  $scoring
-     * @return array{score: float, passed: bool, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
+     * @return array{score: float, passed: bool, detail: array<string, mixed>, judge_status: BenchmarkJudgeStatus, judge_cost_usd: float}
      */
     private function scoreActions(array $scoring, CaseOutcome $caseOutcome): array
     {
@@ -136,7 +125,7 @@ final readonly class BenchmarkScorer
                 'precision' => round($precision, 4),
                 'recall' => round($recall, 4),
             ],
-            'judge_status' => self::JUDGE_NONE,
+            'judge_status' => BenchmarkJudgeStatus::None,
             'judge_cost_usd' => 0.0,
         ];
     }
@@ -147,7 +136,7 @@ final readonly class BenchmarkScorer
      * case tolerance; an expected zero needs an exact zero.
      *
      * @param  array<string, mixed>  $scoring
-     * @return array{score: float, passed: bool, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
+     * @return array{score: float, passed: bool, detail: array<string, mixed>, judge_status: BenchmarkJudgeStatus, judge_cost_usd: float}
      */
     private function scorePrices(array $scoring, CaseOutcome $caseOutcome): array
     {
@@ -200,7 +189,7 @@ final readonly class BenchmarkScorer
             'score' => $fields === 0 ? 1.0 : round($matchedFields / $fields, 4),
             'passed' => $mismatches === [],
             'detail' => ['mismatches' => $mismatches],
-            'judge_status' => self::JUDGE_NONE,
+            'judge_status' => BenchmarkJudgeStatus::None,
             'judge_cost_usd' => 0.0,
         ];
     }
@@ -212,7 +201,7 @@ final readonly class BenchmarkScorer
      * refusal or judge failure leaves the result unscored (re-judgeable);
      * a judge failure is reported.
      *
-     * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
+     * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: BenchmarkJudgeStatus, judge_cost_usd: float}
      */
     private function judge(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
     {
@@ -247,7 +236,7 @@ final readonly class BenchmarkScorer
                 'score' => null,
                 'passed' => null,
                 'detail' => ['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)],
-                'judge_status' => self::JUDGE_FAILED,
+                'judge_status' => BenchmarkJudgeStatus::Failed,
                 'judge_cost_usd' => 0.0,
             ];
         }
@@ -256,7 +245,7 @@ final readonly class BenchmarkScorer
             'score' => round($score10 / 10, 4),
             'passed' => $score10 >= $threshold,
             'detail' => ['score_10' => $score10, 'rationale' => is_string($rationale) ? $rationale : ''],
-            'judge_status' => self::JUDGE_OK,
+            'judge_status' => BenchmarkJudgeStatus::Ok,
             'judge_cost_usd' => $this->judgeCost($agentResponse),
         ];
     }

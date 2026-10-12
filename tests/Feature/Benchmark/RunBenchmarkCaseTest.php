@@ -8,6 +8,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Enums\QueueLane;
@@ -121,7 +122,7 @@ test('a title case runs, is judged and completes the run when it was the last re
         ->and($benchmarkResult->error)->toBeNull()
         ->and($benchmarkResult->score)->toBe(0.8)
         ->and($benchmarkResult->passed)->toBeTrue()
-        ->and($benchmarkResult->judge_status)->toBe('ok')
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
         ->and($benchmarkResult->score_detail)->toMatchArray(['score_10' => 8, 'rationale' => 'Concise and accurate', 'tool_log' => []])
         ->and($benchmarkResult->prompt_tokens)->toBe(100_000)
         ->and($benchmarkResult->completion_tokens)->toBe(10_000)
@@ -224,7 +225,7 @@ test('a judge exception keeps the output unscored and still completes the run', 
 
     expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
         ->and($benchmarkResult->output)->toBe('Expanse Season Three')
-        ->and($benchmarkResult->judge_status)->toBe('failed')
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->score)->toBeNull()
         ->and($benchmarkResult->passed)->toBeNull()
         ->and($benchmarkResult->score_detail)->toMatchArray(['error' => 'judge overloaded', 'tool_log' => []])
@@ -435,7 +436,7 @@ test('a failing judge counts what it spent towards the run cost', function (): v
 
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
 
-    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and((float) $benchmarkResult->fresh()->judge_cost_usd)->toBe(0.0)
         ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.68);
 });
@@ -453,7 +454,7 @@ test('the judge is refused when the candidate spend reaches the monthly hard cap
 
     expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
         ->and($benchmarkResult->output)->toBe('Expanse Season Three')
-        ->and($benchmarkResult->judge_status)->toBe('failed')
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->score)->toBeNull()
         ->and($benchmarkResult->score_detail['error'])->toStartWith('Monthly AI hard cap reached')
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
@@ -469,7 +470,7 @@ test('the judge still runs when the candidate spend stays under the monthly hard
 
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
 
-    expect($benchmarkResult->fresh()->judge_status)->toBe('ok')
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
         ->and($benchmarkResult->fresh()->score)->toBe(0.8);
 });
 
@@ -542,7 +543,7 @@ test('a decision case never creates an action request, even with a recorded writ
     expect(ActionRequest::count())->toBe(0)
         ->and($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
         ->and($benchmarkResult->passed)->toBeTrue()
-        ->and($benchmarkResult->judge_status)->toBe('none')
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::None)
         ->and($benchmarkResult->intended_actions)->toHaveCount(1)
         ->and($benchmarkResult->tool_calls)->toBe(1)
         ->and(array_column($benchmarkResult->score_detail['tool_log'], 'tool'))->toBe(['ProposeActionTool'])
@@ -564,7 +565,7 @@ test('judge-only mode re-scores an unscored result from its stored outcome under
         'cost_usd' => 0.28,
         'latency_ms' => 420,
         'tool_calls' => 1,
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => $toolLog],
     ]);
     jobSpend($benchmarkRun, 100_000, 10_000);
@@ -576,7 +577,7 @@ test('judge-only mode re-scores an unscored result from its stored outcome under
     $benchmarkResult->refresh();
 
     expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
-        ->and($benchmarkResult->judge_status)->toBe('ok')
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
         ->and($benchmarkResult->score)->toBe(0.9)
         ->and($benchmarkResult->passed)->toBeTrue()
         ->and($benchmarkResult->score_detail)->toEqual(['score_10' => 9, 'rationale' => 'Concise and accurate', 'tool_log' => $toolLog])
@@ -594,7 +595,7 @@ test('judge-only mode re-scores an unscored result from its stored outcome under
 
 test('judge-only mode leaves an already scored result alone', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
-    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->scored(0.6, false)->create(['judge_status' => 'ok']);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->scored(0.6, false)->create(['judge_status' => BenchmarkJudgeStatus::Ok]);
     jobFakeJudge(9);
 
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
@@ -691,7 +692,7 @@ test('a refused monthly hard cap leaves a re-judge unscored with the guard messa
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Expanse Season Three',
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
     ]);
     jobFakeJudge();
@@ -700,7 +701,7 @@ test('a refused monthly hard cap leaves a re-judge unscored with the guard messa
 
     $benchmarkResult->refresh();
 
-    expect($benchmarkResult->judge_status)->toBe('failed')
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->score)->toBeNull()
         ->and($benchmarkResult->score_detail)->toEqual(['error' => 'Monthly AI hard cap reached (spend $10.00 / cap $5.00).', 'tool_log' => []])
         ->and(jobContextActive())->toBeFalse();
@@ -712,7 +713,7 @@ test('two judge-only jobs racing on one result judge it once and add its cost on
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Expanse Season Three',
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
     ]);
     $judgeCalls = 0;
@@ -729,35 +730,35 @@ test('two judge-only jobs racing on one result judge it once and add its cost on
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
 
     expect($judgeCalls)->toBe(1)
-        ->and($benchmarkResult->fresh()->judge_status)->toBe('ok')
+        ->and($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
         ->and((float) $benchmarkResult->fresh()->judge_cost_usd)->toBe(0.4)
         ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.4);
 });
 
-test('a judge-only job that dies queued or mid-judge hands the result back to re-judging', function (string $judgeStatus): void {
+test('a judge-only job that dies queued or mid-judge hands the result back to re-judging', function (BenchmarkJudgeStatus $benchmarkJudgeStatus): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
-        'judge_status' => $judgeStatus,
+        'judge_status' => $benchmarkJudgeStatus,
     ]);
 
     new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true)->failed(new RuntimeException('timed out'));
 
-    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
-})->with(['queued', 'pending']);
+})->with([BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending]);
 
 test('a judge-only job only claims a result queued for re-judging', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
-        'judge_status' => 'failed',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
     ]);
     jobFakeJudge();
 
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
 
-    expect($benchmarkResult->fresh()->judge_status)->toBe('failed');
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed);
     BenchmarkJudgeAgent::assertNeverPrompted();
 });
 
@@ -766,7 +767,7 @@ test('a judge-only job whose case was deleted hands the result back to re-judgin
     $benchmarkCase = jobTitleCase();
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => []],
     ]);
     $benchmarkCase->delete();
@@ -774,7 +775,7 @@ test('a judge-only job whose case was deleted hands the result back to re-judgin
 
     dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
 
-    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
         ->and($benchmarkResult->fresh()->score_detail)->toEqual(['error' => 'Case was deleted', 'tool_log' => []]);
     BenchmarkJudgeAgent::assertNeverPrompted();
 });

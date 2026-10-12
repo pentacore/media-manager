@@ -159,7 +159,7 @@ final readonly class BenchmarkMatrix
                     'status' => $benchmarkResult->status->value,
                     'score' => $benchmarkResult->score,
                     'passed' => $benchmarkResult->passed,
-                    'judge_status' => $benchmarkResult->judge_status,
+                    'judge_status' => $benchmarkResult->judge_status->value,
                 ])->values()->all(),
             ])
             ->values()

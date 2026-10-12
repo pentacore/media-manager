@@ -9,6 +9,7 @@ use App\Ai\Benchmark\FixtureBook;
 use App\Ai\ResolvedSelection;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Enums\QueueLane;
@@ -153,8 +154,8 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         if ($this->judgeOnly) {
             BenchmarkResult::query()
                 ->whereKey($this->resultId)
-                ->whereIn('judge_status', [BenchmarkScorer::JUDGE_QUEUED, BenchmarkScorer::JUDGE_PENDING])
-                ->update(['judge_status' => BenchmarkScorer::JUDGE_FAILED]);
+                ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
+                ->update(['judge_status' => BenchmarkJudgeStatus::Failed]);
 
             return;
         }
@@ -251,7 +252,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
         if (! $benchmarkCase instanceof BenchmarkCase) {
             $benchmarkResult->update([
-                'judge_status' => BenchmarkScorer::JUDGE_FAILED,
+                'judge_status' => BenchmarkJudgeStatus::Failed,
                 'score_detail' => ['error' => 'Case was deleted', 'tool_log' => $caseOutcome->toolLog],
             ]);
 
@@ -271,7 +272,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         } catch (Throwable $throwable) {
             $this->reportUnexpected($throwable);
             $benchmarkResult->update([
-                'judge_status' => BenchmarkScorer::JUDGE_FAILED,
+                'judge_status' => BenchmarkJudgeStatus::Failed,
                 'score_detail' => [
                     'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
                     'tool_log' => $caseOutcome->toolLog,
@@ -337,15 +338,15 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             return BenchmarkResult::query()
                 ->whereKey($benchmarkResult->id)
                 ->where('status', BenchmarkResultStatus::Ok)
-                ->where('judge_status', BenchmarkScorer::JUDGE_QUEUED)
-                ->update(['judge_status' => BenchmarkScorer::JUDGE_PENDING]) === 1;
+                ->where('judge_status', BenchmarkJudgeStatus::Queued)
+                ->update(['judge_status' => BenchmarkJudgeStatus::Pending]) === 1;
         });
 
         if (! $claimed) {
             return false;
         }
 
-        $benchmarkResult->judge_status = BenchmarkScorer::JUDGE_PENDING;
+        $benchmarkResult->judge_status = BenchmarkJudgeStatus::Pending;
         $benchmarkResult->syncOriginalAttribute('judge_status');
 
         return true;

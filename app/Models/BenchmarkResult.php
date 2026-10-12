@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
-use App\Services\Benchmark\BenchmarkScorer;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,7 +38,7 @@ use Override;
  * @property float|null $score
  * @property bool|null $passed
  * @property array<string, mixed>|null $score_detail
- * @property string $judge_status
+ * @property BenchmarkJudgeStatus $judge_status
  * @property string $judge_cost_usd
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -96,6 +96,7 @@ class BenchmarkResult extends Model
     {
         return [
             'status' => BenchmarkResultStatus::class,
+            'judge_status' => BenchmarkJudgeStatus::class,
             'intended_actions' => 'array',
             'score_detail' => 'array',
             'score' => 'float',
@@ -133,7 +134,7 @@ class BenchmarkResult extends Model
         return $query
             ->where(fn (Builder $builder): Builder => $builder
                 ->where('status', BenchmarkResultStatus::Running)
-                ->orWhere('judge_status', BenchmarkScorer::JUDGE_PENDING))
+                ->orWhere('judge_status', BenchmarkJudgeStatus::Pending))
             ->where('updated_at', '>', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS));
     }
 

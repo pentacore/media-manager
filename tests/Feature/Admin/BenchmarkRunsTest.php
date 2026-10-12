@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\RunBenchmarkCase;
@@ -12,7 +13,6 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
-use App\Services\Benchmark\BenchmarkScorer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 
@@ -346,7 +346,7 @@ test('re-judging queues a judge-only job per unscored result', function (): void
     Queue::fake();
     $this->actingAs(User::factory()->admin()->create());
     $run = BenchmarkRun::factory()->completed()->create();
-    $unscored = BenchmarkResult::factory()->for($run, 'run')->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkScorer::JUDGE_FAILED]);
+    $unscored = BenchmarkResult::factory()->for($run, 'run')->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
     BenchmarkResult::factory()->for($run, 'run')->scored(0.9, true)->create();
 
     $this->post(route('admin.benchmarks.runs.rejudge', $run))->assertRedirect();
@@ -359,7 +359,7 @@ test('after re-judging on an async queue the run page shows the result queued so
     Queue::fake();
     $this->actingAs(User::factory()->admin()->create());
     $run = BenchmarkRun::factory()->completed()->create();
-    $unscored = BenchmarkResult::factory()->for($run, 'run')->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkScorer::JUDGE_FAILED]);
+    $unscored = BenchmarkResult::factory()->for($run, 'run')->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
 
     $this->from(route('admin.benchmarks.runs.show', $run))
         ->post(route('admin.benchmarks.runs.rejudge', $run))
@@ -368,7 +368,7 @@ test('after re-judging on an async queue the run page shows the result queued so
     $this->get(route('admin.benchmarks.runs.show', $run))
         ->assertInertia(fn ($page) => $page
             ->where('matrix.0.cases.0.cells.0.result_id', $unscored->id)
-            ->where('matrix.0.cases.0.cells.0.judge_status', BenchmarkScorer::JUDGE_QUEUED));
+            ->where('matrix.0.cases.0.cells.0.judge_status', BenchmarkJudgeStatus::Queued->value));
 });
 
 test('re-judging with nothing unscored queues nothing', function (): void {
@@ -413,7 +413,7 @@ test('a cancelled run cannot be deleted while a job still works on one of its re
     expect(BenchmarkRun::query()->whereKey($run->id)->exists())->toBeTrue();
 })->with([
     'a running case' => [['status' => BenchmarkResultStatus::Running]],
-    'a judge scoring' => [['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkScorer::JUDGE_PENDING]],
+    'a judge scoring' => [['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]],
 ]);
 
 test('a run whose running result lost its worker can still be deleted', function (): void {

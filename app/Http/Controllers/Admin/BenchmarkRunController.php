@@ -275,7 +275,7 @@ class BenchmarkRunController extends Controller
                 'intended_actions' => $benchmarkResult->intended_actions,
                 'score' => $benchmarkResult->score,
                 'passed' => $benchmarkResult->passed,
-                'judge_status' => $benchmarkResult->judge_status,
+                'judge_status' => $benchmarkResult->judge_status->value,
                 'score_detail' => collect($benchmarkResult->score_detail ?? [])->except('tool_log')->all(),
                 'error' => $benchmarkResult->error,
                 'tool_log' => $benchmarkResult->score_detail['tool_log'] ?? [],

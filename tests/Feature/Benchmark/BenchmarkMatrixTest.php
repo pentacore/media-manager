@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
@@ -80,8 +81,8 @@ test('each cell carries its judge status', function (): void {
         ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
     ])->create();
     $case = BenchmarkCase::factory()->create();
-    BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'failed']);
-    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => 'pending']);
+    BenchmarkResult::factory()->forCase($run, $case, 0)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Failed]);
+    BenchmarkResult::factory()->forCase($run, $case, 1)->create(['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkJudgeStatus::Pending]);
 
     $cells = BenchmarkMatrix::for($run)[0]['cases'][0]['cells'];
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\AiModelPrice;
@@ -157,7 +158,7 @@ test('a result whose judge failed is flagged and offers a re-judge', function ()
     $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'failed',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
         'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
     ]);
 
@@ -177,7 +178,7 @@ test('an admin re-judges an unscored result and the cell shows its new score', f
     $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'failed',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
         'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
     ]);
     BenchmarkJudgeAgent::fake(fn (): array => ['score' => 8, 'rationale' => 'Accurate']);
@@ -190,7 +191,7 @@ test('an admin re-judges an unscored result and the cell shows its new score', f
         ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), '8.0')
         ->assertMissing('[data-benchmark-rejudge]');
 
-    expect($result->fresh()->judge_status)->toBe('ok');
+    expect($result->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Ok);
 });
 
 test('queued re-judges and running cases show as in progress', function (): void {
@@ -203,7 +204,7 @@ test('queued re-judges and running cases show as in progress', function (): void
     $queued = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
-        'judge_status' => 'queued',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
     ]);
     $running = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 1)->running()->create();
 

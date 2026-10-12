@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\RunBenchmarkCase;
@@ -58,7 +59,7 @@ final readonly class BenchmarkRunLauncher
                         'candidate_index' => $candidateIndex,
                         'status' => BenchmarkResultStatus::Pending,
                         'intended_actions' => [],
-                        'judge_status' => BenchmarkScorer::JUDGE_NONE,
+                        'judge_status' => BenchmarkJudgeStatus::None,
                     ]);
 
                     dispatch(new RunBenchmarkCase($benchmarkResult->id))->afterCommit();
@@ -126,12 +127,12 @@ final readonly class BenchmarkRunLauncher
         return DB::transaction(function () use ($benchmarkRun): int {
             $resultIds = $benchmarkRun->results()
                 ->where('status', BenchmarkResultStatus::Ok)
-                ->where('judge_status', BenchmarkScorer::JUDGE_FAILED)
+                ->where('judge_status', BenchmarkJudgeStatus::Failed)
                 ->whereNotNull('benchmark_case_id')
                 ->lockForUpdate()
                 ->pluck('id');
 
-            BenchmarkResult::query()->whereKey($resultIds)->update(['judge_status' => BenchmarkScorer::JUDGE_QUEUED]);
+            BenchmarkResult::query()->whereKey($resultIds)->update(['judge_status' => BenchmarkJudgeStatus::Queued]);
 
             foreach ($resultIds as $resultId) {
                 dispatch(new RunBenchmarkCase($resultId, judgeOnly: true))->afterCommit();

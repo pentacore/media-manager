@@ -1,5 +1,7 @@
-/** Whether a judge status is a re-judge still waiting for or getting its score. */
-export function isRejudging(judgeStatus: string): boolean {
+import type { BenchmarkJudgeStatus } from '@/typefinder';
+
+/** Whether a judge status is a re-judge still waiting for or getting its score (`queued` and `pending` are transient). */
+export function isRejudging(judgeStatus: BenchmarkJudgeStatus): boolean {
     return judgeStatus === 'queued' || judgeStatus === 'pending';
 }
 

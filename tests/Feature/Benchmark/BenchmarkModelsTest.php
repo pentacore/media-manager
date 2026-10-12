@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
@@ -62,3 +63,10 @@ test('a run reports whether it is terminal', function (BenchmarkRunStatus $statu
     [BenchmarkRunStatus::Cancelled, true],
     [BenchmarkRunStatus::Failed, true],
 ]);
+
+test('a result casts its judge status to the enum', function (): void {
+    $result = BenchmarkResult::factory()->create(['judge_status' => BenchmarkJudgeStatus::Queued]);
+
+    expect($result->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and(BenchmarkResult::factory()->create()->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::None);
+});
