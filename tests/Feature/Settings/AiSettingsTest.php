@@ -109,3 +109,17 @@ test('chatTimeout is not capped when Octane has no request ceiling', function ()
 
     expect($aiSettings->chatTimeout())->toBe(600);
 });
+
+test('configuredChatTimeout reports the saved value or the config default, uncapped', function (): void {
+    config()->set('octane.max_execution_time', 120);
+    config()->set('mediamanager.ai.chat_timeout', 90);
+
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->configuredChatTimeout())->toBe(90);
+
+    $aiSettings->setChatTimeout(600);
+
+    expect($aiSettings->configuredChatTimeout())->toBe(600)
+        ->and($aiSettings->chatTimeout())->toBe(110);
+});

@@ -186,15 +186,7 @@ final readonly class CatalogModelBrowser
             return null;
         }
 
-        $entry = null;
-
-        foreach ($this->cachedSlice($this->cacheKey($canonical))['entries'] ?? [] as $cachedEntry) {
-            if ($cachedEntry['model'] === $model) {
-                $entry = $cachedEntry;
-
-                break;
-            }
-        }
+        $entry = array_find($this->cachedSlice($this->cacheKey($canonical))['entries'] ?? [], fn ($cachedEntry): bool => $cachedEntry['model'] === $model);
 
         if ($entry === null) {
             return null;

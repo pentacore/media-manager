@@ -360,6 +360,71 @@ test('member searches and requests an exact subtitle from the item drawer', func
     expect(ActionRequest::query()->where('type', 'bazarr_download_exact')->count())->toBe(1);
 });
 
+test('a Bazarr search that fails on the server says so', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $movie = [
+        'radarrId' => 801,
+        'title' => 'Example Movie',
+        'sceneName' => 'Example.Movie.2024.1080p',
+        'path' => '/media/movies/Example Movie (2024)',
+        'monitored' => true,
+        'missing_subtitles' => [['name' => 'Swedish', 'code2' => 'sv', 'code3' => 'swe', 'forced' => false, 'hi' => false]],
+        'subtitles' => [],
+    ];
+
+    fakeServiceHttp(function (Request $request) use ($movie) {
+        $path = parse_url($request->url(), PHP_URL_PATH);
+
+        // An exception other than a Bazarr HTTP error surfaces as a 500 from
+        // the search endpoint, which useHttp sends to onHttpException.
+        throw_if($path === '/api/providers/movies', RuntimeException::class, 'Bazarr search crashed.');
+
+        return match ($path) {
+            '/api/movies/wanted' => Http::response(['data' => [$movie], 'total' => 1]),
+            '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+            '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+            '/api/swagger.json' => Http::response([
+                'swagger' => '2.0',
+                'basePath' => '/api',
+                'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+                'paths' => [
+                    // manual_search requires BOTH the episode and movie provider
+                    // routes (BazarrCapabilityRegistry::REQUIREMENTS), regardless
+                    // of the media type being searched.
+                    '/providers/episodes' => [
+                        'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    ],
+                    '/providers/movies' => [
+                        'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    ],
+                ],
+            ]),
+            default => Http::response(['data' => []]),
+        };
+    });
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.missing', ['connection' => $bazarr->id], false))
+        ->assertSee('Example Movie')
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Find subtitles')
+        ->click('@subtitle-search')
+        ->assertSee('Could not search Bazarr right now.')
+        ->assertNoSmoke();
+});
+
 /**
  * The first $failedCapabilityReads swagger reads throw, which surfaces as a 500
  * from the capabilities endpoint (Bazarr HTTP errors would fall back instead).

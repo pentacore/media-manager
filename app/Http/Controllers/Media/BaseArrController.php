@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Services\Arr\ArrConnections;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
@@ -66,12 +67,12 @@ abstract class BaseArrController extends Controller
      * @param  callable(array<string, mixed>): TRow  $map
      * @return array{items: list<TRow>, error: string|null}
      */
-    protected function tryClientList(ServiceConnection $serviceConnection, callable $fetch, callable $map): array
+    protected function tryClientList(ServiceConnection $serviceConnection, ?User $user, callable $fetch, callable $map): array
     {
         try {
             $rows = $fetch($this->buildClient($serviceConnection));
         } catch (RequestException|ConnectionException $exception) {
-            return ['items' => [], 'error' => $this->upstreamFailureMessage($exception)];
+            return ['items' => [], 'error' => $this->upstreamFailureMessage($exception, $user)];
         }
 
         return ['items' => array_values(array_map($map, $rows)), 'error' => null];
@@ -79,15 +80,13 @@ abstract class BaseArrController extends Controller
 
     /**
      * A 4xx means the service answered but refused (a bad API key, a wrong
-     * base URL); anything else is an outage.
+     * base URL), which only an admin can fix; anything else is an outage.
      */
-    protected function upstreamFailureMessage(RequestException|ConnectionException $exception): string
+    protected function upstreamFailureMessage(RequestException|ConnectionException $exception, ?User $user): string
     {
-        $label = $this->serviceType()->label();
-
         return $exception instanceof RequestException && $exception->response->clientError()
-            ? __(':service refused the request — check the connection settings.', ['service' => $label])
-            : __(':service is unreachable right now.', ['service' => $label]);
+            ? $this->upstreamRefusedMessage($this->serviceType(), $user)
+            : __(':service is unreachable right now.', ['service' => $this->serviceType()->label()]);
     }
 
     /**

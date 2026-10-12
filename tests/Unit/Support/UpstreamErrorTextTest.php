@@ -20,6 +20,13 @@ test('it describes an empty upstream message instead of storing nothing', functi
         ->toBe('The upstream service returned an error without a usable description.');
 });
 
+test('it describes an empty message with the fallback its caller passes', function (): void {
+    expect(UpstreamErrorText::sanitize("  \n ", emptyFallback: UpstreamErrorText::AGENT_EMPTY_FALLBACK))
+        ->toBe('The agent failed without a usable description.')
+        ->and(UpstreamErrorText::sanitize('', 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK))
+        ->toBe('The agent failed without a usable description.');
+});
+
 test('it bounds the sanitized message to the requested limit', function (): void {
     expect(UpstreamErrorText::sanitize(str_repeat('error ', 200), 40))
         ->toHaveLength(40);

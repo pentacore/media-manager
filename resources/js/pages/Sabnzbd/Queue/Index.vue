@@ -395,9 +395,15 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
         <div
             v-if="!configured"
             class="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground"
+            data-sabnzbd-no-connection
         >
-            No active SABnzbd connection. Add one in Admin → Connections to
-            start tracking downloads here.
+            <template v-if="isAdmin">
+                No active SABnzbd connection. Add one in Admin → Connections to
+                start tracking downloads here.
+            </template>
+            <template v-else>
+                No active SABnzbd connection — ask an admin to set one up.
+            </template>
         </div>
 
         <div

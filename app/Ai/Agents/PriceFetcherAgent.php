@@ -204,8 +204,8 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
      * When the price_fetcher_provider_webfetch flag is on, the agent uses the
      * SDK's provider-native WebFetch instead of the custom host-allowlisted
      * HTTP tool. Provider WebFetch requires a provider that supports it
-     * (OpenAI/Anthropic); unsupported providers throw a LogicException at
-     * prompt time — hence the flag defaults off.
+     * (OpenAI/Anthropic); the SDK silently drops it on any other provider,
+     * leaving the agent without a fetch tool — hence the flag defaults off.
      *
      * Verification grade: only the custom WebFetchTool path is
      * verification-grade — every fetch is performed locally and recorded as a
@@ -215,8 +215,8 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
      * still applies and rows are never stamped verified.
      *
      * Hosted code execution is added only when every provider in the failover
-     * chain supports it: the SDK rejects an unsupported provider tool with a
-     * non-failoverable LogicException before the request is sent.
+     * chain supports it: the SDK silently drops an unsupported provider tool,
+     * so a failover would run with instructions promising a missing tool.
      *
      * @return iterable<int, Tool|WebFetch|CodeExecution>
      */

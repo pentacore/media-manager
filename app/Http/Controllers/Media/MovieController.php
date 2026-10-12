@@ -35,11 +35,13 @@ class MovieController extends BaseArrController
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
             'movies' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (RadarrClient $radarrClient): array => $radarrClient->getMovies(),
                 fn (array $item): array => $this->mapMovie($item),
             )),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
             ), 'qualityProfiles'),
@@ -70,6 +72,7 @@ class MovieController extends BaseArrController
             ...$canManageLibrary ? [
                 'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                     $connection,
+                    $request->user(),
                     fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
                     $this->mapQualityProfile(...),
                 ), 'qualityProfiles'),
@@ -91,11 +94,13 @@ class MovieController extends BaseArrController
             'searchTerm' => $term,
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
                 $this->mapQualityProfile(...),
             )),
             'rootFolders' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
+                $request->user(),
                 fn (RadarrClient $radarrClient): array => $radarrClient->getRootFolders(),
                 fn (array $f): array => [
                     'id' => $f['id'] ?? null,
@@ -107,6 +112,7 @@ class MovieController extends BaseArrController
                 ? ['items' => [], 'error' => null]
                 : $this->tryClientList(
                     $connection,
+                    $request->user(),
                     fn (RadarrClient $radarrClient): array => $radarrClient->searchMovies($term),
                     fn (array $item): array => [
                         'tmdb_id' => $item['tmdbId'] ?? null,

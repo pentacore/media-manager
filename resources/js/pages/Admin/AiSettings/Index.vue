@@ -27,6 +27,7 @@ interface AiSettingsState {
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
     chat_timeout: number;
+    chat_timeout_effective: number;
     models_dev_pricing_enabled: boolean;
     openrouter_pricing_enabled: boolean;
     litellm_pricing_enabled: boolean;
@@ -287,6 +288,18 @@ const budgetState = computed<{
                                 sec
                             </span>
                         </div>
+                        <p
+                            v-if="
+                                settings.chat_timeout_effective !==
+                                settings.chat_timeout
+                            "
+                            class="mt-1 text-[12px] leading-snug text-warning"
+                            data-chat-timeout-effective
+                        >
+                            Effective: {{ settings.chat_timeout_effective }} s —
+                            capped below the server request limit
+                            (OCTANE_MAX_EXECUTION_TIME).
+                        </p>
                         <InputError
                             :message="errors.chat_timeout"
                             class="mt-1"

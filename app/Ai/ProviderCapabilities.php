@@ -10,9 +10,10 @@ use Throwable;
 
 /**
  * Whether every provider an agent run may reach supports a capability.
- * laravel/ai checks ToolSearch (and provider tools) against the provider
- * before middleware and throws a non-failoverable LogicException, so a
- * capability is only safe to register when the whole chain supports it.
+ * laravel/ai inlines a ToolSearch's tools and silently drops any provider
+ * tool the reached provider lacks, so a capability is only registered when
+ * the whole chain supports it — a failover must not quietly lose a tool the
+ * agent's instructions promise.
  */
 final readonly class ProviderCapabilities
 {

@@ -1117,7 +1117,7 @@ parameters:
 			path: app/Services/Radarr/RadarrWebhookHandler.php
 
 		-
-			message: '#^Parameter \#1 \$items of method App\\Services\\Search\\LibraryEmbedder\:\:embedMany\(\) expects Illuminate\\Support\\Collection\<int, App\\Models\\IndexedMovie\|App\\Models\\IndexedSeries\>, Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\IndexedMovie\>\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\IndexedSeries\> given\.$#'
+			message: '#^Parameter \#1 \$items of method App\\Services\\Search\\LibraryEmbedder\:\:embedMany\(\) expects Illuminate\\Support\\Collection\<int, App\\Models\\IndexedMovie\|App\\Models\\IndexedSeries\>, Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\IndexedMovie\>\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\IndexedSeries\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Services/Search/LibraryEmbedder.php

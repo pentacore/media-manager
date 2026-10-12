@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * A 401 is not retried by the arr clients, so these pages answer at once;
- * it renders the "refused — check the connection settings" message.
+ * a member sees "<Service> is unavailable — ask an admin to check the connection."
  */
 function arrOutageSonarr(): void
 {
@@ -26,7 +26,7 @@ test('the series library shows a Sonarr outage instead of an empty library', fun
 
     visit(route('media.series.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-library-error]', 'Sonarr refused the request — check the connection settings.')
+        ->assertSeeIn('[data-library-error]', 'Sonarr is unavailable — ask an admin to check the connection.')
         ->assertDontSee('No series match these filters.')
         ->assertDontSee('0 series');
 });
@@ -49,8 +49,8 @@ test('a series page says when its episodes and profiles could not load', functio
     visit(route('media.series.show', ['id' => 7], absolute: false))
         ->assertNoSmoke()
         ->assertSee('Severance')
-        ->assertSeeIn('[data-episodes-error]', 'Sonarr refused the request — check the connection settings.')
-        ->assertSeeIn('[data-quality-profile-error]', 'Sonarr refused the request — check the connection settings.');
+        ->assertSeeIn('[data-episodes-error]', 'Sonarr is unavailable — ask an admin to check the connection.')
+        ->assertSeeIn('[data-quality-profile-error]', 'Sonarr is unavailable — ask an admin to check the connection.');
 });
 
 test('the add-series search says when the Sonarr lookup failed', function (): void {
@@ -65,7 +65,7 @@ test('the add-series search says when the Sonarr lookup failed', function (): vo
 
     visit(route('media.series.create', ['q' => 'dune'], absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-search-error]', 'Sonarr refused the request — check the connection settings.')
+        ->assertSeeIn('[data-search-error]', 'Sonarr is unavailable — ask an admin to check the connection.')
         ->assertDontSee('No results found for');
 });
 
@@ -85,7 +85,7 @@ test('the movie library shows a Radarr outage instead of an empty library', func
 
     visit(route('media.movies.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-library-error]', 'Radarr refused the request — check the connection settings.')
+        ->assertSeeIn('[data-library-error]', 'Radarr is unavailable — ask an admin to check the connection.')
         ->assertDontSee('No movies match.')
         ->assertDontSee('0 titles');
 });
@@ -105,7 +105,7 @@ test('a movie page says when its quality profiles could not load', function (): 
     visit(route('media.movies.show', ['id' => 7], absolute: false))
         ->assertNoSmoke()
         ->assertSee('Dune')
-        ->assertSeeIn('[data-quality-profile-error]', 'Radarr refused the request — check the connection settings.');
+        ->assertSeeIn('[data-quality-profile-error]', 'Radarr is unavailable — ask an admin to check the connection.');
 });
 
 test('the add-movie search says when the Radarr lookup failed', function (): void {
@@ -120,6 +120,20 @@ test('the add-movie search says when the Radarr lookup failed', function (): voi
 
     visit(route('media.movies.create', ['q' => 'dune'], absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-search-error]', 'Radarr refused the request — check the connection settings.')
+        ->assertSeeIn('[data-search-error]', 'Radarr is unavailable — ask an admin to check the connection.')
         ->assertDontSee('No results found for');
+});
+
+test('an admin is sent to the connection settings when Sonarr refuses', function (): void {
+    arrOutageSonarr();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => Http::response('Unauthorized', 401),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response('Unauthorized', 401),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-library-error]', 'Sonarr refused the request — check the connection settings.');
 });
