@@ -15,8 +15,8 @@ const emit = defineEmits<{
     'update:checked': [value: boolean];
 }>();
 
-// Cards are links and rows are clickable: swallow the click here so ticking
-// never navigates or opens the row. A click on the padding toggles too.
+// Rows are clickable: swallow the click here so ticking never opens the row.
+// A click on the padding toggles too.
 function onWrapperClick(event: MouseEvent): void {
     if (props.disabled) {
         return;

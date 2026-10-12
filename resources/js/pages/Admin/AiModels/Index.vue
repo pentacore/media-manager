@@ -36,6 +36,7 @@ type TaskRow = {
     inherits_chat: boolean;
     has_reasoning: boolean;
     allow_auto: boolean;
+    allow_tiers: boolean;
     tiers: TierForm[];
     inherited: ResolvedSummary;
     resolved: ResolvedSummary;
@@ -226,6 +227,7 @@ function submit(): void {
                             :inherit-label="modelSelectInheritLabel(row)"
                             :has-reasoning="row.has_reasoning"
                             :allow-auto="row.allow_auto"
+                            :allow-tiers="row.allow_tiers"
                             :error-prefix="`tasks.${row.task}.tiers`"
                             :errors="formErrors"
                         />

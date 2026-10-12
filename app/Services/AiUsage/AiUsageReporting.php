@@ -67,6 +67,23 @@ class AiUsageReporting
     }
 
     /**
+     * What a benchmark run has spent: every usage row tagged with it
+     * (candidates and judges, finished or failed) at the row's price snapshot,
+     * falling back to the catalog, with no free-tier discount.
+     */
+    public function benchmarkRunCost(int $runId): float
+    {
+        [$costSql, $costBindings] = $this->costExpression(null);
+
+        $row = $this->query(null)
+            ->where('ai_usage_records.benchmark_run_id', $runId)
+            ->selectRaw('COALESCE(SUM('.$costSql.'), 0) AS total_cost', $costBindings)
+            ->first();
+
+        return round((float) ($row->total_cost ?? 0), 6);
+    }
+
+    /**
      * @return array<int, array{id: int, name: string, period: string, unified: bool, documentation_url: string|null, free_input: int|null, free_output: int|null, free_total: int|null, used_input: int, used_output: int, used_total: int, models: array<int, array{provider: string, model: string, used_input: int, used_output: int}>}>
      */
     public function freePoolStatus(): array
@@ -94,6 +111,8 @@ class AiUsageReporting
     /**
      * @return array{
      *     record: array<string, mixed>,
+     *     capturable: bool,
+     *     capture_blocker: string|null,
      *     user: array{id: int, name: string}|null,
      *     tools: array<int, array<string, mixed>>,
      *     children: list<array{id: int, agent_class: string|null, model: string|null, status: string, total_tokens: int}>,
@@ -139,10 +158,11 @@ class AiUsageReporting
     }
 
     /**
+     * @param  bool|null  $benchmark  null: every row; true: only benchmark runs; false: leave benchmark runs out
      * @param  bool|null  $fellThrough  null: every row; false: runs that used their task's first tier; true: runs that fell through to a lower tier
      * @return Collection<int, object>
      */
-    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null, ?bool $fellThrough = null): Collection
+    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null, ?bool $fellThrough = null, ?bool $benchmark = null): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -161,12 +181,15 @@ class AiUsageReporting
                 ai_usage_records.kind,
                 ai_usage_records.error_message,
                 ai_usage_records.tier_position,
+                ai_usage_records.benchmark_run_id,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
             ', $costBindings)
             ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
             ->when($fellThrough === false, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', 1))
+            ->when($benchmark === true, fn (Builder $builder) => $builder->whereNotNull('ai_usage_records.benchmark_run_id'))
+            ->when($benchmark === false, fn (Builder $builder) => $builder->whereNull('ai_usage_records.benchmark_run_id'))
             ->latest('ai_usage_records.created_at')
             ->limit($limit)
             ->get()
@@ -187,22 +210,26 @@ class AiUsageReporting
     /**
      * Per-tool call counts, failures and latency percentiles inside the
      * window. Percentiles skip rows recorded before duration tracking
-     * existed (null duration_ms), so they are null for such tools.
+     * existed (null duration_ms), so they are null for such tools. Tool calls
+     * made by benchmark runs are left out: they replay fixtures, not live tools.
      *
      * @return Collection<int, object{tool_class: string, calls: int, failures: int, p50_ms: int|null, p95_ms: int|null}>
      */
     public function toolStats(?CarbonImmutable $since): Collection
     {
         return DB::table('ai_tool_invocations')
-            ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('created_at', '>=', $since))
+            ->whereNotExists(fn (Builder $builder) => $builder->from('ai_usage_records')
+                ->whereColumn('ai_usage_records.invocation_id', 'ai_tool_invocations.invocation_id')
+                ->whereNotNull('ai_usage_records.benchmark_run_id'))
+            ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_tool_invocations.created_at', '>=', $since))
             ->selectRaw("
-                tool_class,
+                ai_tool_invocations.tool_class,
                 COUNT(*) AS calls,
-                COUNT(*) FILTER (WHERE status = 'failed') AS failures,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms
+                COUNT(*) FILTER (WHERE ai_tool_invocations.status = 'failed') AS failures,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY ai_tool_invocations.duration_ms) AS p50_ms,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY ai_tool_invocations.duration_ms) AS p95_ms
             ")
-            ->groupBy('tool_class')
+            ->groupBy('ai_tool_invocations.tool_class')
             ->orderByDesc('calls')
             ->orderBy('tool_class')
             ->get()

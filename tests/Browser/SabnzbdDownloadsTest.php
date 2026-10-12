@@ -105,7 +105,9 @@ test('a member sees the history without any admin controls', function (): void {
         ->assertSeeIn('[data-history-row="SABnzbd_nzo_failed1"]', 'Severance.S02E07.1080p')
         ->assertMissing('[data-speed-limit-trigger]')
         ->assertMissing('[data-history-retry]')
-        ->assertMissing('[data-history-delete]');
+        ->assertMissing('[data-history-delete]')
+        ->assertMissing('[data-history-hidden]')
+        ->assertMissing('[data-queue-hidden]');
 });
 
 test('a history page past the end still shows the pager and leads back to the last page', function (): void {
@@ -188,4 +190,58 @@ test('a SABnzbd that refuses the page load says so instead of showing empty list
         ->assertNoSmoke()
         ->assertSeeIn('[data-sabnzbd-error]', 'SABnzbd is unavailable — ask an admin to check the connection.')
         ->assertMissing('[data-sabnzbd-history]');
+});
+
+test('the history says how many downloads the category filter hid', function (): void {
+    ServiceConnection::query()->sole()->update(['settings' => ['hidden_categories' => ['movies']]]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-history-row="SABnzbd_nzo_failed1"]', 'Severance.S02E07.1080p')
+        ->assertMissing('[data-history-row="SABnzbd_nzo_done1"]')
+        ->assertSeeIn('[data-sabnzbd-history]', '120 jobs')
+        ->assertSeeIn('[data-history-hidden]', '1 hidden by category filter')
+        ->assertMissing('[data-queue-hidden]');
+});
+
+test('a history page whose downloads are all hidden says so instead of looking empty', function (): void {
+    ServiceConnection::query()->sole()->update(['settings' => ['hidden_categories' => ['tv', 'movies']]]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-history-hidden]', '2 hidden by category filter')
+        ->assertSeeIn('[data-sabnzbd-history]', 'Every download on this page is in a hidden category.')
+        ->assertDontSeeIn('[data-sabnzbd-history]', 'No recent downloads.')
+        ->assertDontSeeIn('[data-sabnzbd-history]', 'No downloads on this page.');
+});
+
+test('a queue whose downloads are all hidden says so', function (): void {
+    // A distinct host — the beforeEach's sab.local stub keeps the first
+    // match it registers, so a queue payload with a slot can't be laid
+    // over it on the same host.
+    $serviceConnection = ServiceConnection::query()->sole();
+    $serviceConnection->update(['url' => 'http://sab-hidden.local:8080', 'settings' => ['hidden_categories' => ['movies']]]);
+
+    Http::fake([
+        'sab-hidden.local:8080/api*' => function (Request $request) {
+            $query = sabnzbdDownloadsQuery($request);
+
+            return match (true) {
+                $query['mode'] === 'queue' => Http::response(['queue' => [
+                    'paused' => false, 'noofslots' => 1,
+                    'slots' => [['nzo_id' => 'SABnzbd_nzo_hidden1', 'filename' => 'Dune.Part.Two.2024', 'cat' => 'movies']],
+                ]]),
+                $query['mode'] === 'history' => Http::response(['history' => ['noofslots' => 0, 'slots' => []]]),
+                default => Http::response(['status' => true]),
+            };
+        },
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-hidden]', '1 hidden by category filter')
+        ->assertSee('Every download in the queue is in a hidden category.');
 });

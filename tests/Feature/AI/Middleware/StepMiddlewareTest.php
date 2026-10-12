@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Agents\TitleAgent;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
 use App\Http\Streaming\ClientConnection;
@@ -72,18 +75,20 @@ test('the first step is not re-checked', function (): void {
     expect((new EnforceBudgetEachStep)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ok'))->toBe('ok');
 });
 
-test('every tool-using agent runs the step middleware its runs need', function (string $agentClass, array $expected): void {
+test('every agent runs the step middleware its runs need', function (string $agentClass, array $expected): void {
     $agent = new $agentClass;
 
     expect($agent)->toBeInstanceOf(HasMiddleware::class)
         ->and(array_map(static fn (object $middleware): string => $middleware::class, $agent->middleware()))
         ->toBe($expected);
 })->with([
-    'media' => [MediaAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
-    'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
-    'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
-    'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class]],
-    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class]],
+    'media' => [MediaAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
+    'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
+    'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
+    'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, ReplayBenchmarkTools::class]],
+    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class, ReplayBenchmarkTools::class]],
+    'title' => [TitleAgent::class, [ReplayBenchmarkTools::class]],
+    'benchmark judge' => [BenchmarkJudgeAgent::class, [ReplayBenchmarkTools::class]],
 ]);
 
 /**

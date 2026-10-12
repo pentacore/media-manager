@@ -34,34 +34,66 @@ export async function submitBulk(
     }
 }
 
+const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
+
+/** About two seconds at 60 fps: longer than any dialog exit animation. */
+const MAX_DIALOG_WAIT_FRAMES = 120;
+
 /**
  * After a successful run the selection clears and the bulk bar (holding the
  * focused button, or a dialog's return-focus target) unmounts, dropping
  * focus to <body>. Hand it to the page's select-all control, or to the page
  * heading when there is none, so keyboard and screen-reader users keep
  * their place. Focus the user already moved elsewhere is left alone.
+ *
+ * A run confirmed in a dialog resolves while focus is still inside that
+ * closing dialog. Wait until the dialog has left the DOM, let Reka's
+ * zero-delay focus restore (to a trigger the run may have unmounted) go
+ * first, and decide only then.
  */
 export function focusAfterBulk(): void {
     void nextTick(() => {
-        const active = document.activeElement;
+        const dialog = document.activeElement?.closest(DIALOG_SELECTOR) ?? null;
 
-        if (active !== null && active !== document.body) {
+        if (dialog === null) {
+            moveFocusToBulkTarget();
+
             return;
         }
 
-        const target =
-            document.querySelector<HTMLElement>(
-                '[data-bulk-select-all] button:not([disabled])',
-            ) ?? document.querySelector<HTMLElement>('h1');
-
-        if (target === null) {
-            return;
-        }
-
-        if (target.tagName === 'H1' && !target.hasAttribute('tabindex')) {
-            target.setAttribute('tabindex', '-1');
-        }
-
-        target.focus();
+        waitForDialogToLeave(dialog, 0);
     });
+}
+
+function waitForDialogToLeave(dialog: Element, frame: number): void {
+    if (dialog.isConnected && frame < MAX_DIALOG_WAIT_FRAMES) {
+        requestAnimationFrame(() => waitForDialogToLeave(dialog, frame + 1));
+
+        return;
+    }
+
+    window.setTimeout(moveFocusToBulkTarget, 0);
+}
+
+function moveFocusToBulkTarget(): void {
+    const active = document.activeElement;
+
+    if (active !== null && active !== document.body) {
+        return;
+    }
+
+    const target =
+        document.querySelector<HTMLElement>(
+            '[data-bulk-select-all] button:not([disabled])',
+        ) ?? document.querySelector<HTMLElement>('h1');
+
+    if (target === null) {
+        return;
+    }
+
+    if (target.tagName === 'H1' && !target.hasAttribute('tabindex')) {
+        target.setAttribute('tabindex', '-1');
+    }
+
+    target.focus();
 }

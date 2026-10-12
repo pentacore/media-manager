@@ -29,3 +29,21 @@ export function formatBytes(bytes: unknown): string {
 
     return `${value.toFixed(byteDecimals(unitIndex))} ${BYTE_UNITS[unitIndex]}`;
 }
+
+const COUNT_FORMAT = new Intl.NumberFormat('en-US');
+
+/**
+ * A count with en-US grouping: "1,250,000". Fixed to en-US, not the browser
+ * locale, so the server render and the hydrated page print the same string.
+ * A numeric string is parsed; a missing, non-numeric or non-finite value is
+ * "—".
+ */
+export function formatCount(value: unknown): string {
+    const count = typeof value === 'string' ? Number.parseFloat(value) : value;
+
+    if (typeof count !== 'number' || !Number.isFinite(count)) {
+        return '—';
+    }
+
+    return COUNT_FORMAT.format(count);
+}

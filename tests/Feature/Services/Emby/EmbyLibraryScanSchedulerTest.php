@@ -11,6 +11,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ManualActionOutcome;
 use App\Services\Emby\EmbyLibraryScanScheduler;
 use Carbon\CarbonImmutable;
@@ -32,14 +33,14 @@ function scanSchedulerConfig(bool $requiresApproval = false): void
     ]);
 }
 
-function scheduleImportScan(ServiceConnection $sonarr, string $trigger = 'sonarr_download'): ?ActionRequest
+function scheduleImportScan(ServiceConnection $sonarr, string $trigger = 'sonarr_download', string $seriesTitle = 'Show'): ?ActionRequest
 {
-    $scanPayload = ['trigger' => $trigger, 'series_title' => 'Show'];
+    $scanPayload = ['trigger' => $trigger, 'series_title' => $seriesTitle];
 
     return resolve(EmbyLibraryScanScheduler::class)->schedule(
         sourceService: 'sonarr',
         scanPayload: $scanPayload,
-        description: resolve(ActionDescriber::class)->describe('emby_library_scan', $scanPayload)->because('Sonarr imported "Show".'),
+        description: resolve(ActionDescriber::class)->describe('emby_library_scan', $scanPayload)->because(sprintf('Sonarr imported "%s".', $seriesTitle)),
         webhookEvent: WebhookEvent::factory()->create(['service_connection_id' => $sonarr->id]),
     );
 }
@@ -203,4 +204,42 @@ test('a manual refresh with its rule disabled files nothing', function (): void 
     expect($outcome)->toBeInstanceOf(ManualActionOutcome::class)
         ->and($outcome->state)->toBe(ManualActionOutcome::DISABLED)
         ->and(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a coalesced scan counts its imports and names the latest one', function (): void {
+    scanSchedulerConfig();
+    ServiceConnection::factory()->emby()->create();
+
+    $actionRequest = scheduleImportScan($this->sonarr, seriesTitle: 'First Show');
+    $firstDescription = $actionRequest->description;
+    scheduleImportScan($this->sonarr, seriesTitle: 'Second Show');
+    scheduleImportScan($this->sonarr, 'radarr_download', 'Third Movie');
+
+    $description = $actionRequest->fresh()->description;
+
+    expect($firstDescription)->toStartWith('Sonarr imported "First Show".')
+        ->and($description)->toStartWith('3 imports · latest: Sonarr imported "Third Movie".')
+        ->and($description)->toContain('will rescan its libraries')
+        ->and($description)->not->toContain('First Show');
+});
+
+test('a scan that folds in anything but imports counts changes', function (): void {
+    scanSchedulerConfig();
+    $emby = ServiceConnection::factory()->emby()->create();
+    $actionRequest = scheduleImportScan($this->sonarr);
+
+    resolve(EmbyLibraryScanScheduler::class)->foldOrDispatchManual($emby->id, 'Requested by a test.');
+
+    expect($actionRequest->fresh()->description)->toBe('2 changes · latest: Requested by a test.');
+});
+
+test('a coalesced description stays within the description limit', function (): void {
+    scanSchedulerConfig();
+    ServiceConnection::factory()->emby()->create();
+    $actionRequest = scheduleImportScan($this->sonarr);
+
+    scheduleImportScan($this->sonarr, seriesTitle: str_repeat('Long Example Title ', 80));
+
+    expect(mb_strlen((string) $actionRequest->fresh()->description))->toBe(ActionDescription::DESCRIPTION_LIMIT)
+        ->and($actionRequest->fresh()->description)->toStartWith('2 imports · latest: Sonarr imported "Long Example Title');
 });

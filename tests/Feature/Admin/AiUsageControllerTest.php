@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
+use App\Enums\AiUsageKind;
 use App\Enums\ClassificationGate;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
+use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Models\BenchmarkRun;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
@@ -654,4 +657,81 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->streamedContent();
 
     expect($csv)->toContain(',tier')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
+});
+
+test('recent invocations carry their benchmark run and can be filtered by it', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    AiUsageRecord::factory()->create(['model' => 'gpt-live']);
+    AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
+        ->assertInertia(fn ($page) => $page
+            ->where('benchmark', 'only')
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-benchmarked')
+            ->where('recent.0.benchmark_run_id', $run->id));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->where('benchmark', 'exclude')
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-live')
+            ->where('recent.0.benchmark_run_id', null));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'bogus']))
+        ->assertInertia(fn ($page) => $page->where('benchmark', null)->has('recent', 2));
+});
+
+test('the csv export honours the benchmark filter', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    AiUsageRecord::factory()->create(['model' => 'gpt-live']);
+    AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+
+    $csv = $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.export', ['benchmark' => 'exclude']))
+        ->streamedContent();
+
+    expect($csv)->toContain('gpt-live')->not->toContain('gpt-benchmarked');
+});
+
+test('tool stats leave out the tool calls of benchmark runs', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    $benchmarked = AiUsageRecord::factory()->create(['benchmark_run_id' => $run->id]);
+    $live = AiUsageRecord::factory()->create();
+    AiToolInvocation::factory()->create(['invocation_id' => $benchmarked->invocation_id]);
+    AiToolInvocation::factory()->create(['invocation_id' => $live->invocation_id]);
+    AiToolInvocation::factory()->create(['invocation_id' => 'no-usage-row']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page->where('tool_stats.0.calls', 2));
+});
+
+test('show flags whether an invocation can become a benchmark case', function (string $reason, array $attributes, bool $capturable): void {
+    $record = AiUsageRecord::factory()->create($attributes);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('capturable', $capturable)
+        ->assertJsonPath('capture_blocker', $capturable ? null : fn ($value): bool => is_string($value) && $value !== '')
+        ->assertJsonPath('record.benchmark_run_id', null);
+})->with([
+    'plain text prompt' => ['ok', ['prompt_text' => 'Find severance.'], true],
+    'attachments' => ['attachments', ['prompt_text' => "Look at this\n\nAttachments: a.png"], false],
+    'no prompt' => ['no prompt', ['prompt_text' => null], false],
+    'non-text kind' => ['kind', ['prompt_text' => 'Embed me', 'kind' => AiUsageKind::Embeddings], false],
+]);
+
+test('an invocation of a benchmark run is not capturable', function (): void {
+    $record = AiUsageRecord::factory()->create(['prompt_text' => 'Find severance.', 'benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('capturable', false)
+        ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");
 });

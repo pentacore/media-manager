@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Benchmark\FixtureBook;
+use App\Ai\Benchmark\ReplayTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Events\Ai\AgentStepUpdate;
 use App\Listeners\Ai\BroadcastAgentStep;
@@ -43,6 +45,32 @@ test('listener broadcasts AgentStepUpdate when conversation context is present',
         && $agentStepUpdate->conversationId === $conversationId
         && $agentStepUpdate->toolName === 'GetServiceStatusTool'
         && $agentStepUpdate->status === AgentStepUpdate::STATUS_FINISHED);
+});
+
+test('a benchmark replay broadcasts the name of the tool it stands in for', function (): void {
+    Event::fake([AgentStepUpdate::class]);
+    $user = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => User::class,
+        'participant_id' => $user->id,
+        'title' => 'Test',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    (new BroadcastAgentStep)->handle(new ToolInvoked(
+        invocationId: 'inv-replay',
+        toolInvocationId: 'tic-replay',
+        agent: (new MediaAgent)->continue($conversationId, as: $user),
+        tool: new ReplayTool(resolve(GetServiceStatusTool::class), false, new FixtureBook([]), null),
+        arguments: [],
+        result: FixtureBook::MISS_RESULT,
+        time: 1.0,
+    ));
+
+    Event::assertDispatched(fn (AgentStepUpdate $agentStepUpdate): bool => $agentStepUpdate->toolName === 'GetServiceStatusTool');
 });
 
 test('listener silently skips when agent has no conversation context', function (): void {

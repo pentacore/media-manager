@@ -9,6 +9,7 @@ export { default as UsageHeader } from './UsageHeader.vue';
 export { default as UsageStatCards } from './UsageStatCards.vue';
 export type {
     AggregateRow,
+    BenchmarkFilter,
     BreakdownLine,
     ChildRun,
     FreePoolRow,

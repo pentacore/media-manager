@@ -1,13 +1,22 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import { InitialsAvatar, Pill } from '@/components/mm';
-import { formatCost, formatNumber, formatTimestamp } from './format';
-import type { KindOption, RecentRow, TierFilter } from './types';
+import { formatCount } from '@/lib/format';
+import { formatCost, formatTimestamp } from './format';
+import type {
+    BenchmarkFilter,
+    KindOption,
+    RecentRow,
+    TierFilter,
+} from './types';
 
 const props = defineProps<{
     rows: RecentRow[];
     kinds: KindOption[];
     tier: TierFilter | null;
+    benchmark: BenchmarkFilter | null;
     scenarioActive: boolean;
     scenarioRows?: RecentRow[];
 }>();
@@ -18,6 +27,14 @@ const projected = computed(() =>
     Object.fromEntries(
         (props.scenarioRows ?? []).map((row) => [row.id, row.cost] as const),
     ),
+);
+
+const filterLabel = computed(() =>
+    props.tier && props.benchmark
+        ? 'Tier and benchmark'
+        : props.tier
+          ? 'Tier'
+          : 'Benchmark',
 );
 
 function kindLabel(value: string): string {
@@ -35,10 +52,11 @@ function kindLabel(value: string): string {
         >
             Recent invocations
             <p
-                v-if="tier"
+                v-if="tier || benchmark"
                 class="mt-1 text-[11.5px] font-normal tracking-normal text-muted-foreground normal-case"
             >
-                Tier filter applies to this list; totals include every run.
+                {{ filterLabel }} filter applies to this list; totals include
+                every run.
             </p>
         </div>
         <div class="overflow-x-auto">
@@ -100,10 +118,22 @@ function kindLabel(value: string): string {
                                 >
                                     Tier {{ row.tier_position }}
                                 </Pill>
+                                <Link
+                                    v-if="row.benchmark_run_id !== null"
+                                    :href="
+                                        BenchmarkRunController.show.url(
+                                            row.benchmark_run_id,
+                                        )
+                                    "
+                                    data-usage-benchmark
+                                    @click.stop
+                                >
+                                    <Pill variant="info">Benchmark</Pill>
+                                </Link>
                             </span>
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(row.total_tokens) }}
+                            {{ formatCount(row.total_tokens) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
                             {{ row.tool_calls_count }}

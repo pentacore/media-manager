@@ -1,3 +1,61 @@
+# [1.41.0](https://github.com/pentacore/media-manager/compare/v1.40.0...v1.41.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **library:** keep card controls out of the card link and restore focus after confirmed bulk runs ([56531ae](https://github.com/pentacore/media-manager/commit/56531ae7a1712bc342d542fa3b2baa1ee4458cb2))
+* **library:** name the quality profile for viewers and hide seasons under an episodes outage ([09b9b8d](https://github.com/pentacore/media-manager/commit/09b9b8d0a6bd27a1a0ff78a1308ef4723ce2fd16))
+* **sabnzbd:** say how many downloads the category filter hid ([d219e54](https://github.com/pentacore/media-manager/commit/d219e548e7bead0c3fd1a553975787d0ff3a56f7))
+* **seerr:** free a deleted title's seasons only from completed requests ([4f147c6](https://github.com/pentacore/media-manager/commit/4f147c6c201de1a37f1b4ec39c025f4250f6c776))
+* **seerr:** free every season of a deleted title, and pin the sheet pill and calendar keyboard access ([0ed3b82](https://github.com/pentacore/media-manager/commit/0ed3b8252edff7064437cc2b37a6b9d584a1e340))
+* **seerr:** show blocklisted titles as unrequestable and free deleted seasons ([90cf6cf](https://github.com/pentacore/media-manager/commit/90cf6cfc678fcd21ddc7615be307a87a2c6fbe81))
+* word coalesced scans by count and latest trigger, document framing, unify count formatting ([ca23ab9](https://github.com/pentacore/media-manager/commit/ca23ab9974387c87697b6587a4f5e57eca294e6b))
+
+
+### Features
+
+* **calendar:** open a day popover with full rows from the month grid ([0b4f50a](https://github.com/pentacore/media-manager/commit/0b4f50a14c09891a7588d86ddc11b7cf24ccea2b))
+
+# [1.40.0](https://github.com/pentacore/media-manager/compare/v1.39.0...v1.40.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* account for the benchmark judge task in budget and audit tests ([14ce06f](https://github.com/pentacore/media-manager/commit/14ce06f5e6cd6c2811db15da9d0781a05ed8f93f))
+* **ai:** capture only the earlier chat turns and refuse benchmark rows as cases ([294e994](https://github.com/pentacore/media-manager/commit/294e994367cd92fe845169c1d951a440f7c7e613))
+* **ai:** check the hard cap before judging without counting the candidate twice ([cc67e66](https://github.com/pentacore/media-manager/commit/cc67e66b650a884efc99ca2ba44f787406965f3c))
+* **ai:** claim benchmark results as running so cancel and delete never orphan a job ([126ace8](https://github.com/pentacore/media-manager/commit/126ace888a82e53567fb081514f174427baccc9e))
+* **ai:** drop NUL characters from tool I/O and never fail a run on its telemetry row ([705ea2b](https://github.com/pentacore/media-manager/commit/705ea2bba2a3566ff119717a7a3ca40a0abae058))
+* **ai:** enforce the hard cap and run each benchmark result once ([9f4796e](https://github.com/pentacore/media-manager/commit/9f4796ecec62a933031249b3bee3b51a4f26f9f4))
+* **ai:** harden benchmark case capture against unresolvable tools and misflagged truncation ([224d04f](https://github.com/pentacore/media-manager/commit/224d04fdfe552fe6692804e5c84432196f2a9794))
+* **ai:** index ai_usage_records.benchmark_run_id and tighten case round-trip test ([b4f32e2](https://github.com/pentacore/media-manager/commit/b4f32e293040d438400d4786a13b47978f61d47e))
+* **ai:** keep the AI usage header readable with three filters ([c6017a5](https://github.com/pentacore/media-manager/commit/c6017a5bc3b65c4138f2bad2bb6eb2bc5025375a))
+* **ai:** keep tool telemetry row when I/O capture fails ([6cbf0f5](https://github.com/pentacore/media-manager/commit/6cbf0f5eee92ca5c6061defdb36bc9bf41405b09))
+* **ai:** leave cost per case empty for candidates without ok results ([baee7bc](https://github.com/pentacore/media-manager/commit/baee7bc5b05e7ea3f19c5986670e22793bf49dc6))
+* **ai:** log benchmark write calls and record replayed tools by their real class ([cef332e](https://github.com/pentacore/media-manager/commit/cef332ea95332a4da7b372ba95a8845342271570))
+* **ai:** mark re-judged benchmark results queued so the run page polls ([074ef42](https://github.com/pentacore/media-manager/commit/074ef42e0de50562bdee90677925d8315d77ce03))
+* **ai:** require benchmark tool arguments to be JSON objects ([5dfdecf](https://github.com/pentacore/media-manager/commit/5dfdecf7bc0a54390b231a258a18782e26e0013b))
+* **ai:** show judge failed and re-judging states on benchmark runs ([d1ed23d](https://github.com/pentacore/media-manager/commit/d1ed23d8a945d55b8ec41c5bbab9ca0dcae0fb86))
+* **ai:** show the provider in benchmark candidate labels ([11c2811](https://github.com/pentacore/media-manager/commit/11c281101bdca0d09048e07471e300d043be07b0))
+* **ai:** take benchmark run cost from its usage rows and guard the judge with the hard cap ([8ca0242](https://github.com/pentacore/media-manager/commit/8ca0242c9f0668ad31c1b18731bb0d9923d4136a))
+
+
+### Features
+
+* **ai:** add benchmark case, run and result tables ([aa90d01](https://github.com/pentacore/media-manager/commit/aa90d01de33ee5e94deacde8a041e8022dc528ad))
+* **ai:** add the benchmark judge task and agent ([e6df862](https://github.com/pentacore/media-manager/commit/e6df8624471154f2bbc42fd25a4a29c960354289))
+* **ai:** benchmark case pages ([6328273](https://github.com/pentacore/media-manager/commit/63282737d4c058ee0ace979ae054a77b9da50835))
+* **ai:** benchmark run pages ([6d72169](https://github.com/pentacore/media-manager/commit/6d72169c189ed9a414488c3ada59f862afa4e666))
+* **ai:** let the benchmark judge grade chat mode compliance ([c831029](https://github.com/pentacore/media-manager/commit/c83102996119e9a9f80f3da685b4ba221dafe569))
+* **ai:** manage benchmark cases and capture them from AI usage ([fc7d196](https://github.com/pentacore/media-manager/commit/fc7d1969155e70fd1685eea2534921f8acf0ee91))
+* **ai:** normalise tool arguments and look up benchmark fixtures ([8ff301f](https://github.com/pentacore/media-manager/commit/8ff301fc1a551f28f0ae2c2a0ce9499267d903d3))
+* **ai:** queue and run benchmark cases with a cost cap ([d9145d8](https://github.com/pentacore/media-manager/commit/d9145d8586c0ba4c9ac1747dd5c70bfe4702fd28))
+* **ai:** record tool call arguments and results ([bfdb20d](https://github.com/pentacore/media-manager/commit/bfdb20d200657a711ab756d00c304e3075d42eb8))
+* **ai:** replay recorded tools and pin candidates inside benchmark runs ([ff63d3f](https://github.com/pentacore/media-manager/commit/ff63d3f648c46c37a141763169d85e85df7957f0))
+* **ai:** run benchmark cases and score them ([5a41975](https://github.com/pentacore/media-manager/commit/5a419753f393626c604257953a22c74acbad689c))
+* **ai:** set up, estimate and inspect benchmark runs ([dec2f33](https://github.com/pentacore/media-manager/commit/dec2f3314af6a9aa557de24768049befb8079585))
+* **ai:** show benchmark runs on AI usage and capture cases from it ([a10c007](https://github.com/pentacore/media-manager/commit/a10c0070faf14a93e393ec4b10c3f594de7ab87d))
+
 # [1.39.0](https://github.com/pentacore/media-manager/compare/v1.38.0...v1.39.0) (2026-10-12)
 
 

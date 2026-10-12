@@ -42,6 +42,8 @@ const props = withDefaults(
         reasoningInheritLabel?: string;
         hasReasoning?: boolean;
         allowAuto?: boolean;
+        /** False for single-selection tasks: hides "Add tier". */
+        allowTiers?: boolean;
         /** Error key prefix, e.g. `tasks.chat.tiers`. */
         errorPrefix: string;
         errors: Record<string, string | undefined>;
@@ -51,6 +53,7 @@ const props = withDefaults(
         reasoningInheritLabel: 'Default',
         hasReasoning: true,
         allowAuto: false,
+        allowTiers: true,
     },
 );
 
@@ -319,6 +322,7 @@ function errorFor(index: number): string | undefined {
             <InputError :message="errorFor(index)" />
         </div>
         <Button
+            v-if="allowTiers"
             type="button"
             variant="outline"
             size="sm"

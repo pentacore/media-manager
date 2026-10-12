@@ -463,3 +463,39 @@ test('a selected series that leaves the active filter on reload drops out of the
 
     expect(ActionRequest::query()->where('type', 'monitor_series')->get()->pluck('payload.series_id')->all())->toBe([1]);
 });
+
+test('a movie card keeps its checkbox and open-in-Radarr link beside the card link, not inside it', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => Http::response([
+            ['id' => 10, 'title' => 'Example Movie', 'titleSlug' => 'example-movie', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => bulkBrowserPoster()],
+        ]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.movies.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-movie-card="10"]', 'Example Movie')
+        ->assertCount('[data-movie-card="10"] a, [data-movie-card="10"] button, [data-movie-card="10"] [data-bulk-select]', 0)
+        ->assertPresent('[data-bulk-select="10"]')
+        ->assertAttribute('[data-movie-open-external]', 'target', '_blank')
+        ->click('[data-bulk-select="10"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertPathIs(route('media.movies.index', absolute: false))
+        ->click('[data-movie-card="10"]')
+        ->assertPathIs(route('media.movies.show', ['id' => 10], absolute: false));
+});
+
+test('a series card keeps its checkbox beside the card link, not inside it', function (): void {
+    fakeBulkSonarrLibrary($this->sonarr, 1);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->assertCount('[data-series-card="1"] a, [data-series-card="1"] button, [data-series-card="1"] [data-bulk-select]', 0)
+        ->click('[data-bulk-select="1"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertPathIs(route('media.series.index', absolute: false));
+});

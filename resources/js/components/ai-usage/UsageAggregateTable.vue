@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatCost, formatNumber } from './format';
+import { formatCount } from '@/lib/format';
+import { formatCost } from './format';
 import type { AggregateRow } from './types';
 
 /**
@@ -68,7 +69,7 @@ function indexByKey(rows: AggregateRow[]): Record<string, string> {
                             {{ row.key ?? '—' }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(row.invocations) }}
+                            {{ formatCount(row.invocations) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
                             {{ formatCost(row.total_cost) }}

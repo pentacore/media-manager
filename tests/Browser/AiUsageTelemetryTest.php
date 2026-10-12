@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Models\BenchmarkRun;
 use App\Models\User;
 
 test('admin sees failed runs, tool stats and can filter by kind', function (): void {
@@ -116,4 +117,71 @@ test('the tier filter stays in the query string across a window, kind and scenar
         ->click('[role="option"]:has-text("openai / gpt-5-mini")')
         ->click('[data-usage-scenario-apply]')
         ->assertQueryStringHas('tier', 'fell_through');
+});
+
+test('benchmark rows carry a pill linking to the run and can be filtered', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $run = BenchmarkRun::factory()->create(['name' => 'Spring bake-off']);
+    $benchmarked = AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+    $live = AiUsageRecord::factory()->create(['model' => 'gpt-live']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $benchmarked->id), 'Benchmark')
+        ->assertMissing(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $live->id))
+        ->click('[data-usage-benchmark-filter] button')
+        ->click('[role="option"][aria-label="Exclude benchmarks"]')
+        ->assertQueryStringHas('benchmark', 'exclude')
+        ->assertPresent(sprintf('[data-usage-row="%d"]', $live->id))
+        ->assertMissing(sprintf('[data-usage-row="%d"]', $benchmarked->id))
+        ->click('30d')
+        ->assertQueryStringHas('benchmark', 'exclude')
+        ->click('[data-usage-benchmark-filter] button')
+        ->click('[role="option"][aria-label="Only benchmarks"]')
+        ->assertQueryStringHas('benchmark', 'only')
+        ->assertPresent(sprintf('[data-usage-row="%d"]', $benchmarked->id))
+        ->assertMissing(sprintf('[data-usage-row="%d"]', $live->id))
+        ->click(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $benchmarked->id))
+        ->assertPathIs(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertSee('Spring bake-off');
+});
+
+test('the drill-down offers to save a capturable invocation as a benchmark case', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $record = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class,
+        'prompt_text' => 'Find Dune on my server',
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[data-usage-capture]', 'Save as benchmark case')
+        ->click('[data-usage-capture]')
+        ->assertPathIs(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertValue('[data-benchmark-prompt]', 'Find Dune on my server');
+});
+
+test('the drill-down explains why an invocation cannot be captured', function (): void {
+    $record = AiUsageRecord::factory()->create(['prompt_text' => "Look\n\nAttachments: a.png"]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[data-usage-capture-blocked]', 'attachments')
+        ->assertMissing('[data-usage-capture]');
+});
+
+test('the header keeps a readable title next to the three filters on a wide screen', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->resize(1400, 1000)
+        ->assertNoSmoke()
+        ->assertPresent('[data-usage-benchmark-filter]')
+        ->assertScript('document.querySelector("h1").getBoundingClientRect().width > 200')
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth');
 });

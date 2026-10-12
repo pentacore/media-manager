@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatMs, formatNumber, shortClass } from './format';
+import { formatCount } from '@/lib/format';
+import { formatMs, shortClass } from './format';
 import type { ToolStatRow } from './types';
 
 defineProps<{
@@ -64,7 +65,7 @@ function failureRate(row: ToolStatRow): string {
                             {{ shortClass(row.tool_class) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(row.calls) }}
+                            {{ formatCount(row.calls) }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2 text-right"

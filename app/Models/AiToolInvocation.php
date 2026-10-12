@@ -21,6 +21,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $status
  * @property int|null $duration_ms
  * @property string|null $error_code
+ * @property string|null $tool_name
+ * @property array<string, mixed>|null $arguments
+ * @property string|null $result
+ * @property bool $io_truncated
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -38,6 +42,10 @@ use Illuminate\Database\Eloquent\Model;
     'status',
     'duration_ms',
     'error_code',
+    'tool_name',
+    'arguments',
+    'result',
+    'io_truncated',
 ])]
 class AiToolInvocation extends Model
 {
@@ -45,6 +53,19 @@ class AiToolInvocation extends Model
     use HasFactory;
 
     use MassPrunable;
+
+    public const int MAX_IO_BYTES = 32_768;
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'arguments' => 'array',
+            'io_truncated' => 'boolean',
+        ];
+    }
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
