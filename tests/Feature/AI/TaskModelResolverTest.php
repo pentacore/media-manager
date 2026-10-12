@@ -254,3 +254,49 @@ test('scopes lists the default scope and every event scope the task has rows in'
     expect(resolver()->scopes(AiTask::Decision)->all())->toBe(['radarr:Grab', 'sonarr:Download', 'default'])
         ->and(resolver()->scopes(AiTask::Chat)->all())->toBe(['default']);
 });
+
+test('updating a row flushes the memoised walk', function (): void {
+    $aiTaskModel = AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    $resolver = resolver();
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
+
+    $aiTaskModel->update(['model' => 'gpt-5-nano']);
+
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5-nano');
+});
+
+test('deleting a row flushes the memoised walk', function (): void {
+    $aiTaskModel = AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    $resolver = resolver();
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
+
+    $aiTaskModel->delete();
+
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-config-chat');
+});
+
+test('the decision default and an event scope resolve independently once both are memoised', function (): void {
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5-nano')->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-haiku-4-5')->create();
+    $resolver = resolver();
+
+    $default = $resolver->resolve(AiTask::Decision);
+    $event = $resolver->resolve(AiTask::Decision, 'sonarr:Download');
+
+    expect([$default->provider, $default->model])->toBe(['openai', 'gpt-5-nano'])
+        ->and([$event->provider, $event->model])->toBe(['anthropic', 'claude-haiku-4-5'])
+        ->and($resolver->resolve(AiTask::Decision)->model)->toBe('gpt-5-nano')
+        ->and($resolver->resolve(AiTask::Decision, 'sonarr:Download')->model)->toBe('claude-haiku-4-5');
+});
+
+test('a chat turn reasoning set after a resolve applies on the next resolve of the memoised walk', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    $resolver = resolver();
+
+    expect($resolver->resolve(AiTask::Chat)->reasoning)->toBe(AiReasoningLevel::High);
+
+    resolve(ChatTurnContext::class)->apply(null, null, AiReasoningLevel::Low);
+    $second = $resolver->resolve(AiTask::Chat);
+
+    expect([$second->model, $second->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::Low]);
+});

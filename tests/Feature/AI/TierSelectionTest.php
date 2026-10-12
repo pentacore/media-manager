@@ -373,3 +373,37 @@ test('an event scope without rows following the decision default list names Deci
     expect($tier?->via)->toBe('Decision agent')
         ->and($tier?->reason())->toStartWith('Decision agent tier 1:');
 });
+
+/**
+ * Title tiers: openrouter `auto` (optionally behind a pool minimum), then a fixed anthropic model.
+ */
+function tierAutoTitleList(?int $percent): void
+{
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'auto')->conditions($percent)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->position(1)->selecting('anthropic', 'claude-haiku-4-5')->create();
+}
+
+test('an auto title tier with an unmet pool minimum falls through to the next tier', function (): void {
+    $aiFreeUsagePool = tierPool();
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5', 'free_usage_pool_id' => $aiFreeUsagePool->id]);
+    AiUsageRecord::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    tierAutoTitleList(20);
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Title);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['anthropic', 'claude-haiku-4-5'])
+        ->and($resolvedSelection->tier?->position)->toBe(2);
+});
+
+test('an auto title tier that may run resolves to the provider cheapest model, not auto', function (?int $percent): void {
+    tierAutoTitleList($percent);
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Title);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['openrouter', 'anthropic/claude-haiku-4.5'])
+        ->and($resolvedSelection->tier?->position)->toBe(1);
+})->with([
+    'no condition' => [null],
+    'met condition' => [20],
+]);
