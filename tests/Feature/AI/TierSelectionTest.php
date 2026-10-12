@@ -11,6 +11,7 @@ use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\AiUsage\FreePoolAccounting;
 use App\Services\AiUsage\PoolHeadroom;
 use App\Settings\AiSettings;
@@ -206,6 +207,40 @@ test('when pool status fails every conditional tier is skipped', function (): vo
     expect($resolvedSelection->model)->toBe('gpt-5-nano')
         ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: free pool status unavailable');
     Exceptions::assertReported(RuntimeException::class);
+});
+
+test('a failing rate-limit lookup is named and reported', function (): void {
+    Exceptions::fake();
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierChatList(20);
+    $this->mock(AiRateLimitGuard::class, fn ($mock) => $mock->shouldReceive('exhaustedReason')->andThrow(new RuntimeException('limits down')));
+    app()->forgetScopedInstances();
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->model)->toBe('gpt-5-nano')
+        ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: rate limit status unavailable');
+    Exceptions::assertReportedCount(1);
+});
+
+test('a pool accounting failure is reported once across conditional tiers', function (): void {
+    Exceptions::fake();
+    $aiFreeUsagePool = tierPool();
+    tierPrice('gpt-5.6-luna', $aiFreeUsagePool);
+    tierPrice('gpt-5.6-terra', $aiFreeUsagePool);
+    tierPrice('gpt-5-nano');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5.6-terra')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(2)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    $this->mock(FreePoolAccounting::class, fn ($mock) => $mock->shouldReceive('status')->andThrow(new RuntimeException('accounting down')));
+    app()->forgetScopedInstances();
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->model)->toBe('gpt-5-nano')
+        ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: free pool status unavailable; Tier 2: free pool status unavailable');
+    Exceptions::assertReportedCount(1);
 });
 
 test('the list walk is memoised until flushed', function (): void {
