@@ -308,7 +308,7 @@ test('code execution is offered only when every provider in the chain supports i
     expect(collect($priceFetcherAgent->tools())->contains(fn (object $tool): bool => $tool instanceof CodeExecution))->toBeTrue()
         ->and((string) $priceFetcherAgent->instructions())->toContain('code execution');
 
-    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Groq->value])->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Mistral->value])->create();
 
     expect(collect($priceFetcherAgent->tools())->contains(fn (object $tool): bool => $tool instanceof CodeExecution))->toBeFalse()
         ->and((string) $priceFetcherAgent->instructions())->not->toContain('code execution');
