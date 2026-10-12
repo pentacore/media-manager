@@ -13,6 +13,7 @@ use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
@@ -121,7 +122,7 @@ final readonly class CaseDraftFromUsage
     public static function captureBlocker(AiUsageRecord $aiUsageRecord): ?string
     {
         return match (true) {
-            $aiUsageRecord->benchmark_run_id !== null => "Benchmark runs can't be captured as cases.",
+            $aiUsageRecord->is_benchmark => "Benchmark runs can't be captured as cases.",
             $aiUsageRecord->kind !== AiUsageKind::Text => 'Only text invocations can become benchmark cases.',
             blank($aiUsageRecord->prompt_text) => 'This invocation has no recorded prompt.',
             str_contains((string) $aiUsageRecord->prompt_text, self::ATTACHMENTS_MARKER) => 'Invocations with attachments cannot become benchmark cases.',
@@ -147,7 +148,9 @@ final readonly class CaseDraftFromUsage
      * messages before its usage row and timestamps are second-precise, so
      * every message up to the end of the record's second is read and the
      * captured turn (the last user message that is the recorded prompt, and
-     * everything after it) is cut off.
+     * everything after it) is cut off. When no user message equals the
+     * recorded prompt (it was truncated), the captured turn cannot be located,
+     * so only messages from strictly before the record's second are kept.
      *
      * @return list<array{role: string, content: string}>
      */
@@ -157,23 +160,28 @@ final readonly class CaseDraftFromUsage
             return [];
         }
 
+        $secondStart = $aiUsageRecord->created_at->startOfSecond();
+
         $messages = DB::table('agent_conversation_messages')
             ->where('conversation_id', $aiUsageRecord->conversation_id)
             ->whereIn('role', ['user', 'assistant'])
-            ->where('created_at', '<', $aiUsageRecord->created_at->startOfSecond()->addSecond())
+            ->where('created_at', '<', $secondStart->addSecond())
             ->oldest()
             ->orderBy('id')
-            ->get(['role', 'content'])
-            ->map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])
+            ->get(['role', 'content', 'created_at'])
             ->all();
 
         for ($index = count($messages) - 1; $index >= 0; $index--) {
-            if ($messages[$index]['role'] === 'user' && $messages[$index]['content'] === $aiUsageRecord->prompt_text) {
-                return array_slice($messages, 0, $index);
+            if ($messages[$index]->role === 'user' && $messages[$index]->content === $aiUsageRecord->prompt_text) {
+                $messages = array_slice($messages, 0, $index);
+
+                return array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $messages);
             }
         }
 
-        return $messages;
+        $earlier = array_filter($messages, static fn (object $message): bool => CarbonImmutable::parse((string) $message->created_at, 'UTC')->lessThan($secondStart));
+
+        return array_values(array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $earlier));
     }
 
     /**

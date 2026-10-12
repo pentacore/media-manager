@@ -131,6 +131,37 @@ test('the create form has the option props and default rubrics', function (): vo
             ->missing('defaultRubrics.decision'));
 });
 
+test('a truncated prompt keeps only the conversation turns before the record second', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => now()->subHour(), 'updated_at' => now()->subHour()]);
+
+    foreach ([
+        ['user', 'Earlier question', $turnAt->subMinutes(5)],
+        ['assistant', 'Earlier answer', $turnAt->subMinutes(4)],
+        ['user', 'A very long captured prompt that was cut', $turnAt],
+        ['assistant', 'The captured answer', $turnAt],
+    ] as [$role, $content, $at]) {
+        DB::table('agent_conversation_messages')->insert([
+            'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+            'role' => $role, 'content' => $content, 'attachments' => '[]', 'steps' => '[]', 'usage' => '[]',
+            'meta' => '[]', 'created_at' => $at, 'updated_at' => $at,
+        ]);
+    }
+
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'A very long captured prompt that was cut…', [
+        'conversation_id' => $conversationId, 'created_at' => $turnAt,
+    ]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.input.history', [
+            ['role' => 'user', 'content' => 'Earlier question'],
+            ['role' => 'assistant', 'content' => 'Earlier answer'],
+        ]));
+});
+
 test('the create form pre-fills a chat draft with the earlier conversation turns only', function (int $usageDelaySeconds): void {
     $this->actingAs(User::factory()->admin()->create());
     $conversationId = (string) Str::uuid();
@@ -267,7 +298,7 @@ test('records that cannot become a case redirect back with an error toast', func
 
 test('a usage row of a benchmark run cannot become a case', function (): void {
     $this->actingAs(User::factory()->admin()->create());
-    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Hi', ['benchmark_run_id' => BenchmarkRun::factory()->create()->id]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Hi', ['benchmark_run_id' => BenchmarkRun::factory()->create()->id, 'is_benchmark' => true]);
 
     $this->from(route('admin.ai-usage.index'))
         ->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
