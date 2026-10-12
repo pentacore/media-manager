@@ -84,7 +84,10 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
     BenchmarkResult::factory()->forCase($run, $benchmarkCase, 1)->scored(0.4, false)->create([
         'output' => 'Nolan Films Mini',
         'latency_ms' => 1200,
-        'score_detail' => ['score_10' => 4, 'rationale' => 'Missed Tenet', 'tool_log' => [['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'Nolan'], 'result' => null, 'hit' => false]]],
+        'score_detail' => ['score_10' => 4, 'rationale' => 'Missed Tenet', 'tool_log' => [
+            ['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'Nolan'], 'result' => null, 'hit' => false],
+            ['tool' => 'DeleteMediaTool', 'arguments' => ['id' => 4], 'result' => '{"error":"advisory_mode_blocks_destructive"}', 'hit' => true, 'write' => true, 'refused' => true],
+        ]],
     ]);
     $benchmarkResult = BenchmarkResult::query()->where('candidate_index', 0)->sole();
 
@@ -93,7 +96,10 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
         ->assertSeeIn('[data-benchmark-status]', 'Completed')
         ->assertSeeIn('[data-benchmark-progress]', '2 / 2')
         ->assertSeeIn('[data-benchmark-matrix-row="0"]', '9.0')
+        ->assertSeeIn('[data-benchmark-matrix-row="0"]', 'openai · gpt-5-nano')
+        ->assertSeeIn('[data-benchmark-matrix-row="1"]', 'openai · gpt-5-mini · High')
         ->assertSeeIn('[data-benchmark-matrix-row="1"]', 'self-judged')
+        ->assertSeeIn('[data-benchmark-case-grid] thead', 'openai · gpt-5-mini · High')
         ->assertSeeIn('[data-benchmark-case-grid]', 'Nolan chat')
         ->assertMissing('[data-benchmark-rejudge]')
         ->click(sprintf('[data-benchmark-cell="%d"]', $benchmarkResult->id))
@@ -103,6 +109,7 @@ test('a finished run shows the matrix and the drawer compares both candidates', 
         ->assertSeeIn('[data-benchmark-drawer-candidate="1"]', 'Nolan Films Mini')
         ->assertSeeIn('[data-benchmark-drawer-candidate="1"]', 'Missed Tenet')
         ->assertSeeIn('[data-benchmark-drawer-candidate="1"] [data-benchmark-drawer-tool]', 'miss')
+        ->assertSeeIn('[data-benchmark-drawer-candidate="1"] [data-benchmark-drawer-tool]:nth-child(2)', 'refused')
         ->assertSeeIn('[data-benchmark-drawer-prompt]', 'Which films did Nolan direct?');
 });
 
@@ -161,4 +168,50 @@ test('a result whose judge failed is flagged and offers a re-judge', function ()
         ->click(sprintf('[data-benchmark-cell="%d"]', $result->id))
         ->assertSeeIn('[data-benchmark-drawer-judge-failed]', 'judge failed')
         ->assertSeeIn('[data-benchmark-drawer-judge-error]', 'judge timed out');
+});
+
+test('an admin re-judges an unscored result and the cell shows its new score', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->completed()->create(['case_ids' => [$benchmarkCase->id]]);
+    $result = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Nolan Films',
+        'judge_status' => 'failed',
+        'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
+    ]);
+    BenchmarkJudgeAgent::fake(fn (): array => ['score' => 8, 'rationale' => 'Accurate']);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), 'judge failed')
+        ->click('[data-benchmark-rejudge]')
+        ->assertSee('Re-judging 1 result.')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $result->id), '8.0')
+        ->assertMissing('[data-benchmark-rejudge]');
+
+    expect($result->fresh()->judge_status)->toBe('ok');
+});
+
+test('queued re-judges and running cases show as in progress', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->running()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => 'provider_default'],
+        ['provider' => 'openai', 'model' => 'gpt-5-mini', 'reasoning' => 'provider_default'],
+    ])->create(['case_ids' => [$benchmarkCase->id]]);
+    $queued = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Nolan Films',
+        'judge_status' => 'queued',
+    ]);
+    $running = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 1)->running()->create();
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-running-count]', '1 running')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $queued->id), 're-judging…')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $running->id), 'running')
+        ->click(sprintf('[data-benchmark-cell="%d"]', $queued->id))
+        ->assertVisible('[data-benchmark-drawer-rejudging]');
 });
