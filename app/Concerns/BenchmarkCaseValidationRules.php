@@ -16,7 +16,8 @@ use Illuminate\Validation\Validator;
 
 /**
  * Shared by the benchmark case requests: field shapes in the rules, and the
- * cross-field checks (scoring type per task, canonical providers) in after().
+ * cross-field checks (scoring type per task, tool arguments as JSON objects —
+ * an empty list stands for `{}` — and canonical providers) in after().
  */
 trait BenchmarkCaseValidationRules
 {
@@ -79,6 +80,19 @@ trait BenchmarkCaseValidationRules
 
                 if ($aiTask instanceof AiTask && $aiTask->isBenchmarkable() && ! $validator->errors()->has('scoring.type') && $this->input('scoring.type') !== $aiTask->benchmarkScoringType()->value) {
                     $validator->errors()->add('scoring.type', sprintf('The %s task is scored with %s.', $aiTask->label(), $aiTask->benchmarkScoringType()->value));
+                }
+            },
+            function (Validator $validator): void {
+                foreach (['fixtures', 'scoring.expected'] as $listKey) {
+                    $rows = $this->input($listKey);
+
+                    foreach (is_array($rows) ? $rows : [] as $index => $row) {
+                        $arguments = is_array($row) ? ($row['arguments'] ?? null) : null;
+
+                        if (is_array($arguments) && $arguments !== [] && array_is_list($arguments)) {
+                            $validator->errors()->add(sprintf('%s.%s.arguments', $listKey, $index), 'The arguments must be a JSON object.');
+                        }
+                    }
                 }
             },
             function (Validator $validator): void {

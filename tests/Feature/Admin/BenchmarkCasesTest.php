@@ -366,7 +366,21 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     'tolerance too high' => [['task' => 'price_updater', 'input' => ['providers' => ['openai']], 'scoring' => ['type' => 'prices', 'tolerance_percent' => 51, 'expected' => []]], 'scoring.tolerance_percent'],
     'threshold too high' => [['scoring' => ['pass_threshold' => 11]], 'scoring.pass_threshold'],
     'rubric note too long' => [['scoring' => ['rubric_note' => str_repeat('a', 2001)]], 'scoring.rubric_note'],
+    'fixture arguments as a list' => [['fixtures' => [['tool' => 'x', 'arguments' => ['dune', 'arrival'], 'result' => '']]], 'fixtures.0.arguments'],
+    'expected arguments as a list' => [['task' => 'decision', 'scoring' => ['type' => 'actions', 'expected' => [['tool' => 'ProposeActionTool', 'arguments' => ['retry']]]]], 'scoring.expected.0.arguments'],
 ]);
+
+test('empty tool arguments are accepted as an empty object', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload([
+        'task' => 'decision',
+        'fixtures' => [['tool' => 'SearchMediaTool', 'arguments' => [], 'result' => '[]']],
+        'scoring' => ['type' => 'actions', 'expected' => [['tool' => 'ProposeActionTool', 'arguments' => []]]],
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('admin.benchmarks.cases.index'));
+
+    expect(BenchmarkCase::query()->sole()->fixtures[0]['arguments'])->toBe([]);
+});
 
 test('update and destroy change the case and are audited', function (): void {
     $this->actingAs(User::factory()->admin()->create());
