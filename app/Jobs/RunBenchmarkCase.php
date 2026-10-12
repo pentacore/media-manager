@@ -486,6 +486,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 'result' => is_string($call['result'] ?? null) ? $call['result'] : null,
                 'hit' => (bool) ($call['hit'] ?? false),
                 ...(($call['write'] ?? false) === true ? ['write' => true] : []),
+                ...(($call['refused'] ?? false) === true ? ['refused' => true] : []),
             ];
         }
 

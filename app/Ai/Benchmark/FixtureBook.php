@@ -15,7 +15,7 @@ final class FixtureBook
     /** @var list<array{tool: string, arguments: array<string, mixed>}> */
     private array $intended = [];
 
-    /** @var list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}> */
+    /** @var list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true, refused?: true}> */
     private array $log = [];
 
     /** @param list<array{tool: string, arguments: array<string, mixed>, result: string}> $fixtures */
@@ -80,6 +80,20 @@ final class FixtureBook
         $this->log[] = ['tool' => $tool, 'arguments' => $arguments, 'result' => $result, 'hit' => true, 'write' => true];
     }
 
+    /**
+     * Log a write call the mode refused (advisory mode refuses destructive
+     * tools) with the refusal it answered, so the judge can grade mode
+     * compliance. It counts as a call but is never an intended action.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    public function recordRefusal(string $tool, array $arguments, string $result): void
+    {
+        $this->calls++;
+
+        $this->log[] = ['tool' => $tool, 'arguments' => $arguments, 'result' => $result, 'hit' => true, 'write' => true, 'refused' => true];
+    }
+
     public function calls(): int
     {
         return $this->calls;
@@ -96,7 +110,7 @@ final class FixtureBook
         return $this->intended;
     }
 
-    /** @return list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}> */
+    /** @return list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true, refused?: true}> */
     public function log(): array
     {
         return $this->log;

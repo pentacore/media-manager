@@ -87,6 +87,18 @@ test('a recorded write joins the log in call order as a call but never a miss', 
         ->and($fixtureBook->intendedActions())->toBe([]);
 });
 
+test('a refused write is logged as a refused call but never an intended action', function (): void {
+    $fixtureBook = fixtureBookFor();
+    $fixtureBook->recordRefusal('delete', ['id' => 3], '{"error":"advisory_mode_blocks_destructive"}');
+
+    expect($fixtureBook->log())->toBe([
+        ['tool' => 'delete', 'arguments' => ['id' => 3], 'result' => '{"error":"advisory_mode_blocks_destructive"}', 'hit' => true, 'write' => true, 'refused' => true],
+    ])
+        ->and($fixtureBook->calls())->toBe(1)
+        ->and($fixtureBook->misses())->toBe(0)
+        ->and($fixtureBook->intendedActions())->toBe([]);
+});
+
 test('the miss result constant is the not_recorded error', function (): void {
     expect(json_decode(FixtureBook::MISS_RESULT, true))->toBe([
         'error' => 'not_recorded',

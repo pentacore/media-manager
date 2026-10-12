@@ -539,7 +539,10 @@ test('a decision case never creates an action request, even with a recorded writ
 
 test('judge-only mode re-scores an unscored result from its stored outcome under the run judge', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now(), 'cost_usd' => 0.28]);
-    $toolLog = [['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'expanse'], 'result' => '{"title":"The Expanse"}', 'hit' => true]];
+    $toolLog = [
+        ['tool' => 'SearchMediaTool', 'arguments' => ['query' => 'expanse'], 'result' => '{"title":"The Expanse"}', 'hit' => true],
+        ['tool' => 'DeleteMediaTool', 'arguments' => ['id' => 4], 'result' => '{"error":"advisory_mode_blocks_destructive"}', 'hit' => true, 'write' => true, 'refused' => true],
+    ];
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Expanse Season Three',

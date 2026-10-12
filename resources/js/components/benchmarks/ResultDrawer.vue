@@ -51,7 +51,21 @@ function diffRows(result: BenchmarkResultDetail['results'][number]): Array<{
 }
 
 function toolBadge(entry: BenchmarkToolLogEntry): string {
+    if (entry.refused) {
+        return 'refused';
+    }
+
     return entry.write ? 'write' : entry.hit ? 'hit' : 'miss';
+}
+
+function toolBadgeVariant(
+    entry: BenchmarkToolLogEntry,
+): 'danger' | 'info' | 'ok' | 'warn' {
+    if (entry.refused) {
+        return 'danger';
+    }
+
+    return entry.write ? 'info' : entry.hit ? 'ok' : 'warn';
 }
 </script>
 
@@ -241,13 +255,7 @@ function toolBadge(entry: BenchmarkToolLogEntry): string {
                                         data-benchmark-drawer-tool
                                     >
                                         <Pill
-                                            :variant="
-                                                entry.write
-                                                    ? 'info'
-                                                    : entry.hit
-                                                      ? 'ok'
-                                                      : 'warn'
-                                            "
+                                            :variant="toolBadgeVariant(entry)"
                                             >{{ toolBadge(entry) }}</Pill
                                         >
                                         <code class="font-mono break-words"

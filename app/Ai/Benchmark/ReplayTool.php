@@ -20,6 +20,8 @@ use Stringable;
  * call answers its recorded fixture (or the miss result, counted); a write
  * call is captured as an intended action and answers its recorded result or
  * the canned queued result, and is logged as a write (a call, never a miss).
+ * A destructive call refused by advisory mode is logged as a refused write,
+ * never an intended action.
  */
 final readonly class ReplayTool implements Tool
 {
@@ -53,6 +55,8 @@ final readonly class ReplayTool implements Tool
         }
 
         if ($this->inner instanceof BaseTool && $this->inner->risk() === Risk::Destructive && $this->aiMode === AiMode::Advisory) {
+            $this->fixtureBook->recordRefusal($name, $arguments, BaseTool::ADVISORY_REFUSAL);
+
             return BaseTool::ADVISORY_REFUSAL;
         }
 

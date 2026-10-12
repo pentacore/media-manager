@@ -219,6 +219,8 @@ export type BenchmarkToolLogEntry = {
     result: string | null;
     hit: boolean;
     write?: true;
+    /** A destructive call advisory mode refused; never an intended action. */
+    refused?: true;
 };
 
 export type BenchmarkResultDetail = {

@@ -252,14 +252,23 @@ test('a write tool replays its recorded result when one exists', function (): vo
         ->and($fixtureBook->misses())->toBe(0);
 });
 
-test('advisory mode refuses destructive tools without an intended action', function (): void {
+test('advisory mode refuses destructive tools without an intended action and logs the refusal', function (): void {
     $fixtureBook = replayBook();
 
     $result = new ReplayTool(new ReplayThrowingDestructiveTool, true, $fixtureBook, AiMode::Advisory)->handle(new Request(['id' => 3]));
 
     expect($result)->toBe(BaseTool::ADVISORY_REFUSAL)
         ->and($fixtureBook->intendedActions())->toBe([])
-        ->and($fixtureBook->log())->toBe([]);
+        ->and($fixtureBook->log())->toBe([[
+            'tool' => 'ReplayThrowingDestructiveTool',
+            'arguments' => ['id' => 3],
+            'result' => BaseTool::ADVISORY_REFUSAL,
+            'hit' => true,
+            'write' => true,
+            'refused' => true,
+        ]])
+        ->and($fixtureBook->calls())->toBe(1)
+        ->and($fixtureBook->misses())->toBe(0);
 });
 
 test('the advisory refusal is the advisory_mode_blocks_destructive error BaseTool returns', function (): void {

@@ -13,7 +13,7 @@ final readonly class CaseOutcome
 {
     /**
      * @param  list<array{tool: string, arguments: array<string, mixed>}>  $intendedActions
-     * @param  list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}>  $toolLog
+     * @param  list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true, refused?: true}>  $toolLog
      */
     public function __construct(
         public string $output,
@@ -28,7 +28,7 @@ final readonly class CaseOutcome
     ) {}
 
     /**
-     * @return array{output: string, intended_actions: list<array{tool: string, arguments: array<string, mixed>}>, tool_log: list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true}>, tool_calls: int, tool_misses: int, prompt_tokens: int, completion_tokens: int, latency_ms: int, invocation_id: string|null}
+     * @return array{output: string, intended_actions: list<array{tool: string, arguments: array<string, mixed>}>, tool_log: list<array{tool: string, arguments: array<string, mixed>, result: string|null, hit: bool, write?: true, refused?: true}>, tool_calls: int, tool_misses: int, prompt_tokens: int, completion_tokens: int, latency_ms: int, invocation_id: string|null}
      */
     public function toArray(): array
     {

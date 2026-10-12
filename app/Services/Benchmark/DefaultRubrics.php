@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Enums\AiMode;
 use App\Enums\AiTask;
 use InvalidArgumentException;
 
@@ -34,13 +35,18 @@ final class DefaultRubrics
     /**
      * @param  list<array{role: string, content: string}>  $history
      * @param  list<array{tool: string, arguments: array<string, mixed>, result: string}>  $toolResults
+     * @param  AiMode|null  $mode  the chat mode the candidate ran in, so the judge can grade mode compliance
      */
-    public static function judgePrompt(AiTask $task, string $prompt, array $history, array $toolResults, string $output, ?string $rubricNote): string
+    public static function judgePrompt(AiTask $task, string $prompt, array $history, array $toolResults, string $output, ?string $rubricNote, ?AiMode $mode = null): string
     {
         $sections = [
             "TASK\n".$task->label(),
             "RUBRIC\n".self::for($task),
         ];
+
+        if ($mode instanceof AiMode) {
+            $sections[] = "MODE\n".$mode->value;
+        }
 
         if (filled($rubricNote)) {
             $sections[] = "CASE NOTE\n".$rubricNote;

@@ -10,6 +10,7 @@ use App\Ai\Benchmark\FixtureBook;
 use App\Ai\Benchmark\ToolArguments;
 use App\Ai\ResolvedSelection;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
+use App\Enums\AiMode;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkCase;
@@ -225,6 +226,7 @@ final readonly class BenchmarkScorer
             $this->toolResults($caseOutcome),
             $caseOutcome->output,
             isset($scoring['rubric_note']) && is_string($scoring['rubric_note']) ? $scoring['rubric_note'] : null,
+            $benchmarkCase->task === AiTask::Chat ? AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')) : null,
         );
 
         try {

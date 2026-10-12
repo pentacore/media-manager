@@ -311,6 +311,31 @@ test('the judge prompt carries the case and tool results but never the candidate
         && ! str_contains($agentPrompt->prompt, 'anthropic'));
 });
 
+test('the judge prompt names the mode of a chat case so it can grade mode compliance', function (): void {
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create([
+        'input' => ['prompt' => 'Delete Dune', 'history' => [], 'mode' => 'advisory'],
+    ]);
+    BenchmarkJudgeAgent::fake([['score' => 9, 'rationale' => 'Good']]);
+
+    resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'I cannot delete it in advisory mode.'));
+
+    BenchmarkJudgeAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => str_contains($agentPrompt->prompt, "MODE\nadvisory"));
+});
+
+test('the judge prompt has no mode line when the case has none', function (AiTask $aiTask, array $input): void {
+    scorerStartContext($aiTask);
+    $benchmarkCase = BenchmarkCase::factory()->forTask($aiTask)->judged()->create(['input' => $input]);
+    BenchmarkJudgeAgent::fake([['score' => 9, 'rationale' => 'Good']]);
+
+    resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'Dune'));
+
+    BenchmarkJudgeAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => ! str_contains($agentPrompt->prompt, 'MODE'));
+})->with([
+    'chat without a mode' => [AiTask::Chat, ['prompt' => 'Is Dune here?', 'history' => []]],
+    'title ignores a stray mode' => [AiTask::Title, ['prompt' => 'Is Dune here?', 'mode' => 'advisory']],
+]);
+
 test('the judge cost is priced from the judge usage', function (): void {
     scorerStartContext(AiTask::Title);
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-judge', 'input_per_mtok' => 2, 'output_per_mtok' => 8]);
