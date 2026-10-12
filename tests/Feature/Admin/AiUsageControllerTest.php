@@ -677,7 +677,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
     $tierValues = [];
     foreach (array_slice($lines, 1) as $line) {
         $row = str_getcsv($line);
-        $tierValues[] = end($row); // tier is the last column
+        $tierValues[] = end($row);
     }
     expect($tierValues)->toContain('2')
         ->toHaveCount(1); // Only fell_through (tier 2) records
@@ -688,10 +688,16 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->streamedContent();
 
     $firstTierLines = array_filter(explode("\n", trim($firstTierCsv)));
+    $firstTierHeaderCount = count(str_getcsv($firstTierLines[0]));
+    foreach (array_slice($firstTierLines, 1) as $line) {
+        $rowCount = count(str_getcsv($line));
+        expect($rowCount)->toBe($firstTierHeaderCount);
+    }
+
     $firstTierValues = [];
     foreach (array_slice($firstTierLines, 1) as $line) {
         $row = str_getcsv($line);
-        $firstTierValues[] = end($row); // tier is the last column
+        $firstTierValues[] = end($row);
     }
     expect($firstTierValues)->toContain('')
         ->toContain('1')

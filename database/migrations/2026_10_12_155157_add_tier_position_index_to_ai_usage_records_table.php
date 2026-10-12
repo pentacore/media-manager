@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('ai_usage_records', function (Blueprint $table) {
-            $table->index(['tier_position', 'created_at']);
+        Schema::table('ai_usage_records', function (Blueprint $blueprint) {
+            $blueprint->index(['tier_position', 'created_at']);
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('ai_usage_records', function (Blueprint $table) {
-            $table->dropIndex(['tier_position', 'created_at']);
+        Schema::table('ai_usage_records', function (Blueprint $blueprint) {
+            $blueprint->dropIndex(['tier_position', 'created_at']);
         });
     }
 };
