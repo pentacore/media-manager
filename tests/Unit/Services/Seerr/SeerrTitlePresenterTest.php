@@ -102,7 +102,7 @@ test('a blocklisted show makes every season unrequestable', function (): void {
         ]);
 });
 
-test('a deleted show frees every season even when only one season row is deleted', function (): void {
+test('a deleted show frees each season held only by a completed request, even without a deleted row', function (): void {
     $detail = new SeerrTitlePresenter()->detail('tv', [
         'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
         'seasons' => [
@@ -123,23 +123,34 @@ test('a deleted show frees every season even when only one season row is deleted
         ]);
 });
 
-test('a deleted show ignores stale season rows and a pending request from the deleted copy', function (): void {
+test('a deleted show keeps a live season row and an open request unrequestable, as Seerr does', function (): void {
     $detail = new SeerrTitlePresenter()->detail('tv', [
         'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
         'seasons' => [
             ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
             ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+            ['seasonNumber' => 3, 'name' => 'Season 3', 'episodeCount' => 8],
+            ['seasonNumber' => 4, 'name' => 'Season 4', 'episodeCount' => 6],
         ],
         'mediaInfo' => [
             'status' => 7,
-            'seasons' => [['seasonNumber' => 1, 'status' => 5]],
-            'requests' => [['status' => 1, 'seasons' => [['seasonNumber' => 2]]]],
+            'seasons' => [
+                ['seasonNumber' => 1, 'status' => 7],
+                ['seasonNumber' => 2, 'status' => 3],
+                ['seasonNumber' => 4, 'status' => 5],
+            ],
+            'requests' => [
+                ['status' => 2, 'seasons' => [['seasonNumber' => 2]]],
+                ['status' => 1, 'seasons' => [['seasonNumber' => 3]]],
+            ],
         ],
     ]);
 
     expect($detail['seasons'])->toBe([
         ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'none', 'requestable' => true],
-        ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'none', 'requestable' => true],
+        ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'requested', 'requestable' => false],
+        ['season_number' => 3, 'name' => 'Season 3', 'episode_count' => 8, 'status' => 'pending', 'requestable' => false],
+        ['season_number' => 4, 'name' => 'Season 4', 'episode_count' => 6, 'status' => 'available', 'requestable' => false],
     ]);
 });
 
