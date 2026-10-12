@@ -135,3 +135,90 @@ test('an admin edits a case and deletes it after confirming', function (): void 
 
     expect(BenchmarkCase::query()->count())->toBe(0);
 });
+
+test('a price updater case saves its providers and numeric expected prices', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'price_updater')
+        ->fill('[data-benchmark-name]', 'Gemini prices')
+        ->fill('[data-benchmark-prompt]', 'Refresh prices for Google models')
+        ->check('[data-benchmark-provider="gemini"]')
+        ->fill('[data-benchmark-tolerance]', '2')
+        ->click('[data-benchmark-price-add]')
+        ->fill('[data-benchmark-price-provider]', 'gemini')
+        ->fill('[data-benchmark-price-model]', 'gemini-2.5-pro')
+        ->fill('[data-benchmark-price-field="input_per_mtok"]', '1.25')
+        ->fill('[data-benchmark-price-field="output_per_mtok"]', '10')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+
+    $case = BenchmarkCase::query()->sole();
+
+    expect($case->input['providers'])->toBe(['gemini'])
+        ->and($case->scoring['type'])->toBe('prices')
+        ->and($case->scoring['tolerance_percent'])->toEqual(2)
+        ->and($case->scoring['expected'][0]['model'])->toBe('gemini-2.5-pro')
+        ->and($case->scoring['expected'][0]['input_per_mtok'])->toEqual(1.25)
+        ->and($case->scoring['expected'][0]['output_per_mtok'])->toEqual(10)
+        ->and($case->scoring['expected'][0]['cache_read_per_mtok'])->toBeNull();
+});
+
+test('saving a draft keeps the usage record it came from', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $record = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class,
+        'kind' => AiUsageKind::Text,
+        'prompt_text' => 'Find Dune on my server',
+        'prompt_tokens' => 321,
+        'completion_tokens' => 45,
+    ]);
+
+    visit(route('admin.benchmarks.cases.create', ['from_usage' => $record->id], absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-benchmark-name]', 'From usage')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+
+    $case = BenchmarkCase::query()->sole();
+
+    expect($case->source_invocation_id)->toBe($record->invocation_id)
+        ->and($case->source_prompt_tokens)->toBe(321)
+        ->and($case->source_completion_tokens)->toBe(45);
+});
+
+test('a server validation error is shown next to the nested row it belongs to', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'price_updater')
+        ->fill('[data-benchmark-name]', 'Incomplete price')
+        ->fill('[data-benchmark-prompt]', 'Refresh prices')
+        ->check('[data-benchmark-provider="openai"]')
+        ->click('[data-benchmark-price-add]')
+        ->click('[data-benchmark-save]')
+        ->assertSeeIn('[data-benchmark-price-row]', 'The scoring.expected.0.model field is required')
+        ->assertPathIs(route('admin.benchmarks.cases.create', absolute: false));
+
+    expect(BenchmarkCase::query()->count())->toBe(0);
+});
+
+test('switching away from the actions scoring clears an invalid expected-action flag', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->click('[data-expected-add]')
+        ->fill('[data-expected-arguments]', '{bad')
+        ->click('[data-benchmark-name]')
+        ->assertSeeIn('[data-expected-arguments-error]', 'not valid JSON')
+        ->select('[data-benchmark-task]', 'title')
+        ->fill('[data-benchmark-name]', 'Now a title case')
+        ->fill('[data-benchmark-prompt]', 'Prompt')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+});
