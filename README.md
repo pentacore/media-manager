@@ -127,6 +127,8 @@ Every page carries `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: f
   }
   ```
 
+  `header_down -X-Frame-Options` also drops that header from chat attachment downloads, whose CSP names no `frame-ancestors`. Another page could then frame an attachment, but its `sandbox` CSP keeps it inert (no scripts, forms or same-origin access), and a cross-site frame gets no session cookie, so it shows the login page instead.
+
 - **Embedding from another site** (a different registrable domain) still fails after that: the session cookie is `SameSite=Lax`, so the browser does not send it inside a cross-site frame and the frame stays on the login page.
 
 ### Queue workers

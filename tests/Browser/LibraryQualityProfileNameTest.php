@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 function libraryProfileNameSonarr(): void
 {
@@ -62,3 +63,22 @@ test('a member reads the movie quality profile by name beside the dropdown', fun
         ->assertSeeIn('[data-quality-profile-name]', 'Example Profile')
         ->assertCount('[data-quality-profile-trigger]', 1);
 });
+
+test('a viewer sees a dash for the profile name when the lookup fails or the profile is gone', function (int $status, array|string $body): void {
+    Sleep::fake();
+    // Registered before the shared fake: the first matching stub wins, and a
+    // static response answers every retry attempt.
+    Http::fake(['radarr.local:7878/api/v3/qualityprofile' => Http::response($body, $status)]);
+    libraryProfileNameRadarr();
+    $this->actingAs(User::factory()->create());
+
+    visit(route('media.movies.show', ['id' => 42], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-quality-profile-name]', '—')
+        ->assertDontSeeIn('[data-quality-profile-name]', 'Example Profile')
+        ->assertCount('[data-quality-profile-trigger]', 0)
+        ->assertNoSmoke();
+})->with([
+    'an upstream 5xx on every attempt' => [503, 'boom'],
+    'a profile id the list no longer has' => [200, [['id' => 1, 'name' => 'Any']]],
+]);

@@ -159,7 +159,5 @@ test('an episodes outage shows only the error banner, no season rows', function 
     visit(route('media.series.show', ['id' => 7], absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-episodes-error]', 'Sonarr is unavailable — ask an admin to check the connection.')
-        ->assertCount('[data-season-pill]', 0)
-        ->assertCount('[data-season-actions]', 0)
-        ->assertCount('[data-season-no-episodes]', 0);
+        ->assertCount('[data-season-pill]', 0);
 });

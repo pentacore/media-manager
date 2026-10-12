@@ -105,7 +105,9 @@ test('a member sees the history without any admin controls', function (): void {
         ->assertSeeIn('[data-history-row="SABnzbd_nzo_failed1"]', 'Severance.S02E07.1080p')
         ->assertMissing('[data-speed-limit-trigger]')
         ->assertMissing('[data-history-retry]')
-        ->assertMissing('[data-history-delete]');
+        ->assertMissing('[data-history-delete]')
+        ->assertMissing('[data-history-hidden]')
+        ->assertMissing('[data-queue-hidden]');
 });
 
 test('a history page past the end still shows the pager and leads back to the last page', function (): void {
