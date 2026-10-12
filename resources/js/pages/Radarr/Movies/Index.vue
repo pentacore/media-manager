@@ -386,35 +386,58 @@ function is4k(movie: Movie): boolean {
             class="grid gap-[18px]"
             style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
         >
-            <Link
+            <div
                 v-for="movie in visible"
                 :key="movie.id"
-                :href="MovieController.show.url(movie.id)"
-                :data-movie-card="movie.id"
-                prefetch
-                class="group flex flex-col gap-2"
+                class="group relative"
             >
-                <div class="relative">
-                    <Poster
-                        :hint="movie.title.toLowerCase().slice(0, 12)"
-                        :src="arrPosterUrl(movie.images)"
-                        size="full"
-                    />
-                    <Pill
-                        v-if="is4k(movie)"
-                        class="absolute top-2 left-2 border-transparent bg-black/55 text-white"
-                    >
-                        4K
-                    </Pill>
-                    <Pill
-                        v-if="!movie.has_file"
-                        class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
-                    >
-                        missing
-                    </Pill>
+                <Link
+                    :href="MovieController.show.url(movie.id)"
+                    :data-movie-card="movie.id"
+                    prefetch
+                    class="flex flex-col gap-2"
+                >
+                    <div class="relative">
+                        <Poster
+                            :hint="movie.title.toLowerCase().slice(0, 12)"
+                            :src="arrPosterUrl(movie.images)"
+                            size="full"
+                        />
+                        <Pill
+                            v-if="is4k(movie)"
+                            class="absolute top-2 left-2 border-transparent bg-black/55 text-white"
+                        >
+                            4K
+                        </Pill>
+                        <Pill
+                            v-if="!movie.has_file"
+                            class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
+                        >
+                            missing
+                        </Pill>
+                    </div>
+                    <div>
+                        <div
+                            class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
+                        >
+                            {{ movie.title }}
+                        </div>
+                        <div
+                            class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
+                        >
+                            <span>{{ movie.year ?? '—' }}</span>
+                            <span>{{ formatBytes(movie.size_on_disk) }}</span>
+                        </div>
+                    </div>
+                </Link>
+                <!-- Controls sit beside the card link, over the poster: an
+                     anchor may not contain interactive content. -->
+                <div
+                    class="pointer-events-none absolute inset-x-0 top-0 aspect-[2/3]"
+                >
                     <BulkCheckbox
                         v-if="canBulk"
-                        class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
+                        class="pointer-events-auto absolute right-2 bottom-2 rounded bg-black/55 p-1"
                         :checked="isSelected(movie.id)"
                         :disabled="bulkBusy"
                         :label="`Select ${movie.title}`"
@@ -432,26 +455,14 @@ function is4k(movie: Movie): boolean {
                         :href="`${connection.url}/movie/${movie.title_slug}`"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        @click.stop
+                        :aria-label="`Open ${movie.title} in Radarr`"
+                        class="pointer-events-auto absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        data-movie-open-external
                     >
                         <ExternalLink class="size-3" />
                     </a>
                 </div>
-                <div>
-                    <div
-                        class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
-                    >
-                        {{ movie.title }}
-                    </div>
-                    <div
-                        class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
-                    >
-                        <span>{{ movie.year ?? '—' }}</span>
-                        <span>{{ formatBytes(movie.size_on_disk) }}</span>
-                    </div>
-                </div>
-            </Link>
+            </div>
             <div
                 v-if="visible.length === 0"
                 class="col-span-full py-8 text-center text-sm text-fg-subtle"

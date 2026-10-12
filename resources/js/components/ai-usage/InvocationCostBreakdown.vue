@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { formatCost, formatNumber, formatRate } from './format';
+import { formatCount } from '@/lib/format';
+import { formatCost, formatRate } from './format';
 import type { InvocationDetail } from './types';
 
 defineProps<{
@@ -54,7 +55,7 @@ defineProps<{
                             {{ line.label }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(line.tokens) }}
+                            {{ formatCount(line.tokens) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
                             {{ formatRate(line.rate) }}

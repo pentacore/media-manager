@@ -90,6 +90,34 @@ abstract class BaseArrController extends Controller
     }
 
     /**
+     * The name of one quality profile, for viewers: they get no profile
+     * dropdown, so they never receive the whole list. Reads the same cached
+     * profile list the dropdown uses. An outage, or an id the list no longer
+     * has, reads as null (the page shows "—"): the name is a label, not
+     * worth an error banner.
+     */
+    protected function qualityProfileName(ServiceConnection $serviceConnection, mixed $qualityProfileId): ?string
+    {
+        if (! is_int($qualityProfileId)) {
+            return null;
+        }
+
+        try {
+            $profiles = $this->buildClient($serviceConnection)->getQualityProfiles();
+        } catch (RequestException|ConnectionException) {
+            return null;
+        }
+
+        foreach ($profiles as $profile) {
+            if (($profile['id'] ?? null) === $qualityProfileId && is_string($profile['name'] ?? null)) {
+                return $profile['name'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return array{url: string}
      */
     protected function connectionUrl(ServiceConnection $serviceConnection): array

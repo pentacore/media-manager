@@ -8,9 +8,11 @@ namespace App\Services\Seerr;
  * Shapes Seerr discover/search hits and movie/tv detail payloads into the
  * title rows the Discover page, the Search page and the title detail sheet
  * render. Status comes from Seerr's `mediaInfo.status` (MediaStatus: 1
- * unknown, 2 pending, 3 processing, 4 partially available, 5 available) and,
- * per TV season, from any request that is not declined (MediaRequestStatus:
- * 1 pending, 2 approved, 3 declined, 4 failed, 5 completed).
+ * unknown, 2 pending, 3 processing, 4 partially available, 5 available,
+ * 6 blocklisted, 7 deleted) and, per TV season, from any request that is not
+ * declined (MediaRequestStatus: 1 pending, 2 approved, 3 declined, 4 failed,
+ * 5 completed). A blocklisted title is never requestable; a deleted one
+ * (falls to `none`) is requestable again.
  */
 final readonly class SeerrTitlePresenter
 {
@@ -22,11 +24,19 @@ final readonly class SeerrTitlePresenter
 
     public const string PENDING = 'pending';
 
+    public const string BLOCKLISTED = 'blocklisted';
+
     public const string NONE = 'none';
 
     private const int DECLINED_REQUEST = 3;
 
     private const int PENDING_REQUEST = 1;
+
+    private const int COMPLETED_REQUEST = 5;
+
+    private const int BLOCKLISTED_MEDIA = 6;
+
+    private const int DELETED_MEDIA = 7;
 
     /**
      * @param  array<string, mixed>  $payload
@@ -90,6 +100,7 @@ final readonly class SeerrTitlePresenter
             4 => self::PARTIALLY_AVAILABLE,
             3 => self::REQUESTED,
             2 => self::PENDING,
+            self::BLOCKLISTED_MEDIA => self::BLOCKLISTED,
             default => self::NONE,
         };
     }
@@ -126,17 +137,33 @@ final readonly class SeerrTitlePresenter
     private function seasons(array $detail): array
     {
         $mediaInfo = is_array($detail['mediaInfo'] ?? null) ? $detail['mediaInfo'] : [];
+        // The blocklist is per title: on a blocklisted show no season can be
+        // requested, whatever its own row says.
+        $blocklisted = $this->status($mediaInfo) === self::BLOCKLISTED;
+        // On a deleted title a completed request belonged to the deleted copy.
+        // Seerr keeps open requests and live season rows, and refuses them.
+        $titleDeleted = (int) ($mediaInfo['status'] ?? 0) === self::DELETED_MEDIA;
         $libraryStatus = [];
+        $deletedSeasons = [];
         $requestStatus = [];
 
         foreach (is_array($mediaInfo['seasons'] ?? null) ? $mediaInfo['seasons'] : [] as $season) {
             if (is_array($season)) {
-                $libraryStatus[(int) ($season['seasonNumber'] ?? -1)] = $this->status($season);
+                $number = (int) ($season['seasonNumber'] ?? -1);
+                $libraryStatus[$number] = $this->status($season);
+
+                if ((int) ($season['status'] ?? 0) === self::DELETED_MEDIA) {
+                    $deletedSeasons[$number] = true;
+                }
             }
         }
 
         foreach (is_array($mediaInfo['requests'] ?? null) ? $mediaInfo['requests'] : [] as $request) {
             if (! is_array($request) || (int) ($request['status'] ?? 0) === self::DECLINED_REQUEST) {
+                continue;
+            }
+
+            if ($titleDeleted && (int) ($request['status'] ?? 0) === self::COMPLETED_REQUEST) {
                 continue;
             }
 
@@ -160,7 +187,14 @@ final readonly class SeerrTitlePresenter
             }
 
             $library = $libraryStatus[$number] ?? self::NONE;
-            $status = $library !== self::NONE ? $library : ($requestStatus[$number] ?? self::NONE);
+            $status = match (true) {
+                $blocklisted => self::BLOCKLISTED,
+                $library !== self::NONE => $library,
+                // Deleted from the library: an older request belonged to the
+                // deleted copy, so the season can be requested again.
+                isset($deletedSeasons[$number]) => self::NONE,
+                default => $requestStatus[$number] ?? self::NONE,
+            };
 
             $rows[] = [
                 'season_number' => $number,
