@@ -23,7 +23,7 @@ test('it maps a search hit to a title row', function (): void {
     ]);
 });
 
-test('it maps Seerr media status to the five title states', function (?int $status, string $expected): void {
+test('it maps Seerr media status to the title states', function (?int $status, string $expected): void {
     expect(new SeerrTitlePresenter()->status($status === null ? null : ['status' => $status]))->toBe($expected);
 })->with([
     'never requested' => [null, 'none'],
@@ -32,6 +32,7 @@ test('it maps Seerr media status to the five title states', function (?int $stat
     'processing' => [3, 'requested'],
     'partially available' => [4, 'partially_available'],
     'available' => [5, 'available'],
+    'blocklisted' => [6, 'blocklisted'],
     'deleted' => [7, 'none'],
 ]);
 
@@ -82,4 +83,42 @@ test('detail reads a movie runtime and has no seasons', function (): void {
     $detail = new SeerrTitlePresenter()->detail('movie', ['id' => 438631, 'title' => 'Dune', 'releaseDate' => '2021-10-22', 'runtime' => 155]);
 
     expect($detail['runtime'])->toBe(155)->and($detail['seasons'])->toBe([])->and($detail['season_count'])->toBeNull();
+});
+
+test('a blocklisted show makes every season unrequestable', function (): void {
+    $detail = new SeerrTitlePresenter()->detail('tv', [
+        'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
+        'seasons' => [
+            ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
+            ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+        ],
+        'mediaInfo' => ['status' => 6, 'seasons' => [['seasonNumber' => 1, 'status' => 5]]],
+    ]);
+
+    expect($detail['status'])->toBe('blocklisted')
+        ->and($detail['seasons'])->toBe([
+            ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'blocklisted', 'requestable' => false],
+            ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'blocklisted', 'requestable' => false],
+        ]);
+});
+
+test('a deleted season is requestable again even with an old request on it', function (): void {
+    $detail = new SeerrTitlePresenter()->detail('tv', [
+        'id' => 95396, 'name' => 'Example Show', 'firstAirDate' => '2022-02-17',
+        'seasons' => [
+            ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
+            ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+        ],
+        'mediaInfo' => [
+            'status' => 7,
+            'seasons' => [['seasonNumber' => 1, 'status' => 7]],
+            'requests' => [['status' => 5, 'seasons' => [['seasonNumber' => 1], ['seasonNumber' => 2]]]],
+        ],
+    ]);
+
+    expect($detail['status'])->toBe('none')
+        ->and($detail['seasons'])->toBe([
+            ['season_number' => 1, 'name' => 'Season 1', 'episode_count' => 9, 'status' => 'none', 'requestable' => true],
+            ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'requested', 'requestable' => false],
+        ]);
 });

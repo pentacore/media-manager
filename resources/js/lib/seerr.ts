@@ -13,6 +13,8 @@ export function titleStatusPill(
             return { status: 'approved', label: 'Requested' };
         case 'pending':
             return { status: 'pending', label: 'Pending' };
+        case 'blocklisted':
+            return { status: 'declined', label: 'Blocklisted' };
         default:
             return null;
     }

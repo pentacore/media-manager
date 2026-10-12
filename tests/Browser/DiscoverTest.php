@@ -160,3 +160,33 @@ test('a chooser with no Seerr match must pick a user before Request enables', fu
         && str_ends_with($request->url(), '/api/v1/request')
         && $request['userId'] === 7);
 });
+
+test('a blocklisted movie shows its badge and offers no request', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    // Registered before the shared fake: the first matching stub wins.
+    Http::fake([
+        'seerr.local:5055/api/v1/discover/movies' => Http::response(['results' => [
+            ['id' => 438631, 'mediaType' => 'movie', 'title' => 'Example Movie', 'posterPath' => '/example-movie.jpg', 'mediaInfo' => ['status' => 6]],
+        ]]),
+        'seerr.local:5055/api/v1/movie/438631' => Http::response([
+            'id' => 438631, 'title' => 'Example Movie', 'releaseDate' => '2021-10-22', 'overview' => 'An example overview.',
+            'posterPath' => '/example-movie.jpg', 'runtime' => 155, 'mediaInfo' => ['status' => 6],
+        ]),
+    ]);
+    fakeDiscoverPageSeerr();
+    $viewer = User::factory()->create(['email' => 'viewer@example.com']);
+    EmbyUserLink::factory()->for($viewer)->create(['emby_user_id' => 'A1B2C3D4-E5F6-4711-8899-AABBCCDDEEFF']);
+
+    $this->actingAs($viewer);
+
+    visit(route('media.discover.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-title-card="movie-438631"]', 'Blocklisted')
+        ->click('[data-title-card="movie-438631"]')
+        ->assertSeeIn('[data-title-sheet]', 'An example overview.')
+        ->assertSeeIn('[data-title-blocklisted]', "Blocklisted in Seerr — it can't be requested.")
+        ->assertCount('[data-request-submit]', 0)
+        ->assertNoSmoke();
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v1/request'));
+});
