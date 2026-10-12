@@ -83,7 +83,7 @@ test('the runs index lists runs newest first', function (): void {
     $this->get(route('admin.benchmarks.runs.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Runs/Index', false)
+            ->component('Admin/Benchmarks/Runs/Index')
             ->where('runs.data.0.name', 'Newer')
             ->where('runs.data.0.status_label', 'Running')
             ->where('runs.data.0.case_count', 3)
@@ -101,7 +101,7 @@ test('the setup page lists cases, the judge default and the current tiers', func
     $this->get(route('admin.benchmarks.runs.create'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Runs/Create', false)
+            ->component('Admin/Benchmarks/Runs/Create')
             ->where('cases.0.id', $decision->id)
             ->where('cases.0.task_label', 'Decision agent')
             ->where('cases.0.tags', ['smoke'])
@@ -234,7 +234,7 @@ test('show returns the run, counts and the aggregated matrix', function (): void
     $this->get(route('admin.benchmarks.runs.show', $run))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Admin/Benchmarks/Runs/Show', false)
+            ->component('Admin/Benchmarks/Runs/Show')
             ->where('run.id', $run->id)
             ->where('run.status_label', 'Completed')
             ->where('run.counts', ['total' => 6, 'pending' => 0, 'ok' => 4, 'failed' => 1, 'skipped' => 1])

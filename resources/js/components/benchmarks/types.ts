@@ -87,3 +87,154 @@ export type BenchmarkCaseRow = {
     source_invocation_id: string | null;
     updated_at: string | null;
 };
+
+export type BenchmarkRunStatus =
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'stopped_cost_cap'
+    | 'cancelled'
+    | 'failed';
+
+/** A provider / model / reasoning selection (candidate or judge). */
+export type BenchmarkSelection = {
+    provider: string;
+    model: string;
+    reasoning: string | null;
+};
+
+export type BenchmarkRunRow = {
+    id: number;
+    name: string;
+    status: BenchmarkRunStatus;
+    status_label: string;
+    case_count: number;
+    candidate_count: number;
+    estimate_usd: number;
+    cost_usd: number;
+    created_by: string | null;
+    created_at: string | null;
+};
+
+export type BenchmarkRunCaseOption = {
+    id: number;
+    task: string;
+    task_label: string;
+    name: string;
+    tags: string[];
+};
+
+export type BenchmarkEstimate = {
+    total_usd: number;
+    judge_usd: number;
+    rows: Array<{
+        case_id: number;
+        candidate_index: number;
+        usd: number;
+        priced: boolean;
+    }>;
+    unpriced: string[];
+};
+
+export type BenchmarkRunDetail = {
+    id: number;
+    name: string;
+    status: BenchmarkRunStatus;
+    status_label: string;
+    candidates: BenchmarkSelection[];
+    judge: BenchmarkSelection | null;
+    estimate_usd: number;
+    cost_usd: number;
+    cost_cap_usd: number | null;
+    started_at: string | null;
+    finished_at: string | null;
+    counts: {
+        total: number;
+        pending: number;
+        ok: number;
+        failed: number;
+        skipped: number;
+    };
+};
+
+export type BenchmarkMatrixCandidate = {
+    index: number;
+    provider: string | null;
+    model: string | null;
+    reasoning: string | null;
+    reasoning_label: string;
+    self_judged: boolean;
+    results: number;
+    ok: number;
+    failed: number;
+    skipped: number;
+    avg_score: number | null;
+    pass_rate: number | null;
+    cost_per_case: number | null;
+    latency_p50: number | null;
+    latency_p95: number | null;
+    tool_misses: number;
+};
+
+export type BenchmarkMatrixCell = {
+    candidate_index: number;
+    result_id: number;
+    status: string;
+    score: number | null;
+    passed: boolean | null;
+};
+
+export type BenchmarkMatrixTask = {
+    task: string;
+    task_label: string;
+    candidates: BenchmarkMatrixCandidate[];
+    best: {
+        avg_score: number | null;
+        pass_rate: number | null;
+        cost_per_case: number | null;
+        latency_p50: number | null;
+    };
+    cases: Array<{
+        case_id: number | null;
+        case_name: string;
+        cells: BenchmarkMatrixCell[];
+    }>;
+};
+
+export type BenchmarkToolLogEntry = {
+    tool: string;
+    arguments: JsonObject;
+    result: string | null;
+    hit: boolean;
+    write?: true;
+};
+
+export type BenchmarkResultDetail = {
+    case_id: number | null;
+    case_name: string;
+    case_task: string;
+    scoring: BenchmarkCaseScoring | null;
+    prompt: string | null;
+    results: Array<{
+        result_id: number;
+        candidate_index: number;
+        status: string;
+        output: string | null;
+        intended_actions: BenchmarkExpectedAction[];
+        score: number | null;
+        passed: boolean | null;
+        score_detail: {
+            score_10?: number;
+            rationale?: string;
+            matched?: unknown[];
+            missing?: unknown[];
+            extra?: unknown[];
+            mismatches?: unknown[];
+            error?: string;
+        };
+        error: string | null;
+        tool_log: BenchmarkToolLogEntry[];
+        latency_ms: number | null;
+        cost_usd: number;
+    }>;
+};
