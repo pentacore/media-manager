@@ -677,6 +677,45 @@ test('the concurrency limit releases the job when both run slots are taken', fun
     $runBenchmarkCase->assertReleased(15);
 });
 
+test('a judge-only job waiting for a slot keeps its queued re-judge fresh', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+    ]);
+    jobStaleClaim($benchmarkResult);
+    Cache::lock(sprintf('benchmark:%d:slot:0', $benchmarkRun->id), 300)->get();
+    Cache::lock(sprintf('benchmark:%d:slot:1', $benchmarkRun->id), 300)->get();
+    $runBenchmarkCase = new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true)->withFakeQueueInteractions();
+
+    new LimitBenchmarkConcurrency($benchmarkResult->id)->handle($runBenchmarkCase, fn (): null => null);
+
+    $runBenchmarkCase->assertReleased(15);
+    expect($benchmarkResult->fresh()->judge_status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($benchmarkResult->fresh()->isJudgeStale())->toBeFalse();
+});
+
+test('a case job waiting for a slot leaves its pending result alone, which never goes stale', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobStaleClaim($benchmarkResult);
+    $updatedAt = $benchmarkResult->fresh()->updated_at;
+    Cache::lock(sprintf('benchmark:%d:slot:0', $benchmarkRun->id), 300)->get();
+    Cache::lock(sprintf('benchmark:%d:slot:1', $benchmarkRun->id), 300)->get();
+    $runBenchmarkCase = new RunBenchmarkCase($benchmarkResult->id)->withFakeQueueInteractions();
+
+    new LimitBenchmarkConcurrency($benchmarkResult->id)->handle($runBenchmarkCase, fn (): null => null);
+
+    $runBenchmarkCase->assertReleased(15);
+    expect($benchmarkResult->fresh()->updated_at?->equalTo($updatedAt))->toBeTrue()
+        ->and($benchmarkResult->fresh()->isRunStale())->toBeFalse();
+});
+
+test('the queue gives up on a job only after its result claim went stale', function (): void {
+    expect(config('queue.connections.redis.retry_after'))->toBeGreaterThan(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS)
+        ->and(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS)->toBeGreaterThan(280);
+});
+
 test('the concurrency limit runs the job on a free slot and frees it afterwards', function (): void {
     $benchmarkRun = jobRun();
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();

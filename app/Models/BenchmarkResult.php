@@ -86,7 +86,11 @@ class BenchmarkResult extends Model
     /**
      * A job runs for at most 280 s (its timeout), so a result still claimed
      * this long after the claim lost its worker (killed mid-run): it may be
-     * claimed again and no longer blocks deleting the run.
+     * claimed again and no longer blocks deleting the run. Kept below the
+     * queue's `retry_after` (330 s), so a retried job always finds the dead
+     * claim stale. A job that vanished from the queue still holds its unique
+     * lock (UniqueFor) until that expires, so a re-dispatch for the same
+     * result and mode is dropped until then.
      */
     public const int CLAIM_STALE_AFTER_SECONDS = 300;
 

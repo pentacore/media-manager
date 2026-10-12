@@ -123,7 +123,10 @@ final readonly class BenchmarkRunLauncher
      * at once. Only `failed` results and re-judges that stalled (queued or
      * pending past the stale window: a dropped dispatch or a dead worker)
      * are flipped, under a row lock, so a double submit queues each result
-     * once. Returns how many were queued.
+     * once. A judge-only job that vanished from the queue still holds its
+     * unique lock until UniqueFor expires, so re-queueing its result is
+     * dropped until then and the result goes stale again. Returns how many
+     * were queued.
      */
     public function rejudge(BenchmarkRun $benchmarkRun): int
     {
