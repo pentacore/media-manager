@@ -481,6 +481,7 @@ test('a deterministic upstream failure stores the reason without its paths or se
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,
         'type' => 'delete_movie',
+        'target_service' => 'radarr',
     ]);
 
     $response = new Response(new GuzzleHttp\Psr7\Response(404, [], 'Movie folder /media/movies/Dune (2021) not found; see http://radarr.local/api/v3/movie/7?apikey=radarr-secret'));
@@ -490,12 +491,75 @@ test('a deterministic upstream failure stores the reason without its paths or se
 
     new ExecuteActionRequest($request)->handle();
 
-    $message = $request->fresh()->result['message'];
-
     expect($request->fresh()->result['reason'])->toBe('execution_failed')
-        ->and($message)->toContain('HTTP request returned status code 404')
-        ->and($message)->not->toContain('/media/movies')
-        ->and($message)->not->toContain('radarr-secret');
+        ->and($request->fresh()->result['message'])->toBe('HTTP 404: Radarr could not find the item — it may already have been removed.');
+});
+
+test('an upstream HTTP failure is stored as a fixed sentence naming the service, never the body', function (int $status, int $attempt, string $reason, string $message): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+        'target_service' => 'radarr',
+    ]);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response($status, [], '<html>Internal host radarr-int.example.lan, token radarr-secret</html>'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RequestException($response));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, $attempt)->handle();
+
+    $result = $request->fresh()->result;
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($result['reason'])->toBe($reason)
+        ->and($result['message'])->toBe($message)
+        ->and($result['message'])->not->toContain('radarr-int')
+        ->and($result['message'])->not->toContain('radarr-secret');
+})->with([
+    'a rejected API key' => [401, 1, 'execution_failed', 'HTTP 401: Radarr rejected the API key.'],
+    'a forbidden request' => [403, 1, 'execution_failed', 'HTTP 403: Radarr rejected the API key.'],
+    'a refused request' => [422, 1, 'execution_failed', 'HTTP 422: Radarr refused the request.'],
+    'a server error on the last attempt' => [503, 3, 'retries_exhausted', 'HTTP 503: Radarr reported a server error.'],
+]);
+
+test("the app's own fixed refusal keeps its sentence", function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie', 'target_service' => 'radarr']);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response(200, [], '<html>Sign in</html>'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new ArrUnexpectedResponse($response, 'Radarr'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 3)->handle();
+
+    expect($request->fresh()->result)->toMatchArray([
+        'reason' => 'retries_exhausted',
+        'message' => 'Radarr answered with a body that is not JSON data.',
+    ]);
+});
+
+test('the failed() hook stores a fixed sentence for an HTTP failure', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie', 'target_service' => 'radarr']);
+
+    new ExecuteActionRequest($request)->failed(new RequestException(new Response(new GuzzleHttp\Psr7\Response(500, [], 'stack trace with radarr-secret'))));
+
+    expect($request->fresh()->result)->toMatchArray([
+        'reason' => 'job_failed',
+        'message' => 'HTTP 500: Radarr reported a server error.',
+    ]);
+});
+
+test('a target service the app does not know is named generically', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie', 'target_service' => 'example']);
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RequestException(new Response(new GuzzleHttp\Psr7\Response(404, [], 'gone'))));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->result['message'])->toBe('HTTP 404: The target service could not find the item — it may already have been removed.');
 });
 
 test('a permanent failure message naming a path is stored redacted', function (): void {
