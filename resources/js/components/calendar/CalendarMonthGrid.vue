@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { useDateTime } from '@/composables/useDateTime';
 import type { CalendarItem as CalendarItemType } from '@/types';
 import CalendarItem from './CalendarItem.vue';
 
@@ -13,7 +19,23 @@ const props = defineProps<{
 
 const MAX_PER_DAY = 3;
 
+const { formatDate } = useDateTime();
+
 const cells = computed(() => props.weeks.flat());
+
+function itemsOn(day: string): CalendarItemType[] {
+    return props.itemsByDay[day] ?? [];
+}
+
+function dayHeading(day: string): string {
+    return formatDate(`${day}T12:00:00Z`);
+}
+
+function dayLabel(day: string): string {
+    const count = itemsOn(day).length;
+
+    return `${dayHeading(day)}: ${count} ${count === 1 ? 'item' : 'items'}`;
+}
 </script>
 
 <template>
@@ -34,35 +56,74 @@ const cells = computed(() => props.weeks.flat());
                 v-for="day in cells"
                 :key="day"
                 :class="[
-                    'min-h-24 border-r border-b border-border p-1',
+                    'flex min-h-24 flex-col border-r border-b border-border p-1',
                     !day.startsWith(month) &&
                         'bg-bg-hover/30 text-muted-foreground',
                 ]"
                 :data-calendar-day="day"
             >
-                <div
+                <Popover v-if="itemsOn(day).length > 0">
+                    <PopoverTrigger as-child>
+                        <button
+                            type="button"
+                            class="flex w-full flex-1 cursor-pointer flex-col rounded text-left outline-none hover:bg-bg-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+                            :aria-label="dayLabel(day)"
+                            :data-calendar-day-open="day"
+                        >
+                            <span
+                                :class="[
+                                    'font-mono-tabular mb-0.5 block text-right text-[11px]',
+                                    day === today && 'font-semibold text-info',
+                                ]"
+                            >
+                                {{ Number(day.slice(8)) }}
+                            </span>
+                            <CalendarItem
+                                v-for="item in itemsOn(day).slice(
+                                    0,
+                                    MAX_PER_DAY,
+                                )"
+                                :key="item.key"
+                                :item="item"
+                                compact
+                            />
+                            <span
+                                v-if="itemsOn(day).length > MAX_PER_DAY"
+                                class="block px-1 text-[11px] text-muted-foreground"
+                                data-calendar-day-more
+                            >
+                                +{{ itemsOn(day).length - MAX_PER_DAY }} more
+                            </span>
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                        align="start"
+                        class="w-96 max-w-[calc(100vw-2rem)] p-0"
+                        :data-calendar-day-popover="day"
+                    >
+                        <h3
+                            class="border-b border-border px-3 py-2 text-[12px] font-semibold text-muted-foreground"
+                        >
+                            {{ dayHeading(day) }}
+                        </h3>
+                        <div class="max-h-96 overflow-y-auto">
+                            <CalendarItem
+                                v-for="item in itemsOn(day)"
+                                :key="item.key"
+                                :item="item"
+                            />
+                        </div>
+                    </PopoverContent>
+                </Popover>
+                <span
+                    v-else
                     :class="[
-                        'font-mono-tabular mb-0.5 text-right text-[11px]',
+                        'font-mono-tabular mb-0.5 block text-right text-[11px]',
                         day === today && 'font-semibold text-info',
                     ]"
                 >
                     {{ Number(day.slice(8)) }}
-                </div>
-                <CalendarItem
-                    v-for="item in (itemsByDay[day] ?? []).slice(
-                        0,
-                        MAX_PER_DAY,
-                    )"
-                    :key="item.key"
-                    :item="item"
-                    compact
-                />
-                <div
-                    v-if="(itemsByDay[day] ?? []).length > MAX_PER_DAY"
-                    class="px-1 text-[11px] text-muted-foreground"
-                >
-                    +{{ (itemsByDay[day] ?? []).length - MAX_PER_DAY }} more
-                </div>
+                </span>
             </div>
         </div>
     </div>
