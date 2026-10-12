@@ -667,18 +667,19 @@ test('the csv export has a tier column and honours the tier filter', function ()
 
     // Verify header and data row column counts match
     $lines = array_filter(explode("\n", trim($csv)));
-    $headerCount = count(str_getcsv($lines[0]));
+    $headerCount = count(str_getcsv($lines[0], escape: '\\'));
     foreach (array_slice($lines, 1) as $line) {
-        $rowCount = count(str_getcsv($line));
+        $rowCount = count(str_getcsv($line, escape: '\\'));
         expect($rowCount)->toBe($headerCount);
     }
 
     // Verify tier column contains expected values: 1, 2, and empty
     $tierValues = [];
     foreach (array_slice($lines, 1) as $line) {
-        $row = str_getcsv($line);
+        $row = str_getcsv($line, escape: '\\');
         $tierValues[] = end($row);
     }
+
     expect($tierValues)->toContain('2')
         ->toHaveCount(1); // Only fell_through (tier 2) records
 
@@ -688,17 +689,18 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->streamedContent();
 
     $firstTierLines = array_filter(explode("\n", trim($firstTierCsv)));
-    $firstTierHeaderCount = count(str_getcsv($firstTierLines[0]));
+    $firstTierHeaderCount = count(str_getcsv($firstTierLines[0], escape: '\\'));
     foreach (array_slice($firstTierLines, 1) as $line) {
-        $rowCount = count(str_getcsv($line));
+        $rowCount = count(str_getcsv($line, escape: '\\'));
         expect($rowCount)->toBe($firstTierHeaderCount);
     }
 
     $firstTierValues = [];
     foreach (array_slice($firstTierLines, 1) as $line) {
-        $row = str_getcsv($line);
+        $row = str_getcsv($line, escape: '\\');
         $firstTierValues[] = end($row);
     }
+
     expect($firstTierValues)->toContain('')
         ->toContain('1')
         ->toHaveCount(2); // tier 1 and untiered

@@ -280,10 +280,10 @@ test('the decision default and an event scope resolve independently once both ar
     AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-haiku-4-5')->create();
     $resolver = resolver();
 
-    $default = $resolver->resolve(AiTask::Decision);
+    $resolvedSelection = $resolver->resolve(AiTask::Decision);
     $event = $resolver->resolve(AiTask::Decision, 'sonarr:Download');
 
-    expect([$default->provider, $default->model])->toBe(['openai', 'gpt-5-nano'])
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['openai', 'gpt-5-nano'])
         ->and([$event->provider, $event->model])->toBe(['anthropic', 'claude-haiku-4-5'])
         ->and($resolver->resolve(AiTask::Decision)->model)->toBe('gpt-5-nano')
         ->and($resolver->resolve(AiTask::Decision, 'sonarr:Download')->model)->toBe('claude-haiku-4-5');
@@ -296,7 +296,7 @@ test('a chat turn reasoning set after a resolve applies on the next resolve of t
     expect($resolver->resolve(AiTask::Chat)->reasoning)->toBe(AiReasoningLevel::High);
 
     resolve(ChatTurnContext::class)->apply(null, null, AiReasoningLevel::Low);
-    $second = $resolver->resolve(AiTask::Chat);
+    $resolvedSelection = $resolver->resolve(AiTask::Chat);
 
-    expect([$second->model, $second->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::Low]);
+    expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::Low]);
 });
