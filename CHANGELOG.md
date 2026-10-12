@@ -1,3 +1,21 @@
+# [1.41.0](https://github.com/pentacore/media-manager/compare/v1.40.0...v1.41.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* **library:** keep card controls out of the card link and restore focus after confirmed bulk runs ([56531ae](https://github.com/pentacore/media-manager/commit/56531ae7a1712bc342d542fa3b2baa1ee4458cb2))
+* **library:** name the quality profile for viewers and hide seasons under an episodes outage ([09b9b8d](https://github.com/pentacore/media-manager/commit/09b9b8d0a6bd27a1a0ff78a1308ef4723ce2fd16))
+* **sabnzbd:** say how many downloads the category filter hid ([d219e54](https://github.com/pentacore/media-manager/commit/d219e548e7bead0c3fd1a553975787d0ff3a56f7))
+* **seerr:** free a deleted title's seasons only from completed requests ([4f147c6](https://github.com/pentacore/media-manager/commit/4f147c6c201de1a37f1b4ec39c025f4250f6c776))
+* **seerr:** free every season of a deleted title, and pin the sheet pill and calendar keyboard access ([0ed3b82](https://github.com/pentacore/media-manager/commit/0ed3b8252edff7064437cc2b37a6b9d584a1e340))
+* **seerr:** show blocklisted titles as unrequestable and free deleted seasons ([90cf6cf](https://github.com/pentacore/media-manager/commit/90cf6cfc678fcd21ddc7615be307a87a2c6fbe81))
+* word coalesced scans by count and latest trigger, document framing, unify count formatting ([ca23ab9](https://github.com/pentacore/media-manager/commit/ca23ab9974387c87697b6587a4f5e57eca294e6b))
+
+
+### Features
+
+* **calendar:** open a day popover with full rows from the month grid ([0b4f50a](https://github.com/pentacore/media-manager/commit/0b4f50a14c09891a7588d86ddc11b7cf24ccea2b))
+
 # [1.40.0](https://github.com/pentacore/media-manager/compare/v1.39.0...v1.40.0) (2026-10-12)
 
 
