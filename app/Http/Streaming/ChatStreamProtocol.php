@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Streaming;
 
+use App\Ai\AnsweredBy;
 use App\Ai\ChatFailure;
+use App\Ai\ChatTurnContext;
 use Closure;
 use Generator;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Exceptions\ApprovalMismatchException;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Streaming\Protocols\AgentUserInteractionProtocol;
 use Override;
@@ -17,17 +20,33 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
- * AG-UI for the chat panel, with four app behaviours on top: keep the
+ * AG-UI for the chat panel, with five app behaviours on top: keep the
  * request alive after a browser disconnect so usage is recorded, while the
  * agent stops at its next step (ClientConnection + StopWhenClientDisconnected),
  * write the frames under Octane, keep them inside a capturing output buffer,
  * and explain failures instead of the SDK's masked "An error occurred."
- * (naming the stored conversation of a failed turn).
+ * (naming the stored conversation of a failed turn), and name the exact
+ * answered-by (model, reasoning, tier) on a completed run's RUN_FINISHED.
  * The SDK's own terminal cases (an interrupt that already finished the run,
  * the unmasked approval-mismatch frame) are left to the parent.
  */
 final class ChatStreamProtocol extends AgentUserInteractionProtocol
 {
+    private ?ChatTurnContext $turnOverride = null;
+
+    /**
+     * Remember the turn's model/reasoning override. The frames are written
+     * after the controller returns, by which point a host may already have
+     * torn down the request's scoped state, so the closing frame re-applies it.
+     */
+    public function forTurn(ChatTurnContext $chatTurnContext): self
+    {
+        $this->turnOverride = new ChatTurnContext;
+        $this->turnOverride->apply($chatTurnContext->provider, $chatTurnContext->model, $chatTurnContext->reasoning);
+
+        return $this;
+    }
+
     #[Override]
     public function response(StreamableAgentResponse $response): Response
     {
@@ -89,6 +108,31 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
 
             flush();
         }
+    }
+
+    /**
+     * Only a normal completion reaches here; an approval interrupt builds its
+     * RUN_FINISHED directly and stays untouched. A resolver failure must not
+     * break the end of the stream, so it is reported and the field omitted.
+     *
+     * @return array<string, mixed>
+     */
+    #[Override]
+    protected function completionAttributes(?TextUsage $usage, ?string $reason, ?string $provider, ?string $model): array
+    {
+        $attributes = parent::completionAttributes($usage, $reason, $provider, $model);
+
+        try {
+            if ($this->turnOverride instanceof ChatTurnContext) {
+                resolve(ChatTurnContext::class)->apply($this->turnOverride->provider, $this->turnOverride->model, $this->turnOverride->reasoning);
+            }
+
+            $attributes['answeredBy'] = AnsweredBy::forChat($provider, $model);
+        } catch (Throwable $throwable) {
+            report($throwable);
+        }
+
+        return $attributes;
     }
 
     #[Override]

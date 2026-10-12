@@ -533,7 +533,7 @@ async function sendStreamingTurn(
         return;
     }
 
-    assistantMessage.answered_by = answeredBy;
+    assistantMessage.answered_by = result.answeredBy ?? answeredBy;
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is

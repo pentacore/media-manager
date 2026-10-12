@@ -226,6 +226,21 @@ function exhaustChatModelRateLimit(?string $provider = null, ?string $model = nu
     ]);
 }
 
+test('send names who answered with the resolved reasoning and tier', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    MediaAgent::fake(['Hello']);
+    $admin = User::factory()->admin()->create();
+
+    $answeredBy = $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'hi'])->assertOk()->json('answered_by');
+
+    expect($answeredBy)->toHaveKeys(['provider', 'model', 'reasoning_label', 'tier'])
+        ->and($answeredBy['provider'])->toBe('openai')
+        ->and($answeredBy['model'])->toBe('gpt-5.6-luna');
+});
+
 test('send refuses with 429 when the chat model has exhausted its rate limit and no failover is configured', function (): void {
     exhaustChatModelRateLimit();
     MediaAgent::fake(['Should never run.']);
