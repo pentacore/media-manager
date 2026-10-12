@@ -453,6 +453,7 @@ class QueueController extends Controller
             'speedlimit' => isset($queue['speedlimit']) ? (string) $queue['speedlimit'] : null,
             'speedlimit_abs' => isset($queue['speedlimit_abs']) ? (string) $queue['speedlimit_abs'] : null,
             'noofslots' => (int) ($queue['noofslots'] ?? count($slots)),
+            'hidden_by_category' => (int) ($queue['hidden_by_category'] ?? 0),
             'slots' => array_values(array_map(static fn (array $slot): array => [
                 'nzo_id' => (string) ($slot['nzo_id'] ?? ''),
                 'filename' => $slot['filename'] ?? null,
@@ -473,7 +474,7 @@ class QueueController extends Controller
      * text loses URL query strings and filesystem paths (see redactFailMessage()).
      *
      * @param  array<string, mixed>  $history
-     * @return array{slots: list<array<string, mixed>>, total: int, page: int, page_size: int}
+     * @return array{slots: list<array<string, mixed>>, total: int, hidden_by_category: int, page: int, page_size: int}
      */
     private function presentHistory(array $history, int $page): array
     {
@@ -492,6 +493,7 @@ class QueueController extends Controller
                 'completed' => isset($slot['completed']) ? (int) $slot['completed'] : null,
             ], $slots)),
             'total' => (int) ($history['noofslots'] ?? count($slots)),
+            'hidden_by_category' => (int) ($history['hidden_by_category'] ?? 0),
             'page' => $page,
             'page_size' => self::HISTORY_PAGE_SIZE,
         ];
@@ -516,24 +518,26 @@ class QueueController extends Controller
     }
 
     /**
-     * Drop slots whose category matches the connection's hidden list. The
-     * `noslots` / pagination totals stay as-is — they reflect what
-     * SABnzbd reports — so the user-visible "X items hidden" delta is
-     * implicit. Categories with no `cat`/`category` field on the slot
-     * are kept (treated as uncategorised).
+     * Drop slots whose category matches the connection's hidden list, and
+     * record how many were dropped in `hidden_by_category`. SABnzbd pages
+     * before we filter (its API can include one category, not exclude
+     * one), so a page can come up short; the totals stay SABnzbd's and the
+     * page says "N hidden by category filter" instead. Slots with no
+     * `cat`/`category` field are kept (treated as uncategorised).
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     private function filterByCategory(array $payload, string $field, ServiceConnection $serviceConnection): array
     {
+        $payload['hidden_by_category'] = 0;
         $hidden = $serviceConnection->settings['hidden_categories'] ?? null;
         if (! is_array($hidden) || $hidden === []) {
             return $payload;
         }
 
         $slots = is_array($payload['slots'] ?? null) ? $payload['slots'] : [];
-        $payload['slots'] = array_values(array_filter(
+        $kept = array_values(array_filter(
             $slots,
             static function (array $slot) use ($field, $hidden): bool {
                 $category = $slot[$field] ?? null;
@@ -541,6 +545,9 @@ class QueueController extends Controller
                 return ! is_string($category) || ! in_array($category, $hidden, true);
             },
         ));
+
+        $payload['slots'] = $kept;
+        $payload['hidden_by_category'] = count($slots) - count($kept);
 
         return $payload;
     }

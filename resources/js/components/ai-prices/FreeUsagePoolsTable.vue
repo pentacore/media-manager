@@ -14,6 +14,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { useConfirm } from '@/composables/useConfirm';
+import { formatCount } from '@/lib/format';
 import type { PoolRow } from './types';
 
 defineProps<{
@@ -42,10 +43,6 @@ async function destroyPool(pool: PoolRow): Promise<void> {
         method: 'delete',
         preserveScroll: true,
     });
-}
-
-function formatTokens(value: number | null): string {
-    return value === null ? '—' : new Intl.NumberFormat().format(value);
 }
 </script>
 
@@ -127,13 +124,13 @@ function formatTokens(value: number | null): string {
                         </td>
                         <td class="font-mono-tabular px-3 py-2.5">
                             <template v-if="pool.unified">
-                                {{ formatTokens(pool.free_total_tokens) }}
+                                {{ formatCount(pool.free_total_tokens) }}
                                 total
                             </template>
                             <template v-else>
-                                {{ formatTokens(pool.free_input_tokens) }}
+                                {{ formatCount(pool.free_input_tokens) }}
                                 in /
-                                {{ formatTokens(pool.free_output_tokens) }}
+                                {{ formatCount(pool.free_output_tokens) }}
                                 out
                             </template>
                         </td>

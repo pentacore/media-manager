@@ -250,3 +250,26 @@ test('a single queue delete asks first; Cancel keeps the job and Remove deletes 
 
     Http::assertSent($isSlotDelete);
 });
+
+test('a confirmed bulk delete hands focus to select all, not the page body', function (): void {
+    // Both slots stay listed after the delete, so select all is still there.
+    fakeSabnzbdBrowser(fn (int $read): array => [
+        sabnzbdBrowserSlot('SABnzbd_nzo_aaa', 'Example.Show.S01E01.mkv'),
+        sabnzbdBrowserSlot('SABnzbd_nzo_bbb', 'Example.Show.S01E02.mkv'),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_aaa"]', 'Example.Show.S01E01.mkv')
+        ->click('[data-bulk-select="SABnzbd_nzo_aaa"]')
+        ->click('[data-bulk-sab-action="delete"]')
+        ->click('[data-bulk-sab-delete-confirm]')
+        ->assertSee('1 deleted');
+
+    // Assert only after the dialog has left the DOM and Reka's restore
+    // (a zero-delay timer scheduled at unmount) has run.
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[role=\"dialog\"]')"));
+    $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
+    $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
+});

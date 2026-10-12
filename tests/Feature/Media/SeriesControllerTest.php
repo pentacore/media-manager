@@ -490,13 +490,15 @@ test('the series page defers the quality profiles for the profile dropdown', fun
         ->get(route('media.series.show', ['id' => 1]))
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
+            ->missing('qualityProfileName')
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', ['items' => [['id' => 6, 'name' => 'Ultra-HD']], 'error' => null])));
 });
 
-test('viewers never trigger the quality profile lookup on the series page', function (): void {
+test('viewers read the quality profile name on the series page but never receive the profile list', function (): void {
     Http::fake([
-        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'qualityProfileId' => 6, 'seasons' => [], 'images' => []]),
         'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'Any'], ['id' => 6, 'name' => 'Ultra-HD']]),
     ]);
 
     $response = $this->actingAs(User::factory()->create())
@@ -504,10 +506,74 @@ test('viewers never trigger the quality profile lookup on the series page', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
-            ->loadDeferredProps(fn ($reload) => $reload->where('episodes', ['items' => [], 'error' => null])->missing('qualityProfiles')));
+            ->missing('qualityProfileName')
+            ->loadDeferredProps('qualityProfileName', fn ($reload) => $reload
+                ->where('qualityProfileName', 'Ultra-HD')
+                ->missing('qualityProfiles')));
 
-    expect($response->viewData('page')['deferredProps'] ?? [])->not->toHaveKey('qualityProfiles');
-    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+    expect($response->viewData('page')['deferredProps'] ?? [])->not->toHaveKey('qualityProfiles')
+        ->and($response->viewData('page')['deferredProps']['qualityProfileName'] ?? null)->toBe(['qualityProfileName']);
+});
+
+test("a viewer's quality profile name is empty when the lookup fails or the profile is gone", function (int $status, array $profiles): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'qualityProfileId' => 6, 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response($profiles, $status),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('qualityProfileName', fn ($reload) => $reload
+                ->where('qualityProfileName', null)
+                ->missing('qualityProfiles')));
+})->with([
+    // A 4xx is not retried by the arr clients, so one fake answers once.
+    'Sonarr refuses the profile read' => [401, []],
+    'the profile no longer exists' => [200, [['id' => 1, 'name' => 'Any']]],
+]);
+
+test("a viewer's quality profile name is empty when every profile read fails", function (Closure $profileFake): void {
+    Sleep::fake();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'qualityProfileId' => 6, 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+        // A static fake answers every retry attempt, so the read never recovers.
+        'sonarr.local:8989/api/v3/qualityprofile' => $profileFake(),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('qualityProfileName', fn ($reload) => $reload
+                ->where('qualityProfileName', null)
+                ->missing('qualityProfiles')));
+
+    expect(Http::recorded(fn ($request): bool => str_ends_with($request->url(), '/api/v3/qualityprofile')))->not->toBeEmpty();
+})->with([
+    'an upstream 5xx on every attempt' => [fn (): mixed => Http::response('boom', 503)],
+    'a connection failure' => [fn (): mixed => Http::failedConnection()],
+]);
+
+test('a second viewer visit reads the quality profile name from the cached list', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'qualityProfileId' => 6, 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 6, 'name' => 'Ultra-HD']]),
+    ]);
+    $viewer = User::factory()->create();
+
+    foreach ([1, 2] as $visit) {
+        $this->actingAs($viewer)
+            ->get(route('media.series.show', ['id' => 1]))
+            ->assertInertia(fn ($page) => $page
+                ->loadDeferredProps('qualityProfileName', fn ($reload) => $reload->where('qualityProfileName', 'Ultra-HD')));
+    }
+
+    expect(Http::recorded(fn ($request): bool => str_ends_with($request->url(), '/api/v3/qualityprofile')))->toHaveCount(1);
 });
 
 test('a series page whose episodes fail to load says so', function (): void {

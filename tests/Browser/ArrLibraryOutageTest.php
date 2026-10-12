@@ -137,3 +137,27 @@ test('an admin is sent to the connection settings when Sonarr refuses', function
         ->assertNoSmoke()
         ->assertSeeIn('[data-library-error]', 'Sonarr refused the request — check the connection settings.');
 });
+
+test('an episodes outage shows only the error banner, no season rows', function (): void {
+    arrOutageSonarr();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/7' => Http::response([
+            'id' => 7, 'title' => 'Example Show', 'titleSlug' => 'example-show', 'year' => 2024, 'status' => 'continuing',
+            'monitored' => true, 'qualityProfileId' => 1, 'images' => [],
+            'seasons' => [
+                ['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 1, 'episodeFileCount' => 1, 'sizeOnDisk' => 10]],
+                ['seasonNumber' => 2, 'monitored' => true, 'statistics' => ['episodeCount' => 0, 'episodeFileCount' => 0, 'sizeOnDisk' => 0]],
+            ],
+            'statistics' => ['sizeOnDisk' => 10, 'episodeCount' => 1, 'episodeFileCount' => 1],
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response('Unauthorized', 401),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.show', ['id' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-episodes-error]', 'Sonarr is unavailable — ask an admin to check the connection.')
+        ->assertCount('[data-season-pill]', 0);
+});

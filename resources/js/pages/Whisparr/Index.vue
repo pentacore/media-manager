@@ -142,9 +142,9 @@ const bulkBusy = ref(false);
 // request never names a title the user can no longer see.
 watch(visibleIds, (ids) => retainSelection(ids));
 
-// A blurred poster sits inside the card link with overlays (checkbox, pill)
-// as its siblings: the card reveals it while the link has focus or the
-// pointer is anywhere over the poster area, overlays included.
+// The blurred poster reveals while anything in the card wrapper has focus
+// (the link or the checkbox) or the pointer is over the poster or the
+// checkbox.
 const focusedCard = ref<number | null>(null);
 const hoveredCard = ref<number | null>(null);
 
@@ -327,72 +327,92 @@ function sync(): void {
                 "
                 data-whisparr-grid
             >
-                <Link
+                <div
                     v-for="item in visible"
                     :key="item.id"
-                    :href="WhisparrController.show.url(item.id)"
-                    prefetch
-                    class="group flex flex-col gap-2"
-                    :data-whisparr-card="item.id"
+                    class="group relative"
                     @focusin="focusedCard = item.id"
                     @focusout="focusedCard = null"
                 >
-                    <div
-                        class="relative"
-                        @pointerenter="
-                            (event) => onCardPointerEnter(event, item.id)
-                        "
-                        @pointerleave="hoveredCard = null"
+                    <Link
+                        :href="WhisparrController.show.url(item.id)"
+                        prefetch
+                        class="flex flex-col gap-2"
+                        :data-whisparr-card="item.id"
                     >
-                        <Poster
-                            :hint="item.title.toLowerCase().slice(0, 12)"
-                            :src="item.poster_url"
-                            :blurred="blurPosters"
-                            :focusable="false"
-                            :revealed="
-                                focusedCard === item.id ||
-                                hoveredCard === item.id
-                            "
-                            size="full"
-                        />
-                        <Pill
-                            v-if="!item.monitored"
-                            class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
-                        >
-                            Unmonitored
-                        </Pill>
-                        <Pill
-                            v-else-if="item.missing"
-                            class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
-                        >
-                            missing
-                        </Pill>
-                        <BulkCheckbox
-                            class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
-                            :checked="isSelected(item.id)"
-                            :disabled="bulkBusy"
-                            :label="`Select ${item.title}`"
-                            :data-bulk-select="item.id"
-                            @update:checked="
-                                (value) => toggleSelected(item.id, value)
-                            "
-                        />
-                    </div>
-                    <div>
                         <div
-                            class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
-                            data-whisparr-title
+                            class="relative"
+                            @pointerenter="
+                                (event) => onCardPointerEnter(event, item.id)
+                            "
+                            @pointerleave="hoveredCard = null"
                         >
-                            {{ item.title }}
+                            <Poster
+                                :hint="item.title.toLowerCase().slice(0, 12)"
+                                :src="item.poster_url"
+                                :blurred="blurPosters"
+                                :focusable="false"
+                                :revealed="
+                                    focusedCard === item.id ||
+                                    hoveredCard === item.id
+                                "
+                                size="full"
+                            />
+                            <Pill
+                                v-if="!item.monitored"
+                                class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
+                            >
+                                Unmonitored
+                            </Pill>
+                            <Pill
+                                v-else-if="item.missing"
+                                class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
+                            >
+                                missing
+                            </Pill>
                         </div>
-                        <div
-                            class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
+                        <div>
+                            <div
+                                class="text-[13px] leading-tight font-medium text-pretty group-hover:text-accent"
+                                data-whisparr-title
+                            >
+                                {{ item.title }}
+                            </div>
+                            <div
+                                class="font-mono-tabular mt-0.5 flex justify-between text-[10.5px] text-fg-subtle"
+                            >
+                                <span>{{ item.year ?? '—' }}</span>
+                                <span>{{ formatBytes(item.size_bytes) }}</span>
+                            </div>
+                        </div>
+                    </Link>
+                    <!-- Beside the card link, over the poster: an anchor may
+                         not contain interactive content. Hovering the
+                         checkbox keeps the poster revealed; focus is caught
+                         by the wrapper's focusin. -->
+                    <div
+                        class="pointer-events-none absolute inset-x-0 top-0 aspect-[2/3]"
+                    >
+                        <span
+                            class="pointer-events-auto absolute right-2 bottom-2"
+                            @pointerenter="
+                                (event) => onCardPointerEnter(event, item.id)
+                            "
+                            @pointerleave="hoveredCard = null"
                         >
-                            <span>{{ item.year ?? '—' }}</span>
-                            <span>{{ formatBytes(item.size_bytes) }}</span>
-                        </div>
+                            <BulkCheckbox
+                                class="rounded bg-black/55 p-1"
+                                :checked="isSelected(item.id)"
+                                :disabled="bulkBusy"
+                                :label="`Select ${item.title}`"
+                                :data-bulk-select="item.id"
+                                @update:checked="
+                                    (value) => toggleSelected(item.id, value)
+                                "
+                            />
+                        </span>
                     </div>
-                </Link>
+                </div>
                 <div
                     v-if="visible.length === 0"
                     class="col-span-full py-8 text-center text-sm text-fg-subtle"

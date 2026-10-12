@@ -474,18 +474,37 @@ test('the movie page defers the quality profiles for the profile dropdown', func
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', ['items' => [['id' => 6, 'name' => 'Ultra-HD']], 'error' => null])));
 });
 
-test('viewers never trigger the quality profile lookup on the movie page', function (): void {
+test('viewers read the quality profile name on the movie page but never receive the profile list', function (): void {
     Http::fake([
-        'radarr.local:7878/api/v3/movie/1' => Http::response(['id' => 1, 'title' => 'Movie', 'images' => []]),
+        'radarr.local:7878/api/v3/movie/1' => Http::response(['id' => 1, 'title' => 'Movie', 'qualityProfileId' => 6, 'images' => []]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'Any'], ['id' => 6, 'name' => 'Ultra-HD']]),
     ]);
 
     $response = $this->actingAs(User::factory()->create())
         ->get(route('media.movies.show', ['id' => 1]))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->missing('qualityProfiles'));
+        ->assertInertia(fn ($page) => $page
+            ->missing('qualityProfiles')
+            ->missing('qualityProfileName')
+            ->loadDeferredProps('qualityProfileName', fn ($reload) => $reload
+                ->where('qualityProfileName', 'Ultra-HD')
+                ->missing('qualityProfiles')));
 
-    expect($response->viewData('page')['deferredProps'] ?? [])->toBe([]);
-    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+    expect($response->viewData('page')['deferredProps'] ?? [])->toBe(['qualityProfileName' => ['qualityProfileName']]);
+});
+
+test('members get the profile list on the movie page and no separate profile name', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/1' => Http::response(['id' => 1, 'title' => 'Movie', 'qualityProfileId' => 6, 'images' => []]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 6, 'name' => 'Ultra-HD']]),
+    ]);
+
+    $response = $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.movies.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->missing('qualityProfileName'));
+
+    expect($response->viewData('page')['deferredProps'] ?? [])->toBe(['qualityProfiles' => ['qualityProfiles']]);
 });
 
 test('the add-movie form reports failed lookups, profiles and root folders', function (): void {

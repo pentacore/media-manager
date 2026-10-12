@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { StatCard } from '@/components/mm';
-import { costDelta, formatCost, formatNumber } from './format';
+import { formatCount } from '@/lib/format';
+import { costDelta, formatCost } from './format';
 import type { Totals, WindowKey } from './types';
 
 defineProps<{
@@ -24,17 +25,17 @@ defineProps<{
         />
         <StatCard
             label="Invocations"
-            :value="formatNumber(totals.total_invocations)"
-            :hint="`${formatNumber(totals.total_tool_calls)} tool calls`"
+            :value="formatCount(totals.total_invocations)"
+            :hint="`${formatCount(totals.total_tool_calls)} tool calls`"
         />
         <StatCard
             label="Total tokens"
-            :value="formatNumber(totals.total_tokens)"
+            :value="formatCount(totals.total_tokens)"
             hint="prompt + completion"
         />
         <StatCard
             label="Tool calls"
-            :value="formatNumber(totals.total_tool_calls)"
+            :value="formatCount(totals.total_tool_calls)"
             hint="across all invocations"
         />
     </div>

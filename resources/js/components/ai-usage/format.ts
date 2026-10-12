@@ -1,8 +1,4 @@
-export function formatNumber(value: number | string): string {
-    const n = typeof value === 'string' ? parseFloat(value) : value;
-
-    return n.toLocaleString('en-US');
-}
+import { formatCount } from '@/lib/format';
 
 export function formatCost(value: string | number): string {
     const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -35,7 +31,7 @@ export function formatRate(value: number): string {
 }
 
 export function formatMs(value: number | null): string {
-    return value === null ? '—' : `${formatNumber(value)} ms`;
+    return value === null ? '—' : `${formatCount(value)} ms`;
 }
 
 export function shortClass(value: string | null): string {

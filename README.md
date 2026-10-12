@@ -111,6 +111,26 @@ MediaManager expects a reverse proxy (Traefik, Caddy, nginx) in front of the `we
 
 Leave it empty (the default) when nothing sits in front of the app: no forwarded header is trusted. Do not list whole private ranges such as `192.168.0.0/16`. Compose publishes `WEB_PORT` on every interface, so any host inside a trusted range could send a forged `X-Forwarded-For` and dodge the login and Emby-login throttles. The app logs a warning (at most once a day) while `TRUSTED_PROXIES` contains `*` or a range wider than /24 (IPv6: /64). Where you can, also firewall `WEB_PORT` and `REVERB_BIND_PORT` so only the proxy host reaches them.
 
+### Embedding in a dashboard (Homarr, Organizr)
+
+Every page carries `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: frame-ancestors 'self'`, so a dashboard on another host or port shows an empty or refused iframe. This is deliberate: it stops another site from loading MediaManager invisibly and tricking a signed-in admin into clicking approve, delete or save (clickjacking). Chat attachment downloads send their own, stricter sandboxing CSP (`default-src 'none'; sandbox`), which the substring replace below leaves intact.
+
+- **Recommended:** add MediaManager to Homarr, Organizr or a similar dashboard as a link or app tile that opens it in its own tab.
+- **Embedding from a sibling subdomain** (a dashboard at `dash.example.com` framing `media.example.com`) needs your reverse proxy to replace both headers on MediaManager's responses: drop `X-Frame-Options` (it cannot name another origin) and widen `Content-Security-Policy`'s `frame-ancestors` to include the dashboard's origin. The listed origin can then frame MediaManager, and so could clickjack it: list only a dashboard you control, behind the same login. A Caddy example (MediaManager's `web` port published as `8080` on `192.168.1.20`), using a substring replace so a response with a different Content-Security-Policy is left alone:
+
+  ```caddyfile
+  media.example.com {
+      reverse_proxy 192.168.1.20:8080 {
+          header_down -X-Frame-Options
+          header_down Content-Security-Policy "frame-ancestors 'self'" "frame-ancestors 'self' https://dash.example.com"
+      }
+  }
+  ```
+
+  `header_down -X-Frame-Options` also drops that header from chat attachment downloads, whose CSP names no `frame-ancestors`. Another page could then frame an attachment, but its `sandbox` CSP keeps it inert (no scripts, forms or same-origin access), only its uploader can open it, and a cross-site frame gets no session cookie, so the redirect to the login page is refused too.
+
+- **Embedding from another site** (a different registrable domain) still fails after that: the session cookie is `SameSite=Lax`, so the browser does not send it inside a cross-site frame and the frame stays on the login page.
+
 ### Queue workers
 
 Jobs run on five named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) then `maintenance` (long housekeeping — bulk Seerr request clears, search index reconcile, anime mapping sync) so a slow model call or a long-running job never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all five queues by default — add the `queue-ai` service to split them.

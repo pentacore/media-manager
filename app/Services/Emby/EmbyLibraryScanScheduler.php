@@ -35,6 +35,9 @@ final readonly class EmbyLibraryScanScheduler
 
     public const int MAX_RECORDED_TRIGGERS = 20;
 
+    /** Triggers that are imports; anything else makes the card say "changes". */
+    private const array IMPORT_TRIGGERS = ['sonarr_download', 'radarr_download'];
+
     public function __construct(
         private ActionOrchestrator $actionOrchestrator,
         private ActionRequestActivityLogger $actionRequestActivityLogger,
@@ -68,7 +71,7 @@ final readonly class EmbyLibraryScanScheduler
             $pendingScan = $this->pendingScan($embyConnectionId);
 
             if ($pendingScan instanceof ActionRequest) {
-                $this->fold($pendingScan, $trigger, $scanAfter);
+                $this->fold($pendingScan, $trigger, $description->description, $scanAfter);
 
                 return $pendingScan;
             }
@@ -115,7 +118,7 @@ final readonly class EmbyLibraryScanScheduler
             $pendingScan = $this->pendingScan($embyConnectionId);
 
             if ($pendingScan instanceof ActionRequest) {
-                $this->fold($pendingScan, 'manual', now());
+                $this->fold($pendingScan, 'manual', $because, now());
 
                 return $pendingScan;
             }
@@ -131,19 +134,41 @@ final readonly class EmbyLibraryScanScheduler
 
     /**
      * Count one more trigger on a scan that has not started, record it, move
-     * scan_after to $scanAfter, log the fold and schedule the wake-up. Call
-     * inside the advisory lock.
+     * scan_after to $scanAfter, reword the card, log the fold and schedule
+     * the wake-up. Call inside the advisory lock.
      */
-    private function fold(ActionRequest $pendingScan, string $trigger, CarbonImmutable $scanAfter): void
+    private function fold(ActionRequest $pendingScan, string $trigger, string $latest, CarbonImmutable $scanAfter): void
     {
         $payload = $pendingScan->payload;
         $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
         $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), $trigger], -self::MAX_RECORDED_TRIGGERS);
         $payload['scan_after'] = $scanAfter->toIso8601String();
-        $pendingScan->update(['payload' => $payload]);
+        $pendingScan->update([
+            'payload' => $payload,
+            'description' => $this->coalescedDescription($payload['coalesced_events'], $payload['triggers'], $latest),
+        ]);
 
         $this->actionRequestActivityLogger->coalesced($pendingScan, $trigger);
         $this->wakeAfter($pendingScan, $scanAfter);
+    }
+
+    /**
+     * "3 imports · latest: Sonarr imported "Show". Emby server "Home" will
+     * rescan …": how many triggers the waiting scan absorbed and the newest
+     * one's own wording, so the card stops repeating the first trigger. The
+     * noun is "imports" only while every recorded trigger is an import.
+     *
+     * @param  array<int, mixed>  $triggers
+     */
+    private function coalescedDescription(int $count, array $triggers, string $latest): string
+    {
+        $allImports = array_all($triggers, static fn (mixed $trigger): bool => in_array($trigger, self::IMPORT_TRIGGERS, true));
+
+        return mb_substr(
+            sprintf('%d %s · latest: %s', $count, $allImports ? 'imports' : 'changes', trim($latest)),
+            0,
+            ActionDescription::DESCRIPTION_LIMIT,
+        );
     }
 
     /**

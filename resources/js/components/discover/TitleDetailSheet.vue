@@ -300,6 +300,7 @@ onBeforeUnmount(() => {
                                 v-if="pill"
                                 :status="pill.status"
                                 :label="pill.label"
+                                data-title-status
                             />
                             <p
                                 v-if="detail.overview"
@@ -406,6 +407,13 @@ onBeforeUnmount(() => {
                         data-no-seerr-account
                     >
                         No Seerr account is linked to you — ask an admin.
+                    </p>
+                    <p
+                        v-else-if="detail.status === 'blocklisted'"
+                        class="text-[13px] text-muted-foreground"
+                        data-title-blocklisted
+                    >
+                        Blocklisted in Seerr — it can't be requested.
                     </p>
                     <Button
                         v-else-if="detail.status !== 'available'"

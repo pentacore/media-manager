@@ -3,7 +3,8 @@ import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import { InitialsAvatar, Pill } from '@/components/mm';
-import { formatCost, formatNumber, formatTimestamp } from './format';
+import { formatCount } from '@/lib/format';
+import { formatCost, formatTimestamp } from './format';
 import type {
     BenchmarkFilter,
     KindOption,
@@ -138,7 +139,7 @@ function kindLabel(value: string): string {
                             </span>
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(row.total_tokens) }}
+                            {{ formatCount(row.total_tokens) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">
                             {{ row.tool_calls_count }}
