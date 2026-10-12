@@ -7,6 +7,7 @@ namespace App\Listeners\Ai;
 use App\Models\AiToolInvocation;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Tools\ToolNameResolver;
+use Throwable;
 
 class RecordToolInvocation
 {
@@ -40,21 +41,34 @@ class RecordToolInvocation
      */
     private function io(ToolInvoked $toolInvoked): array
     {
-        $arguments = $toolInvoked->arguments;
-        $result = is_string($toolInvoked->result) ? $toolInvoked->result : json_encode($toolInvoked->result, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-        $truncated = false;
+        try {
+            $arguments = $toolInvoked->arguments;
+            $encodedArguments = json_encode($arguments, JSON_INVALID_UTF8_SUBSTITUTE);
+            $result = is_string($toolInvoked->result) ? $toolInvoked->result : json_encode($toolInvoked->result, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+            $truncated = false;
 
-        if (strlen((string) json_encode($arguments)) > AiToolInvocation::MAX_IO_BYTES) {
-            $arguments = ['_truncated' => true];
-            $truncated = true;
+            if ($encodedArguments === false) {
+                $arguments = ['_unencodable' => true];
+            } elseif (strlen($encodedArguments) > AiToolInvocation::MAX_IO_BYTES) {
+                $arguments = ['_truncated' => true];
+                $truncated = true;
+            } else {
+                $arguments = json_decode($encodedArguments, true);
+            }
+
+            if (is_string($result)) {
+                $result = mb_scrub($result, 'UTF-8');
+
+                if (strlen($result) > AiToolInvocation::MAX_IO_BYTES) {
+                    $result = mb_strcut($result, 0, AiToolInvocation::MAX_IO_BYTES, 'UTF-8').'…[truncated]';
+                    $truncated = true;
+                }
+            }
+
+            return [is_array($arguments) ? $arguments : null, is_string($result) ? $result : null, $truncated];
+        } catch (Throwable) {
+            return [null, null, false];
         }
-
-        if (is_string($result) && strlen($result) > AiToolInvocation::MAX_IO_BYTES) {
-            $result = mb_strcut($result, 0, AiToolInvocation::MAX_IO_BYTES, 'UTF-8').'…[truncated]';
-            $truncated = true;
-        }
-
-        return [$arguments, $result === false ? null : $result, $truncated];
     }
 
     /**

@@ -53,3 +53,25 @@ test('oversized arguments and results are truncated and flagged', function (): v
         ->and($row->arguments)->toBe(['_truncated' => true])
         ->and($row->io_truncated)->toBeTrue();
 });
+
+test('invalid UTF-8 in arguments or result still writes the row', function (): void {
+    toolIoInvoke(resolve(GetServiceStatusTool::class), ['q' => "bad\xB1byte"], "res\xB1ult");
+
+    $row = AiToolInvocation::query()->latest('id')->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row->arguments)->toBeArray()
+        ->and(mb_check_encoding((string) $row->result, 'UTF-8'))->toBeTrue()
+        ->and($row->result)->toStartWith('res')->toEndWith('ult');
+});
+
+test('an oversized multibyte result is cut to valid UTF-8 within the cap', function (): void {
+    toolIoInvoke(resolve(GetServiceStatusTool::class), [], str_repeat('é', 20_000));
+
+    $row = AiToolInvocation::query()->latest('id')->first();
+
+    expect(mb_check_encoding((string) $row->result, 'UTF-8'))->toBeTrue()
+        ->and($row->result)->toEndWith('…[truncated]')
+        ->and(strlen((string) $row->result))->toBeLessThanOrEqual(AiToolInvocation::MAX_IO_BYTES + 20)
+        ->and($row->io_truncated)->toBeTrue();
+});
