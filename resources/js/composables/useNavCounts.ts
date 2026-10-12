@@ -151,8 +151,9 @@ export function useNavCounts(): NavCounts {
 
     /**
      * When the `nav` the page now shows was produced: the fetch time of the
-     * hover prefetch a click reused for this URL, else "now" — a request
-     * that was really sent forgot its URL's prefetch when it started.
+     * hover prefetch a click may have reused for this URL, else "now". A
+     * response to a request that was really sent is re-applied as "now" on
+     * 'success', so an older date here only delays that.
      */
     function snapshotTimeFor(url: string): number {
         return prefetchFetchedAt.get(pageKey(url)) ?? Number.POSITIVE_INFINITY;
@@ -175,8 +176,12 @@ export function useNavCounts(): NavCounts {
     // and locally-drifted counts (a websocket delta applied after the old
     // snapshot, now rolled back by the full visit) are left stale. Track
     // every visit's `only`/`except` at 'start' and force a re-sync from
-    // `page.props.nav` on 'success' for the ones that were full, non-prefetch
-    // visits — regardless of whether the reference changed.
+    // `page.props.nav` on 'success' for the non-prefetch requests that
+    // bring `nav` (full visits, and reloads that name it) — regardless of
+    // whether the reference changed. The watch may first have dated that
+    // `nav` by an older prefetch of the same URL; this re-apply makes it
+    // current. A click that reuses a prefetch sends no request, so it fires
+    // no 'start' and keeps the prefetch's date.
     const pendingFullVisitIds = new Set<string>();
     let stopStartListener: VoidFunction | null = null;
     let stopSuccessListener: VoidFunction | null = null;
@@ -191,11 +196,16 @@ export function useNavCounts(): NavCounts {
                 return;
             }
 
-            // A request that is really sent supersedes any cached prefetch of
-            // its URL: the `nav` it brings back is current.
-            prefetchFetchedAt.delete(pageKey(visit.url));
-
-            if (visit.only.length === 0 && visit.except.length === 0) {
+            // A request that is really sent never forgets its URL's prefetch
+            // date: Inertia keeps the cached prefetch reusable for its whole
+            // `cacheFor` window (a partial reload carries other params, so it
+            // never replaces it), and a later click can still bring that
+            // hover-time `nav`. The `nav` this request brings back is
+            // re-applied as current on 'success' instead.
+            if (
+                (visit.only.length === 0 && visit.except.length === 0) ||
+                visit.only.includes('nav')
+            ) {
                 pendingFullVisitIds.add(visit.id);
             }
         });

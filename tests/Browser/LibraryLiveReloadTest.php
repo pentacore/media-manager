@@ -8,30 +8,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Hands a broadcast to the page's `dashboard` channel listeners. Tests
- * broadcast through the null driver, so this emits on the pusher-js channel
- * Echo subscribed to. The layout's badges always hold `dashboard`, so a
- * missing channel throws, but only a recorded reload proves the page itself
- * listened.
- *
- * @param  array<string, mixed>  $payload
- */
-function libraryLiveEmitScript(string $event, array $payload): string
-{
-    $json = json_encode($payload, JSON_THROW_ON_ERROR);
-
-    return <<<JS
-        (() => {
-            const channel = window.Pusher?.instances?.[0]?.channel('private-dashboard');
-            if (!channel) {
-                throw new Error('The page has not subscribed to dashboard.');
-            }
-            channel.emit('{$event}', {$json});
-        })()
-    JS;
-}
-
-/**
  * Records every partial reload the page starts, as its comma-joined `only`.
  * Install it after the deferred props have loaded.
  */
@@ -94,20 +70,22 @@ test('the series list reloads only after a Sonarr webhook was processed', functi
     $webpage = visit(route('media.series.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-series-card="1"]', 'Example Show Series');
+    $webpage->script(appHydratedScript());
     $webpage->script(libraryLiveRecorderScript());
 
-    // Stored but not yet processed: the cache may still be stale.
-    $webpage->script(libraryLiveEmitScript('WebhookReceived', [
+    // Stored but not yet processed: the cache may still be stale, so nothing
+    // on the page listens for it (no minimum listener count to wait for).
+    $webpage->script(echoEmitScript('dashboard', 'WebhookReceived', [
         'id' => 7000, 'service_connection_id' => $sonarr->id, 'service_name' => 'Sonarr', 'service_type' => 'sonarr',
         'event_type' => 'Download', 'created_at' => '2026-10-12T10:00:00.000000Z',
-    ]));
+    ], 0));
     // Processed, but for another service (a Radarr connection that is not on this page).
-    $webpage->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('radarr', 2)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', 2)));
     $webpage->script(libraryLiveRestScript());
 
     expect($webpage->script(libraryLiveReloadCountScript('series')))->toBe(0);
 
-    $webpage->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('series'))));
 
     expect($webpage->script(libraryLiveReloadCountScript('series')))->toBe(1);
@@ -130,7 +108,7 @@ test('the movie list reloads after a Radarr webhook was processed', function ():
         ->assertSeeIn('[data-movie-card="1"]', 'Example Movie');
     $webpage->script(libraryLiveRecorderScript());
 
-    $webpage->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('radarr', $radarr->id)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', $radarr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('movies'))));
 
     expect($webpage->script(libraryLiveReloadCountScript('movies')))->toBe(1);
@@ -149,7 +127,7 @@ test('the Seerr requests list reloads after a Seerr webhook was processed', func
         ->assertSee('No requests in this view.');
     $webpage->script(libraryLiveRecorderScript());
 
-    $webpage->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('seerr', $seerr->id)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('seerr', $seerr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('requests,summary'))));
 
     expect($webpage->script(libraryLiveReloadCountScript('requests,summary')))->toBe(1);
@@ -169,7 +147,7 @@ test('the Whisparr library and title page reload after a Whisparr webhook was pr
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-card="21"]', 'Example Scene');
     $webpage->script(libraryLiveRecorderScript());
-    $webpage->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('library'))));
 
     expect($webpage->script(libraryLiveReloadCountScript('library')))->toBe(1);
@@ -178,7 +156,7 @@ test('the Whisparr library and title page reload after a Whisparr webhook was pr
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-show-title]', 'Example Scene');
     $title->script(libraryLiveRecorderScript());
-    $title->script(libraryLiveEmitScript('WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
+    $title->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
     $title->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('item,scenes'))));
 
     expect($title->script(libraryLiveReloadCountScript('item,scenes')))->toBe(1);

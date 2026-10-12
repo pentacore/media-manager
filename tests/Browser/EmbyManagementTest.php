@@ -103,27 +103,10 @@ test('an Emby outage shows an error banner instead of an empty list', function (
         ->assertMissing('[data-emby-user]');
 });
 
-/**
- * Hands an EmbyPlaybackUpdated broadcast to the page's emby.activity
- * listeners. Tests broadcast through the null driver, so this emits on the
- * pusher-js channel Echo subscribed to; it throws when the page never did.
- *
- * @param  array<string, mixed>  $payload
+/*
+ * Live emits wait for both EmbyPlaybackUpdated listeners on emby.activity:
+ * the sidebar's session badge (useNavCounts) and the Watch History page.
  */
-function embyManagementEmitPlaybackScript(array $payload): string
-{
-    $json = json_encode($payload, JSON_THROW_ON_ERROR);
-
-    return <<<JS
-        (() => {
-            const channel = window.Pusher?.instances?.[0]?.channel('private-emby.activity');
-            if (!channel) {
-                throw new Error('The page has not subscribed to emby.activity.');
-            }
-            channel.emit('EmbyPlaybackUpdated', {$json});
-        })()
-    JS;
-}
 
 /**
  * An EmbyPlaybackUpdated payload as the event broadcasts it.
@@ -160,9 +143,9 @@ test('rows pushed live offer the played toggle to their owner only, and an updat
         ->assertNoSmoke()
         ->assertVisible("[data-mark-played=\"{$own->id}\"]");
 
-    $webpage->script(embyManagementEmitPlaybackScript(embyManagementPlaybackPayload(990_001, $member->id, 'Example Show One')));
-    $webpage->script(embyManagementEmitPlaybackScript(embyManagementPlaybackPayload(990_002, $other->id, 'Example Show Two')));
-    $webpage->script(embyManagementEmitPlaybackScript(embyManagementPlaybackPayload($own->id, $member->id, 'Severance (resumed)')));
+    $webpage->script(echoEmitScript('emby.activity', 'EmbyPlaybackUpdated', embyManagementPlaybackPayload(990_001, $member->id, 'Example Show One'), 2));
+    $webpage->script(echoEmitScript('emby.activity', 'EmbyPlaybackUpdated', embyManagementPlaybackPayload(990_002, $other->id, 'Example Show Two'), 2));
+    $webpage->script(echoEmitScript('emby.activity', 'EmbyPlaybackUpdated', embyManagementPlaybackPayload($own->id, $member->id, 'Severance (resumed)'), 2));
     $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-watch-row=\"990002\"]') !== null"));
 
     $webpage->assertSeeIn('[data-watch-row="990001"]', 'Example Show One')
@@ -181,7 +164,7 @@ test("an admin gets the played toggle on anyone's live row", function (): void {
 
     $webpage = visit(route('monitoring.watch-history', absolute: false))->assertNoSmoke();
 
-    $webpage->script(embyManagementEmitPlaybackScript(embyManagementPlaybackPayload(990_003, $owner->id, 'Example Show Three')));
+    $webpage->script(echoEmitScript('emby.activity', 'EmbyPlaybackUpdated', embyManagementPlaybackPayload(990_003, $owner->id, 'Example Show Three'), 2));
     $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-watch-row=\"990003\"]') !== null"));
 
     $webpage->assertSeeIn('[data-watch-row="990003"]', 'Example Show Three')

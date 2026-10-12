@@ -281,28 +281,6 @@ function prefetchLandedRecorderScript(): string
     JS;
 }
 
-/**
- * Hands an ActionRequestStatusChanged broadcast to the layout's
- * members.actions listener (the sidebar badges); throws when nothing
- * subscribed.
- *
- * @param  array<string, mixed>  $payload
- */
-function prefetchEmitActionStatusScript(array $payload): string
-{
-    $json = json_encode($payload, JSON_THROW_ON_ERROR);
-
-    return <<<JS
-        (() => {
-            const channel = window.Pusher?.instances?.[0]?.channel('private-members.actions');
-            if (!channel) {
-                throw new Error('The page has not subscribed to members.actions.');
-            }
-            channel.emit('ActionRequestStatusChanged', {$json});
-        })()
-    JS;
-}
-
 test('a click that reuses a prefetch keeps a badge count that changed live after the hover', function (): void {
     $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
     $this->actingAs(User::factory()->admin()->create());
@@ -311,14 +289,17 @@ test('a click that reuses a prefetch keeps a badge count that changed live after
     $webpage = visit(route('dashboard', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(appHydratedScript());
     $webpage->script(prefetchRecorderScript());
     $webpage->script(prefetchLandedRecorderScript());
 
     $webpage->hover('[data-nav-item="Action Queue"]');
     $webpage->script(confirmDialogWaitUntilScript(sprintf("window.__mmPrefetched.includes('%s')", $actionQueuePath)));
 
+    expect($webpage->script('window.__mmPrefetched'))->toContain($actionQueuePath);
+
     // Settled elsewhere after the prefetch was fetched: its `nav` still says 3.
-    $webpage->script(prefetchEmitActionStatusScript([
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
         'id' => $pending[0]->id,
         'status' => 'approved',
         'result' => null,
@@ -335,4 +316,55 @@ test('a click that reuses a prefetch keeps a badge count that changed live after
         ->assertNoSmoke();
     // The click reused the prefetch (no fresh visit), so the stale `nav` was offered.
     expect($webpage->script(prefetchCountScript($actionQueuePath, false)))->toBe(0);
+});
+
+test("a page's own deferred reload does not make a later click forget its prefetch's date", function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+    $dashboardPath = route('dashboard', absolute: false);
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit($actionQueuePath)
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(appHydratedScript());
+    $webpage->script(prefetchRecorderScript());
+    $webpage->script(prefetchLandedRecorderScript());
+
+    // Hover prefetch of the Dashboard (its `nav` says 3), reused by the click.
+    $webpage->hover('[data-nav-item="Dashboard"]');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("window.__mmPrefetched.includes('%s')", $dashboardPath)));
+
+    expect($webpage->script('window.__mmPrefetched'))->toContain($dashboardPath);
+    $webpage->click('[data-nav-item="Dashboard"]');
+    $webpage->script(prefetchWaitForPathScript($dashboardPath));
+
+    // The Dashboard's deferred `nowPlaying` reload: a real request for its URL.
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("window.__mmVisits.some((visit) => visit.path === '%s' && visit.partial)", $dashboardPath)));
+
+    expect($webpage->script(sprintf("window.__mmVisits.filter((visit) => visit.path === '%s' && visit.partial).length", $dashboardPath)))->toBeGreaterThan(0);
+
+    $webpage->click('[data-nav-item="Action Queue"]');
+    $webpage->script(prefetchWaitForPathScript($actionQueuePath));
+
+    // Settled elsewhere after the Dashboard prefetch was fetched.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $pending[0]->id,
+        'status' => 'approved',
+        'result' => null,
+        'updated_at' => $pending[0]->updated_at->addSeconds(5)->toISOString(),
+        'pending_count' => 2,
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-nav-badge=\"Action Queue\"]')?.innerText.trim() === '2'"));
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '2');
+
+    // Within the 10 s cache window the click reuses the hover-time Dashboard response.
+    $webpage->click('[data-nav-item="Dashboard"]');
+    $webpage->script(prefetchWaitForPathScript($dashboardPath));
+
+    $webpage->assertPathIs($dashboardPath)
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
+    expect($webpage->script(prefetchCountScript($dashboardPath, true)))->toBe(1)
+        ->and($webpage->script(prefetchCountScript($dashboardPath, false)))->toBe(0);
 });
