@@ -24,7 +24,10 @@ const pill = computed(() => titleStatusPill(props.item.status));
             size="full"
             :src="tmdbPosterUrl(item.poster_path)"
         />
-        <span class="line-clamp-2 text-[13px] leading-snug font-medium">
+        <span
+            class="line-clamp-2 text-[13px] leading-snug font-medium"
+            data-title-card-name
+        >
             {{ item.title }}
         </span>
         <span
