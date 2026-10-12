@@ -129,6 +129,12 @@ function kindLabel(value: string): string {
                                 >
                                     <Pill variant="info">Benchmark</Pill>
                                 </Link>
+                                <Pill
+                                    v-else-if="row.is_benchmark"
+                                    data-usage-benchmark-deleted
+                                >
+                                    Benchmark (deleted run)
+                                </Pill>
                             </span>
                         </td>
                         <td class="font-mono-tabular px-3 py-2 text-right">

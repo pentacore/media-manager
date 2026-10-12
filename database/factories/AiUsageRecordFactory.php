@@ -31,8 +31,14 @@ class AiUsageRecordFactory extends Factory
             'reasoning_tokens' => 0,
             'tool_calls_count' => 0,
             'is_batch' => false,
+            'is_benchmark' => false,
             'status' => 'success',
         ];
+    }
+
+    public function benchmarked(?int $benchmarkRunId = null): static
+    {
+        return $this->state(fn (array $attributes): array => ['benchmark_run_id' => $benchmarkRunId, 'is_benchmark' => true]);
     }
 
     public function failed(): static

@@ -39,7 +39,7 @@ test('the invocation drill-down keeps its full payload shape and numbers', funct
             'id', 'invocation_id', 'agent_class', 'provider', 'model', 'prompt_tokens', 'completion_tokens',
             'cache_read_input_tokens', 'cache_write_input_tokens', 'reasoning_tokens', 'tool_calls_count',
             'prompt_text', 'response_text', 'price_source', 'conversation_id', 'status', 'kind', 'error_message',
-            'parent_invocation_id', 'search_units', 'benchmark_run_id', 'created_at',
+            'parent_invocation_id', 'search_units', 'benchmark_run_id', 'is_benchmark', 'created_at',
         ])
         ->and($detail['record']['prompt_text'])->toBe('What is on tonight?')
         ->and($detail['record']['response_text'])->toBe('Three new episodes.')

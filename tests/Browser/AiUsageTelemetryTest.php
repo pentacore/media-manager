@@ -122,7 +122,7 @@ test('the tier filter stays in the query string across a window, kind and scenar
 test('benchmark rows carry a pill linking to the run and can be filtered', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     $run = BenchmarkRun::factory()->create(['name' => 'Spring bake-off']);
-    $benchmarked = AiUsageRecord::factory()->create(['model' => 'gpt-benchmarked', 'benchmark_run_id' => $run->id]);
+    $benchmarked = AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-benchmarked']);
     $live = AiUsageRecord::factory()->create(['model' => 'gpt-live']);
     $this->actingAs(User::factory()->admin()->create());
 
@@ -145,6 +145,19 @@ test('benchmark rows carry a pill linking to the run and can be filtered', funct
         ->click(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $benchmarked->id))
         ->assertPathIs(route('admin.benchmarks.runs.show', $run, absolute: false))
         ->assertSee('Spring bake-off');
+});
+
+test('benchmark rows of a deleted run show a plain pill', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $run = BenchmarkRun::factory()->create();
+    $orphan = AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-orphaned']);
+    $run->delete();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-usage-row="%d"] [data-usage-benchmark-deleted]', $orphan->id), 'Benchmark (deleted run)')
+        ->assertMissing(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $orphan->id));
 });
 
 test('the drill-down offers to save a capturable invocation as a benchmark case', function (): void {

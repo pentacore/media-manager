@@ -91,8 +91,7 @@ function jobFakeJudge(int $score = 8): void
  */
 function jobSpend(BenchmarkRun $benchmarkRun, int $promptTokens, int $completionTokens, string $model = 'gpt-candidate'): AiUsageRecord
 {
-    return AiUsageRecord::factory()->create([
-        'benchmark_run_id' => $benchmarkRun->id,
+    return AiUsageRecord::factory()->benchmarked($benchmarkRun->id)->create([
         'provider' => 'openai',
         'model' => $model,
         'prompt_tokens' => $promptTokens,
