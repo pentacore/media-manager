@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
@@ -48,6 +49,7 @@ class RecordAgentUsage
             // Set when this run is a sub-agent invoked as a tool; its usage is
             // not folded into the parent's response, so each row bills once.
             'parent_invocation_id' => $agentPrompted->prompt->parentInvocationId ?? null,
+            'benchmark_run_id' => resolve(BenchmarkRunContext::class)->runId(),
         ]);
 
         // The run finished; its step totals were only needed had it failed.

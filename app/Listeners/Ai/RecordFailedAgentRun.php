@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
@@ -38,6 +39,7 @@ class RecordFailedAgentRun
             ...UsageColumns::fromText($runUsageAccumulator->usage($invocationId) ?? new TextUsage),
             'prompt_text' => UsageText::agentInput($agentPrompt),
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
+            'benchmark_run_id' => resolve(BenchmarkRunContext::class)->runId(),
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',
             'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000),

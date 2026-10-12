@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\ModelSelection;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiMode;
@@ -189,13 +190,19 @@ class AiSettings
     /**
      * The explicit provider => model map an agent passes to laravel/ai: the
      * selection first, then the failover provider (with its optional model)
-     * when one is configured and differs from the selection's provider.
+     * when one is configured and differs from the selection's provider. A
+     * benchmark run never fails over: the candidate alone is measured.
      *
      * @return array<string, string|null>
      */
     public function providerChainFor(ModelSelection $modelSelection): array
     {
         $chain = [$modelSelection->provider => $modelSelection->model];
+
+        if (resolve(BenchmarkRunContext::class)->active()) {
+            return $chain;
+        }
+
         $failover = resolve(TaskModelResolver::class)->failover();
 
         if ($failover !== null && $failover['provider'] !== $modelSelection->provider) {

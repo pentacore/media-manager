@@ -6,11 +6,13 @@ namespace App\Ai\Agents;
 
 use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Enums\AiTask;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
@@ -21,7 +23,7 @@ use Laravel\Ai\Promptable;
  * builds.
  */
 #[MaxTokens(2048)]
-class BenchmarkJudgeAgent implements Agent, HasProviderOptions, HasStructuredOutput
+class BenchmarkJudgeAgent implements Agent, HasMiddleware, HasProviderOptions, HasStructuredOutput
 {
     use Promptable;
     use RunsAsAiTask;
@@ -30,6 +32,16 @@ class BenchmarkJudgeAgent implements Agent, HasProviderOptions, HasStructuredOut
     public function aiTask(): AiTask
     {
         return AiTask::BenchmarkJudge;
+    }
+
+    /**
+     * Toolless, so this only keeps provider tools out of a benchmark run.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [new ReplayBenchmarkTools];
     }
 
     public function instructions(): string

@@ -22,14 +22,14 @@ use Throwable;
 
 abstract class BaseTool implements Tool
 {
+    /** What a destructive tool answers in Advisory mode (benchmark replays answer the same). */
+    public const string ADVISORY_REFUSAL = '{"error":"advisory_mode_blocks_destructive","message":"The system is in Advisory mode. Tell the user to switch to Executive mode (Admin → AI Settings) if they want this action executed."}';
+
     final public function handle(Request $request): string
     {
         if ($this->risk() === Risk::Destructive
             && resolve(AiSettings::class)->mode() === AiMode::Advisory) {
-            return $this->safeEncode([
-                'error' => 'advisory_mode_blocks_destructive',
-                'message' => 'The system is in Advisory mode. Tell the user to switch to Executive mode (Admin → AI Settings) if they want this action executed.',
-            ]);
+            return self::ADVISORY_REFUSAL;
         }
 
         try {

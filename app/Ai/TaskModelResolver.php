@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai;
 
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\AiTaskModel;
@@ -46,6 +47,9 @@ use LogicException;
  * scoped) and flushed by AiTaskModelObserver whenever a row is saved or
  * deleted. The memo holds the walk only; ChatTurnContext applies on top at
  * every resolve().
+ *
+ * An active BenchmarkRunContext wins over all of it: the case task runs on
+ * the run's candidate and BenchmarkJudge on the run's judge.
  */
 final class TaskModelResolver
 {
@@ -58,11 +62,18 @@ final class TaskModelResolver
     public function __construct(
         private readonly ChatTurnContext $chatTurnContext,
         private readonly TierEligibility $tierEligibility,
+        private readonly BenchmarkRunContext $benchmarkRunContext,
     ) {}
 
     public function resolve(AiTask $aiTask, ?string $eventKey = null): ResolvedSelection
     {
         throw_if($aiTask === AiTask::Failover, InvalidArgumentException::class, 'Resolve the failover task with failover().');
+
+        $pinned = $this->benchmarkRunContext->selectionFor($aiTask);
+
+        if ($pinned instanceof ResolvedSelection) {
+            return $pinned;
+        }
 
         if ($aiTask === AiTask::Chat && $this->chatTurnContext->hasModel()) {
             return new ResolvedSelection(
