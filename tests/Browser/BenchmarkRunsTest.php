@@ -225,6 +225,7 @@ test('a re-judge that stalled shows as a failed judge and offers a re-judge', fu
         'status' => BenchmarkResultStatus::Ok,
         'output' => 'Nolan Films',
         'judge_status' => BenchmarkJudgeStatus::Pending,
+        'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
     ]);
     BenchmarkResult::query()->whereKey($result->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
     BenchmarkJudgeAgent::fake(fn (): array => ['score' => 7, 'rationale' => 'Fine']);
@@ -235,7 +236,27 @@ test('a re-judge that stalled shows as a failed judge and offers a re-judge', fu
         ->assertVisible('[data-benchmark-rejudge]')
         ->click(sprintf('[data-benchmark-cell="%d"]', $result->id))
         ->assertSeeIn('[data-benchmark-drawer-judge-failed]', 'judge failed — stalled')
+        ->assertSeeIn('[data-benchmark-drawer-judge-error]', 'judge timed out')
         ->assertMissing('[data-benchmark-drawer-rejudging]');
+});
+
+test('a running result whose worker died shows as stalled and stops the polling count', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->cancelled()->create(['case_ids' => [$benchmarkCase->id]]);
+    $stalled = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->running()->create();
+    BenchmarkResult::query()->whereKey($stalled->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-stalled-count]', '1 stalled')
+        ->assertMissing('[data-benchmark-running-count]')
+        ->assertSeeIn(sprintf('[data-benchmark-cell="%d"]', $stalled->id), 'stalled')
+        ->assertAttributeContains(sprintf('[data-benchmark-cell="%d"]', $stalled->id), 'class', 'text-destructive')
+        ->click(sprintf('[data-benchmark-cell="%d"]', $stalled->id))
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-status]', 'stalled');
+
+    expect($stalled->fresh()->status)->toBe(BenchmarkResultStatus::Running);
 });
 
 test('a cancelled run keeps polling while a case still runs and shows its result', function (): void {

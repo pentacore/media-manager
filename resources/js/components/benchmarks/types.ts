@@ -154,6 +154,8 @@ export type BenchmarkRunDetail = {
         total: number;
         pending: number;
         running: number;
+        /** Running results whose claim went stale (their worker died). */
+        stalled: number;
         ok: number;
         failed: number;
         skipped: number;

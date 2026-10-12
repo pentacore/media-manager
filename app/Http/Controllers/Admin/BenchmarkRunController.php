@@ -165,6 +165,9 @@ class BenchmarkRunController extends Controller
                     'total' => (int) $counts->sum(),
                     'pending' => $count(BenchmarkResultStatus::Pending),
                     'running' => $count(BenchmarkResultStatus::Running),
+                    // Running under a claim whose worker died: read-only here,
+                    // the next settle of the run fails them.
+                    'stalled' => $benchmarkRun->results()->runStale()->count(),
                     'ok' => $count(BenchmarkResultStatus::Ok),
                     'failed' => $count(BenchmarkResultStatus::Failed),
                     'skipped' => $count(BenchmarkResultStatus::Skipped),

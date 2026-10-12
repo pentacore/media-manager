@@ -129,11 +129,18 @@ function toolBadgeVariant(
                                     :variant="
                                         result.status === 'ok'
                                             ? 'ok'
-                                            : result.status === 'failed'
+                                            : result.status === 'failed' ||
+                                                result.stale
                                               ? 'danger'
                                               : 'default'
                                     "
-                                    >{{ result.status }}</Pill
+                                    data-benchmark-drawer-status
+                                    >{{
+                                        result.status === 'running' &&
+                                        result.stale
+                                            ? 'stalled'
+                                            : result.status
+                                    }}</Pill
                                 >
                                 <Pill
                                     v-if="result.score !== null"
@@ -200,7 +207,7 @@ function toolBadgeVariant(
                             </p>
                             <p
                                 v-if="
-                                    result.judge_status === 'failed' &&
+                                    isJudgeFailed(result) &&
                                     result.score_detail.error
                                 "
                                 class="text-[12.5px] text-destructive"

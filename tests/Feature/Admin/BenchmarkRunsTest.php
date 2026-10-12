@@ -237,7 +237,7 @@ test('show returns the run, counts and the aggregated matrix', function (): void
             ->component('Admin/Benchmarks/Runs/Show')
             ->where('run.id', $run->id)
             ->where('run.status_label', 'Completed')
-            ->where('run.counts', ['total' => 6, 'pending' => 0, 'running' => 0, 'ok' => 4, 'failed' => 1, 'skipped' => 1])
+            ->where('run.counts', ['total' => 6, 'pending' => 0, 'running' => 0, 'stalled' => 0, 'ok' => 4, 'failed' => 1, 'skipped' => 1])
             ->has('matrix', 2)
             ->where('matrix.1.task', 'decision')
             ->where('matrix.1.task_label', 'Decision agent')
@@ -299,6 +299,8 @@ test('the run page flags a stalled re-judge and a running result whose claim wen
 
     $this->get(route('admin.benchmarks.runs.show', $run))
         ->assertInertia(fn ($page) => $page
+            ->where('run.counts.running', 1)
+            ->where('run.counts.stalled', 1)
             ->where('matrix.0.cases.0.cells.0.judge_stale', true)
             ->where('matrix.0.cases.0.cells.0.stale', false)
             ->where('matrix.0.cases.0.cells.1.judge_stale', false)
@@ -469,6 +471,6 @@ test('show counts running results', function (): void {
 
     $this->get(route('admin.benchmarks.runs.show', $run))
         ->assertInertia(fn ($page) => $page
-            ->where('run.counts', ['total' => 2, 'pending' => 1, 'running' => 1, 'ok' => 0, 'failed' => 0, 'skipped' => 0])
+            ->where('run.counts', ['total' => 2, 'pending' => 1, 'running' => 1, 'stalled' => 0, 'ok' => 0, 'failed' => 0, 'skipped' => 0])
             ->where('matrix.0.cases.0.cells.0.status', 'running'));
 });

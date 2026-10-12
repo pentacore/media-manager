@@ -70,16 +70,14 @@ const hasFailedJudge = computed(() =>
 /**
  * Poll while the run goes, a re-judge is in flight or a result still runs
  * (a cancelled run's running case finishes and keeps its result). A stale
- * re-judge or running claim lost its worker, so it never keeps polling alive.
+ * re-judge or a stalled running result lost its worker, so it never keeps
+ * polling alive.
  */
 const needsPolling = computed(
     () =>
         isActive.value ||
         allCells.value.some(isRejudgingLive) ||
-        (props.run.counts.running > 0 &&
-            allCells.value.some(
-                (cell) => cell.status === 'running' && !cell.stale,
-            )),
+        props.run.counts.running - props.run.counts.stalled > 0,
 );
 
 watch(
@@ -234,11 +232,15 @@ function cellText(cell: BenchmarkMatrixCell): string {
         return cell.passed === null ? 'unscored' : cell.passed ? '✓' : '✗';
     }
 
+    if (cell.status === 'running' && cell.stale) {
+        return 'stalled';
+    }
+
     return cell.status;
 }
 
 function cellClass(cell: BenchmarkMatrixCell): string {
-    if (cell.status === 'failed') {
+    if (cell.status === 'failed' || (cell.status === 'running' && cell.stale)) {
         return 'text-destructive';
     }
 
@@ -277,9 +279,18 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                         ></span
                     >
                     <span
-                        v-if="run.counts.running > 0"
+                        v-if="run.counts.running - run.counts.stalled > 0"
                         data-benchmark-running-count
-                        >{{ run.counts.running }} running</span
+                        >{{
+                            run.counts.running - run.counts.stalled
+                        }}
+                        running</span
+                    >
+                    <span
+                        v-if="run.counts.stalled > 0"
+                        class="text-destructive"
+                        data-benchmark-stalled-count
+                        >{{ run.counts.stalled }} stalled</span
                     >
                     <span v-if="run.counts.failed > 0"
                         >{{ run.counts.failed }} failed</span
