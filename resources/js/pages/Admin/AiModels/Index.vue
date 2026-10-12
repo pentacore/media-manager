@@ -180,6 +180,15 @@ function errorFor(...keys: string[]): string | undefined {
     return keys.map((key) => formErrors.value[key]).find(Boolean);
 }
 
+/** Row indexes shift on add/remove/reorder, so drop that list's stale errors. */
+function clearTierErrors(prefix: string): void {
+    form.clearErrors(
+        ...(Object.keys(form.errors).filter((key) =>
+            key.startsWith(`${prefix}.`),
+        ) as Array<keyof typeof form.errors>),
+    );
+}
+
 function submit(): void {
     form.put(AiModelsController.update.url(), { preserveScroll: true });
 }
@@ -235,6 +244,9 @@ function submit(): void {
                             :allow-tiers="row.allow_tiers"
                             :error-prefix="`tasks.${row.task}.tiers`"
                             :errors="formErrors"
+                            @structure-change="
+                                clearTierErrors(`tasks.${row.task}.tiers`)
+                            "
                         />
                         <div class="flex flex-wrap items-center gap-2">
                             <p
@@ -328,6 +340,11 @@ function submit(): void {
                                     reasoning-inherit-label="Same as decision agent"
                                     :error-prefix="`event_overrides.${index}.tiers`"
                                     :errors="formErrors"
+                                    @structure-change="
+                                        clearTierErrors(
+                                            `event_overrides.${index}.tiers`,
+                                        )
+                                    "
                                 />
                                 <div
                                     v-if="eventResolved(override.event_key)"

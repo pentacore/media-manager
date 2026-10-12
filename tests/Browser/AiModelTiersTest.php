@@ -210,3 +210,48 @@ test('the benchmark judge is a single selection without an add tier button', fun
 
     expect(AiTaskModel::query()->forTask(AiTask::BenchmarkJudge)->pluck('model')->all())->toBe(['gpt-5.6-luna']);
 });
+
+test('a decimal pool percent is neither truncated nor saved', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->click('[data-task="chat"] [data-tier-row="0"] [data-model-select] button')
+        ->click('[role="option"][aria-label="gpt-5.6-luna"]')
+        ->assertAttribute('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', 'step', '1')
+        ->assertAttribute('[data-task="chat"] [data-tier-row="0"] [data-tier-min-tokens]', 'step', '1')
+        ->fill('[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]', '12.5')
+        ->click('Save models')
+        ->assertDontSee('AI models updated.')
+        ->assertScript('document.querySelector(\'[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]\').value', '12.5')
+        ->assertScript('document.querySelector(\'[data-task="chat"] [data-tier-row="0"] [data-tier-min-percent]\').validity.stepMismatch', true);
+
+    expect(AiTaskModel::query()->forTask(AiTask::Chat)->count())->toBe(1);
+});
+
+test('moving a tier clears the stale validation errors', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->click('Save models')
+        ->assertSeeIn('[data-task="chat"] [data-tier-row="1"]', 'Pick a model for this tier.')
+        ->click('[data-task="chat"] [data-tier-row="1"] [data-tier-up]')
+        ->assertDontSee('Pick a model for this tier.');
+});
+
+test('the model pickers are named by tier', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-task="chat"] [aria-label="Model"]')
+        ->assertMissing('[data-task="chat"] [aria-label="Tier 1 model"]')
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->assertPresent('[data-task="chat"] [aria-label="Tier 1 model"]')
+        ->assertPresent('[data-task="chat"] [aria-label="Tier 2 model"]')
+        ->assertMissing('[data-task="chat"] [aria-label="Model"]');
+});

@@ -601,6 +601,8 @@ test('condition values are bounded', function (array $tier, string $field): void
     'percent over 100' => [['min_pool_percent' => 101], 'min_pool_percent'],
     'tokens zero' => [['min_pool_tokens' => 0], 'min_pool_tokens'],
     'tokens text' => [['min_pool_tokens' => 'lots'], 'min_pool_tokens'],
+    'percent decimal' => [['min_pool_percent' => 12.5], 'min_pool_percent'],
+    'tokens decimal' => [['min_pool_tokens' => 1000.5], 'min_pool_tokens'],
 ]);
 
 test('event overrides save tier lists', function (): void {
