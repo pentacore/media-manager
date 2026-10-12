@@ -71,7 +71,7 @@ test('the first tier runs while its pool has enough left', function (): void {
     $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::High])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 1, 'count' => 2, 'reason' => null]);
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 1, 'count' => 2, 'reason' => null, 'via' => null]);
 });
 
 test('a tier below its percent minimum falls through with a reason', function (): void {
@@ -83,7 +83,7 @@ test('a tier below its percent minimum falls through with a reason', function ()
     $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)']);
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null]);
 });
 
 test('a tier below its token minimum falls through even when its percent holds', function (): void {
@@ -152,7 +152,7 @@ test('an inherit tier in an event list hands off to the decision default list', 
     $inheritingReasoning = tierResolver()->resolve(AiTask::Decision, 'radarr:Grab');
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)'])
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null])
         ->and([$inheritingReasoning->model, $inheritingReasoning->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::High]);
 });
 
@@ -288,4 +288,53 @@ test('an explicit event tier with no reasoning resolves to the task config level
     config()->set('mediamanager.decision_agent.reasoning_level', 'low');
 
     expect(tierResolver()->resolve(AiTask::Decision, 'sonarr:Download')->reasoning)->toBe(AiReasoningLevel::Low);
+});
+
+test('a task that follows the chat list reports the chat list as the source of its tier', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+
+    expect(tierResolver()->resolve(AiTask::Decision)->tier?->toArray())
+        ->toBe(['position' => 2, 'count' => 2, 'reason' => 'Chat tier 1: Luna free below 20% (10% left)', 'via' => 'Chat']);
+});
+
+test('an inherit tier keeps its own skipped tiers and the relabelled parent reasons', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->position(1)->create();
+
+    $tier = tierResolver()->resolve(AiTask::Decision)->tier;
+
+    expect($tier?->toArray())->toBe([
+        'position' => 2,
+        'count' => 2,
+        'reason' => 'Tier 1: Luna free below 20% (10% left); Chat tier 1: Luna free below 20% (10% left)',
+        'via' => null,
+    ]);
+});
+
+test('an event scope without rows names the list it follows', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+
+    expect(tierResolver()->resolve(AiTask::Decision, 'some_event')->tier?->via)->toBe('Chat');
+});
+
+test('an event scope without rows following the decision default list names Decision', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20, aiTask: AiTask::Decision);
+
+    $tier = tierResolver()->resolve(AiTask::Decision, 'some_event')->tier;
+
+    expect($tier?->via)->toBe('Decision agent')
+        ->and($tier?->reason())->toStartWith('Decision agent tier 1:');
 });

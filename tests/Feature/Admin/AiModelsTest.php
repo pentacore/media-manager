@@ -109,6 +109,21 @@ test('the index exposes what an inherit tier runs on beside the live resolution'
             ->where('tasks.0.inherited.provider', 'openai'));
 });
 
+test('the index summary names the list a following task takes its tier from', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => $pool->id]);
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.resolved.tier.via', null)
+            ->where('tasks.2.resolved.tier.via', 'Chat')
+            ->where('tasks.2.resolved.tier.reason', 'Chat tier 1: Luna free below 20% (10% left)'));
+});
+
 test('the index hints when the resolved model does not reason', function (): void {
     AiModelPrice::query()->where('model', 'gpt-5-nano')->update(['supports_reasoning' => false]);
     AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5-nano')->create();

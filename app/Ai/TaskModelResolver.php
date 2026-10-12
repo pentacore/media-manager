@@ -35,7 +35,7 @@ use LogicException;
  *   `mediamanager.ai.sub_agent_model`, then the Chat list.
  *
  * A scope without rows inherits the same way. Following another task's list
- * takes only its provider/model pair (and tier outcome), never its reasoning.
+ * takes only its provider/model pair (and tier outcome, labelled with `via`), never its reasoning.
  *
  * Reasoning: the conversation override (Chat and sub-agents), then the
  * picked tier's level (an inherit tier without one keeps what its same-task
@@ -225,17 +225,17 @@ final class TaskModelResolver
     private function inherited(AiTask $aiTask, string $scope): TierPick
     {
         if ($scope !== AiTaskModel::DEFAULT_SCOPE) {
-            return $this->pick($aiTask, AiTaskModel::DEFAULT_SCOPE);
+            return $this->pick($aiTask, AiTaskModel::DEFAULT_SCOPE)->via($aiTask->label());
         }
 
         return match ($aiTask) {
             AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
             AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
-            AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
-            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
-            AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+            AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
-                ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+                ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::Failover => throw new InvalidArgumentException('Resolve the failover task with failover().'),
         };
     }

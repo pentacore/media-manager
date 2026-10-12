@@ -60,6 +60,20 @@ test('the live badge shows a fall-through and why', function (): void {
         ->assertSeeIn('[data-task="chat"] [data-tier-row="0"] [data-tier-pool]', 'Luna free · 10% left');
 });
 
+test('a task that follows the chat list shows which list its tier came from', function (): void {
+    AiTaskModel::query()->delete();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-task="decision"] [data-tier-live]', 'via Chat')
+        ->assertSeeIn('[data-task="decision"] [data-tier-live]', 'tier 2 of 2')
+        ->assertAttributeContains('[data-task="decision"] [data-tier-live]', 'title', 'Chat tier 1: Luna free below 20% (10% left)');
+});
+
 test('tiers can be reordered and removed', function (): void {
     AiTaskModel::query()->delete();
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();

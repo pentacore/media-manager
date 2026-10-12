@@ -27,7 +27,12 @@ type ResolvedSummary = {
     reasoning: AiReasoningLevel;
     reasoning_label: string;
     reasoning_hint: string | null;
-    tier: { position: number; count: number; reason: string | null } | null;
+    tier: {
+        position: number;
+        count: number;
+        reason: string | null;
+        via: string | null;
+    } | null;
 };
 
 type TaskRow = {
@@ -245,7 +250,11 @@ function submit(): void {
                                 :title="row.resolved.tier.reason ?? undefined"
                                 data-tier-live
                             >
-                                Live: tier {{ row.resolved.tier.position }} of
+                                Live:
+                                <template v-if="row.resolved.tier.via">
+                                    via {{ row.resolved.tier.via }} ·
+                                </template>
+                                tier {{ row.resolved.tier.position }} of
                                 {{ row.resolved.tier.count }}
                             </Pill>
                         </div>
@@ -355,7 +364,23 @@ function submit(): void {
                                         "
                                         data-tier-live
                                     >
-                                        Live: tier
+                                        Live:
+                                        <template
+                                            v-if="
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            "
+                                        >
+                                            via
+                                            {{
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            }}
+                                            ·
+                                        </template>
+                                        tier
                                         {{
                                             eventResolved(override.event_key)
                                                 ?.tier?.position
