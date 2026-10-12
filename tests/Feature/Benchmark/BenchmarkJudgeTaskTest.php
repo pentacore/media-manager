@@ -82,10 +82,15 @@ test('the judge prompt truncates long tool results and conversation turns and ca
         ->not->toContain('CASE NOTE');
 });
 
-test('the judge prompt never names the candidate model', function (): void {
+test('the judge prompt carries no provider or model of the configured selections', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-candidate-9')->create();
+    AiTaskModel::factory()->task(AiTask::BenchmarkJudge)->selecting('openai', 'gpt-judge-7')->create();
+
     $prompt = DefaultRubrics::judgePrompt(AiTask::Title, 'Make a title', [], [], 'A title', null);
 
-    expect($prompt)->not->toContain('gpt-candidate-9');
+    expect($prompt)->not->toContain('gpt-candidate-9')
+        ->not->toContain('gpt-judge-7')
+        ->not->toContain('openai');
 });
 
 test('the judge agent returns its structured score', function (): void {
