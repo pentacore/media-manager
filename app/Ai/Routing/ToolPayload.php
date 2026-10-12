@@ -11,8 +11,8 @@ use Laravel\Ai\Providers\Tools\ToolSearch;
 
 /**
  * Hosted tool search keeps rarely-needed tool definitions out of every
- * request — but only when the whole failover chain supports it, because the
- * SDK throws a non-failoverable LogicException otherwise.
+ * request — but only when the whole failover chain supports it; the SDK
+ * otherwise inlines every deferred tool on a provider that lacks it.
  */
 final readonly class ToolPayload
 {

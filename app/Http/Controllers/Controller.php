@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ServiceType;
+use App\Models\User;
+use App\Support\Abilities;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 
@@ -29,5 +31,17 @@ abstract class Controller
         Inertia::flash('toast', ['type' => 'error', 'message' => $this->noActiveConnectionMessage($serviceType)]);
 
         return $redirectResponse ?? to_route('dashboard');
+    }
+
+    /**
+     * The sentence for a service that answered but refused the request (a
+     * bad API key, a wrong base URL). Only an admin can fix a connection, so
+     * only an admin is sent to its settings; everyone else is told to ask one.
+     */
+    protected function upstreamRefusedMessage(ServiceType $serviceType, ?User $user): string
+    {
+        return $user?->can(Abilities::ADMIN) === true
+            ? __(':service refused the request — check the connection settings.', ['service' => $serviceType->label()])
+            : __(':service is unavailable — ask an admin to check the connection.', ['service' => $serviceType->label()]);
     }
 }

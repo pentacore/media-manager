@@ -42,7 +42,7 @@ class RecordFailedAgentRun
             'benchmark_run_id' => resolve(BenchmarkRunContext::class)->runId(),
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',
-            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000),
+            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
         ]);
 
         $runUsageAccumulator->forget($invocationId);

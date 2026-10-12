@@ -519,12 +519,8 @@ class ServiceConnectionController extends Controller
             // A removed or repointed mapping supersedes the cases that belonged to
             // the old Bazarr-to-managing pairing.
             foreach ($existingPairings as $role => $previousRelatedId) {
-                if ($previousRelatedId === null) {
-                    continue;
-                }
-
                 if (($mappingIds[$role] ?? null) !== $previousRelatedId) {
-                    $subtitleCaseSupersession->forPairing($serviceConnection->id, (int) $previousRelatedId);
+                    $subtitleCaseSupersession->forPairing($serviceConnection->id, $previousRelatedId);
                 }
             }
         });

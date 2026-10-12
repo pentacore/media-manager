@@ -260,6 +260,17 @@ test('a failed agent run stores its error without upstream paths or credentials'
         ->summary->toBe('Agent run failed: Provider said: cannot read [redacted path] via https://api.example/v1?[redacted]');
 });
 
+test('a failed agent run with an empty error blames the agent, not an upstream service', function (): void {
+    DecisionAgent::fake(fn () => throw new RuntimeException('   '));
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
+        ->status->toBe(AgentDecisionStatus::Failed)
+        ->summary->toBe('Agent run failed: The agent failed without a usable description.');
+});
+
 test('a run the worker stops stores the reason without upstream paths', function (): void {
     $event = WebhookEvent::factory()->create();
 

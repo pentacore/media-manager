@@ -92,6 +92,34 @@ test('a non-string rejection reason never reaches a member', function (): void {
         ->assertInertia(fn ($page) => $page->where('requests.data.0.result.rejection_reason', null));
 });
 
+test('admins receive the full failure result, including its message and outcome flag', function (): void {
+    $actionRequest = ActionRequest::factory()->needsReconciliation()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.result.reason', 'needs_reconciliation')
+            ->where('requests.data.0.result.indeterminate', true)
+            ->where('requests.data.0.result.message', $actionRequest->result['message'])
+        );
+});
+
+test('members never receive the failure message or outcome flag of an uncertain action', function (): void {
+    ActionRequest::factory()->needsReconciliation()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.result', [
+                'success' => false,
+                'reason' => 'needs_reconciliation',
+                'rejection_reason' => null,
+            ])
+        );
+});
+
 test('replacement request listings expose only bounded review fields', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->create([

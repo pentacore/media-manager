@@ -477,9 +477,9 @@ test('a provider without an API key is rejected', function (string $prefix): voi
 })->with(['tasks.chat.tiers.0', 'tasks.title.tiers.0', 'tasks.decision.tiers.0', 'tasks.file_inspector.tiers.0', 'tasks.price_updater.tiers.0', 'failover']);
 
 test('a provider that cannot serve text is rejected', function (string $prefix): void {
-    config()->set('ai.providers.cohere.key', 'cohere-test-key');
+    config()->set('ai.providers.jina.key', 'jina-test-key');
     $payload = aiModelsPayload();
-    data_set($payload, $prefix.'.provider', 'cohere');
+    data_set($payload, $prefix.'.provider', 'jina');
 
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-models.update'), $payload)
