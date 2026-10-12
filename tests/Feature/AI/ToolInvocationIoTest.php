@@ -75,3 +75,37 @@ test('an oversized multibyte result is cut to valid UTF-8 within the cap', funct
         ->and(strlen((string) $row->result))->toBeLessThanOrEqual(AiToolInvocation::MAX_IO_BYTES + 20)
         ->and($row->io_truncated)->toBeTrue();
 });
+
+test('NUL characters in arguments and result are dropped so the row still writes', function (): void {
+    toolIoInvoke(resolve(GetServiceStatusTool::class), ['q' => "Du\u{0000}ne", "ke\u{0000}y" => ['nested' => "x\u{0000}y"]], "res\u{0000}ult");
+
+    $row = AiToolInvocation::query()->latest('id')->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row->arguments)->toBe(['q' => 'Dune', 'key' => ['nested' => 'xy']])
+        ->and($row->result)->toBe('result');
+});
+
+test('a NUL character in an error envelope is dropped from the error code', function (): void {
+    toolIoInvoke(resolve(GetServiceStatusTool::class), [], '{"error":"lookup\\u0000_failed"}');
+
+    $row = AiToolInvocation::query()->latest('id')->first();
+
+    expect($row->status)->toBe('failed')
+        ->and($row->error_code)->toBe('lookup_failed');
+});
+
+test('a row whose I/O cannot be written is written without it instead of failing the run', function (): void {
+    AiToolInvocation::creating(function (AiToolInvocation $aiToolInvocation): void {
+        throw_if($aiToolInvocation->arguments !== null, RuntimeException::class, 'I/O rejected');
+    });
+
+    toolIoInvoke(resolve(GetServiceStatusTool::class), ['service' => 'sonarr'], '{"ok":true}');
+
+    $row = AiToolInvocation::query()->latest('id')->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row->tool_name)->toBe('GetServiceStatusTool')
+        ->and($row->arguments)->toBeNull()
+        ->and($row->result)->toBeNull();
+});
