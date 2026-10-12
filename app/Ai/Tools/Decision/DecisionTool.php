@@ -79,6 +79,15 @@ abstract class DecisionTool implements Tool
     }
 
     /**
+     * Whether the tool changes anything (it queues actions), as opposed to a
+     * read-only lookup.
+     */
+    public function mutates(): bool
+    {
+        return $this->countsTowardActionCap();
+    }
+
+    /**
      * Whether the tool queues actions and so stops once the run's cap is reached.
      */
     protected function countsTowardActionCap(): bool

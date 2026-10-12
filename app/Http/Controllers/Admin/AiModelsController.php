@@ -51,6 +51,7 @@ class AiModelsController extends Controller
                 'inherits_chat' => $aiTask->inheritsChatModel(),
                 'has_reasoning' => $aiTask->hasReasoning(),
                 'allow_auto' => $aiTask === AiTask::Title,
+                'allow_tiers' => $aiTask->allowsTiers(),
                 'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
                 'resolved' => $this->summary($taskModelResolver->resolve($aiTask)),
                 'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask)),

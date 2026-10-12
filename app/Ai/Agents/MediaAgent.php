@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\Concerns\RunsAsAiTask;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Conversations\HistoryForProvider;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Arr\AddMediaTool;
@@ -90,12 +92,19 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     /**
      * Stored history adapted for the provider this turn runs on (see
      * HistoryForProvider). Uses the turn's primary provider; a mid-turn
-     * failover replays the primary's adaptation.
+     * failover replays the primary's adaptation. Inside a benchmark run it is
+     * the case's recorded history instead.
      *
      * @return iterable<int, mixed>
      */
     public function messages(): iterable
     {
+        $benchmarkRunContext = resolve(BenchmarkRunContext::class);
+
+        if ($benchmarkRunContext->active()) {
+            return $benchmarkRunContext->history();
+        }
+
         return HistoryForProvider::adapt(
             $this->rememberedMessages(),
             resolve(TaskModelResolver::class)->resolve($this->aiTask())->provider,
@@ -167,14 +176,15 @@ PROMPT;
 
     /**
      * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, force a plain answer on the final allowed step, and
-     * stop at the next step once the chat client disconnected.
+     * crossed mid-run, force a plain answer on the final allowed step, stop
+     * at the next step once the chat client disconnected, and answer tools
+     * from fixtures inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenClientDisconnected];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenClientDisconnected, new ReplayBenchmarkTools];
     }
 
     /**

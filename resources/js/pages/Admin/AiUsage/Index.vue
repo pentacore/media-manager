@@ -18,6 +18,7 @@ import {
 } from '@/components/ai-usage';
 import type {
     AggregateRow,
+    BenchmarkFilter,
     FreePoolRow,
     KindOption,
     PricedModel,
@@ -40,6 +41,7 @@ const props = defineProps<{
     kind: string | null;
     kinds: KindOption[];
     tier: TierFilter | null;
+    benchmark: BenchmarkFilter | null;
     tool_stats: ToolStatRow[];
     totals: Totals;
     by_model: AggregateRow[];
@@ -69,13 +71,21 @@ defineOptions({
 
 const scenarioActive = computed(() => props.scenario !== null);
 
-const { exportUrl, setWindow, setKind, setTier, applyScenario, clearScenario } =
-    useAiUsageNavigation(() => ({
-        window: props.window,
-        kind: props.kind,
-        tier: props.tier,
-        scenario: props.scenario,
-    }));
+const {
+    exportUrl,
+    setWindow,
+    setKind,
+    setTier,
+    setBenchmark,
+    applyScenario,
+    clearScenario,
+} = useAiUsageNavigation(() => ({
+    window: props.window,
+    kind: props.kind,
+    tier: props.tier,
+    benchmark: props.benchmark,
+    scenario: props.scenario,
+}));
 
 const {
     detail,
@@ -97,11 +107,13 @@ const {
             :kind="props.kind"
             :kinds="props.kinds"
             :tier="props.tier"
+            :benchmark="props.benchmark"
             :window-key="props.window"
             :windows="props.windows"
             :export-url="exportUrl"
             @kind-change="setKind"
             @tier-change="setTier"
+            @benchmark-change="setBenchmark"
             @window-change="setWindow"
         />
 
@@ -170,6 +182,7 @@ const {
             :rows="recent"
             :kinds="props.kinds"
             :tier="props.tier"
+            :benchmark="props.benchmark"
             :scenario-active="scenarioActive"
             :scenario-rows="scenario_recent"
             @open="openDetail"

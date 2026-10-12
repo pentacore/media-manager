@@ -15,6 +15,7 @@ import {
     DollarSign,
     Download,
     Film,
+    Gauge,
     Heart,
     HeartPulse,
     Inbox,
@@ -46,6 +47,7 @@ import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModel
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
@@ -364,6 +366,11 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'AI Models',
                         href: AiModelsController.index.url(),
                         icon: Cpu,
+                    },
+                    {
+                        title: 'Benchmarks',
+                        href: BenchmarkRunController.index.url(),
+                        icon: Gauge,
                     },
                     {
                         title: 'Decision Agent',

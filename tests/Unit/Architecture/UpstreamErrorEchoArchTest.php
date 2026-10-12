@@ -39,6 +39,10 @@ function upstreamEchoReviewedLines(): array
             // (D2) — it never quotes the upstream body.
             "return \$this->flashAndBack('error', \$arrWriteUnconfirmed->getMessage());",
         ],
+        'app/Http/Controllers/Admin/BenchmarkCaseController.php' => [
+            // CaseDraftRefused carries a fixed, app-authored refusal sentence.
+            "Inertia::flash('toast', ['type' => 'error', 'message' => __(\$caseDraftRefused->getMessage())]);",
+        ],
         'app/Http/Controllers/Admin/ServiceConnectionController.php' => [
             // A QueryException inspected for a constraint name, never shown.
             "return str_contains(\$queryException->getMessage(), 'subtitle_cases_bazarr_connection_id_foreign')",

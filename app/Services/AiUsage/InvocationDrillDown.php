@@ -8,6 +8,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use App\Services\Benchmark\CaseDraftFromUsage;
 
 /**
  * The admin usage drill-down for one invocation: tokens, the rates that
@@ -25,6 +26,8 @@ class InvocationDrillDown
      *
      * @return array{
      *     record: array<string, mixed>,
+     *     capturable: bool,
+     *     capture_blocker: string|null,
      *     user: array{id: int, name: string}|null,
      *     tools: array<int, array<string, mixed>>,
      *     children: list<array{id: int, agent_class: string|null, model: string|null, status: string, total_tokens: int}>,
@@ -120,6 +123,8 @@ class InvocationDrillDown
 
         [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario, (float) ($aiUsageRecord->search_unit_per_k ?? 0));
 
+        $captureBlocker = CaseDraftFromUsage::captureBlocker($aiUsageRecord);
+
         return [
             'record' => [
                 'id' => $aiUsageRecord->id,
@@ -142,8 +147,11 @@ class InvocationDrillDown
                 'error_message' => $aiUsageRecord->error_message,
                 'parent_invocation_id' => $aiUsageRecord->parent_invocation_id,
                 'search_units' => (float) $aiUsageRecord->search_units,
+                'benchmark_run_id' => $aiUsageRecord->benchmark_run_id,
                 'created_at' => $aiUsageRecord->created_at?->toIso8601String(),
             ],
+            'capturable' => $captureBlocker === null,
+            'capture_blocker' => $captureBlocker,
             'user' => $aiUsageRecord->user instanceof User ? [
                 'id' => $aiUsageRecord->user->id,
                 'name' => $aiUsageRecord->user->name,

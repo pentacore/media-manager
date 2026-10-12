@@ -9,6 +9,7 @@ use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -134,13 +135,14 @@ PROMPT;
 
     /**
      * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, and force a plain answer on the final allowed step.
+     * crossed mid-run, force a plain answer on the final allowed step, and
+     * answer tools from fixtures inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new ReplayBenchmarkTools];
     }
 
     /**
