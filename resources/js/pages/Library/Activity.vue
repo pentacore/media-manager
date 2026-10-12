@@ -878,8 +878,14 @@ async function runQueueBulk(): Promise<void> {
                                             ) in row.status_messages"
                                             :key="mi"
                                             class="text-warn mt-1 text-[11.5px]"
+                                            data-queue-status-message
                                         >
-                                            <span class="font-medium"
+                                            <span
+                                                v-if="
+                                                    message.title.trim() !== ''
+                                                "
+                                                class="font-medium"
+                                                data-queue-status-title
                                                 >{{ message.title }}:</span
                                             >
                                             {{ message.messages.join('; ') }}

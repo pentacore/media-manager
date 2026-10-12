@@ -186,6 +186,6 @@ test('a SABnzbd that refuses the page load says so instead of showing empty list
 
     visit(route('sabnzbd.queue.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-sabnzbd-error]', 'SABnzbd refused the request — check the connection settings.')
+        ->assertSeeIn('[data-sabnzbd-error]', 'SABnzbd is unavailable — ask an admin to check the connection.')
         ->assertMissing('[data-sabnzbd-history]');
 });

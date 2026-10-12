@@ -40,7 +40,7 @@ class RecordFailedAgentRun
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',
-            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000),
+            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
         ]);
 
         $runUsageAccumulator->forget($invocationId);

@@ -7,7 +7,9 @@ namespace Database\Factories;
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\WebhookEvent;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Http\Client\RequestException;
 
 /**
  * @extends Factory<ActionRequest>
@@ -45,6 +47,42 @@ class ActionRequestFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'status' => ActionRequestStatus::Completed,
             'result' => ['success' => true],
+        ]);
+    }
+
+    /**
+     * A plain failure: the target refused, so nothing changed and a retry is
+     * safe.
+     */
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ActionRequestStatus::Failed,
+            'result' => [
+                'success' => false,
+                'reason' => 'execution_failed',
+                'message' => 'Sonarr answered 404 Not Found.',
+                'exception' => RequestException::class,
+                'indeterminate' => false,
+            ],
+        ]);
+    }
+
+    /**
+     * A failure with an unknown outcome: the write may already have reached
+     * the target, so a retry could repeat it.
+     */
+    public function needsReconciliation(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ActionRequestStatus::Failed,
+            'result' => [
+                'success' => false,
+                'reason' => 'needs_reconciliation',
+                'message' => 'Sonarr answered the write with a login page, so whether it was applied is unknown.',
+                'exception' => ArrWriteUnconfirmed::class,
+                'indeterminate' => true,
+            ],
         ]);
     }
 

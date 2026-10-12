@@ -155,8 +155,25 @@ test('movies index reports an outage instead of an empty library', function (int
         ->and($response->json('props.qualityProfiles'))->toBe(['items' => [], 'error' => $message]);
 })->with([
     'outage' => [503, 'Radarr is unreachable right now.'],
-    'bad api key' => [401, 'Radarr refused the request — check the connection settings.'],
+    'bad api key' => [401, 'Radarr is unavailable — ask an admin to check the connection.'],
 ]);
+
+test('an admin is sent to the connection settings when Radarr refuses', function (): void {
+    Sleep::fake();
+    Http::fake(['radarr.local:7878/*' => Http::response('Unauthorized', 401)]);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => inertiaVersion(),
+            'X-Inertia-Partial-Component' => 'Radarr/Movies/Index',
+            'X-Inertia-Partial-Data' => 'movies',
+        ])
+        ->get(route('media.movies.index'))
+        ->assertOk();
+
+    expect($response->json('props.movies'))->toBe(['items' => [], 'error' => 'Radarr refused the request — check the connection settings.']);
+});
 
 test('a Radarr behind a login page is an outage on the movie lists, never an empty library', function (): void {
     Http::fake(['radarr.local:7878/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
@@ -485,7 +502,7 @@ test('the add-movie form reports failed lookups, profiles and root folders', fun
             ->reloadOnly(['qualityProfiles', 'rootFolders', 'searchResults'], fn ($reload) => $reload
                 ->where('qualityProfiles.error', 'Radarr is unreachable right now.')
                 ->where('rootFolders.error', 'Radarr is unreachable right now.')
-                ->where('searchResults', ['items' => [], 'error' => 'Radarr refused the request — check the connection settings.'])));
+                ->where('searchResults', ['items' => [], 'error' => 'Radarr is unavailable — ask an admin to check the connection.'])));
 });
 
 test('a movie page says when its quality profiles could not load', function (): void {

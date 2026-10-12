@@ -147,6 +147,21 @@ test('index exposes the chat timeout', function (): void {
         ->assertInertia(fn ($page) => $page
             ->component('Admin/AiSettings/Index')
             ->where('settings.chat_timeout', 300)
+            ->where('settings.chat_timeout_effective', 300)
+        );
+});
+
+test('index sends the configured chat timeout and the capped one the chat uses', function (): void {
+    config()->set('octane.max_execution_time', 60);
+    resolve(AiSettings::class)->setChatTimeout(300);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.chat_timeout', 300)
+            ->where('settings.chat_timeout_effective', 50)
         );
 });
 

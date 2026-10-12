@@ -67,6 +67,33 @@ final readonly class ActionRequestBrowserPayload
     }
 
     /**
+     * The part of an action's result anyone on the members.actions channel
+     * may read: the outcome flag, the reason code and the reviewer's
+     * rejection reason (written for the requester). The failure message,
+     * exception class and indeterminate flag stay admin-only: only
+     * ActionRequestResource sends an admin the full result. Null while
+     * nothing is recorded (pending, approved, or cleared by a retry).
+     *
+     * @return array{success: mixed, reason: mixed, rejection_reason: string|null}|null
+     */
+    public function safeResult(ActionRequest $actionRequest): ?array
+    {
+        $result = $actionRequest->result;
+
+        if ($result === null) {
+            return null;
+        }
+
+        $rejectionReason = $result['rejection_reason'] ?? null;
+
+        return [
+            'success' => $result['success'] ?? null,
+            'reason' => $result['reason'] ?? null,
+            'rejection_reason' => is_string($rejectionReason) ? $rejectionReason : null,
+        ];
+    }
+
+    /**
      * A release guid can carry a private tracker passkey, so a grab request's
      * payload reaches the browser without it — top level or inside the
      * release facts. The executor still reads it from the stored payload.
