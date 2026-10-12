@@ -15,12 +15,14 @@ use App\Jobs\Middleware\LimitBenchmarkConcurrency;
 use App\Jobs\RunBenchmarkCase;
 use App\Models\ActionRequest;
 use App\Models\AiModelPrice;
+use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Benchmark\BenchmarkRunLauncher;
+use App\Settings\AiSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
@@ -83,6 +85,20 @@ function jobFakeJudge(int $score = 8): void
     ));
 }
 
+/**
+ * A usage row the run's candidate (or judge) recorded, priced from the catalog.
+ */
+function jobSpend(BenchmarkRun $benchmarkRun, int $promptTokens, int $completionTokens, string $model = 'gpt-candidate'): AiUsageRecord
+{
+    return AiUsageRecord::factory()->create([
+        'benchmark_run_id' => $benchmarkRun->id,
+        'provider' => 'openai',
+        'model' => $model,
+        'prompt_tokens' => $promptTokens,
+        'completion_tokens' => $completionTokens,
+    ]);
+}
+
 function jobContextActive(): bool
 {
     return resolve(BenchmarkRunContext::class)->active();
@@ -91,6 +107,7 @@ function jobContextActive(): bool
 test('a title case runs, is judged and completes the run when it was the last result', function (): void {
     $benchmarkRun = jobRun();
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobSpend(BenchmarkRun::factory()->create(), 500_000, 0);
     jobFakeTitle();
     jobFakeJudge(8);
 
@@ -387,6 +404,62 @@ test('a run cancelled while a result runs keeps that result when its job finishe
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Cancelled);
 });
 
+test('a failing candidate counts what it spent towards the run cost and the cap', function (): void {
+    $benchmarkRun = jobRun(['cost_cap_usd' => 0.2]);
+    $benchmarkCase = jobTitleCase();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+    $otherPending = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+    TitleAgent::fake(function () use ($benchmarkRun): never {
+        jobSpend($benchmarkRun, 100_000, 10_000);
+
+        throw new RuntimeException('The provider dropped the stream.');
+    });
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.28)
+        ->and($otherPending->fresh()->status)->toBe(BenchmarkResultStatus::Skipped)
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::StoppedCostCap);
+});
+
+test('a failing judge counts what it spent towards the run cost', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+    BenchmarkJudgeAgent::fake(function () use ($benchmarkRun): never {
+        jobSpend($benchmarkRun, 200_000, 50_000, 'gpt-judge');
+
+        throw new RuntimeException('judge overloaded');
+    });
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->judge_status)->toBe('failed')
+        ->and((float) $benchmarkResult->fresh()->judge_cost_usd)->toBe(0.0)
+        ->and((float) $benchmarkRun->fresh()->cost_usd)->toBe(0.68);
+});
+
+test('the judge is refused when the candidate spend reaches the monthly hard cap', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(0.5);
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkResult->output)->toBe('Expanse Season Three')
+        ->and($benchmarkResult->judge_status)->toBe('failed')
+        ->and($benchmarkResult->score)->toBeNull()
+        ->and($benchmarkResult->score_detail['error'])->toStartWith('Monthly AI hard cap reached')
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
 test('a job of a cancelled run does nothing', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
@@ -478,6 +551,7 @@ test('judge-only mode re-scores an unscored result from its stored outcome under
         'judge_status' => 'queued',
         'score_detail' => ['error' => 'judge overloaded', 'tool_log' => $toolLog],
     ]);
+    jobSpend($benchmarkRun, 100_000, 10_000);
     jobFakeTitle();
     jobFakeJudge(9);
 

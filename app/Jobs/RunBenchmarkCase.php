@@ -18,6 +18,7 @@ use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\BenchmarkScorer;
@@ -42,8 +43,9 @@ use Throwable;
 
 /**
  * Runs one benchmark result: the case's agent on one candidate inside a
- * BenchmarkRunContext, then scores it, stores it, adds its cost to the run,
- * stops the run at its cost cap and completes it after the last result. A
+ * BenchmarkRunContext, then scores it, stores it, refreshes the run's cost
+ * from its usage rows, stops the run at its cost cap and completes it after
+ * the last result. A
  * failure of any step fails this result only; the run always settles.
  *
  * Judge-only mode re-scores a stored result whose judge failed, from its
@@ -194,7 +196,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
             $caseOutcome = $benchmarkCaseRunner->run($benchmarkCase);
             $costUsd = $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup);
-            $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
+            $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome, $costUsd);
         } catch (Throwable $throwable) {
             $this->reportUnexpected($throwable);
             $this->recordFailure($benchmarkResult, $throwable, $caseOutcome, $costUsd);
@@ -204,42 +206,33 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             $benchmarkRunContext->stop();
         }
 
-        DB::transaction(function () use ($benchmarkResult, $caseOutcome, $costUsd, $scores): void {
-            $benchmarkResult->update([
-                ...$this->outcomeAttributes($caseOutcome, $costUsd),
-                'status' => BenchmarkResultStatus::Ok,
-                'error' => null,
-                'score' => $scores['score'],
-                'passed' => $scores['passed'],
-                'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
-                'judge_status' => $scores['judge_status'],
-                'judge_cost_usd' => $scores['judge_cost_usd'],
-            ]);
-
-            $this->addRunCost($benchmarkResult->benchmark_run_id, $costUsd + $scores['judge_cost_usd']);
-        });
+        $benchmarkResult->update([
+            ...$this->outcomeAttributes($caseOutcome, $costUsd),
+            'status' => BenchmarkResultStatus::Ok,
+            'error' => null,
+            'score' => $scores['score'],
+            'passed' => $scores['passed'],
+            'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
+            'judge_status' => $scores['judge_status'],
+            'judge_cost_usd' => $scores['judge_cost_usd'],
+        ]);
     }
 
     /**
      * Fail the result; whatever the candidate already produced (and cost) is
-     * kept, so the run total stays honest for the cost cap.
+     * kept for the drill-down. The run's cost comes from its usage rows, so a
+     * failure's spend counts towards the cap either way.
      */
     private function recordFailure(BenchmarkResult $benchmarkResult, Throwable $throwable, ?CaseOutcome $caseOutcome, float $costUsd): void
     {
-        DB::transaction(function () use ($benchmarkResult, $throwable, $caseOutcome, $costUsd): void {
-            $benchmarkResult->update([
-                ...($caseOutcome instanceof CaseOutcome ? [
-                    ...$this->outcomeAttributes($caseOutcome, $costUsd),
-                    'score_detail' => ['tool_log' => $caseOutcome->toolLog],
-                ] : []),
-                'status' => BenchmarkResultStatus::Failed,
-                'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
-            ]);
-
-            if ($costUsd > 0) {
-                $this->addRunCost($benchmarkResult->benchmark_run_id, $costUsd);
-            }
-        });
+        $benchmarkResult->update([
+            ...($caseOutcome instanceof CaseOutcome ? [
+                ...$this->outcomeAttributes($caseOutcome, $costUsd),
+                'score_detail' => ['tool_log' => $caseOutcome->toolLog],
+            ] : []),
+            'status' => BenchmarkResultStatus::Failed,
+            'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
+        ]);
     }
 
     /**
@@ -284,23 +277,21 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                     'tool_log' => $caseOutcome->toolLog,
                 ],
             ]);
+            $this->settle($benchmarkResult->benchmark_run_id);
 
             return;
         } finally {
             $benchmarkRunContext->stop();
         }
 
-        DB::transaction(function () use ($benchmarkResult, $caseOutcome, $scores): void {
-            $benchmarkResult->update([
-                'score' => $scores['score'],
-                'passed' => $scores['passed'],
-                'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
-                'judge_status' => $scores['judge_status'],
-                'judge_cost_usd' => $scores['judge_cost_usd'],
-            ]);
-
-            $this->addRunCost($benchmarkResult->benchmark_run_id, $scores['judge_cost_usd']);
-        });
+        $benchmarkResult->update([
+            'score' => $scores['score'],
+            'passed' => $scores['passed'],
+            'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
+            'judge_status' => $scores['judge_status'],
+            'judge_cost_usd' => $scores['judge_cost_usd'],
+        ]);
+        $this->settle($benchmarkResult->benchmark_run_id);
     }
 
     /**
@@ -521,32 +512,35 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         );
     }
 
-    private function addRunCost(int $runId, float $usd): void
-    {
-        if ($usd <= 0) {
-            return;
-        }
-
-        BenchmarkRun::query()->whereKey($runId)->increment('cost_usd', round($usd, 6));
-    }
-
     private function costCapReached(BenchmarkRun $benchmarkRun): bool
     {
         return $benchmarkRun->cost_cap_usd !== null && (float) $benchmarkRun->cost_usd >= (float) $benchmarkRun->cost_cap_usd;
     }
 
     /**
-     * Under a lock on the run: complete it once no result is pending or
-     * running, or stop it at its cost cap (skipping every pending result; a
-     * running one finishes and keeps its result) once the total reached the
-     * cap. A terminal run is left alone.
+     * Under a lock on the run: bring its cost up to what its usage rows
+     * (candidates and judges, finished or failed) have spent — never down,
+     * so pruned usage rows can't shrink it — then, unless it already ended,
+     * complete it once no result is pending or running, or stop it at its
+     * cost cap (skipping every pending result; a running one finishes and
+     * keeps its result) once the total reached the cap.
      */
     private function settle(int $runId): void
     {
         DB::transaction(function () use ($runId): void {
             $benchmarkRun = BenchmarkRun::query()->lockForUpdate()->find($runId);
 
-            if (! $benchmarkRun instanceof BenchmarkRun || $benchmarkRun->isTerminal()) {
+            if (! $benchmarkRun instanceof BenchmarkRun) {
+                return;
+            }
+
+            $spentUsd = resolve(AiUsageReporting::class)->benchmarkRunCost($runId);
+
+            if ($spentUsd > (float) $benchmarkRun->cost_usd) {
+                $benchmarkRun->update(['cost_usd' => $spentUsd]);
+            }
+
+            if ($benchmarkRun->isTerminal()) {
                 return;
             }
 

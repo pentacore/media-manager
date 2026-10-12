@@ -67,6 +67,23 @@ class AiUsageReporting
     }
 
     /**
+     * What a benchmark run has spent: every usage row tagged with it
+     * (candidates and judges, finished or failed) at the row's price snapshot,
+     * falling back to the catalog, with no free-tier discount.
+     */
+    public function benchmarkRunCost(int $runId): float
+    {
+        [$costSql, $costBindings] = $this->costExpression(null);
+
+        $row = $this->query(null)
+            ->where('ai_usage_records.benchmark_run_id', $runId)
+            ->selectRaw('COALESCE(SUM('.$costSql.'), 0) AS total_cost', $costBindings)
+            ->first();
+
+        return round((float) ($row->total_cost ?? 0), 6);
+    }
+
+    /**
      * @return array<int, array{id: int, name: string, period: string, unified: bool, documentation_url: string|null, free_input: int|null, free_output: int|null, free_total: int|null, used_input: int, used_output: int, used_total: int, models: array<int, array{provider: string, model: string, used_input: int, used_output: int}>}>
      */
     public function freePoolStatus(): array

@@ -13,9 +13,12 @@ use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkCase;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Services\AiUsage\UsageColumns;
+use App\Support\UpstreamErrorText;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
@@ -43,6 +46,8 @@ final readonly class BenchmarkScorer
 
     private const int DEFAULT_PASS_THRESHOLD = 7;
 
+    private const int ERROR_LIMIT = 2000;
+
     private const float DEFAULT_TOLERANCE_PERCENT = 1.0;
 
     /** The price fields a case may expect, in the order mismatches are listed. */
@@ -51,12 +56,14 @@ final readonly class BenchmarkScorer
     public function __construct(
         private ModelPriceLookup $modelPriceLookup,
         private BenchmarkRunContext $benchmarkRunContext,
+        private AiBudgetGuard $aiBudgetGuard,
     ) {}
 
     /**
+     * @param  float  $candidateSpendUsd  what the candidate just spent, counted against the monthly hard cap before the judge runs
      * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
      */
-    public function score(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
+    public function score(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome, float $candidateSpendUsd = 0.0): array
     {
         $scoring = $benchmarkCase->scoring;
         $scoringType = BenchmarkScoringType::tryFrom((string) ($scoring['type'] ?? '')) ?? $benchmarkCase->task->benchmarkScoringType();
@@ -64,7 +71,7 @@ final readonly class BenchmarkScorer
         return match ($scoringType) {
             BenchmarkScoringType::Actions => $this->scoreActions($scoring, $caseOutcome),
             BenchmarkScoringType::Prices => $this->scorePrices($scoring, $caseOutcome),
-            BenchmarkScoringType::Judge => $this->judge($benchmarkCase, $caseOutcome),
+            BenchmarkScoringType::Judge => $this->judge($benchmarkCase, $caseOutcome, $candidateSpendUsd),
         };
     }
 
@@ -199,12 +206,14 @@ final readonly class BenchmarkScorer
     }
 
     /**
-     * Ask the blind judge to grade the output against the task rubric. A
-     * judge failure leaves the result unscored (re-judgeable) and is reported.
+     * Ask the blind judge to grade the output against the task rubric, after
+     * the monthly hard cap (counting the candidate's spend) allows it. A
+     * refusal or judge failure leaves the result unscored (re-judgeable);
+     * a judge failure is reported.
      *
      * @return array{score: float|null, passed: bool|null, detail: array<string, mixed>, judge_status: string, judge_cost_usd: float}
      */
-    private function judge(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome): array
+    private function judge(BenchmarkCase $benchmarkCase, CaseOutcome $caseOutcome, float $candidateSpendUsd): array
     {
         $scoring = $benchmarkCase->scoring;
         $threshold = (int) ($scoring['pass_threshold'] ?? self::DEFAULT_PASS_THRESHOLD);
@@ -219,6 +228,8 @@ final readonly class BenchmarkScorer
         );
 
         try {
+            $this->aiBudgetGuard->enforceIncluding($candidateSpendUsd);
+
             $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt);
 
             $rawScore = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['score'] ?? null) : null;
@@ -228,12 +239,12 @@ final readonly class BenchmarkScorer
 
             $score10 = max(1, min(10, (int) round((float) $rawScore)));
         } catch (Throwable $throwable) {
-            report($throwable);
+            report_unless($throwable instanceof AiBudgetExceededException, $throwable);
 
             return [
                 'score' => null,
                 'passed' => null,
-                'detail' => ['error' => $throwable->getMessage()],
+                'detail' => ['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)],
                 'judge_status' => self::JUDGE_FAILED,
                 'judge_cost_usd' => 0.0,
             ];

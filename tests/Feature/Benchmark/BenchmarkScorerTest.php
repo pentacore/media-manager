@@ -273,6 +273,19 @@ test('a failing judge leaves the result unscored', function (): void {
         ->and($scores['detail'])->toBe(['error' => 'judge overloaded']);
 });
 
+test('a judge failure message is sanitised before it is stored', function (): void {
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create();
+    BenchmarkJudgeAgent::fake(fn (): never => throw new RuntimeException('Request to https://api.example.test/v1/chat?api_key=sk-secret-123 failed reading /var/www/storage/keys.json'));
+
+    $scores = resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'Some answer'));
+
+    expect($scores['judge_status'])->toBe('failed')
+        ->and($scores['detail']['error'])->toContain('failed reading')
+        ->and($scores['detail']['error'])->not->toContain('sk-secret-123')
+        ->and($scores['detail']['error'])->not->toContain('/var/www/storage');
+});
+
 test('the judge prompt carries the case and tool results but never the candidate model', function (): void {
     scorerStartContext(AiTask::Chat);
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged('Must mention the year.')->create([
