@@ -687,6 +687,7 @@ test('the index still renders without model pools when pool status fails', funct
         ->assertInertia(fn ($page) => $page->where('modelPools', []));
 
     Exceptions::assertReported(RuntimeException::class);
+    Exceptions::assertReportedCount(1);
 });
 
 test('the index marks the benchmark judge as a single selection', function (): void {

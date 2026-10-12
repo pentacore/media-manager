@@ -182,11 +182,16 @@ function errorFor(...keys: string[]): string | undefined {
 
 /** Row indexes shift on add/remove/reorder, so drop that list's stale errors. */
 function clearTierErrors(prefix: string): void {
-    form.clearErrors(
-        ...(Object.keys(form.errors).filter((key) =>
-            key.startsWith(`${prefix}.`),
-        ) as Array<keyof typeof form.errors>),
-    );
+    const staleKeys = Object.keys(form.errors).filter((key) =>
+        key.startsWith(`${prefix}.`),
+    ) as Array<keyof typeof form.errors>;
+
+    // clearErrors() with no keys wipes every error on the page.
+    if (staleKeys.length === 0) {
+        return;
+    }
+
+    form.clearErrors(...staleKeys);
 }
 
 function submit(): void {

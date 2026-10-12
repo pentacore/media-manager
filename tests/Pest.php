@@ -92,9 +92,11 @@ pest()->extend(TestCase::class)
         // them: Inertia's scoped SsrState then replays the first SSR response
         // on every later full page load, and memos like TaskModelResolver go
         // stale. Octane forgets them after the response is sent; the plugin
-        // calls terminate() before streaming a body, so forget at the start of
-        // the next request instead (the request instance is rebound per
-        // request), which keeps a streamed response's scoped state alive.
+        // calls terminate() before streaming a body, so forget when the request
+        // instance is rebound instead. That happens when the next request is
+        // captured and again when the kernel dispatches to the router, so
+        // scoped state is also dropped mid-request, before routing; a streamed
+        // response's scoped state still survives until then.
         $this->app->rebinding('request', fn () => $this->app->forgetScopedInstances());
 
         config()->set('mediamanager.cache.store', 'array');

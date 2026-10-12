@@ -243,6 +243,19 @@ test('moving a tier clears the stale validation errors', function (): void {
         ->assertDontSee('Pick a model for this tier.');
 });
 
+test('changing one tier list keeps the validation errors of another list', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-task="chat"] [data-tier-add]')
+        ->click('Save models')
+        ->assertSeeIn('[data-task="chat"] [data-tier-row="0"]', 'Pick a model for this tier.')
+        ->click('[data-task="title"] [data-tier-add]')
+        ->assertPresent('[data-task="title"] [data-tier-row="1"]')
+        ->assertSeeIn('[data-task="chat"] [data-tier-row="0"]', 'Pick a model for this tier.');
+});
+
 test('the model pickers are named by tier', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
