@@ -253,6 +253,11 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             >{{ done }} / {{ run.counts.total }}</strong
                         ></span
                     >
+                    <span
+                        v-if="run.counts.running > 0"
+                        data-benchmark-running-count
+                        >{{ run.counts.running }} running</span
+                    >
                     <span v-if="run.counts.failed > 0"
                         >{{ run.counts.failed }} failed</span
                     >

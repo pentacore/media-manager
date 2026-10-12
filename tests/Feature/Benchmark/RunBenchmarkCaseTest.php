@@ -20,6 +20,7 @@ use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\Benchmark\BenchmarkRunLauncher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
@@ -310,6 +311,82 @@ test('a result that reaches the cost cap stops the run and skips the rest', func
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::StoppedCostCap);
 });
 
+test('the job claims its result as running while the candidate runs', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    $statusDuringRun = null;
+    TitleAgent::fake(function () use (&$statusDuringRun, $benchmarkResult): StructuredTextResponse {
+        $statusDuringRun = $benchmarkResult->fresh()->status;
+
+        return new StructuredTextResponse(['title' => 'Expanse'], '{"title":"Expanse"}', new TextUsage(100_000, 10_000), new Meta('openai', 'gpt-candidate'));
+    });
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($statusDuringRun)->toBe(BenchmarkResultStatus::Running)
+        ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
+});
+
+test('a result another job is running is not run again', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->running()->create();
+    jobFakeTitle();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Running)
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Running);
+    TitleAgent::assertNeverPrompted();
+});
+
+test('a result whose running job died is claimed again after the stale window', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->running()->create();
+    BenchmarkResult::query()->whereKey($benchmarkResult->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+    jobFakeTitle();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+});
+
+test('a running result keeps the run going until it finishes', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkCase = jobTitleCase();
+    $first = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+    BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->running()->create();
+    jobFakeTitle();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($first->id));
+
+    expect($first->fresh()->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Running);
+});
+
+test('a run cancelled while a result runs keeps that result when its job finishes', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkCase = jobTitleCase();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+    $queued = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+    TitleAgent::fake(function () use ($benchmarkRun): StructuredTextResponse {
+        resolve(BenchmarkRunLauncher::class)->cancel($benchmarkRun);
+
+        return new StructuredTextResponse(['title' => 'Expanse'], '{"title":"Expanse"}', new TextUsage(100_000, 10_000), new Meta('openai', 'gpt-candidate'));
+    });
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkResult->fresh()->score)->toBe(0.8)
+        ->and($queued->fresh()->status)->toBe(BenchmarkResultStatus::Skipped)
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Cancelled);
+});
+
 test('a job of a cancelled run does nothing', function (): void {
     $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
@@ -490,16 +567,16 @@ test('the concurrency limit frees its slot when the job throws', function (): vo
         ->and(Cache::lock(sprintf('benchmark:%d:slot:0', $benchmarkRun->id), 300)->get())->toBeTrue();
 });
 
-test('a job that fails outside the case run fails its pending result and settles the run', function (): void {
+test('a job that fails outside the case run fails its pending or running result and settles the run', function (BenchmarkResultStatus $benchmarkResultStatus): void {
     $benchmarkRun = jobRun();
-    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create(['status' => $benchmarkResultStatus]);
 
     new RunBenchmarkCase($benchmarkResult->id)->failed(new RuntimeException('App\Jobs\RunBenchmarkCase has timed out.'));
 
     expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Failed)
         ->and($benchmarkResult->fresh()->error)->toBe('App\Jobs\RunBenchmarkCase has timed out.')
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
-});
+})->with([BenchmarkResultStatus::Pending, BenchmarkResultStatus::Running]);
 
 test('a refused monthly hard cap fails the result with the guard message before any agent runs', function (): void {
     $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new AiBudgetExceededException(10.0, 5.0));

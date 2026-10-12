@@ -164,6 +164,7 @@ class BenchmarkRunController extends Controller
                 'counts' => [
                     'total' => (int) $counts->sum(),
                     'pending' => $count(BenchmarkResultStatus::Pending),
+                    'running' => $count(BenchmarkResultStatus::Running),
                     'ok' => $count(BenchmarkResultStatus::Ok),
                     'failed' => $count(BenchmarkResultStatus::Failed),
                     'skipped' => $count(BenchmarkResultStatus::Skipped),
@@ -206,15 +207,15 @@ class BenchmarkRunController extends Controller
         return back();
     }
 
-    public function destroy(BenchmarkRun $benchmarkRun, AuditLogger $auditLogger): RedirectResponse
+    public function destroy(BenchmarkRun $benchmarkRun, BenchmarkRunLauncher $benchmarkRunLauncher, AuditLogger $auditLogger): RedirectResponse
     {
-        if (! $benchmarkRun->isTerminal()) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Cancel the run first.')]);
+        $refusal = $benchmarkRunLauncher->delete($benchmarkRun);
+
+        if ($refusal !== null) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $refusal]);
 
             return back();
         }
-
-        $benchmarkRun->delete();
 
         $auditLogger->record('benchmark_run.deleted', $benchmarkRun, sprintf('Deleted benchmark run "%s".', $benchmarkRun->name));
 

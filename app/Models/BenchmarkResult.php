@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\BenchmarkResultStatus;
+use App\Services\Benchmark\BenchmarkScorer;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -48,6 +49,8 @@ use Override;
  * @method static Builder<static>|BenchmarkResult newModelQuery()
  * @method static Builder<static>|BenchmarkResult newQuery()
  * @method static Builder<static>|BenchmarkResult query()
+ * @method static Builder<static>|BenchmarkResult claimable()
+ * @method static Builder<static>|BenchmarkResult inFlight()
  *
  * @mixin \Eloquent
  */
@@ -79,6 +82,13 @@ class BenchmarkResult extends Model
     use HasFactory;
 
     /**
+     * A job runs for at most 280 s (its timeout), so a result still claimed
+     * this long after the claim lost its worker (killed mid-run): it may be
+     * claimed again and no longer blocks deleting the run.
+     */
+    public const int CLAIM_STALE_AFTER_SECONDS = 300;
+
+    /**
      * @return array<string, string>
      */
     #[Override]
@@ -93,6 +103,38 @@ class BenchmarkResult extends Model
             'cost_usd' => 'decimal:6',
             'judge_cost_usd' => 'decimal:6',
         ];
+    }
+
+    /**
+     * Results a job may claim to run: pending, or running under a stale claim.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeClaimable(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $builder): Builder => $builder
+            ->where('status', BenchmarkResultStatus::Pending)
+            ->orWhere(fn (Builder $stale): Builder => $stale
+                ->where('status', BenchmarkResultStatus::Running)
+                ->where('updated_at', '<=', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS))));
+    }
+
+    /**
+     * Results a live job is working on now: a case running or a re-judge
+     * scoring, claimed within the stale window. Their jobs still write usage
+     * rows tagged with the run.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeInFlight(Builder $query): Builder
+    {
+        return $query
+            ->where(fn (Builder $builder): Builder => $builder
+                ->where('status', BenchmarkResultStatus::Running)
+                ->orWhere('judge_status', BenchmarkScorer::JUDGE_PENDING))
+            ->where('updated_at', '>', now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS));
     }
 
     /**

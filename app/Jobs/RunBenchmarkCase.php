@@ -53,8 +53,9 @@ use Throwable;
  * releases a job while the run's two slots are busy, and every release counts
  * as an attempt. One exception or a timeout fails the job (failed() then
  * fails the result). Unique per result and mode for the whole wait window, and
- * a judge-only job claims its result atomically, so a result is never run or
- * judged twice. The monthly hard cap is enforced before every agent call.
+ * both modes claim their result atomically (pending → running, queued →
+ * pending judge), so a result is never run or judged twice. The monthly hard
+ * cap is enforced before every agent call.
  */
 #[Queue(QueueLane::Ai)]
 #[Timeout(280)]
@@ -112,13 +113,17 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
         $benchmarkRun = $benchmarkResult->run;
 
-        if ($benchmarkRun->isTerminal() || $benchmarkResult->status !== BenchmarkResultStatus::Pending) {
+        if ($benchmarkRun->isTerminal() || ! $benchmarkResult->status->isInProgress()) {
             return;
         }
 
         if ($this->costCapReached($benchmarkRun)) {
             $this->settle($benchmarkRun->id);
 
+            return;
+        }
+
+        if (! $this->claim($benchmarkResult)) {
             return;
         }
 
@@ -137,7 +142,8 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
     /**
      * The job itself failed (an exception escaped, it timed out or it waited
-     * too long for a slot): fail a still-pending result and settle the run; a
+     * too long for a slot): fail its pending or running result (the job is
+     * unique per result, so a running one is this job's claim) and settle the run; a
      * judge-only job hands its queued or claimed result back to re-judging.
      */
     public function failed(?Throwable $throwable): void
@@ -157,7 +163,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if ($benchmarkResult->status === BenchmarkResultStatus::Pending) {
+        if ($benchmarkResult->status->isInProgress()) {
             $benchmarkResult->update([
                 'status' => BenchmarkResultStatus::Failed,
                 'error' => UpstreamErrorText::sanitize($throwable?->getMessage() ?? 'The benchmark job failed.', self::ERROR_LIMIT),
@@ -298,19 +304,53 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     }
 
     /**
+     * Atomically move the result to `running` (pending, or running under a
+     * stale claim whose worker died) while its run is still going, under a
+     * lock on the run so a delete can't slip between the check and the claim.
+     * False when another job claimed it first or the run ended.
+     */
+    private function claim(BenchmarkResult $benchmarkResult): bool
+    {
+        $claimed = DB::transaction(function () use ($benchmarkResult): bool {
+            $benchmarkRun = BenchmarkRun::query()->lockForUpdate()->find($benchmarkResult->benchmark_run_id);
+
+            if (! $benchmarkRun instanceof BenchmarkRun || $benchmarkRun->isTerminal()) {
+                return false;
+            }
+
+            return BenchmarkResult::query()
+                ->whereKey($benchmarkResult->id)
+                ->claimable()
+                ->update(['status' => BenchmarkResultStatus::Running]) === 1;
+        });
+
+        if ($claimed) {
+            $benchmarkResult->status = BenchmarkResultStatus::Running;
+            $benchmarkResult->syncOriginalAttribute('status');
+        }
+
+        return $claimed;
+    }
+
+    /**
      * Atomically move a result queued for re-judging from `queued` to the
-     * transient `pending` judge status; false when another job claimed it
-     * first or it is not queued.
+     * transient `pending` judge status, under a lock on the run so a delete
+     * can't slip between its in-flight check and this claim; false when
+     * another job claimed it first or it is not queued.
      */
     private function claimForJudging(BenchmarkResult $benchmarkResult): bool
     {
-        $claimed = BenchmarkResult::query()
-            ->whereKey($benchmarkResult->id)
-            ->where('status', BenchmarkResultStatus::Ok)
-            ->where('judge_status', BenchmarkScorer::JUDGE_QUEUED)
-            ->update(['judge_status' => BenchmarkScorer::JUDGE_PENDING]);
+        $claimed = DB::transaction(function () use ($benchmarkResult): bool {
+            BenchmarkRun::query()->lockForUpdate()->find($benchmarkResult->benchmark_run_id);
 
-        if ($claimed === 0) {
+            return BenchmarkResult::query()
+                ->whereKey($benchmarkResult->id)
+                ->where('status', BenchmarkResultStatus::Ok)
+                ->where('judge_status', BenchmarkScorer::JUDGE_QUEUED)
+                ->update(['judge_status' => BenchmarkScorer::JUDGE_PENDING]) === 1;
+        });
+
+        if (! $claimed) {
             return false;
         }
 
@@ -496,9 +536,10 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Under a lock on the run: complete it once no result is pending, or stop
-     * it at its cost cap (skipping every pending result) once the total
-     * reached the cap. A terminal run is left alone.
+     * Under a lock on the run: complete it once no result is pending or
+     * running, or stop it at its cost cap (skipping every pending result; a
+     * running one finishes and keeps its result) once the total reached the
+     * cap. A terminal run is left alone.
      */
     private function settle(int $runId): void
     {
@@ -509,16 +550,16 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
-            $pending = $benchmarkRun->results()->where('status', BenchmarkResultStatus::Pending);
+            $unfinished = $benchmarkRun->results()->whereIn('status', [BenchmarkResultStatus::Pending, BenchmarkResultStatus::Running]);
 
-            if (! $pending->exists()) {
+            if (! $unfinished->exists()) {
                 $benchmarkRun->update(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
 
                 return;
             }
 
             if ($this->costCapReached($benchmarkRun)) {
-                $pending->update(['status' => BenchmarkResultStatus::Skipped]);
+                $benchmarkRun->results()->where('status', BenchmarkResultStatus::Pending)->update(['status' => BenchmarkResultStatus::Skipped]);
                 $benchmarkRun->update(['status' => BenchmarkRunStatus::StoppedCostCap, 'finished_at' => now()]);
             }
         });

@@ -103,6 +103,16 @@ test('cancelling a run skips its pending results and keeps finished ones', funct
         ->and($finished->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
 });
 
+test('cancelling a run leaves a running result to its job', function (): void {
+    $benchmarkRun = BenchmarkRun::factory()->running()->create();
+    $running = BenchmarkResult::factory()->forCase($benchmarkRun, BenchmarkCase::factory()->create(), 0)->running()->create();
+
+    resolve(BenchmarkRunLauncher::class)->cancel($benchmarkRun);
+
+    expect($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Cancelled)
+        ->and($running->fresh()->status)->toBe(BenchmarkResultStatus::Running);
+});
+
 test('cancelling a finished run changes nothing', function (): void {
     $benchmarkRun = BenchmarkRun::factory()->completed()->create();
     $finishedAt = $benchmarkRun->finished_at;

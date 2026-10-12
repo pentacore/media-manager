@@ -153,6 +153,7 @@ export type BenchmarkRunDetail = {
     counts: {
         total: number;
         pending: number;
+        running: number;
         ok: number;
         failed: number;
         skipped: number;

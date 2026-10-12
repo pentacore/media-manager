@@ -43,6 +43,13 @@ class BenchmarkResultFactory extends Factory
         ]);
     }
 
+    public function running(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => BenchmarkResultStatus::Running,
+        ]);
+    }
+
     public function scored(float $score, bool $passed): static
     {
         return $this->state(fn (array $attributes): array => [

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Starts, cancels and re-judges benchmark runs: one pending result and one
+ * Starts, cancels, deletes and re-judges benchmark runs: one pending result and one
  * queued RunBenchmarkCase job per case × candidate.
  */
 final readonly class BenchmarkRunLauncher
@@ -70,8 +70,8 @@ final readonly class BenchmarkRunLauncher
     }
 
     /**
-     * Stop a running run: its pending results are skipped (a job already
-     * running finishes and keeps its result).
+     * Stop a running run: its pending results are skipped; a running result's
+     * job finishes, keeps its result and settles the run's cost.
      */
     public function cancel(BenchmarkRun $benchmarkRun): void
     {
@@ -84,6 +84,34 @@ final readonly class BenchmarkRunLauncher
 
             $lockedRun->update(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
             $lockedRun->results()->where('status', BenchmarkResultStatus::Pending)->update(['status' => BenchmarkResultStatus::Skipped]);
+        });
+    }
+
+    /**
+     * Delete a finished run with its results, under a lock on the run. Refused
+     * (with the reason) while the run is going or a job still works on one of
+     * its results: that job's usage rows reference the run.
+     */
+    public function delete(BenchmarkRun $benchmarkRun): ?string
+    {
+        return DB::transaction(function () use ($benchmarkRun): ?string {
+            $lockedRun = BenchmarkRun::query()->lockForUpdate()->find($benchmarkRun->id);
+
+            if (! $lockedRun instanceof BenchmarkRun) {
+                return null;
+            }
+
+            if (! $lockedRun->isTerminal()) {
+                return __('Cancel the run first.');
+            }
+
+            if ($lockedRun->results()->inFlight()->exists()) {
+                return __('Wait for the running cases to finish.');
+            }
+
+            $lockedRun->delete();
+
+            return null;
         });
     }
 

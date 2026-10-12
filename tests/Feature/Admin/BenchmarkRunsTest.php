@@ -237,7 +237,7 @@ test('show returns the run, counts and the aggregated matrix', function (): void
             ->component('Admin/Benchmarks/Runs/Show')
             ->where('run.id', $run->id)
             ->where('run.status_label', 'Completed')
-            ->where('run.counts', ['total' => 6, 'pending' => 0, 'ok' => 4, 'failed' => 1, 'skipped' => 1])
+            ->where('run.counts', ['total' => 6, 'pending' => 0, 'running' => 0, 'ok' => 4, 'failed' => 1, 'skipped' => 1])
             ->has('matrix', 2)
             ->where('matrix.1.task', 'decision')
             ->where('matrix.1.task_label', 'Decision agent')
@@ -399,4 +399,42 @@ test('a running run cannot be deleted', function (): void {
     $this->delete(route('admin.benchmarks.runs.destroy', $run))->assertRedirect();
 
     expect(BenchmarkRun::query()->whereKey($run->id)->exists())->toBeTrue();
+});
+
+test('a cancelled run cannot be deleted while a job still works on one of its results', function (array $attributes): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->create(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
+    BenchmarkResult::factory()->for($run, 'run')->create($attributes);
+
+    $this->delete(route('admin.benchmarks.runs.destroy', $run))
+        ->assertRedirect()
+        ->assertInertiaFlash('toast.message', 'Wait for the running cases to finish.');
+
+    expect(BenchmarkRun::query()->whereKey($run->id)->exists())->toBeTrue();
+})->with([
+    'a running case' => [['status' => BenchmarkResultStatus::Running]],
+    'a judge scoring' => [['status' => BenchmarkResultStatus::Ok, 'judge_status' => BenchmarkScorer::JUDGE_PENDING]],
+]);
+
+test('a run whose running result lost its worker can still be deleted', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->create(['status' => BenchmarkRunStatus::Cancelled, 'finished_at' => now()]);
+    $stale = BenchmarkResult::factory()->for($run, 'run')->running()->create();
+    BenchmarkResult::query()->whereKey($stale->id)->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+
+    $this->delete(route('admin.benchmarks.runs.destroy', $run))->assertRedirect(route('admin.benchmarks.runs.index'));
+
+    expect(BenchmarkRun::query()->whereKey($run->id)->exists())->toBeFalse();
+});
+
+test('show counts running results', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->running()->create();
+    BenchmarkResult::factory()->for($run, 'run')->running()->create();
+    BenchmarkResult::factory()->for($run, 'run')->create();
+
+    $this->get(route('admin.benchmarks.runs.show', $run))
+        ->assertInertia(fn ($page) => $page
+            ->where('run.counts', ['total' => 2, 'pending' => 1, 'running' => 1, 'ok' => 0, 'failed' => 0, 'skipped' => 0])
+            ->where('matrix.0.cases.0.cells.0.status', 'running'));
 });
