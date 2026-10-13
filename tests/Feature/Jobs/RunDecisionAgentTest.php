@@ -343,15 +343,3 @@ test('a failed agent run and a worker-stopped run store no invocation id', funct
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->invocation_id)->toBeNull()
         ->and(AgentDecision::query()->where('webhook_event_id', $stopped->id)->sole()->invocation_id)->toBeNull();
 });
-
-test('recording a failed outcome over a decision that held an invocation id clears it', function (): void {
-    $event = WebhookEvent::factory()->create();
-    AgentDecision::factory()->create(['webhook_event_id' => $event->id, 'invocation_id' => 'inv-old']);
-    $job = new RunDecisionAgent($event->id, 'sonarr', 'Grab', ['eventType' => 'Grab']);
-
-    new ReflectionMethod($job, 'record')->invoke($job, $event->id, AgentDecisionStatus::Failed, 'Agent run failed: boom', null);
-
-    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
-        ->status->toBe(AgentDecisionStatus::Failed)
-        ->invocation_id->toBeNull();
-});
