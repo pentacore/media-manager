@@ -76,4 +76,6 @@ test('show hides the capture invocation id without a usage row, for benchmark ro
     'no usage row' => [[], 'inv-decision-1'],
     'benchmark row' => [['is_benchmark' => true], 'inv-decision-1'],
     'no invocation id' => [[], null],
+    'no invocation id but a usage row' => [['is_benchmark' => false], null],
+    'non-text usage row' => [['kind' => AiUsageKind::Embeddings], 'inv-decision-1'],
 ]);
