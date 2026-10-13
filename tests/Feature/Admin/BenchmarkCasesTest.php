@@ -591,3 +591,51 @@ test('a chat reply that cannot be traced redirects back with an error toast', fu
         ->assertRedirect(route('admin.benchmarks.cases.index'))
         ->assertInertiaFlash('toast.message', "This reply can't be traced to its AI Usage record.");
 });
+
+test('the chat reply fallback window includes a usage row exactly five seconds later', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Edge turn', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(5)]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('the chat reply fallback picks the earliest of several rows in the window', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    benchmarkTextUsage(MediaAgent::class, 'Later', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(3)]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Earlier', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSecond()]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('the chat reply fallback ignores sub-agent rows with a parent invocation', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    benchmarkTextUsage(MediaAgent::class, 'Child', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSecond(), 'parent_invocation_id' => (string) Str::uuid()]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Parent', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(2)]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('from_usage takes priority over from_invocation', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'By usage');
+    $byInvocation = benchmarkTextUsage(MediaAgent::class, 'By invocation');
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id, 'from_invocation' => $byInvocation->invocation_id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});

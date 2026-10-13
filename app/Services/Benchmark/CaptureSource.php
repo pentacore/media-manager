@@ -48,7 +48,8 @@ final readonly class CaptureSource
             ->where('is_benchmark', false)
             ->whereNull('parent_invocation_id')
             ->where('agent_class', MediaAgent::class)
-            ->whereBetween('created_at', [$repliedAt, $repliedAt->addSeconds(self::CHAT_REPLY_WINDOW_SECONDS)])->oldest()
+            ->whereBetween('created_at', [$repliedAt, $repliedAt->addSeconds(self::CHAT_REPLY_WINDOW_SECONDS)])
+            ->oldest()
             ->orderBy('id')
             ->first();
     }
