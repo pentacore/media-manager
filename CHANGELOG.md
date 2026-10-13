@@ -1,3 +1,21 @@
+# [1.43.0](https://github.com/pentacore/media-manager/compare/v1.42.0...v1.43.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **actions:** keep a newer live status when a late reload lands ([fd9fdf9](https://github.com/pentacore/media-manager/commit/fd9fdf94890de71a70f603e062fb11200a8ee016))
+* **actions:** store a fixed sentence for an upstream HTTP failure ([a42d0a4](https://github.com/pentacore/media-manager/commit/a42d0a41d51c8c04087cba520028b25f87c886e5))
+* **nav:** keep the pending badge right after bulk reviews and prefetched clicks ([c35cbd6](https://github.com/pentacore/media-manager/commit/c35cbd63c1ea2cdf408720aa5e94db0977a80d76))
+* **realtime:** expire prefetch dates and keep viewers off the action channel ([647cad5](https://github.com/pentacore/media-manager/commit/647cad54d1a5f99c5c3eba68b78266999c3729a1))
+* **realtime:** reload library pages after a webhook was processed ([47f7c6f](https://github.com/pentacore/media-manager/commit/47f7c6f8c8ab1bad1ad33879471d0afa7aa005ff))
+* **seerr:** treat a login page or JSON scalar as a refusal, never as no requests ([f8e1c4d](https://github.com/pentacore/media-manager/commit/f8e1c4d1af99cb1a5f7037ef20078c4010b7d7c5))
+
+
+### Features
+
+* **library:** make Sync re-read Sonarr, Radarr and Whisparr ([71771f6](https://github.com/pentacore/media-manager/commit/71771f6d4f62e039e915006440386c08013cf352))
+* **realtime:** keep live rows' permissions and make every dashboard feed live ([712b1a3](https://github.com/pentacore/media-manager/commit/712b1a385103e99b3c82061b9c3ce792b52e73a1))
+
 # [1.42.0](https://github.com/pentacore/media-manager/compare/v1.41.1...v1.42.0) (2026-10-13)
 
 
