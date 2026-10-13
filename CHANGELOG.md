@@ -1,3 +1,27 @@
+# [1.42.0](https://github.com/pentacore/media-manager/compare/v1.41.1...v1.42.0) (2026-10-13)
+
+
+### Bug Fixes
+
+* **ai-chat:** stream the exact answered-by on RUN_FINISHED ([b1825ef](https://github.com/pentacore/media-manager/commit/b1825ef9fa5331de468107de0b428b8d7ed31330))
+* **ai-models:** integer pool inputs, stable tier rows, and accessible tier pickers ([b25b516](https://github.com/pentacore/media-manager/commit/b25b516923b54726b259ccd1728e55d9b207981e))
+* **ai-models:** keep other lists' errors when a tier list changes ([bd2aa48](https://github.com/pentacore/media-manager/commit/bd2aa48031fbdd7baac65f2d4688772e9466a840))
+* **ai-pricing:** report capability-only changes as updates ([3d9a622](https://github.com/pentacore/media-manager/commit/3d9a6224497dcab11636a524b5a0abf4a1d20448))
+* **ai-usage:** count untiered runs as tier 1 and index the tier filter ([b7dbe68](https://github.com/pentacore/media-manager/commit/b7dbe68a7d0b2c2b84edc54d7f49d28aad492396))
+* **ai-usage:** follow migration naming and tighten CSV test ([e83d419](https://github.com/pentacore/media-manager/commit/e83d4191a3ed84861cc3d692f03add067be2e200))
+* **ai:** check prices for every configured tier, not just the live one ([43843cf](https://github.com/pentacore/media-manager/commit/43843cf1c451f2bfa31dd4e8b0f93ebbf97ecd5f))
+* **ai:** label tier outcomes that follow another task's list ([d037227](https://github.com/pentacore/media-manager/commit/d0372273d9d73c61f1683405cf3df0f46331221f))
+* **ai:** name rate-limit lookup failures and report pool failures once ([605426f](https://github.com/pentacore/media-manager/commit/605426fe6e0508d9e80375e70d5ed8251dbf1c3c))
+* **benchmark:** final review fixes ([c787321](https://github.com/pentacore/media-manager/commit/c7873213206503118d0d9f84b761773f6ff467d3))
+
+
+### Features
+
+* **benchmark:** capture cases from an invocation or chat reply ([26e5485](https://github.com/pentacore/media-manager/commit/26e5485b7dd813b683ccbe8c771bc918f9b8e2a0))
+* **benchmark:** use a run candidate as an AI Models tier ([4731c12](https://github.com/pentacore/media-manager/commit/4731c1238efed8e1c4cb7a334f100c4be8dd4d96))
+* **chat:** save a reply as a benchmark case ([52ef086](https://github.com/pentacore/media-manager/commit/52ef086f348bb7adc804a562bf719f4e305a282c))
+* **webhooks:** save a decision run as a benchmark case ([fe7f50c](https://github.com/pentacore/media-manager/commit/fe7f50ca4b7df43ce844277215bf4b62dfba8fa2))
+
 ## [1.41.1](https://github.com/pentacore/media-manager/compare/v1.41.0...v1.41.1) (2026-10-12)
 
 
