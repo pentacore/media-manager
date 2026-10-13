@@ -109,6 +109,7 @@ class ChatController extends Controller
             'text' => $response->text,
             'conversation_id' => $newConversationId,
             'workflow' => $workflowPayload,
+            'invocation_id' => $response->invocationId,
             'answered_by' => AnsweredBy::forChat($response->meta->provider, $response->meta->model),
         ]);
     }

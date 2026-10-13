@@ -91,6 +91,36 @@ test('the conversation shows who answered each message', function (): void {
         ->assertJsonPath('messages.1.answered_by.reasoning_label', 'High');
 });
 
+test('the conversation exposes message ids and the invocation id of each reply', function (): void {
+    MediaAgent::fake(['Hello']);
+    $admin = User::factory()->admin()->create();
+    $id = $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'Hi'])
+        ->assertJsonPath('invocation_id', fn ($value): bool => is_string($value) && $value !== '')
+        ->json('conversation_id');
+
+    $stored = DB::table('agent_conversation_messages')->where('conversation_id', $id)->where('role', 'assistant')->first();
+    $invocationId = json_decode((string) $stored->meta, true)['invocation_id'];
+
+    $this->actingAs($admin)->getJson(route('ai.conversations.show', $id))
+        ->assertOk()
+        ->assertJsonPath('messages.0.invocation_id', null)
+        ->assertJsonPath('messages.1.id', $stored->id)
+        ->assertJsonPath('messages.1.invocation_id', $invocationId);
+});
+
+test('a reply stored without an invocation id exposes null', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = reasoningMetaConversation($admin, [
+        ['user', 'Hello', [], []],
+        ['assistant', 'Hi there', ['provider' => 'openai', 'model' => 'gpt-5'], []],
+    ]);
+
+    $this->actingAs($admin)->getJson(route('ai.conversations.show', $conversationId))
+        ->assertOk()
+        ->assertJsonPath('messages.1.invocation_id', null)
+        ->assertJsonPath('messages.1.id', DB::table('agent_conversation_messages')->where('conversation_id', $conversationId)->where('role', 'assistant')->value('id'));
+});
+
 test('messages stored before the label existed show only provider and model', function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = reasoningMetaConversation($admin, [

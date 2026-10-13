@@ -423,6 +423,7 @@ async function sendBlockingTurn(
         conversation_id: string | null;
         workflow: WorkflowProposal | null;
         answered_by?: AnsweredBy | null;
+        invocation_id?: string | null;
     };
 
     if (
@@ -440,6 +441,7 @@ async function sendBlockingTurn(
         workflow: data.workflow,
         workflowResolved: null,
         answered_by: data.answered_by ?? null,
+        invocation_id: data.invocation_id ?? null,
     });
 
     if (data.conversation_id) {
@@ -535,6 +537,7 @@ async function sendStreamingTurn(
     }
 
     assistantMessage.answered_by = result.answeredBy ?? answeredBy;
+    assistantMessage.invocation_id = result.invocationId ?? null;
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is

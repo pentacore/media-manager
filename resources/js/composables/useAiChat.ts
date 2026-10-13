@@ -24,6 +24,10 @@ export interface ChatAttachmentRef {
 }
 
 export interface ConversationMessage {
+    /** The stored message id; absent on a reply that was only just streamed. */
+    id?: string;
+    /** The SDK invocation id behind an assistant reply; null when unknown. */
+    invocation_id?: string | null;
     role: 'user' | 'assistant';
     text: string;
     ts: number;

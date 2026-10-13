@@ -31,6 +31,7 @@ class ConversationStore extends DatabaseConversationStore
 
         return [
             ...parent::metaFor($response, $exception),
+            'invocation_id' => $response->invocationId,
             'reasoning_level' => $resolvedSelection->reasoning->value,
             ...($resolvedSelection->tier instanceof TierOutcome ? ['tier' => $resolvedSelection->tier->toArray()] : []),
         ];
