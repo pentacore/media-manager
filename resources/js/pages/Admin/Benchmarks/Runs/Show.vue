@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, router, usePoll } from '@inertiajs/vue3';
+import { Head, Link, router, usePoll } from '@inertiajs/vue3';
 import { Ban, RefreshCw, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import {
     ResultDrawer,
@@ -373,6 +374,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             <TableHead class="text-right">p95</TableHead>
                             <TableHead class="text-right">Misses</TableHead>
                             <TableHead class="text-right">Failures</TableHead>
+                            <TableHead />
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -440,6 +442,23 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             <TableCell class="text-right tabular-nums">{{
                                 candidate.failed
                             }}</TableCell>
+                            <TableCell class="text-right whitespace-nowrap">
+                                <Link
+                                    v-if="candidate.scored > 0"
+                                    :href="
+                                        AiModelsController.index.url({
+                                            query: {
+                                                benchmark_run: run.id,
+                                                candidate: candidate.index,
+                                                task: task.task,
+                                            },
+                                        })
+                                    "
+                                    class="text-[12.5px] text-primary hover:underline"
+                                    data-benchmark-use-candidate
+                                    >Use this</Link
+                                >
+                            </TableCell>
                         </TableRow>
                     </TableBody>
                 </Table>

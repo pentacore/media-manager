@@ -15,6 +15,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiModelsRequest;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
+use App\Models\BenchmarkRun;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\PoolHeadroom;
 use App\Services\AiUsage\PoolHeadroomFigures;
@@ -22,6 +23,7 @@ use App\Services\AiUsage\PoolHeadroomUnavailable;
 use App\Services\Audit\AuditLogger;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -31,12 +33,25 @@ use Throwable;
 class AiModelsController extends Controller
 {
     public function index(
+        Request $request,
         TaskModelResolver $taskModelResolver,
         ModelCatalog $modelCatalog,
         DecisionAgentSettings $decisionAgentSettings,
         UnpricedModelDetector $unpricedModelDetector,
         PoolHeadroom $poolHeadroom,
-    ): Response {
+    ): Response|RedirectResponse {
+        $prefill = null;
+
+        if ($request->has('benchmark_run')) {
+            $prefill = $this->benchmarkPrefill($request);
+
+            if ($prefill === null) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __('That benchmark candidate is no longer available.')]);
+
+                return to_route('admin.ai-models.index');
+            }
+        }
+
         $allowlist = $decisionAgentSettings->eventAllowlist();
 
         $tasks = [];
@@ -88,7 +103,53 @@ class AiModelsController extends Controller
             'modelCapabilities' => $modelCatalog->reasoningCapabilities(),
             'reasoningProviders' => array_values(array_filter($modelCatalog->textProviders(), ReasoningOptions::supportsProvider(...))),
             'unpricedModels' => $unpricedModelDetector->forHardCap(),
+            'prefill' => $prefill,
         ]);
+    }
+
+    /**
+     * The benchmark candidate a "Use this" link points at, or null when the
+     * run, candidate or task no longer exists.
+     *
+     * @return array{task: string, provider: string, model: string, reasoning: string|null, run_id: int, run_name: string}|null
+     */
+    private function benchmarkPrefill(Request $request): ?array
+    {
+        $runId = $request->query('benchmark_run');
+        $candidateIndex = $request->query('candidate');
+        $taskValue = $request->query('task');
+
+        if (! is_string($runId) || ! ctype_digit($runId) || ! is_string($candidateIndex) || ! ctype_digit($candidateIndex) || ! is_string($taskValue)) {
+            return null;
+        }
+
+        $aiTask = AiTask::tryFrom($taskValue);
+        $benchmarkRun = BenchmarkRun::query()->find((int) $runId);
+
+        if ($aiTask === null || $aiTask === AiTask::Failover || ! $benchmarkRun instanceof BenchmarkRun) {
+            return null;
+        }
+
+        $candidate = $benchmarkRun->candidates[(int) $candidateIndex] ?? null;
+
+        if (! is_array($candidate) || ! is_string($candidate['provider'] ?? null) || ! is_string($candidate['model'] ?? null)) {
+            return null;
+        }
+
+        if (! $benchmarkRun->results()->where('case_task', $aiTask->value)->exists()) {
+            return null;
+        }
+
+        $reasoning = is_string($candidate['reasoning'] ?? null) ? AiReasoningLevel::tryFrom($candidate['reasoning']) : null;
+
+        return [
+            'task' => $aiTask->value,
+            'provider' => $candidate['provider'],
+            'model' => $candidate['model'],
+            'reasoning' => $aiTask->hasReasoning() ? $reasoning?->value : null,
+            'run_id' => $benchmarkRun->id,
+            'run_name' => $benchmarkRun->name,
+        ];
     }
 
     public function update(UpdateAiModelsRequest $updateAiModelsRequest, AuditLogger $auditLogger): RedirectResponse
