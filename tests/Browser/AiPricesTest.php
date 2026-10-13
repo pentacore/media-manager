@@ -27,42 +27,15 @@ use Illuminate\Support\Facades\Http;
  * client-side channel object. pusher-js Channels extend an EventsDispatcher,
  * so we look the subscribed channel up by name and `.emit()` the payload
  * straight into the bound callback — exactly what a delivered socket frame
- * does — driving the REAL handler end-to-end without a broker. See
- * emitPriceRefreshState() below.
+ * does — driving the REAL handler end-to-end without a broker, through the
+ * shared echoEmitScript() (tests/Pest.php), which waits for the listener and
+ * throws when it never binds.
  *
  * Backend payload shape is separately proven in
  * tests/Feature/Jobs/RefreshAiPricesJobTest.php and
  * tests/Feature/AI/Pricing/AiPriceRefreshCoordinatorTest.php; dispatch/locking
  * in tests/Feature/Admin/AiModelPriceControllerTest.php.
  */
-
-/**
- * Fires the client-side `AiPriceRefreshStateChanged` handler by emitting the
- * payload directly on the pusher-js channel the page subscribed to. Returns a
- * status string so the test can assert the handler was actually reachable
- * (`EMITTED`) rather than silently no-op on a missing channel/callback.
- *
- * @param  array<string, mixed>  $payload
- */
-function emitPriceRefreshState(array $payload): string
-{
-    $json = json_encode($payload, JSON_THROW_ON_ERROR);
-
-    return <<<JS
-        (() => {
-            const pusher = window.Pusher
-                && window.Pusher.instances
-                && window.Pusher.instances[0];
-            if (!pusher) { return 'NO_PUSHER'; }
-            const channel = pusher.channels.channels['private-admin.ai-prices'];
-            if (!channel) { return 'NO_CHANNEL'; }
-            const bound = channel.callbacks._callbacks['_AiPriceRefreshStateChanged'];
-            if (!bound || bound.length === 0) { return 'NO_CALLBACK'; }
-            channel.emit('AiPriceRefreshStateChanged', {$json});
-            return 'EMITTED';
-        })()
-    JS;
-}
 
 /**
  * A fully enriched succeeded payload. Individual tests override the fields
@@ -336,8 +309,7 @@ test('a succeeded broadcast shows the success toast and reloads prices', functio
         'pricing_source' => PricingSource::ModelsDev,
     ]);
 
-    expect($pendingAwaitablePage->script(emitPriceRefreshState(enrichedRefreshPayload())))
-        ->toBe('EMITTED');
+    $pendingAwaitablePage->script(echoEmitScript('admin.ai-prices', 'AiPriceRefreshStateChanged', enrichedRefreshPayload()));
 
     $pendingAwaitablePage->assertSee('Price refresh complete')
         ->assertSee('3 created, 5 updated, 2 locked, 0 rejected')
@@ -363,7 +335,7 @@ test('a partial broadcast shows the warning toast with counts and fallback provi
     $pendingAwaitablePage = visit('/admin/ai-prices');
     $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    $pendingAwaitablePage->script(echoEmitScript('admin.ai-prices', 'AiPriceRefreshStateChanged', $payload));
 
     $pendingAwaitablePage->assertSee('Price refresh partially completed')
         ->assertSee('1 created, 2 updated, 0 locked, 1 rejected')
@@ -386,7 +358,7 @@ test('a failed broadcast shows the error toast with the error message', function
     $pendingAwaitablePage = visit('/admin/ai-prices');
     $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    $pendingAwaitablePage->script(echoEmitScript('admin.ai-prices', 'AiPriceRefreshStateChanged', $payload));
 
     $pendingAwaitablePage->assertSee('Price refresh failed')
         ->assertSee('models.dev unreachable');
@@ -409,7 +381,7 @@ test('a legacy broadcast (no final_result) shows the old added/total success toa
     $pendingAwaitablePage = visit('/admin/ai-prices');
     $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    $pendingAwaitablePage->script(echoEmitScript('admin.ai-prices', 'AiPriceRefreshStateChanged', $payload));
 
     $pendingAwaitablePage->assertSee('Price refresh complete')
         ->assertSee('4 new, 12 total');

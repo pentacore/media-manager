@@ -9,3 +9,5 @@ export {
     uncertainOutcomeWarning,
 } from './failure';
 export type { ActionResult } from './failure';
+export { compareLiveStatus, reconcileWithLive } from './liveStatus';
+export type { LiveStatusChange } from './liveStatus';

@@ -20,29 +20,44 @@ type PlaybackPayload = {
     action: string;
 };
 
-type ActionRequestCreatedPayload = {
+type ActionRequestCountPayload = {
     id: number;
-    requires_approval: boolean;
-    status: string;
-};
-
-type ActionRequestStatusPayload = {
-    id: number;
-    status: string;
+    /** Every pending request when the broadcast was sent. */
+    pending_count?: number;
 };
 
 type ReplacementAttemptPayload = {
     attention_unacknowledged: number;
 };
 
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'rejected']);
+/** The counters a live event moves; applyNav() guards each one. */
+type LiveCounter =
+    | 'pendingActions'
+    | 'activeSessions'
+    | 'libraryIntervention'
+    | 'sabnzbd'
+    | 'replacementAttention';
+
 const SESSION_EXPIRY_MS = 10 * 60 * 1000;
 
 /**
+ * How long Inertia keeps a hover prefetch reusable (`defaults.prefetch.cacheFor`
+ * in app.ts). After it no click can reuse that prefetch, so its date is dropped.
+ */
+const PREFETCH_CACHE_MS = 10 * 1000;
+
+/** A URL's path and query, to match a visit with the page it rendered. */
+function pageKey(url: string | URL): string {
+    const parsed = new URL(url.toString(), window.location.origin);
+
+    return `${parsed.pathname}${parsed.search}`;
+}
+
+/**
  * Live counters for the sidebar badges. Seeded from the `nav` shared prop and
- * kept current by three private channels. `nav` is a lazy shared prop: full
- * page visits (and prefetched ones) send a fresh object, partial reloads omit
- * it and Inertia keeps the previous object.
+ * kept current by private channels. `nav` is a lazy shared prop: full page
+ * visits (and prefetched ones) send a fresh object, partial reloads omit it
+ * unless they name it, and Inertia keeps the previous object.
  */
 export function useNavCounts(): NavCounts {
     const page = usePage();
@@ -59,14 +74,19 @@ export function useNavCounts(): NavCounts {
 
     const recentSessionIds = new Set<number>();
     const sessionTimestamps = new Map<number, number>();
-    // Track which action ids we've already counted as pending so an
-    // out-of-order Created/StatusChanged sequence doesn't double-count.
-    const pendingIds = new Set<number>();
+    // When a live event last moved each counter (client clock).
+    const liveChangedAt = new Map<LiveCounter, number>();
+    // When the hover prefetch cached for a page was fetched (client clock).
+    const prefetchFetchedAt = new Map<string, number>();
 
     const { acquirePrivateChannel } = useWebSocket();
     const channelLeases: ChannelLease[] = [];
 
     let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
+
+    function markLive(counter: LiveCounter): void {
+        liveChangedAt.set(counter, Date.now());
+    }
 
     function pruneStaleSessions(): void {
         const cutoff = Date.now() - SESSION_EXPIRY_MS;
@@ -90,33 +110,95 @@ export function useNavCounts(): NavCounts {
     }
 
     /**
-     * Re-sync every counter from a `nav` snapshot, server truth. The local ID
-     * sets only track deltas observed since the previous snapshot, so they
-     * are cleared here — keeping them would double-count events already
-     * baked into the server numbers.
+     * Re-sync the counters from a `nav` snapshot: server truth as of
+     * `snapshotAt` (client clock; Infinity for the response to a request
+     * just sent). A counter a live event moved after `snapshotAt` keeps its
+     * live value, because the snapshot predates that event. The session sets
+     * only track deltas since the previous snapshot, so they are cleared
+     * together with their counter.
      */
-    function applyNav(nav: typeof page.props.nav | undefined): void {
+    function applyNav(
+        nav: typeof page.props.nav | undefined,
+        snapshotAt = Number.POSITIVE_INFINITY,
+    ): void {
         if (!nav) {
             return;
         }
 
-        pendingActions.value = nav.pendingActions ?? 0;
-        activeSessions.value = nav.activeSessions ?? 0;
-        libraryIntervention.value = nav.libraryIntervention ?? 0;
-        sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
-        sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
-        replacementAttention.value = nav.replacementAttention ?? 0;
+        const isCurrent = (counter: LiveCounter): boolean =>
+            (liveChangedAt.get(counter) ?? Number.NEGATIVE_INFINITY) <=
+            snapshotAt;
+
+        if (isCurrent('pendingActions')) {
+            pendingActions.value = nav.pendingActions ?? 0;
+        }
+
+        if (isCurrent('activeSessions')) {
+            activeSessions.value = nav.activeSessions ?? 0;
+            recentSessionIds.clear();
+            sessionTimestamps.clear();
+        }
+
+        if (isCurrent('libraryIntervention')) {
+            libraryIntervention.value = nav.libraryIntervention ?? 0;
+        }
+
+        if (isCurrent('sabnzbd')) {
+            sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
+            sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
+        }
+
+        if (isCurrent('replacementAttention')) {
+            replacementAttention.value = nav.replacementAttention ?? 0;
+        }
+
         wantedMissing.value = nav.wantedMissing ?? 0;
-        recentSessionIds.clear();
-        sessionTimestamps.clear();
-        pendingIds.clear();
+    }
+
+    /**
+     * When the `nav` the page now shows was produced: the fetch time of the
+     * hover prefetch a click may have reused for this URL (only while that
+     * prefetch is still inside Inertia's cache window), else "now". A
+     * response to a request that was really sent is re-applied as "now" on
+     * 'success', so an older date here only delays that.
+     */
+    function snapshotTimeFor(url: string): number {
+        const key = pageKey(url);
+        const fetchedAt = prefetchFetchedAt.get(key);
+
+        if (fetchedAt === undefined) {
+            return Number.POSITIVE_INFINITY;
+        }
+
+        if (Date.now() - fetchedAt > PREFETCH_CACHE_MS) {
+            prefetchFetchedAt.delete(key);
+
+            return Number.POSITIVE_INFINITY;
+        }
+
+        return fetchedAt;
+    }
+
+    /** Drops every prefetch date past Inertia's cache window. */
+    function forgetExpiredPrefetches(): void {
+        const cutoff = Date.now() - PREFETCH_CACHE_MS;
+
+        for (const [key, fetchedAt] of prefetchFetchedAt) {
+            if (fetchedAt < cutoff) {
+                prefetchFetchedAt.delete(key);
+            }
+        }
     }
 
     // Re-sync when a fresh `nav` snapshot arrives. Watch the reference, not
     // every page update: a partial reload keeps the previous `nav` object,
     // and re-applying that older snapshot would undo the live deltas the
-    // channels below added since.
-    watch(() => page.props.nav, applyNav);
+    // channels below added since. A click that reuses a hover prefetch also
+    // lands here, with the hover-time `nav`: snapshotTimeFor() dates it.
+    watch(
+        () => page.props.nav,
+        (nav) => applyNav(nav, snapshotTimeFor(page.url)),
+    );
 
     // The reference watch above misses one case: a full visit back to the
     // same component whose `nav` payload is byte-identical to the previous
@@ -125,24 +207,48 @@ export function useNavCounts(): NavCounts {
     // and locally-drifted counts (a websocket delta applied after the old
     // snapshot, now rolled back by the full visit) are left stale. Track
     // every visit's `only`/`except` at 'start' and force a re-sync from
-    // `page.props.nav` on 'success' for the ones that were full, non-prefetch
-    // visits — regardless of whether the reference changed.
+    // `page.props.nav` on 'success' for the non-prefetch requests that
+    // bring `nav` (full visits, and reloads that name it) — regardless of
+    // whether the reference changed. The watch may first have dated that
+    // `nav` by an older prefetch of the same URL; this re-apply makes it
+    // current. A click that reuses a prefetch sends no request, so it fires
+    // no 'start' and keeps the prefetch's date.
     const pendingFullVisitIds = new Set<string>();
     let stopStartListener: VoidFunction | null = null;
     let stopSuccessListener: VoidFunction | null = null;
     let stopFinishListener: VoidFunction | null = null;
+    let stopPrefetchedListener: VoidFunction | null = null;
 
     onMounted(() => {
         stopStartListener = router.on('start', (event) => {
             const visit = event.detail.visit;
 
+            if (visit.prefetch) {
+                return;
+            }
+
+            // A request that is really sent never forgets its URL's prefetch
+            // date: Inertia keeps the cached prefetch reusable for its whole
+            // `cacheFor` window (a partial reload carries other params, so it
+            // never replaces it), and a later click can still bring that
+            // hover-time `nav`. The `nav` this request brings back is
+            // re-applied as current on 'success' instead.
             if (
-                visit.only.length === 0 &&
-                visit.except.length === 0 &&
-                !visit.prefetch
+                (visit.only.length === 0 && visit.except.length === 0) ||
+                visit.only.includes('nav')
             ) {
                 pendingFullVisitIds.add(visit.id);
             }
+        });
+
+        // A click that reuses a prefetch fires no 'start'; remember when
+        // each prefetch was fetched so its `nav` can be dated.
+        stopPrefetchedListener = router.on('prefetched', (event) => {
+            forgetExpiredPrefetches();
+            prefetchFetchedAt.set(
+                pageKey(event.detail.visit.url),
+                event.detail.fetchedAt,
+            );
         });
 
         stopSuccessListener = router.on('success', (event) => {
@@ -167,6 +273,7 @@ export function useNavCounts(): NavCounts {
                         if (!recentSessionIds.has(event.id)) {
                             recentSessionIds.add(event.id);
                             activeSessions.value += 1;
+                            markLive('activeSessions');
                         }
 
                         sessionTimestamps.set(event.id, Date.now());
@@ -178,6 +285,7 @@ export function useNavCounts(): NavCounts {
                                 0,
                                 activeSessions.value - 1,
                             );
+                            markLive('activeSessions');
                         }
                     }
                 },
@@ -185,38 +293,24 @@ export function useNavCounts(): NavCounts {
         );
 
         if (can('manage-library')) {
+            // Both events carry the server's pending count, taken as is: a
+            // per-id delta could not lower the badge for a request that was
+            // pending before this tab opened.
+            const applyPendingCount = (
+                event: ActionRequestCountPayload,
+            ): void => {
+                if (typeof event.pending_count !== 'number') {
+                    return;
+                }
+
+                pendingActions.value = event.pending_count;
+                markLive('pendingActions');
+            };
+
             channelLeases.push(
                 acquirePrivateChannel('members.actions')
-                    .listen(
-                        '.ActionRequestCreated',
-                        (event: ActionRequestCreatedPayload) => {
-                            if (
-                                event.status === 'pending' &&
-                                !pendingIds.has(event.id)
-                            ) {
-                                pendingIds.add(event.id);
-                                pendingActions.value += 1;
-                            }
-                        },
-                    )
-                    .listen(
-                        '.ActionRequestStatusChanged',
-                        (event: ActionRequestStatusPayload) => {
-                            if (
-                                TERMINAL_STATUSES.has(event.status) ||
-                                event.status === 'approved' ||
-                                event.status === 'executing'
-                            ) {
-                                if (pendingIds.has(event.id)) {
-                                    pendingIds.delete(event.id);
-                                    pendingActions.value = Math.max(
-                                        0,
-                                        pendingActions.value - 1,
-                                    );
-                                }
-                            }
-                        },
-                    ),
+                    .listen('.ActionRequestCreated', applyPendingCount)
+                    .listen('.ActionRequestStatusChanged', applyPendingCount),
             );
         }
 
@@ -226,6 +320,7 @@ export function useNavCounts(): NavCounts {
                     '.LibraryInterventionChanged',
                     (event: { count: number }) => {
                         libraryIntervention.value = event.count;
+                        markLive('libraryIntervention');
                     },
                 )
                 .listen(
@@ -233,6 +328,7 @@ export function useNavCounts(): NavCounts {
                     (event: { queued: number; completed: number }) => {
                         sabnzbdQueued.value = event.queued;
                         sabnzbdCompleted.value = event.completed;
+                        markLive('sabnzbd');
                     },
                 ),
         );
@@ -246,6 +342,7 @@ export function useNavCounts(): NavCounts {
                     (event: ReplacementAttemptPayload) => {
                         replacementAttention.value =
                             event.attention_unacknowledged;
+                        markLive('replacementAttention');
                     },
                 ),
             );
@@ -265,6 +362,7 @@ export function useNavCounts(): NavCounts {
         stopStartListener?.();
         stopSuccessListener?.();
         stopFinishListener?.();
+        stopPrefetchedListener?.();
     });
 
     return {

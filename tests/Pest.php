@@ -192,6 +192,56 @@ function confirmDialogWaitUntilScript(string $condition): string
 }
 
 /**
+ * Waits until the Vue app has mounted onto #app (Vue sets `__vue_app__` after
+ * hydrate() has flushed every onMounted hook), so Echo subscriptions, hover
+ * prefetch and click handlers exist. Throws after ~5 s. SSR markup satisfies
+ * DOM assertions before hydration, so they are not a substitute.
+ */
+function appHydratedScript(): string
+{
+    return <<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (document.querySelector('#app')?.__vue_app__) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            throw new Error('The app never hydrated #app.');
+        })()
+    JS;
+}
+
+/**
+ * Hands a broadcast to the page's Echo listeners. Tests broadcast through the
+ * null driver, so this emits on the pusher-js channel Echo created for
+ * `private-{$channel}`, after waiting (up to ~5 s) until at least
+ * `$minimumListeners` callbacks are bound for the event. It throws when they
+ * never are, so an emit can neither race the page's subscriptions nor pass
+ * vacuously.
+ *
+ * @param  array<string, mixed>  $payload
+ */
+function echoEmitScript(string $channel, string $event, array $payload, int $minimumListeners = 1): string
+{
+    $json = json_encode($payload, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (async () => {
+            const channel = () => window.Pusher?.instances?.[0]?.channel('private-{$channel}');
+            const bound = () => (channel()?.callbacks?.get('{$event}') ?? []).length;
+            for (let attempt = 0; attempt < 250 && bound() < {$minimumListeners}; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            if (bound() < {$minimumListeners}) {
+                throw new Error('private-{$channel} has ' + bound() + ' listener(s) for {$event} after 5 s.');
+            }
+            channel().emit('{$event}', {$json});
+        })()
+    JS;
+}
+
+/**
  * Waits until the shared confirm dialog has left the DOM; its exit animation
  * keeps it mounted briefly after it closes.
  */

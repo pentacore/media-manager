@@ -8,6 +8,7 @@ use App\Enums\ServiceType;
 use App\Enums\WhisparrVersion;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Arr\LibraryCacheSync;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemPresenter;
 use Illuminate\Http\Client\ConnectionException;
@@ -67,6 +68,20 @@ class WhisparrController extends Controller
                 : ['groups' => [], 'error' => null],
             'qualityProfiles' => Inertia::defer(fn (): array => $this->qualityProfiles($connection), 'qualityProfiles'),
         ]);
+    }
+
+    /**
+     * The library page's Sync button (admins, like every Whisparr page).
+     */
+    public function sync(LibraryCacheSync $libraryCacheSync): RedirectResponse
+    {
+        $connection = ServiceConnection::findActive(ServiceType::Whisparr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Whisparr, back());
+        }
+
+        return $this->syncLibraryCache($connection, $libraryCacheSync);
     }
 
     /**

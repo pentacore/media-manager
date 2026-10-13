@@ -13,11 +13,14 @@ import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/A
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import {
     ActionFailureDetails,
+    compareLiveStatus,
     failureReasonLabel,
     isUncertainOutcome,
     mergeLiveResult,
+    reconcileWithLive,
     retryConfirmation,
 } from '@/components/actions';
+import type { LiveStatusChange } from '@/components/actions';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import {
     Field,
@@ -121,13 +124,39 @@ watch(
     { immediate: true },
 );
 
+// The newest live status seen for each listed row. A reload or a redirect
+// can be read before a fast change was written and land after its
+// broadcast; reseeding from it must not roll the row back.
+const liveStatuses = new Map<number, LiveStatusChange>();
+
+/** The user's own review settles these rows: their next server row wins. */
+function forgetLiveStatuses(ids: number[]): void {
+    ids.forEach((id) => liveStatuses.delete(id));
+}
+
+function reconcileReloadedRow(row: ActionRequestRow): ActionRequestRow {
+    const live = liveStatuses.get(row.id);
+
+    if (live === undefined) {
+        return row;
+    }
+
+    if (compareLiveStatus(live, row) <= 0) {
+        liveStatuses.delete(row.id);
+
+        return row;
+    }
+
+    return reconcileWithLive(row, live);
+}
+
 // Filter changes navigate with preserveState (no remount) and Refresh
 // replaces the prop in place, so the realtime list must be reseeded from
 // every fresh server payload — otherwise it keeps rendering the seed from
 // whatever filter/page this component originally mounted with.
 watch(
     () => props.requests.data,
-    (rows) => reseed(rows),
+    (rows) => reseed(rows.map(reconcileReloadedRow)),
 );
 
 const visibleRequests = computed<ActionRequestRow[]>(() =>
@@ -200,6 +229,7 @@ async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
     }
 
     bulkBusy.value = true;
+    forgetLiveStatuses(bulkIds.value);
     const reason = rejectReason.value.trim();
     const summary = await submitBulk(ActionRequestController.bulk.url(), {
         ids: bulkIds.value,
@@ -213,27 +243,34 @@ async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
         focusAfterBulk();
         rejectDialogOpen.value = false;
         rejectReason.value = '';
-        router.reload({ only: ['requests', 'statusCounts'] });
+        // `nav` too: the bulk run is a JSON request, not a visit, so the
+        // sidebar badges would otherwise wait for the broadcasts.
+        router.reload({ only: ['requests', 'statusCounts', 'nav'] });
     }
 }
 
 const { acquirePrivateChannel } = useWebSocket();
 let statusLease: ChannelLease | null = null;
 
-interface StatusChangePayload {
-    id: number;
-    status: ActionRequestRow['status'];
-    /** The member-safe result (null once a retry cleared it). */
-    result?: ActionRequestRow['result'];
-    updated_at: string;
-}
-
-function applyStatusChange(payload: StatusChangePayload): void {
+function applyStatusChange(payload: LiveStatusChange): void {
     const target = liveRequests.value.find((row) => row.id === payload.id);
 
     if (!target) {
         return;
     }
+
+    // Delivered out of order: an event older than one already applied
+    // changes nothing.
+    const remembered = liveStatuses.get(payload.id);
+
+    if (
+        remembered !== undefined &&
+        compareLiveStatus(payload, remembered) < 0
+    ) {
+        return;
+    }
+
+    liveStatuses.set(payload.id, payload);
 
     const statusChanged = target.status !== payload.status;
 
@@ -288,7 +325,7 @@ onMounted(() => {
     subscribeCreated();
 
     statusLease = acquirePrivateChannel(ACTIONS_CHANNEL)
-        .listen('.ActionRequestStatusChanged', (event: StatusChangePayload) => {
+        .listen('.ActionRequestStatusChanged', (event: LiveStatusChange) => {
             applyStatusChange(event);
             scheduleStatusCountsReload();
         })
@@ -406,6 +443,7 @@ function svcId(name: string | null | undefined): string {
 }
 
 function approve(id: number): void {
+    forgetLiveStatuses([id]);
     router.post(
         ActionRequestController.approve.url(id),
         {},
@@ -414,6 +452,7 @@ function approve(id: number): void {
 }
 
 function reject(id: number): void {
+    forgetLiveStatuses([id]);
     router.post(
         ActionRequestController.reject.url(id),
         {},
@@ -437,6 +476,7 @@ async function retry(row: ActionRequestRow): Promise<void> {
         }
     }
 
+    forgetLiveStatuses([row.id]);
     router.post(
         ActionRequestController.retry.url(row.id),
         {},
@@ -1189,12 +1229,14 @@ function pipelineState(
                         >
                             <Button
                                 class="flex-1"
+                                data-action-approve
                                 @click="approve(selected.id)"
                             >
                                 Approve &amp; execute
                             </Button>
                             <Button
                                 variant="destructive"
+                                data-action-decline
                                 @click="reject(selected.id)"
                             >
                                 Decline

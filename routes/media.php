@@ -30,6 +30,11 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::get('movies', [MovieController::class, 'index'])->name('movies.index');
             Route::get('movies/{id}', [MovieController::class, 'show'])->whereNumber('id')->name('movies.show');
 
+            // The index pages' Sync button: busts the connection's cache, at
+            // most once per 30 s per connection (LibraryCacheSync).
+            Route::post('series/sync', [SeriesController::class, 'sync'])->name('series.sync');
+            Route::post('movies/sync', [MovieController::class, 'sync'])->name('movies.sync');
+
             // Unified search — viewers get the Seerr scope only (SearchController).
             Route::get('search', [SearchController::class, 'index'])->name('search.index');
             Route::get('search/instant', InstantSearchController::class)->name('search.instant');
@@ -151,5 +156,6 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::post('actions/search', [WhisparrActionController::class, 'search'])->name('actions.search');
             Route::post('actions/delete', [WhisparrActionController::class, 'delete'])->name('actions.delete');
             Route::post('bulk', [WhisparrActionController::class, 'bulk'])->name('bulk');
+            Route::post('sync', [WhisparrController::class, 'sync'])->name('sync');
         });
     });

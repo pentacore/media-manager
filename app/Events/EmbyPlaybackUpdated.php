@@ -30,6 +30,12 @@ class EmbyPlaybackUpdated implements ShouldBroadcast
     }
 
     /**
+     * `user_id` is the app user who owns the row's Emby link (a required
+     * relation). The channel is shared by every signed-in user, so the payload
+     * cannot say whether the reader may toggle the played state; Watch
+     * History derives it from `user_id` with the same rule as
+     * EmbyActivity::playedStateEditableBy(), and the server re-checks.
+     *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
@@ -37,6 +43,7 @@ class EmbyPlaybackUpdated implements ShouldBroadcast
         return [
             'id' => $this->embyActivity->id,
             'emby_user_link_id' => $this->embyActivity->emby_user_link_id,
+            'user_id' => $this->embyActivity->embyUserLink->user_id,
             'media_type' => $this->embyActivity->media_type,
             'media_title' => $this->embyActivity->media_title,
             'series_title' => $this->embyActivity->series_title,

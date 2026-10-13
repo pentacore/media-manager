@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Broadcasting\InteractsWithSockets;
@@ -37,6 +38,11 @@ class ActionRequestCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
      * ActionRequestBrowserPayload::safeResult() (no exception or message
      * text leaves the server).
      *
+     * `pending_count` is every pending request at the time the queued
+     * broadcast runs: the sidebar badge takes it as is, so it never drifts
+     * the way per-id deltas did (a request pending before the tab opened, or
+     * settled by a bulk review).
+     *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
@@ -58,6 +64,7 @@ class ActionRequestCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
             'webhook_source' => $this->actionRequest->webhookEvent?->serviceConnection?->name,
             'created_at' => $this->actionRequest->created_at?->toISOString(),
             'updated_at' => $this->actionRequest->updated_at?->toISOString(),
+            'pending_count' => ActionRequest::query()->where('status', ActionRequestStatus::Pending)->count(),
         ];
     }
 }

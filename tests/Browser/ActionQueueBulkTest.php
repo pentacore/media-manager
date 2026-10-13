@@ -164,3 +164,41 @@ test('a bulk reject that resolves with focus still in the dialog hands focus to 
     $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });
+
+test('the sidebar pending badge drops by the requests a bulk review settled', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click(sprintf('[data-bulk-select="%d"]', $pending[0]->id))
+        ->click(sprintf('[data-bulk-select="%d"]', $pending[1]->id))
+        ->click('[data-bulk-approve]')
+        ->assertSee('2 approved')
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '1')
+        ->assertNoSmoke();
+});
+
+test('a request settled elsewhere lowers the badge although this tab never saw it created', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $pending[0]->id,
+        'status' => 'approved',
+        'result' => null,
+        'updated_at' => $pending[0]->updated_at->addSeconds(5)->toISOString(),
+        'pending_count' => 2,
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-nav-badge=\"Action Queue\"]')?.innerText.trim() === '2'"));
+
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
+});

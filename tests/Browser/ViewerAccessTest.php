@@ -128,3 +128,40 @@ test('a viewer searching gets no scope switcher', function (): void {
         ->assertNoSmoke()
         ->assertCount('[data-search-scope]', 0);
 });
+
+/**
+ * How many ActionRequestStatusChanged callbacks the page binds on
+ * `private-members.actions`, or -1 when it never joined that channel. Run it
+ * after appHydratedScript(): before hydration nothing has subscribed yet.
+ */
+function viewerAccessActionListenersScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const channel = window.Pusher?.instances?.[0]?.channel('private-members.actions');
+            return channel ? (channel.callbacks?.get('ActionRequestStatusChanged') ?? []).length : -1;
+        })()
+    JS;
+}
+
+test('a viewer page never joins the action channel it would be refused', function (): void {
+    $viewer = User::factory()->create();
+    $this->actingAs($viewer);
+
+    $webpage = visit('/dashboard')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // The viewer's own channel proves the page has subscribed by now.
+    expect($webpage->script(sprintf("window.Pusher?.instances?.[0]?.channel('private-App.Models.User.%d') !== undefined", $viewer->id)))->toBeTrue()
+        ->and($webpage->script(viewerAccessActionListenersScript()))->toBe(-1);
+});
+
+test('a member page keeps the action toasts and the pending badge on the action channel', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit('/dashboard')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // The layout's toast (useNotifications) and the sidebar badge (useNavCounts).
+    expect($webpage->script(viewerAccessActionListenersScript()))->toBe(2);
+});

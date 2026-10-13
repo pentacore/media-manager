@@ -91,7 +91,7 @@ interface Summary {
 const props = defineProps<{
     connection: { url: string };
     filters: { page: number; status: FilterId };
-    requests?: { data: SeerrRequest[]; meta: Meta };
+    requests?: { data: SeerrRequest[]; meta: Meta; error: string | null };
     summary?: Summary;
 }>();
 
@@ -104,11 +104,14 @@ defineOptions({
     },
 });
 
+// WebhookEventProcessed fires after the queued handler cleared the Seerr
+// cache; WebhookReceived fires before, and a reload on it can re-read
+// stale rows.
 const { subscribe: subscribeReload } = useRealtimeReload<{
     service_type: string | null;
 }>({
     channel: 'dashboard',
-    event: 'WebhookReceived',
+    event: 'WebhookEventProcessed',
     only: ['requests', 'summary'],
     filter: (event) => event.service_type === 'seerr',
 });
@@ -639,9 +642,17 @@ const rangeText = computed(() => {
             </button>
         </div>
 
+        <p
+            v-if="requests?.error"
+            class="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-destructive"
+            data-requests-error
+        >
+            {{ requests.error }}
+        </p>
+
         <!-- Cards -->
         <div
-            v-if="requests"
+            v-else-if="requests"
             class="grid gap-4"
             style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))"
         >

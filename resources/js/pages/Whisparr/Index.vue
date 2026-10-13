@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { RefreshCcw, Search } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import WhisparrActionController from '@/actions/App/Http/Controllers/Whisparr/WhisparrActionController';
 import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { focusAfterBulk } from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
@@ -53,6 +54,19 @@ defineOptions({
 });
 
 const { blurPosters } = useWhisparrBlur();
+
+// WebhookEventProcessed fires after the queued handler cleared the
+// Whisparr cache, so the reload reads fresh rows.
+const { subscribe: subscribeReload } = useRealtimeReload<{
+    service_type: string | null;
+}>({
+    channel: 'dashboard',
+    event: 'WebhookEventProcessed',
+    only: ['library'],
+    filter: (event) => event.service_type === 'whisparr',
+});
+
+onMounted(subscribeReload);
 
 const filter = ref<LibraryFilter>('all');
 const sort = ref<LibrarySort>('title');
@@ -163,18 +177,26 @@ function bulkDone(summary: BulkSummary): void {
     }
 }
 
+// The POST busts the cached Whisparr reads (at most once per 30 s per
+// connection, LibraryCacheSync) and redirects back; `only` turns that
+// redirect into a reload of the two lists, and the toast says which it was.
 function sync(): void {
     if (syncing.value) {
         return;
     }
 
     syncing.value = true;
-    router.reload({
-        only: ['library', 'qualityProfiles'],
-        onFinish: () => {
-            syncing.value = false;
+    router.post(
+        WhisparrController.sync.url(),
+        {},
+        {
+            only: ['library', 'qualityProfiles'],
+            preserveScroll: true,
+            onFinish: () => {
+                syncing.value = false;
+            },
         },
-    });
+    );
 }
 </script>
 
@@ -213,6 +235,7 @@ function sync(): void {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-library-sync
                     :disabled="syncing"
                     @click="sync"
                 >
