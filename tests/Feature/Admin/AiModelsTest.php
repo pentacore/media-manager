@@ -757,6 +757,22 @@ test('a prefill for a candidate without reasoning carries none', function (): vo
         ->assertInertia(fn ($page) => $page->where('prefill.reasoning', null)->where('prefill.model', 'gpt-5-nano'));
 });
 
+test('a task that inherits the chat model still gets the prefill prop', function (): void {
+    expect(AiTask::Decision->inheritsChatModel())->toBeTrue();
+    [$benchmarkRun] = prefillRun(AiTask::Decision);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'decision']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.2.task', 'decision')
+            ->where('tasks.2.tiers.0.model', null)
+            ->where('prefill.task', 'decision')
+            ->where('prefill.model', 'gpt-5.6-luna'));
+
+    expect(AiTaskModel::query()->count())->toBe(0);
+});
+
 test('the index has no prefill without a benchmark link', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
@@ -771,7 +787,8 @@ test('a stale benchmark link redirects to the plain page with a toast', function
         ->get(route('admin.ai-models.index', $query))
         ->assertRedirect(route('admin.ai-models.index'));
 
-    expect(session('inertia.flash_data.toast') ?? session('toast'))->toMatchArray(['type' => 'error']);
+    expect(session('inertia.flash_data.toast.type'))->toBe('error')
+        ->and((string) session('inertia.flash_data.toast.message'))->toBe('That benchmark candidate is no longer available.');
     expect(AiTaskModel::query()->count())->toBe(0);
 })->with([
     'unknown run' => [['benchmark_run' => 999_999]],

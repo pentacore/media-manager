@@ -156,7 +156,8 @@ onMounted(() => {
         .querySelector(`[data-task="${props.prefill.task}"]`)
         ?.scrollIntoView({ block: 'center' });
 
-    // A reload must not re-apply the prefill.
+    // A reload must not re-apply the prefill. Inertia's page.url keeps the
+    // query, so navigating back re-applies the unsaved prefill (accepted).
     window.history.replaceState(
         window.history.state,
         '',
