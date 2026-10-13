@@ -18,10 +18,13 @@ use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\Emby\EmbyActions;
+use App\Services\Emby\EmbyUnexpectedResponse;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
 use App\Support\UpstreamErrorText;
@@ -41,6 +44,14 @@ use Illuminate\Support\Sleep;
 beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
 });
+
+/**
+ * A 200 whose body is a login page, as a proxy in front of a service answers.
+ */
+function executeActionRequestLoginPage(): Response
+{
+    return new Response(new GuzzleHttp\Psr7\Response(200, [], '<html>Sign in</html>'));
+}
 
 /**
  * The job as the queue hands it over on a given delivery attempt.
@@ -523,21 +534,37 @@ test('an upstream HTTP failure is stored as a fixed sentence naming the service,
     'a server error on the last attempt' => [503, 3, 'retries_exhausted', 'HTTP 503: Radarr reported a server error.'],
 ]);
 
-test("the app's own fixed refusal keeps its sentence", function (): void {
+test("the app's own fixed refusal keeps its sentence", function (RequestException $refusal, string $message): void {
     $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie', 'target_service' => 'radarr']);
 
-    $response = new Response(new GuzzleHttp\Psr7\Response(200, [], '<html>Sign in</html>'));
     $mock = Mockery::mock(ActionExecutor::class);
-    $mock->shouldReceive('execute')->once()->andThrow(new ArrUnexpectedResponse($response, 'Radarr'));
+    $mock->shouldReceive('execute')->once()->andThrow($refusal);
     $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
 
     executeActionRequestOnAttempt($request, 3)->handle();
 
     expect($request->fresh()->result)->toMatchArray([
         'reason' => 'retries_exhausted',
-        'message' => 'Radarr answered with a body that is not JSON data.',
+        'message' => $message,
     ]);
-});
+})->with([
+    'an Arr body that is not JSON' => [
+        fn (): RequestException => new ArrUnexpectedResponse(executeActionRequestLoginPage(), 'Radarr'),
+        'Radarr answered with a body that is not JSON data.',
+    ],
+    'a SABnzbd refusal' => [
+        fn (): RequestException => new SabnzbdRefused(executeActionRequestLoginPage(), 'SABnzbd refused the request.'),
+        'SABnzbd refused the request.',
+    ],
+    'an Emby body that is not JSON' => [
+        fn (): RequestException => new EmbyUnexpectedResponse(executeActionRequestLoginPage()),
+        'Emby answered with a body that is not a JSON user list.',
+    ],
+    'a Seerr body that is not JSON' => [
+        fn (): RequestException => new SeerrUnexpectedResponse(executeActionRequestLoginPage()),
+        'Seerr answered with a body that is not JSON data.',
+    ],
+]);
 
 test('the failed() hook stores a fixed sentence for an HTTP failure', function (): void {
     $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie', 'target_service' => 'radarr']);
