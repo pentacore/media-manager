@@ -105,6 +105,7 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
     protected function completionAttributes(?TextUsage $usage, ?string $reason, ?string $provider, ?string $model): array
     {
         $attributes = parent::completionAttributes($usage, $reason, $provider, $model);
+        $attributes['invocationId'] = $this->response?->invocationId;
 
         try {
             $attributes['answeredBy'] = AnsweredBy::forChat($provider, $model);

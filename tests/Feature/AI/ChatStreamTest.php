@@ -86,6 +86,25 @@ test('a completed streamed turn names the exact answered-by on RUN_FINISHED', fu
         ->and($frame)->toHaveKeys(['threadId', 'usage']);
 });
 
+test('a completed streamed turn carries the invocation id that its stored reply recorded', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($frame['invocationId'])->toBeString()->not->toBeEmpty()
+        ->and($meta['invocation_id'])->toBe($frame['invocationId']);
+});
+
 test('the streamed answered-by reports the tier that ran when tier 1 is skipped', function (): void {
     config()->set('ai.default', 'openai');
     config()->set('ai.providers.openai.key', 'sk-test');

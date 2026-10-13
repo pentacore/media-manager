@@ -322,3 +322,24 @@ test("a run's own outcome replaces a decision row written for the same event whi
         ->summary->toBe('Nothing to do.')
         ->actions_count->toBe(0);
 });
+
+test('an agent answer stores the run invocation id on the decision', function (): void {
+    DecisionAgent::fake(['Nothing to do.']);
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->invocation_id)->toBeString()->not->toBe('');
+});
+
+test('a failed agent run and a worker-stopped run store no invocation id', function (): void {
+    DecisionAgent::fake(fn () => throw new RuntimeException('boom'));
+    $event = WebhookEvent::factory()->create();
+    runJob($event->id);
+
+    $stopped = WebhookEvent::factory()->create();
+    new RunDecisionAgent($stopped->id, 'sonarr', 'Grab', ['eventType' => 'Grab'])->failed(new RuntimeException('timed out'));
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->invocation_id)->toBeNull()
+        ->and(AgentDecision::query()->where('webhook_event_id', $stopped->id)->sole()->invocation_id)->toBeNull();
+});

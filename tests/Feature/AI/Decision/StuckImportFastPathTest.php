@@ -96,7 +96,7 @@ test('a confident import queues the import without running the agent', function 
 
     DecisionAgent::assertNeverPrompted();
     expect(ActionRequest::sole())->type->toBe('resolve_manual_import')->requires_approval->toBeFalse()
-        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('95%')
+        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('95%')->invocation_id->toBeNull()
         ->and(ClassificationOutcome::sole())->gate->toBe(ClassificationGate::StuckImport)->verdict->toBe(ClassificationVerdict::ResolvedByClassifier)->predicted->toBe('import');
 });
 

@@ -300,3 +300,37 @@ test('a candidate scored on fewer cases shows its coverage and is never highligh
         ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-avg-score]', 'class', 'text-success')
         ->assertAttributeDoesntContain('[data-benchmark-matrix-row="1"] [data-benchmark-pass-rate]', 'class', 'text-success');
 });
+
+test('use this pre-fills tier 1 on AI Models and saves only after Save', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->create();
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'gpt-5-mini', 'reasoning' => null],
+    ])->create(['name' => 'Title bake-off', 'case_ids' => [$benchmarkCase->id]]);
+    BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->scored(0.9, true)->create();
+    BenchmarkResult::factory()->forCase($run, $benchmarkCase, 1)->failed('boom')->create();
+    $existing = AiTaskModel::query()->count();
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->assertMissing('[data-benchmark-matrix-row="1"] [data-benchmark-use-candidate]')
+        ->click('[data-benchmark-matrix-row="0"] [data-benchmark-use-candidate]')
+        ->assertVisible('[data-ai-models-prefill]')
+        ->assertSeeIn('[data-ai-models-prefill]', 'Tier 1 of Conversation titles pre-filled from benchmark run Title bake-off')
+        ->assertSeeIn('[data-task="title"] [data-model-select]', 'gpt-5-nano')
+        ->assertScript("(() => { const top = document.querySelector('[data-task=\"title\"]').getBoundingClientRect().top; return top >= 0 && top < window.innerHeight; })()", true);
+
+    expect(AiTaskModel::query()->count())->toBe($existing);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->click('[data-benchmark-matrix-row="0"] [data-benchmark-use-candidate]')
+        ->click('Save models')
+        ->assertSee('AI models updated.')
+        ->assertMissing('[data-ai-models-prefill]');
+
+    expect(AiTaskModel::query()->forTask(AiTask::Title)->first())
+        ->provider->toBe('openai')
+        ->model->toBe('gpt-5-nano');
+});

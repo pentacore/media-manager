@@ -6,6 +6,7 @@ import { InitialsAvatar } from '@/components/mm';
 import { useAiChat } from '@/composables/useAiChat';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { cn } from '@/lib/utils';
+import { create as createBenchmarkCase } from '@/routes/admin/benchmarks/cases';
 import AttachmentChips from './AttachmentChips.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import ToolCallChip from './ToolCallChip.vue';
@@ -32,6 +33,17 @@ const { closeChat } = useAiChat();
 
 /** Server cap for a template body. */
 const MAX_TEMPLATE_BODY = 4000;
+
+/** The capture source the case form reads: the invocation when known, else the stored message. */
+function benchmarkCaseQuery(
+    message: ChatMessage,
+): { from_invocation: string } | { from_chat_message: string } | null {
+    if (message.invocation_id) {
+        return { from_invocation: message.invocation_id };
+    }
+
+    return message.id ? { from_chat_message: message.id } : null;
+}
 </script>
 
 <template>
@@ -116,6 +128,22 @@ const MAX_TEMPLATE_BODY = 4000;
                 data-save-as-template
                 @click="closeChat()"
                 >Save as template</Link
+            >
+            <Link
+                v-if="
+                    message.role === 'assistant' &&
+                    !message.failed &&
+                    !streaming &&
+                    message.text.trim() !== '' &&
+                    benchmarkCaseQuery(message)
+                "
+                :href="
+                    createBenchmarkCase({ query: benchmarkCaseQuery(message)! })
+                "
+                class="mt-1 inline-block text-[11.5px] text-muted-foreground hover:text-foreground"
+                data-chat-save-benchmark-case
+                @click="closeChat()"
+                >Save as benchmark case</Link
             >
             <p
                 v-if="message.stopped"
