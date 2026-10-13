@@ -176,12 +176,14 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         $fastPathOutcome = null;
         $summary = '';
+        $invocationId = null;
 
         try {
             $fastPathOutcome = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
 
             if ($fastPathOutcome === null) {
                 $response = (new DecisionAgent)->prompt($this->buildPrompt());
+                $invocationId = $response->invocationId;
                 $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
             }
         } catch (Throwable $throwable) {
@@ -215,7 +217,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
-        $this->record($webhookEventId, $status, $summary, $decisionRunContext);
+        $this->record($webhookEventId, $status, $summary, $decisionRunContext, $invocationId);
         $this->resolveGateOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->resolveActionKindOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->resolveFallbackAgreement($decisionRunContext, $classificationOutcomeRecorder);
@@ -655,11 +657,11 @@ Decide whether any action is warranted. Gather context with the read tools if ne
 PROMPT;
     }
 
-    private function record(?int $webhookEventId, AgentDecisionStatus $agentDecisionStatus, string $summary, ?DecisionRunContext $decisionRunContext): void
+    private function record(?int $webhookEventId, AgentDecisionStatus $agentDecisionStatus, string $summary, ?DecisionRunContext $decisionRunContext, ?string $invocationId = null): void
     {
         $this->persistDecision(
             $webhookEventId,
-            $this->decisionAttributes($agentDecisionStatus, $summary, $decisionRunContext?->actionRequestIds() ?? []),
+            $this->decisionAttributes($agentDecisionStatus, $summary, $decisionRunContext?->actionRequestIds() ?? [], $invocationId),
             overwrite: true,
         );
     }
@@ -669,9 +671,9 @@ PROMPT;
      * without an ellipsis.
      *
      * @param  array<int, int>  $actionRequestIds
-     * @return array{service: string, event_type: string, status: AgentDecisionStatus, summary: string, actions_count: int, action_request_ids: array<int, int>}
+     * @return array{service: string, event_type: string, status: AgentDecisionStatus, summary: string, actions_count: int, action_request_ids: array<int, int>, invocation_id: string|null}
      */
-    private function decisionAttributes(AgentDecisionStatus $agentDecisionStatus, string $summary, array $actionRequestIds): array
+    private function decisionAttributes(AgentDecisionStatus $agentDecisionStatus, string $summary, array $actionRequestIds, ?string $invocationId = null): array
     {
         return [
             'service' => $this->service,
@@ -680,6 +682,7 @@ PROMPT;
             'summary' => Str::limit($summary, 4000, ''),
             'actions_count' => count($actionRequestIds),
             'action_request_ids' => $actionRequestIds,
+            'invocation_id' => $invocationId,
         ];
     }
 

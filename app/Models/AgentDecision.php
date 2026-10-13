@@ -24,6 +24,7 @@ use Override;
  * @property string|null $summary
  * @property int $actions_count
  * @property array<array-key, mixed>|null $action_request_ids
+ * @property string|null $invocation_id
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read WebhookEvent|null $webhookEvent
@@ -35,7 +36,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['webhook_event_id', 'service', 'event_type', 'status', 'summary', 'actions_count', 'action_request_ids'])]
+#[Fillable(['webhook_event_id', 'service', 'event_type', 'status', 'summary', 'actions_count', 'action_request_ids', 'invocation_id'])]
 class AgentDecision extends Model
 {
     /** @use HasFactory<AgentDecisionFactory> */

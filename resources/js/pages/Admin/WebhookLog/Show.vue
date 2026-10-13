@@ -6,6 +6,7 @@ import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLo
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
+import { create as createBenchmarkCase } from '@/routes/admin/benchmarks/cases';
 
 interface ActivityEntry {
     id: number;
@@ -20,6 +21,7 @@ interface AgentDecision {
     summary: string | null;
     actions_count: number;
     action_request_ids: number[] | null;
+    capture_invocation_id: string | null;
 }
 
 interface ActionEntry {
@@ -260,6 +262,20 @@ function decisionVariant(status: string): PillVariant {
             <p class="mt-2 text-[12px] text-muted-foreground">
                 {{ event.agent_decision.actions_count }} action(s) proposed.
             </p>
+            <Link
+                v-if="event.agent_decision.capture_invocation_id"
+                :href="
+                    createBenchmarkCase({
+                        query: {
+                            from_invocation:
+                                event.agent_decision.capture_invocation_id,
+                        },
+                    })
+                "
+                class="mt-2 inline-block text-[12px] text-muted-foreground hover:text-foreground"
+                data-webhook-save-benchmark-case
+                >Save as benchmark case</Link
+            >
         </div>
 
         <div
