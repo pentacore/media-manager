@@ -124,9 +124,23 @@ const greeting = computed(() => {
 
 const { stats: liveStats, subscribe: subscribeStats } = useDashboardStats();
 
+/**
+ * The feeds this dashboard lists, matching what the server rendered
+ * (ActivityLog::scopeVisibleTo()): everyone's activity for manage-library
+ * users, plus the admin-only audit rows for admins; a viewer only their own
+ * rows, which ActivityLogCreated also sends to their private user channel.
+ */
+function activityChannels(): string[] {
+    if (!canManageLibrary.value) {
+        return [`App.Models.User.${page.props.auth.user.id}`];
+    }
+
+    return can('admin') ? ['activity', 'activity.audit'] : ['activity'];
+}
+
 const { items: liveActivity, subscribe: subscribeActivity } =
     useRealtimeList<ActivityItem>({
-        channel: 'activity',
+        channel: activityChannels(),
         event: 'ActivityLogCreated',
         keyField: 'id',
         initial: props.recentActivity,
@@ -247,12 +261,7 @@ function isDestructive(type: string): boolean {
 
 onMounted(() => {
     subscribeStats();
-
-    // The `activity` channel carries every user's rows; viewers only get
-    // their own, server-rendered, so they never join it.
-    if (canManageLibrary.value) {
-        subscribeActivity();
-    }
+    subscribeActivity();
 });
 </script>
 
@@ -366,7 +375,7 @@ onMounted(() => {
                         class="flex items-center gap-2 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                         data-dashboard-activity-heading
                     >
-                        <LiveDot v-if="canManageLibrary" class="text-accent" />
+                        <LiveDot class="text-accent" />
                         {{
                             canManageLibrary ? 'Live activity' : 'Your activity'
                         }}

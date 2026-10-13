@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Arr\LibraryCacheSync;
 use App\Support\Abilities;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -43,5 +45,26 @@ abstract class Controller
         return $user?->can(Abilities::ADMIN) === true
             ? __(':service refused the request — check the connection settings.', ['service' => $serviceType->label()])
             : __(':service is unavailable — ask an admin to check the connection.', ['service' => $serviceType->label()]);
+    }
+
+    /**
+     * The library pages' Sync button: bust the connection's cached reads (at
+     * most once per LibraryCacheSync::DECAY_SECONDS per connection, whoever
+     * asks) and go back to the page, which reloads its lists.
+     */
+    protected function syncLibraryCache(ServiceConnection $serviceConnection, LibraryCacheSync $libraryCacheSync): RedirectResponse
+    {
+        $service = $serviceConnection->type->label();
+
+        if ($libraryCacheSync->sync($serviceConnection)) {
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Synced with :service.', ['service' => $service])]);
+        } else {
+            Inertia::flash('toast', ['type' => 'info', 'message' => __(':service was synced moments ago — try again in :seconds s.', [
+                'service' => $service,
+                'seconds' => $libraryCacheSync->secondsUntilNextSync($serviceConnection),
+            ])]);
+        }
+
+        return back();
     }
 }

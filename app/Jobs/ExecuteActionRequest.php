@@ -6,20 +6,25 @@ namespace App\Jobs;
 
 use App\Enums\ActionRequestStatus;
 use App\Enums\QueueLane;
+use App\Enums\ServiceType;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\ActionRequestActivityLogger;
 use App\Services\Arr\ArrActions;
+use App\Services\Arr\ArrUnexpectedResponse;
 use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\Emby\EmbyActions;
+use App\Services\Emby\EmbyUnexpectedResponse;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\Seerr\SeerrActions;
+use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
 use App\Support\UpstreamErrorText;
@@ -181,7 +186,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             if (! $transient) {
                 $this->markFailed([
                     'reason' => 'execution_failed',
-                    'message' => $exception->getMessage(),
+                    'message' => $this->failureMessage($exception),
                     'exception' => $exception::class,
                 ]);
 
@@ -194,7 +199,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             if ($this->attempts() >= $this->tries) {
                 $this->markFailed([
                     'reason' => 'retries_exhausted',
-                    'message' => $exception->getMessage(),
+                    'message' => $this->failureMessage($exception),
                     'exception' => $exception::class,
                 ]);
 
@@ -269,16 +274,17 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
         $this->markFailed([
             'reason' => 'job_failed',
-            'message' => $throwable?->getMessage() ?? 'Job failed',
+            'message' => $throwable instanceof Throwable ? $this->failureMessage($throwable) : 'Job failed',
         ], UpstreamErrorText::ACTION_EMPTY_FALLBACK);
     }
 
     /**
-     * Executor exception text embeds upstream response bodies
-     * (RequestException) and file paths, and result.message is shown on the
-     * Action Queue — so it is stored reduced, never raw. A message with
-     * nothing usable left becomes $emptyFallback: the upstream sentence for a
-     * media service's failure, a neutral one for a local exception.
+     * Executor exception text can embed file paths, and result.message is
+     * shown on the Action Queue — so it is stored reduced, never raw (HTTP
+     * failures arrive here already as fixed sentences, see failureMessage()).
+     * A message with nothing usable left becomes $emptyFallback: the
+     * upstream sentence for a media service's failure, a neutral one for a
+     * local exception.
      *
      * @param  array<string, mixed>  $result
      */
@@ -293,6 +299,43 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             'result' => ['success' => false, ...$result],
         ]);
         event(new ActionRequestStatusChanged($this->actionRequest));
+    }
+
+    /**
+     * What result.message says about a failure. The Action Queue shows it to
+     * admins, so it says what went wrong in plain words — but an upstream
+     * HTTP failure becomes one fixed sentence per status class naming the
+     * target service, never the response body: an error page can carry
+     * internal hostnames or tokens the sanitizer does not recognise (the
+     * PingServiceHealth rule). The app's own fixed-message refusals keep
+     * their sentence, which never quotes the body. Anything else (a
+     * connection failure's cURL text, a local exception) is returned as is;
+     * markFailed() sanitizes it.
+     */
+    private function failureMessage(Throwable $throwable): string
+    {
+        if (! $throwable instanceof RequestException || $this->isFixedMessageRefusal($throwable)) {
+            return $throwable->getMessage();
+        }
+
+        $status = $throwable->response->status();
+        $service = ServiceType::tryFrom($this->actionRequest->target_service)?->label() ?? 'The target service';
+
+        return match (true) {
+            in_array($status, [401, 403], true) => sprintf('HTTP %d: %s rejected the API key.', $status, $service),
+            $status === 404 => sprintf('HTTP 404: %s could not find the item — it may already have been removed.', $service),
+            $status >= 500 => sprintf('HTTP %d: %s reported a server error.', $status, $service),
+            $status >= 400 => sprintf('HTTP %d: %s refused the request.', $status, $service),
+            default => sprintf('HTTP %d: %s answered with something other than its API data.', $status, $service),
+        };
+    }
+
+    private function isFixedMessageRefusal(RequestException $requestException): bool
+    {
+        return $requestException instanceof ArrUnexpectedResponse
+            || $requestException instanceof SabnzbdRefused
+            || $requestException instanceof EmbyUnexpectedResponse
+            || $requestException instanceof SeerrUnexpectedResponse;
     }
 
     private function claimForExecution(): bool

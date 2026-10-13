@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Broadcast;
 use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 
+// The owner only: their notifications, plus their own non-audit activity rows
+// (ActivityLogCreated), which a viewer's dashboard feed listens for here.
 Broadcast::channel('App.Models.User.{id}', fn (User $user, int $id): bool => $user->id === $id);
 
 // Service-internals channels — broadcast detail an admin would see (health

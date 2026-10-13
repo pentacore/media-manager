@@ -1,5 +1,6 @@
 import { onUnmounted } from 'vue';
 import { toast } from 'vue-sonner';
+import { useCan } from '@/composables/useCan';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 
@@ -12,10 +13,16 @@ export interface UseNotifications {
 
 export function useNotifications(): UseNotifications {
     const { acquirePrivateChannel } = useWebSocket();
+    const { can } = useCan();
     let lease: ChannelLease | null = null;
 
+    /**
+     * Joins `members.actions` for the action toasts. Only manage-library
+     * users may join it (`routes/channels.php`); a viewer would get a refused
+     * channel auth and a console error on every page.
+     */
     function subscribe(): void {
-        if (lease) {
+        if (lease || !can('manage-library')) {
             return;
         }
 
