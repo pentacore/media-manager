@@ -11,6 +11,7 @@ use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\AiUsage\FreePoolAccounting;
 use App\Services\AiUsage\PoolHeadroom;
 use App\Settings\AiSettings;
@@ -71,7 +72,7 @@ test('the first tier runs while its pool has enough left', function (): void {
     $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::High])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 1, 'count' => 2, 'reason' => null]);
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 1, 'count' => 2, 'reason' => null, 'via' => null]);
 });
 
 test('a tier below its percent minimum falls through with a reason', function (): void {
@@ -83,7 +84,7 @@ test('a tier below its percent minimum falls through with a reason', function ()
     $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)']);
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null]);
 });
 
 test('a tier below its token minimum falls through even when its percent holds', function (): void {
@@ -152,7 +153,7 @@ test('an inherit tier in an event list hands off to the decision default list', 
     $inheritingReasoning = tierResolver()->resolve(AiTask::Decision, 'radarr:Grab');
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::Low])
-        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)'])
+        ->and($resolvedSelection->tier?->toArray())->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null])
         ->and([$inheritingReasoning->model, $inheritingReasoning->reasoning])->toBe(['gpt-5-nano', AiReasoningLevel::High]);
 });
 
@@ -206,6 +207,40 @@ test('when pool status fails every conditional tier is skipped', function (): vo
     expect($resolvedSelection->model)->toBe('gpt-5-nano')
         ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: free pool status unavailable');
     Exceptions::assertReported(RuntimeException::class);
+});
+
+test('a failing rate-limit lookup is named and reported', function (): void {
+    Exceptions::fake();
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierChatList(20);
+    $this->mock(AiRateLimitGuard::class, fn ($mock) => $mock->shouldReceive('exhaustedReason')->andThrow(new RuntimeException('limits down')));
+    app()->forgetScopedInstances();
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->model)->toBe('gpt-5-nano')
+        ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: rate limit status unavailable');
+    Exceptions::assertReportedCount(1);
+});
+
+test('a pool accounting failure is reported once across conditional tiers', function (): void {
+    Exceptions::fake();
+    $aiFreeUsagePool = tierPool();
+    tierPrice('gpt-5.6-luna', $aiFreeUsagePool);
+    tierPrice('gpt-5.6-terra', $aiFreeUsagePool);
+    tierPrice('gpt-5-nano');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5.6-terra')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(2)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    $this->mock(FreePoolAccounting::class, fn ($mock) => $mock->shouldReceive('status')->andThrow(new RuntimeException('accounting down')));
+    app()->forgetScopedInstances();
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->model)->toBe('gpt-5-nano')
+        ->and($resolvedSelection->tier?->reason())->toBe('Tier 1: free pool status unavailable; Tier 2: free pool status unavailable');
+    Exceptions::assertReportedCount(1);
 });
 
 test('the list walk is memoised until flushed', function (): void {
@@ -289,3 +324,86 @@ test('an explicit event tier with no reasoning resolves to the task config level
 
     expect(tierResolver()->resolve(AiTask::Decision, 'sonarr:Download')->reasoning)->toBe(AiReasoningLevel::Low);
 });
+
+test('a task that follows the chat list reports the chat list as the source of its tier', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+
+    expect(tierResolver()->resolve(AiTask::Decision)->tier?->toArray())
+        ->toBe(['position' => 2, 'count' => 2, 'reason' => 'Chat tier 1: Luna free below 20% (10% left)', 'via' => 'Chat']);
+});
+
+test('an inherit tier keeps its own skipped tiers and the relabelled parent reasons', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->position(1)->create();
+
+    $tier = tierResolver()->resolve(AiTask::Decision)->tier;
+
+    expect($tier?->toArray())->toBe([
+        'position' => 2,
+        'count' => 2,
+        'reason' => 'Tier 1: Luna free below 20% (10% left); Chat tier 1: Luna free below 20% (10% left)',
+        'via' => null,
+    ]);
+});
+
+test('an event scope without rows names the list it follows', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20);
+
+    expect(tierResolver()->resolve(AiTask::Decision, 'some_event')->tier?->via)->toBe('Chat');
+});
+
+test('an event scope without rows following the decision default list names Decision', function (): void {
+    tierPrice('gpt-5.6-luna', tierPool());
+    tierPrice('gpt-5-nano');
+    tierUsage('gpt-5.6-luna', 900_000);
+    tierChatList(20, aiTask: AiTask::Decision);
+
+    $tier = tierResolver()->resolve(AiTask::Decision, 'some_event')->tier;
+
+    expect($tier?->via)->toBe('Decision agent')
+        ->and($tier?->reason())->toStartWith('Decision agent tier 1:');
+});
+
+/**
+ * Title tiers: openrouter `auto` (optionally behind a pool minimum), then a fixed anthropic model.
+ */
+function tierAutoTitleList(?int $percent): void
+{
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'auto')->conditions($percent)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->position(1)->selecting('anthropic', 'claude-haiku-4-5')->create();
+}
+
+test('an auto title tier with an unmet pool minimum falls through to the next tier', function (): void {
+    $aiFreeUsagePool = tierPool();
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5', 'free_usage_pool_id' => $aiFreeUsagePool->id]);
+    AiUsageRecord::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    tierAutoTitleList(20);
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Title);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['anthropic', 'claude-haiku-4-5'])
+        ->and($resolvedSelection->tier?->position)->toBe(2);
+});
+
+test('an auto title tier that may run resolves to the provider cheapest model, not auto', function (?int $percent): void {
+    tierAutoTitleList($percent);
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Title);
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['openrouter', 'anthropic/claude-haiku-4.5'])
+        ->and($resolvedSelection->tier?->position)->toBe(1);
+})->with([
+    'no condition' => [null],
+    'met condition' => [20],
+]);

@@ -18,6 +18,7 @@ const props = withDefaults(
         inheritLabel?: string;
         allowAuto?: boolean;
         placeholder?: string;
+        ariaLabel?: string;
     }>(),
     {
         name: undefined,
@@ -25,6 +26,7 @@ const props = withDefaults(
         inheritLabel: undefined,
         allowAuto: false,
         placeholder: 'Select a model',
+        ariaLabel: undefined,
     },
 );
 
@@ -98,7 +100,11 @@ const groups = computed<Record<string, string[]>>(() => {
 <template>
     <div>
         <Select v-model="selected">
-            <SelectTrigger :id="id ?? name" class="h-8 max-w-[320px] text-sm">
+            <SelectTrigger
+                :id="id ?? name"
+                :aria-label="ariaLabel"
+                class="h-8 max-w-[320px] text-sm"
+            >
                 <SelectValue :placeholder="placeholder" />
             </SelectTrigger>
             <SelectContent>

@@ -7,13 +7,15 @@ namespace App\Ai;
 use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\AiUsage\PoolHeadroom;
 use App\Services\AiUsage\PoolHeadroomFigures;
+use App\Services\AiUsage\PoolHeadroomUnavailable;
 use Throwable;
 
 /**
  * Whether a non-last tier may run now: its model is not rate-limited and,
  * when the tier has pool minimums, its model's free pool has that much left.
- * Fails closed: if either check cannot be answered, the tier is skipped and
- * the list falls through to its unconditional last tier.
+ * Fails closed: if a check cannot be answered, the tier is skipped with
+ * 'rate limit status unavailable' or 'free pool status unavailable' and the
+ * list falls through to its unconditional last tier.
  */
 final readonly class TierEligibility
 {
@@ -29,16 +31,24 @@ final readonly class TierEligibility
     {
         try {
             $rateLimited = $this->aiRateLimitGuard->exhaustedReason($provider, $model);
+        } catch (Throwable $throwable) {
+            report($throwable);
 
-            if ($rateLimited !== null) {
-                return $rateLimited;
-            }
+            return 'rate limit status unavailable';
+        }
 
-            if ($minPercent === null && $minTokens === null) {
-                return null;
-            }
+        if ($rateLimited !== null) {
+            return $rateLimited;
+        }
 
+        if ($minPercent === null && $minTokens === null) {
+            return null;
+        }
+
+        try {
             $figures = $this->poolHeadroom->forModel($provider, $model);
+        } catch (PoolHeadroomUnavailable) {
+            return 'free pool status unavailable';
         } catch (Throwable $throwable) {
             report($throwable);
 

@@ -27,7 +27,12 @@ type ResolvedSummary = {
     reasoning: AiReasoningLevel;
     reasoning_label: string;
     reasoning_hint: string | null;
-    tier: { position: number; count: number; reason: string | null } | null;
+    tier: {
+        position: number;
+        count: number;
+        reason: string | null;
+        via: string | null;
+    } | null;
 };
 
 type TaskRow = {
@@ -175,6 +180,20 @@ function errorFor(...keys: string[]): string | undefined {
     return keys.map((key) => formErrors.value[key]).find(Boolean);
 }
 
+/** Row indexes shift on add/remove/reorder, so drop that list's stale errors. */
+function clearTierErrors(prefix: string): void {
+    const staleKeys = Object.keys(form.errors).filter((key) =>
+        key.startsWith(`${prefix}.`),
+    ) as Array<keyof typeof form.errors>;
+
+    // clearErrors() with no keys wipes every error on the page.
+    if (staleKeys.length === 0) {
+        return;
+    }
+
+    form.clearErrors(...staleKeys);
+}
+
 function submit(): void {
     form.put(AiModelsController.update.url(), { preserveScroll: true });
 }
@@ -230,6 +249,9 @@ function submit(): void {
                             :allow-tiers="row.allow_tiers"
                             :error-prefix="`tasks.${row.task}.tiers`"
                             :errors="formErrors"
+                            @structure-change="
+                                clearTierErrors(`tasks.${row.task}.tiers`)
+                            "
                         />
                         <div class="flex flex-wrap items-center gap-2">
                             <p
@@ -245,7 +267,11 @@ function submit(): void {
                                 :title="row.resolved.tier.reason ?? undefined"
                                 data-tier-live
                             >
-                                Live: tier {{ row.resolved.tier.position }} of
+                                Live:
+                                <template v-if="row.resolved.tier.via">
+                                    via {{ row.resolved.tier.via }} ·
+                                </template>
+                                tier {{ row.resolved.tier.position }} of
                                 {{ row.resolved.tier.count }}
                             </Pill>
                         </div>
@@ -319,6 +345,11 @@ function submit(): void {
                                     reasoning-inherit-label="Same as decision agent"
                                     :error-prefix="`event_overrides.${index}.tiers`"
                                     :errors="formErrors"
+                                    @structure-change="
+                                        clearTierErrors(
+                                            `event_overrides.${index}.tiers`,
+                                        )
+                                    "
                                 />
                                 <div
                                     v-if="eventResolved(override.event_key)"
@@ -355,7 +386,23 @@ function submit(): void {
                                         "
                                         data-tier-live
                                     >
-                                        Live: tier
+                                        Live:
+                                        <template
+                                            v-if="
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            "
+                                        >
+                                            via
+                                            {{
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            }}
+                                            ·
+                                        </template>
+                                        tier
                                         {{
                                             eventResolved(override.event_key)
                                                 ?.tier?.position

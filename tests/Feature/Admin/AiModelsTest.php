@@ -109,6 +109,21 @@ test('the index exposes what an inherit tier runs on beside the live resolution'
             ->where('tasks.0.inherited.provider', 'openai'));
 });
 
+test('the index summary names the list a following task takes its tier from', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => $pool->id]);
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.resolved.tier.via', null)
+            ->where('tasks.2.resolved.tier.via', 'Chat')
+            ->where('tasks.2.resolved.tier.reason', 'Chat tier 1: Luna free below 20% (10% left)'));
+});
+
 test('the index hints when the resolved model does not reason', function (): void {
     AiModelPrice::query()->where('model', 'gpt-5-nano')->update(['supports_reasoning' => false]);
     AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5-nano')->create();
@@ -586,6 +601,8 @@ test('condition values are bounded', function (array $tier, string $field): void
     'percent over 100' => [['min_pool_percent' => 101], 'min_pool_percent'],
     'tokens zero' => [['min_pool_tokens' => 0], 'min_pool_tokens'],
     'tokens text' => [['min_pool_tokens' => 'lots'], 'min_pool_tokens'],
+    'percent decimal' => [['min_pool_percent' => 12.5], 'min_pool_percent'],
+    'tokens decimal' => [['min_pool_tokens' => 1000.5], 'min_pool_tokens'],
 ]);
 
 test('event overrides save tier lists', function (): void {
@@ -670,6 +687,7 @@ test('the index still renders without model pools when pool status fails', funct
         ->assertInertia(fn ($page) => $page->where('modelPools', []));
 
     Exceptions::assertReported(RuntimeException::class);
+    Exceptions::assertReportedCount(1);
 });
 
 test('the index marks the benchmark judge as a single selection', function (): void {

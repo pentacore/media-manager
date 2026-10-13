@@ -12,6 +12,7 @@ use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\ChatTemplate;
 use App\Models\User;
+use App\Services\AiUsage\PoolHeadroom;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -151,4 +152,28 @@ test('an answer from a lower tier says so', function (): void {
         ->assertSeeIn('[data-answered-by]', 'gpt-5-nano')
         ->assertSeeIn('[data-answered-by-tier]', 'tier 2')
         ->assertAttributeContains('[data-answered-by-tier]', 'title', 'Luna free below 20%');
+});
+
+test('the label names the tier that answered even when it changed after the page loaded', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => $pool->id]);
+    AiTaskModel::query()->forTask(AiTask::Chat)->update(['min_pool_percent' => 20]);
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    MediaAgent::fake(['Hello there']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-chat-model-chip]', 'gpt-5.6-luna');
+
+    // Tier 1 is healthy at page load; the pool runs dry before the turn is sent.
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    // Pool headroom is cached for a short while; drop it so this turn sees the new usage.
+    resolve(PoolHeadroom::class)->flush();
+
+    $webpage->fill('[data-chat-input]', 'Hi')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertSee('Hello there')
+        ->assertSeeIn('[data-answered-by]', 'gpt-5-nano')
+        ->assertSeeIn('[data-answered-by-tier]', 'tier 2');
 });

@@ -18,6 +18,7 @@ use App\Models\AiTaskModel;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\PoolHeadroom;
 use App\Services\AiUsage\PoolHeadroomFigures;
+use App\Services\AiUsage\PoolHeadroomUnavailable;
 use App\Services\Audit\AuditLogger;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\RedirectResponse;
@@ -164,6 +165,9 @@ class AiModelsController extends Controller
                     $pools[sprintf('%s|%s', $aiModelPrice->provider, $aiModelPrice->model)] = $figures->toArray();
                 }
             }
+        } catch (PoolHeadroomUnavailable) {
+            // PoolHeadroom already reported the original failure.
+            return [];
         } catch (Throwable $throwable) {
             // Runtime resolution fails closed on the same error; keep the page up.
             report($throwable);

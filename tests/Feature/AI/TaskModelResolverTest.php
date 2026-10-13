@@ -223,3 +223,80 @@ test('saving a row flushes the memoised rows', function (): void {
 
     expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
 });
+
+test('configured selections list every tier that names a model, one-based, leaving inherit tiers out', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-a')->conditions(20)->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('anthropic', 'claude-b')->position(1)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->position(0)->create();
+
+    expect(resolver()->configuredSelections(AiTask::Chat))->toBe([
+        ['position' => 1, 'provider' => 'openai', 'model' => 'gpt-a'],
+        ['position' => 2, 'provider' => 'anthropic', 'model' => 'claude-b'],
+    ])->and(resolver()->configuredSelections(AiTask::Title))->toBe([]);
+});
+
+test('configured selections resolve a tier like a run would', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openrouter', 'auto')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Title)->state(['model' => 'gpt-no-provider'])->position(1)->create();
+
+    expect(resolver()->configuredSelections(AiTask::Title))->toBe([
+        ['position' => 1, 'provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5'],
+        ['position' => 2, 'provider' => 'openai', 'model' => 'gpt-no-provider'],
+    ]);
+});
+
+test('scopes lists the default scope and every event scope the task has rows in', function (): void {
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-a')->create();
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-b')->position(1)->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('openai', 'gpt-c')->create();
+
+    expect(resolver()->scopes(AiTask::Decision)->all())->toBe(['radarr:Grab', 'sonarr:Download', 'default'])
+        ->and(resolver()->scopes(AiTask::Chat)->all())->toBe(['default']);
+});
+
+test('updating a row flushes the memoised walk', function (): void {
+    $aiTaskModel = AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    $resolver = resolver();
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
+
+    $aiTaskModel->update(['model' => 'gpt-5-nano']);
+
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5-nano');
+});
+
+test('deleting a row flushes the memoised walk', function (): void {
+    $aiTaskModel = AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    $resolver = resolver();
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-5.6-luna');
+
+    $aiTaskModel->delete();
+
+    expect($resolver->resolve(AiTask::Chat)->model)->toBe('gpt-config-chat');
+});
+
+test('the decision default and an event scope resolve independently once both are memoised', function (): void {
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5-nano')->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-haiku-4-5')->create();
+    $resolver = resolver();
+
+    $resolvedSelection = $resolver->resolve(AiTask::Decision);
+    $event = $resolver->resolve(AiTask::Decision, 'sonarr:Download');
+
+    expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['openai', 'gpt-5-nano'])
+        ->and([$event->provider, $event->model])->toBe(['anthropic', 'claude-haiku-4-5'])
+        ->and($resolver->resolve(AiTask::Decision)->model)->toBe('gpt-5-nano')
+        ->and($resolver->resolve(AiTask::Decision, 'sonarr:Download')->model)->toBe('claude-haiku-4-5');
+});
+
+test('a chat turn reasoning set after a resolve applies on the next resolve of the memoised walk', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    $resolver = resolver();
+
+    expect($resolver->resolve(AiTask::Chat)->reasoning)->toBe(AiReasoningLevel::High);
+
+    resolve(ChatTurnContext::class)->apply(null, null, AiReasoningLevel::Low);
+    $resolvedSelection = $resolver->resolve(AiTask::Chat);
+
+    expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::Low]);
+});

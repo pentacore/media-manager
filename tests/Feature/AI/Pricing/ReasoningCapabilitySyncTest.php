@@ -112,7 +112,7 @@ test('the writer refreshes capabilities on an unlocked row even when prices are 
         PricingSource::ModelsDev,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::Unchanged)
+    expect($writeOutcome)->toBe(WriteOutcome::Updated)
         ->and(AiModelPrice::query()->where('model', 'gpt-cap-update')->value('supports_reasoning'))->toBeTrue();
 });
 

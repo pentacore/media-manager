@@ -188,7 +188,7 @@ class AiUsageReporting
                 ('.$costSql.') AS cost
             ', $costBindings)
             ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
-            ->when($fellThrough === false, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', 1))
+            ->when($fellThrough === false, fn (Builder $builder) => $builder->where(fn (Builder $query) => $query->whereNull('ai_usage_records.tier_position')->orWhere('ai_usage_records.tier_position', 1)))
             ->when($benchmark === true, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', true))
             ->when($benchmark === false, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', false))
             ->latest('ai_usage_records.created_at')
