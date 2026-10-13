@@ -461,6 +461,36 @@ test("an admin's review of a pending row is not undone by a status remembered fr
     'decline' => ['[data-action-decline]', 'Action rejected.', ActionRequestStatus::Rejected],
 ]);
 
+test("an admin's bulk review is not undone by a status remembered from a live event", function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
+    Queue::fake([ExecuteActionRequest::class]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible(sprintf('[data-bulk-select="%d"]', $actionRequest->id));
+
+    // A pending status a minute newer than the row: remembered, row unchanged.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'pending', 60), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'pending'));
+    $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'pending'));
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // The bulk run's reload brings the approved row, older than the
+    // remembered pending status: only forgetting it first lets it show.
+    $webpage->click(sprintf('[data-bulk-select="%d"]', $actionRequest->id))
+        ->click('[data-bulk-approve]')
+        ->assertSee('1 approved');
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertMissing(sprintf('[data-bulk-select="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
 test('a live status with an unreadable timestamp still applies over a remembered one', function (): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
     $this->actingAs(User::factory()->admin()->create());

@@ -96,6 +96,27 @@ test('an admin dashboard shows audit rows live next to activity rows', function 
         ->assertNoSmoke();
 });
 
+test('a row that arrives on two of the dashboard channels is listed once', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertCount('[data-dashboard-activity-row]', 0);
+
+    $webpage->script(appHydratedScript());
+
+    $webpage->script(echoEmitScript('activity', 'ActivityLogCreated', dashboardActivityFeedRow(980_003, 'activity', 'Approved Example Movie.')));
+    $webpage->script(confirmDialogWaitUntilScript("document.body.innerText.includes('Approved Example Movie.')"));
+
+    // The same id again on the admin's other feed channel replaces the row.
+    $webpage->script(echoEmitScript('activity.audit', 'ActivityLogCreated', dashboardActivityFeedRow(980_003, 'activity', 'Approved Example Movie, seen twice.')));
+    $webpage->script(confirmDialogWaitUntilScript("document.body.innerText.includes('Approved Example Movie, seen twice.')"));
+
+    $webpage->assertCount('[data-dashboard-activity-row]', 1)
+        ->assertSeeIn('[data-dashboard-activity-row]', 'Approved Example Movie, seen twice.')
+        ->assertNoSmoke();
+});
+
 test("a viewer's dashboard listens only on their own channel and shows their new rows live", function (): void {
     $viewer = User::factory()->create();
     $this->actingAs($viewer);

@@ -362,9 +362,13 @@ test("a page's own deferred reload does not make a later click forget its prefet
     $webpage->click('[data-nav-item="Dashboard"]');
     $webpage->script(prefetchWaitForPathScript($dashboardPath));
 
-    $webpage->assertPathIs($dashboardPath)
-        ->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
-        ->assertNoSmoke();
+    $webpage->assertPathIs($dashboardPath);
+
+    // Checked before the badge: a run slow enough to miss the cache window
+    // sends a fresh visit, and the server's 3 would hide why.
     expect($webpage->script(prefetchCountScript($dashboardPath, true)))->toBe(1)
         ->and($webpage->script(prefetchCountScript($dashboardPath, false)))->toBe(0);
+
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
 });

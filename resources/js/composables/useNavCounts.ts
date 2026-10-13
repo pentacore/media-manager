@@ -40,6 +40,12 @@ type LiveCounter =
 
 const SESSION_EXPIRY_MS = 10 * 60 * 1000;
 
+/**
+ * How long Inertia keeps a hover prefetch reusable (`defaults.prefetch.cacheFor`
+ * in app.ts). After it no click can reuse that prefetch, so its date is dropped.
+ */
+const PREFETCH_CACHE_MS = 10 * 1000;
+
 /** A URL's path and query, to match a visit with the page it rendered. */
 function pageKey(url: string | URL): string {
     const parsed = new URL(url.toString(), window.location.origin);
@@ -151,12 +157,37 @@ export function useNavCounts(): NavCounts {
 
     /**
      * When the `nav` the page now shows was produced: the fetch time of the
-     * hover prefetch a click may have reused for this URL, else "now". A
+     * hover prefetch a click may have reused for this URL (only while that
+     * prefetch is still inside Inertia's cache window), else "now". A
      * response to a request that was really sent is re-applied as "now" on
      * 'success', so an older date here only delays that.
      */
     function snapshotTimeFor(url: string): number {
-        return prefetchFetchedAt.get(pageKey(url)) ?? Number.POSITIVE_INFINITY;
+        const key = pageKey(url);
+        const fetchedAt = prefetchFetchedAt.get(key);
+
+        if (fetchedAt === undefined) {
+            return Number.POSITIVE_INFINITY;
+        }
+
+        if (Date.now() - fetchedAt > PREFETCH_CACHE_MS) {
+            prefetchFetchedAt.delete(key);
+
+            return Number.POSITIVE_INFINITY;
+        }
+
+        return fetchedAt;
+    }
+
+    /** Drops every prefetch date past Inertia's cache window. */
+    function forgetExpiredPrefetches(): void {
+        const cutoff = Date.now() - PREFETCH_CACHE_MS;
+
+        for (const [key, fetchedAt] of prefetchFetchedAt) {
+            if (fetchedAt < cutoff) {
+                prefetchFetchedAt.delete(key);
+            }
+        }
     }
 
     // Re-sync when a fresh `nav` snapshot arrives. Watch the reference, not
@@ -213,6 +244,7 @@ export function useNavCounts(): NavCounts {
         // A click that reuses a prefetch fires no 'start'; remember when
         // each prefetch was fetched so its `nav` can be dated.
         stopPrefetchedListener = router.on('prefetched', (event) => {
+            forgetExpiredPrefetches();
             prefetchFetchedAt.set(
                 pageKey(event.detail.visit.url),
                 event.detail.fetchedAt,
