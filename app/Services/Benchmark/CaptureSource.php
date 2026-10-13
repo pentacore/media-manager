@@ -48,7 +48,8 @@ final readonly class CaptureSource
             ->where('role', 'assistant')
             ->where(fn (Builder $query) => $query
                 ->where('created_at', '>', $message->created_at)
-                ->orWhere(fn (Builder $tie) => $tie->where('created_at', $message->created_at)->where('id', '>', $message->id)))->oldest()
+                ->orWhere(fn (Builder $tie) => $tie->where('created_at', $message->created_at)->where('id', '>', $message->id)))
+            ->oldest()
             ->orderBy('id')
             ->value('created_at');
 
@@ -59,7 +60,7 @@ final readonly class CaptureSource
             ->whereNull('parent_invocation_id')
             ->where('agent_class', MediaAgent::class)
             ->whereBetween('created_at', [$repliedAt, $repliedAt->addSeconds(self::CHAT_REPLY_WINDOW_SECONDS)])
-            ->when($nextReplyAt !== null, fn ($query) => $query->where('created_at', '<', CarbonImmutable::parse($nextReplyAt)))
+            ->when($nextReplyAt !== null, fn (Builder $query) => $query->where('created_at', '<', CarbonImmutable::parse($nextReplyAt)))
             ->oldest()
             ->orderBy('id')
             ->first();
