@@ -15,6 +15,7 @@ export type AnsweredTier = {
     position: number;
     count: number;
     reason: string | null;
+    via?: string | null;
 };
 
 /** The model and reasoning level behind one assistant reply. */

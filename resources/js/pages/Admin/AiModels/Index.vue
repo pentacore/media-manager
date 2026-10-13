@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
-import { Plus, Trash2 } from '@lucide/vue';
-import { computed } from 'vue';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import { FlaskConical, Plus, Trash2 } from '@lucide/vue';
+import { computed, onMounted } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
 import TierListEditor from '@/components/ai/TierListEditor.vue';
@@ -9,6 +9,7 @@ import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill } from '@/components/mm';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -27,7 +28,12 @@ type ResolvedSummary = {
     reasoning: AiReasoningLevel;
     reasoning_label: string;
     reasoning_hint: string | null;
-    tier: { position: number; count: number; reason: string | null } | null;
+    tier: {
+        position: number;
+        count: number;
+        reason: string | null;
+        via: string | null;
+    } | null;
 };
 
 type TaskRow = {
@@ -50,7 +56,17 @@ type EventOverride = {
     resolved: ResolvedSummary;
 };
 
+type BenchmarkPrefill = {
+    task: AiTask;
+    provider: string;
+    model: string;
+    reasoning: AiReasoningLevel | null;
+    run_id: number;
+    run_name: string;
+};
+
 const props = defineProps<{
+    prefill: BenchmarkPrefill | null;
     tasks: TaskRow[];
     failover: { provider: string | null; model: string | null };
     eventOverrides: EventOverride[];
@@ -91,6 +107,62 @@ const form = useForm({
         event_key: row.event_key,
         tiers: row.tiers.map((tier) => ({ ...tier })),
     })),
+});
+
+const prefillLabel = computed<string | null>(
+    () =>
+        props.tasks.find((row) => row.task === props.prefill?.task)?.label ??
+        null,
+);
+
+/** Puts a benchmark candidate into tier 1 of its task; nothing is saved until Save. */
+function applyPrefill(): void {
+    const prefill = props.prefill;
+    const row = props.tasks.find((task) => task.task === prefill?.task);
+
+    if (!prefill || !row) {
+        return;
+    }
+
+    const selection = form.tasks[prefill.task];
+
+    if (selection.tiers.length === 0) {
+        selection.tiers.push({
+            provider: null,
+            model: null,
+            reasoning: null,
+            min_pool_percent: null,
+            min_pool_tokens: null,
+        });
+    }
+
+    const tier = selection.tiers[0];
+    tier.provider = prefill.provider;
+    tier.model = prefill.model;
+
+    if (row.has_reasoning) {
+        tier.reasoning = prefill.reasoning;
+    }
+}
+
+applyPrefill();
+
+onMounted(() => {
+    if (!props.prefill) {
+        return;
+    }
+
+    document
+        .querySelector(`[data-task="${props.prefill.task}"]`)
+        ?.scrollIntoView({ block: 'center' });
+
+    // A reload must not re-apply the prefill: swap the history entry's URL
+    // client-side, which also keeps Inertia's page.url in sync.
+    router.replace({
+        url: AiModelsController.index.url(),
+        preserveState: true,
+        preserveScroll: true,
+    });
 });
 
 const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>
@@ -175,6 +247,20 @@ function errorFor(...keys: string[]): string | undefined {
     return keys.map((key) => formErrors.value[key]).find(Boolean);
 }
 
+/** Row indexes shift on add/remove/reorder, so drop that list's stale errors. */
+function clearTierErrors(prefix: string): void {
+    const staleKeys = Object.keys(form.errors).filter((key) =>
+        key.startsWith(`${prefix}.`),
+    ) as Array<keyof typeof form.errors>;
+
+    // clearErrors() with no keys wipes every error on the page.
+    if (staleKeys.length === 0) {
+        return;
+    }
+
+    form.clearErrors(...staleKeys);
+}
+
 function submit(): void {
     form.put(AiModelsController.update.url(), { preserveScroll: true });
 }
@@ -201,6 +287,14 @@ function submit(): void {
                 always runs.
             </p>
         </div>
+
+        <Alert v-if="prefill" data-ai-models-prefill>
+            <FlaskConical />
+            <AlertDescription>
+                Tier 1 of {{ prefillLabel ?? prefill.task }} pre-filled from
+                benchmark run {{ prefill.run_name }} — not saved yet.
+            </AlertDescription>
+        </Alert>
 
         <UnpricedModelWarning :models="unpricedModels" />
 
@@ -230,6 +324,9 @@ function submit(): void {
                             :allow-tiers="row.allow_tiers"
                             :error-prefix="`tasks.${row.task}.tiers`"
                             :errors="formErrors"
+                            @structure-change="
+                                clearTierErrors(`tasks.${row.task}.tiers`)
+                            "
                         />
                         <div class="flex flex-wrap items-center gap-2">
                             <p
@@ -245,7 +342,11 @@ function submit(): void {
                                 :title="row.resolved.tier.reason ?? undefined"
                                 data-tier-live
                             >
-                                Live: tier {{ row.resolved.tier.position }} of
+                                Live:
+                                <template v-if="row.resolved.tier.via">
+                                    via {{ row.resolved.tier.via }} ·
+                                </template>
+                                tier {{ row.resolved.tier.position }} of
                                 {{ row.resolved.tier.count }}
                             </Pill>
                         </div>
@@ -319,6 +420,11 @@ function submit(): void {
                                     reasoning-inherit-label="Same as decision agent"
                                     :error-prefix="`event_overrides.${index}.tiers`"
                                     :errors="formErrors"
+                                    @structure-change="
+                                        clearTierErrors(
+                                            `event_overrides.${index}.tiers`,
+                                        )
+                                    "
                                 />
                                 <div
                                     v-if="eventResolved(override.event_key)"
@@ -355,7 +461,23 @@ function submit(): void {
                                         "
                                         data-tier-live
                                     >
-                                        Live: tier
+                                        Live:
+                                        <template
+                                            v-if="
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            "
+                                        >
+                                            via
+                                            {{
+                                                eventResolved(
+                                                    override.event_key,
+                                                )?.tier?.via
+                                            }}
+                                            ·
+                                        </template>
+                                        tier
                                         {{
                                             eventResolved(override.event_key)
                                                 ?.tier?.position

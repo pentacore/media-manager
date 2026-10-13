@@ -83,6 +83,8 @@ class ConversationController extends Controller
             ->filter(fn (StoredMessage $storedMessage): bool => in_array($storedMessage->role, ['user', 'assistant'], true)
                 && (trim($storedMessage->content) !== '' || $storedMessage->status === MessageStatus::Failed || $storedMessage->attachments !== []))
             ->map(fn (StoredMessage $storedMessage): array => [
+                'id' => $storedMessage->id,
+                'invocation_id' => $storedMessage->role === 'assistant' && is_string($storedMessage->meta['invocation_id'] ?? null) ? $storedMessage->meta['invocation_id'] : null,
                 'role' => $storedMessage->role,
                 'text' => $storedMessage->content,
                 'ts' => ($storedMessage->createdAt?->getTimestamp() ?? 0) * 1000,

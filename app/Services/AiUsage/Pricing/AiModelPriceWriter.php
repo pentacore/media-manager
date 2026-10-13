@@ -270,17 +270,23 @@ final readonly class AiModelPriceWriter
         );
 
         if ($changes === []) {
-            if ($capabilityChanges !== [] && ! $dryRun) {
+            if ($capabilityChanges !== []) {
+                if ($dryRun) {
+                    return WriteOutcome::WouldUpdate;
+                }
+
                 $aiModelPrice->fill($capabilityChanges);
-                $aiModelPrice->save();
             }
 
             if ($firstPartyVerified && ! $dryRun) {
                 $aiModelPrice->fill(['pricing_verified_at' => CarbonImmutable::now()]);
+            }
+
+            if (! $dryRun && $aiModelPrice->isDirty()) {
                 $aiModelPrice->save();
             }
 
-            return WriteOutcome::Unchanged;
+            return $capabilityChanges === [] ? WriteOutcome::Unchanged : WriteOutcome::Updated;
         }
 
         if ($dryRun) {

@@ -11,6 +11,9 @@ use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
+use App\Models\BenchmarkResult;
+use App\Models\BenchmarkRun;
 use App\Models\User;
 use App\Services\AiUsage\FreePoolAccounting;
 use App\Settings\AiSettings;
@@ -107,6 +110,21 @@ test('the index exposes what an inherit tier runs on beside the live resolution'
             ->where('tasks.0.resolved.model', 'gpt-5.6-luna')
             ->where('tasks.0.inherited.model', 'gpt-config-chat')
             ->where('tasks.0.inherited.provider', 'openai'));
+});
+
+test('the index summary names the list a following task takes its tier from', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create(['name' => 'Luna free']);
+    AiModelPrice::query()->where('model', 'gpt-5.6-luna')->update(['free_usage_pool_id' => $pool->id]);
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.resolved.tier.via', null)
+            ->where('tasks.2.resolved.tier.via', 'Chat')
+            ->where('tasks.2.resolved.tier.reason', 'Chat tier 1: Luna free below 20% (10% left)'));
 });
 
 test('the index hints when the resolved model does not reason', function (): void {
@@ -586,6 +604,8 @@ test('condition values are bounded', function (array $tier, string $field): void
     'percent over 100' => [['min_pool_percent' => 101], 'min_pool_percent'],
     'tokens zero' => [['min_pool_tokens' => 0], 'min_pool_tokens'],
     'tokens text' => [['min_pool_tokens' => 'lots'], 'min_pool_tokens'],
+    'percent decimal' => [['min_pool_percent' => 12.5], 'min_pool_percent'],
+    'tokens decimal' => [['min_pool_tokens' => 1000.5], 'min_pool_tokens'],
 ]);
 
 test('event overrides save tier lists', function (): void {
@@ -670,6 +690,7 @@ test('the index still renders without model pools when pool status fails', funct
         ->assertInertia(fn ($page) => $page->where('modelPools', []));
 
     Exceptions::assertReported(RuntimeException::class);
+    Exceptions::assertReportedCount(1);
 });
 
 test('the index marks the benchmark judge as a single selection', function (): void {
@@ -694,3 +715,86 @@ test('the benchmark judge accepts only one tier', function (): void {
         ]))
         ->assertSessionHasErrors('tasks.benchmark_judge.tiers');
 });
+
+/**
+ * @return array{BenchmarkRun, BenchmarkCase}
+ */
+function aiModelsPrefillRun(AiTask $aiTask = AiTask::Title): array
+{
+    $benchmarkCase = BenchmarkCase::factory()->forTask($aiTask)->create();
+    $benchmarkRun = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'high'],
+    ])->create(['name' => 'Title bake-off', 'case_ids' => [$benchmarkCase->id]]);
+    BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 1)->scored(0.9, true)->create();
+
+    return [$benchmarkRun, $benchmarkCase];
+}
+
+test('a benchmark candidate prefills the index without writing anything', function (): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('prefill.task', 'title')
+            ->where('prefill.provider', 'openai')
+            ->where('prefill.model', 'gpt-5.6-luna')
+            ->where('prefill.reasoning', 'high')
+            ->where('prefill.run_id', $benchmarkRun->id)
+            ->where('prefill.run_name', 'Title bake-off'));
+
+    expect(AiTaskModel::query()->count())->toBe(0);
+});
+
+test('a prefill for a candidate without reasoning carries none', function (): void {
+    [$benchmarkRun, $benchmarkCase] = aiModelsPrefillRun(AiTask::Decision);
+    BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->scored(0.5, true)->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 0, 'task' => 'decision']))
+        ->assertInertia(fn ($page) => $page->where('prefill.reasoning', null)->where('prefill.model', 'gpt-5-nano'));
+});
+
+test('a task that inherits the chat model still gets the prefill prop', function (): void {
+    expect(AiTask::Decision->inheritsChatModel())->toBeTrue();
+    [$benchmarkRun] = aiModelsPrefillRun(AiTask::Decision);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'decision']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.2.task', 'decision')
+            ->where('tasks.2.tiers.0.model', null)
+            ->where('prefill.task', 'decision')
+            ->where('prefill.model', 'gpt-5.6-luna'));
+
+    expect(AiTaskModel::query()->count())->toBe(0);
+});
+
+test('the index has no prefill without a benchmark link', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page->where('prefill', null));
+});
+
+test('a stale benchmark link redirects to the plain page with a toast', function (array $query): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+    $query = array_replace(['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title'], $query);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', $query))
+        ->assertRedirect(route('admin.ai-models.index'));
+
+    expect(session('inertia.flash_data.toast.type'))->toBe('error')
+        ->and((string) session('inertia.flash_data.toast.message'))->toBe('That benchmark candidate is no longer available.');
+    expect(AiTaskModel::query()->count())->toBe(0);
+})->with([
+    'unknown run' => [['benchmark_run' => 999_999]],
+    'candidate out of range' => [['candidate' => 5]],
+    'candidate not numeric' => [['candidate' => 'x']],
+    'task not in the run' => [['task' => 'chat']],
+    'failover task' => [['task' => 'failover']],
+    'unknown task' => [['task' => 'nope']],
+]);

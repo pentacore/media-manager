@@ -130,8 +130,9 @@ function clearOverrideUntilLoaded(): void {
 
 /**
  * Who answers the next turn: the override where it is set, the chat
- * default otherwise. Shown under streamed replies, whose frames carry no
- * model (blocking replies use the server's `answered_by`).
+ * default otherwise. The optimistic fallback under a reply: the server's
+ * answer (`answered_by`, or RUN_FINISHED's `answeredBy` when streamed) wins
+ * once it arrives.
  */
 const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
     const options = modelOptions.value;
@@ -422,6 +423,7 @@ async function sendBlockingTurn(
         conversation_id: string | null;
         workflow: WorkflowProposal | null;
         answered_by?: AnsweredBy | null;
+        invocation_id?: string | null;
     };
 
     if (
@@ -439,6 +441,7 @@ async function sendBlockingTurn(
         workflow: data.workflow,
         workflowResolved: null,
         answered_by: data.answered_by ?? null,
+        invocation_id: data.invocation_id ?? null,
     });
 
     if (data.conversation_id) {
@@ -533,7 +536,8 @@ async function sendStreamingTurn(
         return;
     }
 
-    assistantMessage.answered_by = answeredBy;
+    assistantMessage.answered_by = result.answeredBy ?? answeredBy;
+    assistantMessage.invocation_id = result.invocationId ?? null;
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is

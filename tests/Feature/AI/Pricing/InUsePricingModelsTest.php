@@ -113,3 +113,15 @@ test('the auto title model counts its resolved cheapest model, never the sentine
     expect($inUsePricingModels->contains('openai', AiSettings::AUTO_MODEL))->toBeFalse()
         ->and($inUsePricingModels->contains('openai', Ai::textProvider('openai')->cheapestTextModel()))->toBeTrue();
 });
+
+test('a lower tier model that is never the live pick counts as in use', function (): void {
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-tier-one')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('anthropic', 'claude-tier-two')->position(1)->create();
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-event-one')->position(0)->create();
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('anthropic', 'claude-event-two')->position(1)->create();
+
+    $inUsePricingModels = resolve(InUsePricingModels::class);
+
+    expect($inUsePricingModels->contains('anthropic', 'claude-tier-two'))->toBeTrue()
+        ->and($inUsePricingModels->contains('anthropic', 'claude-event-two'))->toBeTrue();
+});

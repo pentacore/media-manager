@@ -24,8 +24,16 @@ final readonly class TierPick
      * The same pair and tier without the list's reasoning — for tasks that
      * follow another task's list (they never take its reasoning).
      */
-    public function pairOnly(): self
+    public function pairOnly(?string $via = null): self
     {
-        return new self($this->provider, $this->model, null, $this->tier);
+        return new self($this->provider, $this->model, null, $via === null ? $this->tier : $this->tier?->via($via));
+    }
+
+    /**
+     * The same pick with its tier outcome labelled as coming from another list.
+     */
+    public function via(string $label): self
+    {
+        return new self($this->provider, $this->model, $this->reasoning, $this->tier?->via($label));
     }
 }

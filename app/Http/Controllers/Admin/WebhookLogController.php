@@ -9,10 +9,14 @@ use App\Enums\WebhookHandlingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
+use App\Models\AiUsageRecord;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Providers\AIServiceProvider;
 use App\Services\Audit\AuditLogger;
 use App\Services\Audit\SettingsSnapshot;
+use App\Services\Benchmark\CaptureSource;
+use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Settings\WebhookSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -122,7 +126,7 @@ class WebhookLogController extends Controller
         return back();
     }
 
-    public function show(WebhookEvent $webhookEvent): Response
+    public function show(WebhookEvent $webhookEvent, CaptureSource $captureSource): Response
     {
         $webhookEvent->load([
             'serviceConnection:id,name,type',
@@ -154,6 +158,7 @@ class WebhookLogController extends Controller
                     'summary' => $webhookEvent->agentDecision->summary,
                     'actions_count' => $webhookEvent->agentDecision->actions_count,
                     'action_request_ids' => $webhookEvent->agentDecision->action_request_ids,
+                    'capture_invocation_id' => $this->captureInvocationId($webhookEvent, $captureSource),
                 ],
                 'actions' => $webhookEvent->actionRequests->map(fn (ActionRequest $actionRequest): array => [
                     'id' => $actionRequest->id,
@@ -164,6 +169,24 @@ class WebhookLogController extends Controller
                 ])->all(),
             ],
         ]);
+    }
+
+    /**
+     * The decision run's invocation id when AI is enabled and its usage row can become a benchmark case.
+     */
+    private function captureInvocationId(WebhookEvent $webhookEvent, CaptureSource $captureSource): ?string
+    {
+        $invocationId = $webhookEvent->agentDecision?->invocation_id;
+
+        if ($invocationId === null || ! AIServiceProvider::enabled()) {
+            return null;
+        }
+
+        $aiUsageRecord = $captureSource->forInvocation($invocationId);
+
+        return $aiUsageRecord instanceof AiUsageRecord && CaseDraftFromUsage::captureBlocker($aiUsageRecord) === null
+            ? $invocationId
+            : null;
     }
 
     /**

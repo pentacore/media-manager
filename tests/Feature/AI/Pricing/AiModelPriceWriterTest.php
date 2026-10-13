@@ -11,6 +11,7 @@ use App\Models\AiModelRateLimit;
 use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\Data\CandidatePriceField;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
+use App\Services\AiUsage\Pricing\Data\ReasoningCapability;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\PricingAnomalyPolicy;
 use App\Services\AiUsage\Pricing\RefreshScope;
@@ -22,7 +23,7 @@ use App\Settings\AiSettings;
  * value (including an explicit zero).
  *
  * @param  array<string, string|null>  $values
- * @param  array{source?: PricingSource, sourceUrl?: string|null, sourceUpdatedAt?: string|null, tiered?: bool}  $meta
+ * @param  array{source?: PricingSource, sourceUrl?: string|null, sourceUpdatedAt?: string|null, tiered?: bool, reasoning?: ReasoningCapability|null}  $meta
  */
 function priceCandidate(string $provider, string $model, array $values, array $meta = []): ModelPriceCandidate
 {
@@ -42,6 +43,7 @@ function priceCandidate(string $provider, string $model, array $values, array $m
         sourceUrl: $meta['sourceUrl'] ?? null,
         sourceUpdatedAt: $meta['sourceUpdatedAt'] ?? null,
         tiered: $meta['tiered'] ?? false,
+        reasoning: $meta['reasoning'] ?? null,
     );
 }
 
@@ -1006,4 +1008,126 @@ test('an explicit-create scope creates an openrouter model the auto-create list 
     expect($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
         ->and($aiModelPrice->is_price_locked)->toBeFalse()
         ->and($aiModelPrice->input_per_mtok)->toBe('4.0000');
+});
+
+test('capability-only changes on an unlocked row return updated and save capabilities', function (): void {
+    $row = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-cap-only',
+        'input_per_mtok' => '1.2500',
+        'output_per_mtok' => '10.0000',
+        'supports_reasoning' => null,
+        'reasoning_levels' => null,
+    ]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-cap-only', [
+            'input_per_mtok' => '1.25',
+            'output_per_mtok' => '10.0000',
+        ], [
+            'reasoning' => new ReasoningCapability(true, ['low', 'high'], ReasoningCapability::STYLE_EFFORT),
+        ]),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Updated);
+
+    $row->refresh();
+
+    expect($row->input_per_mtok)->toBe('1.2500')
+        ->and($row->output_per_mtok)->toBe('10.0000')
+        ->and($row->supports_reasoning)->toBeTrue()
+        ->and($row->reasoning_levels)->toBe(['low', 'high'])
+        ->and($row->reasoning_style)->toBe(ReasoningCapability::STYLE_EFFORT);
+});
+
+test('capability-only changes on dry-run return would-update without saving', function (): void {
+    $row = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-cap-dry',
+        'input_per_mtok' => '1.2500',
+        'output_per_mtok' => '10.0000',
+        'supports_reasoning' => null,
+    ]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-cap-dry', [
+            'input_per_mtok' => '1.25',
+            'output_per_mtok' => '10.0000',
+        ], [
+            'reasoning' => new ReasoningCapability(true, ['medium'], null),
+        ]),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+        dryRun: true,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdate);
+
+    $row->refresh();
+
+    expect($row->supports_reasoning)->toBeNull()
+        ->and($row->reasoning_levels)->toBeNull();
+});
+
+test('identical prices and capabilities return unchanged', function (): void {
+    $row = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-cap-same',
+        'input_per_mtok' => '1.2500',
+        'output_per_mtok' => '10.0000',
+        'supports_reasoning' => true,
+        'reasoning_levels' => ['low', 'high'],
+        'reasoning_style' => ReasoningCapability::STYLE_EFFORT,
+    ]);
+
+    $originalUpdatedAt = $row->updated_at;
+
+    $this->travel(1)->hours();
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-cap-same', [
+            'input_per_mtok' => '1.25',
+            'output_per_mtok' => '10',
+        ], [
+            'reasoning' => new ReasoningCapability(true, ['low', 'high'], ReasoningCapability::STYLE_EFFORT),
+        ]),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Unchanged);
+
+    $row->refresh();
+
+    expect($row->updated_at->equalTo($originalUpdatedAt))->toBeTrue();
+});
+
+test('locked rows stay locked even with capability changes', function (): void {
+    $row = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-cap-locked',
+        'input_per_mtok' => '1.2500',
+        'output_per_mtok' => '10.0000',
+        'is_price_locked' => true,
+        'supports_reasoning' => false,
+    ]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-cap-locked', [
+            'input_per_mtok' => '1.25',
+            'output_per_mtok' => '10.0000',
+        ], [
+            'reasoning' => new ReasoningCapability(true, ['low'], null),
+        ]),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Locked);
+
+    $row->refresh();
+
+    expect($row->supports_reasoning)->toBeFalse();
 });

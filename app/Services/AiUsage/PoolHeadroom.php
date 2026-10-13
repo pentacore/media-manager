@@ -6,6 +6,7 @@ namespace App\Services\AiUsage;
 
 use App\Models\AiModelPrice;
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
  * Per-pool headroom for tier selection. FreePoolAccounting::status() replays
@@ -14,7 +15,9 @@ use Illuminate\Support\Facades\Cache;
  * UTC day boundary, so a reset never serves yesterday's figures), memoised
  * for the request or job (scoped binding) and flushed whenever a pool or
  * price row changes. Usage writes do not flush: the tiers' thresholds are
- * the headroom that covers the cache window.
+ * the headroom that covers the cache window. A failure is reported once and
+ * remembered for the request or job: later lookups throw
+ * PoolHeadroomUnavailable without re-reporting.
  */
 class PoolHeadroom
 {
@@ -22,6 +25,8 @@ class PoolHeadroom
 
     /** @var array<int, PoolHeadroomFigures|null>|null */
     private ?array $figures = null;
+
+    private ?PoolHeadroomUnavailable $unavailable = null;
 
     public function __construct(private readonly FreePoolAccounting $freePoolAccounting) {}
 
@@ -52,6 +57,7 @@ class PoolHeadroom
     public function flush(): void
     {
         $this->figures = null;
+        $this->unavailable = null;
         Cache::forget(self::cacheKey());
     }
 
@@ -60,24 +66,34 @@ class PoolHeadroom
      */
     private function all(): array
     {
+        if ($this->unavailable instanceof PoolHeadroomUnavailable) {
+            throw $this->unavailable;
+        }
+
         if ($this->figures !== null) {
             return $this->figures;
         }
 
-        /** @var array<int, array{name: string, percent_left: float, tokens_left: int}|null> $cached */
-        $cached = Cache::remember(self::cacheKey(), self::CACHE_SECONDS, function (): array {
-            $figures = [];
+        try {
+            /** @var array<int, array{name: string, percent_left: float, tokens_left: int}|null> $cached */
+            $cached = Cache::remember(self::cacheKey(), self::CACHE_SECONDS, function (): array {
+                $figures = [];
 
-            foreach ($this->freePoolAccounting->status() as $status) {
-                $figures[$status['id']] = PoolHeadroomFigures::fromStatus($status)?->toArray();
-            }
+                foreach ($this->freePoolAccounting->status() as $status) {
+                    $figures[$status['id']] = PoolHeadroomFigures::fromStatus($status)?->toArray();
+                }
 
-            return $figures;
-        });
+                return $figures;
+            });
 
-        return $this->figures = array_map(
-            static fn (?array $row): ?PoolHeadroomFigures => $row === null ? null : PoolHeadroomFigures::fromArray($row),
-            $cached,
-        );
+            return $this->figures = array_map(
+                static fn (?array $row): ?PoolHeadroomFigures => $row === null ? null : PoolHeadroomFigures::fromArray($row),
+                $cached,
+            );
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            throw $this->unavailable = new PoolHeadroomUnavailable('Free pool status is unavailable.', previous: $throwable);
+        }
     }
 }
