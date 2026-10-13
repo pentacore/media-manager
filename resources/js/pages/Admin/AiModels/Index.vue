@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { FlaskConical, Plus, Trash2 } from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
@@ -156,13 +156,13 @@ onMounted(() => {
         .querySelector(`[data-task="${props.prefill.task}"]`)
         ?.scrollIntoView({ block: 'center' });
 
-    // A reload must not re-apply the prefill. Inertia's page.url keeps the
-    // query, so navigating back re-applies the unsaved prefill (accepted).
-    window.history.replaceState(
-        window.history.state,
-        '',
-        AiModelsController.index.url(),
-    );
+    // A reload must not re-apply the prefill: swap the history entry's URL
+    // client-side, which also keeps Inertia's page.url in sync.
+    router.replace({
+        url: AiModelsController.index.url(),
+        preserveState: true,
+        preserveScroll: true,
+    });
 });
 
 const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>

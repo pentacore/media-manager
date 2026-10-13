@@ -537,7 +537,7 @@ test('an unknown invocation id redirects back with an error toast', function ():
     $this->from(route('admin.benchmarks.cases.index'))
         ->get(route('admin.benchmarks.cases.create', ['from_invocation' => 'nope']))
         ->assertRedirect(route('admin.benchmarks.cases.index'))
-        ->assertInertiaFlash('toast.message', "This run's AI Usage record was not found.");
+        ->assertInertiaFlash('toast.message', 'This AI Usage record was not found.');
 });
 
 test('a benchmark usage row captured by invocation id hits the existing refusal', function (): void {
@@ -585,6 +585,44 @@ test('a chat reply that cannot be traced redirects back with an error toast', fu
     $replyAt = now()->startOfSecond()->subMinute();
     $messageId = benchmarkChatReply($conversationId, $replyAt);
     benchmarkTextUsage(MediaAgent::class, 'Too late', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(10)]);
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.message', "This reply can't be traced to its AI Usage record.");
+});
+
+test('the chat reply fallback does not draft from the next turn of the conversation', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    benchmarkChatReply($conversationId, $replyAt->addSeconds(2));
+    benchmarkTextUsage(MediaAgent::class, 'Next turn', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(2)]);
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.message', "This reply can't be traced to its AI Usage record.");
+});
+
+test('a user message id cannot be traced to a usage row', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    DB::table('agent_conversation_messages')->where('id', $messageId)->update(['role' => 'user']);
+    benchmarkTextUsage(MediaAgent::class, 'Prompt', ['conversation_id' => $conversationId, 'created_at' => $replyAt]);
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.message', "This reply can't be traced to its AI Usage record.");
+});
+
+test('a reply whose meta invocation has no usage row cannot be traced', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $messageId = benchmarkChatReply((string) Str::uuid(), now()->subMinute(), ['invocation_id' => 'gone-invocation']);
 
     $this->from(route('admin.benchmarks.cases.index'))
         ->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))

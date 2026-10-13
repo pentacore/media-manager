@@ -84,7 +84,7 @@ class BenchmarkCaseController extends Controller
             $aiUsageRecord = $captureSource->forInvocation($request->string('from_invocation')->toString());
 
             if (! $aiUsageRecord instanceof AiUsageRecord) {
-                Inertia::flash('toast', ['type' => 'error', 'message' => __("This run's AI Usage record was not found.")]);
+                Inertia::flash('toast', ['type' => 'error', 'message' => __('This AI Usage record was not found.')]);
 
                 return back();
             }

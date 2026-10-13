@@ -374,7 +374,9 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             <TableHead class="text-right">p95</TableHead>
                             <TableHead class="text-right">Misses</TableHead>
                             <TableHead class="text-right">Failures</TableHead>
-                            <TableHead />
+                            <TableHead
+                                ><span class="sr-only">Actions</span></TableHead
+                            >
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -454,6 +456,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                                             },
                                         })
                                     "
+                                    preserve-scroll
                                     class="text-[12.5px] text-primary hover:underline"
                                     data-benchmark-use-candidate
                                     >Use this</Link

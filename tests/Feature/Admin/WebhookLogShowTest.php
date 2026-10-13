@@ -44,7 +44,10 @@ test('show exposes handling, activity, ai decision and actions', function (): vo
         );
 });
 
-function decisionWithUsage(array $usage, ?string $invocationId = 'inv-decision-1'): WebhookEvent
+/**
+ * @param  array<string, mixed>  $usage
+ */
+function webhookLogDecisionWithUsage(array $usage, ?string $invocationId = 'inv-decision-1'): WebhookEvent
 {
     $event = WebhookEvent::factory()->create();
     AgentDecision::factory()->completed(1)->create(['webhook_event_id' => $event->id, 'invocation_id' => $invocationId]);
@@ -57,7 +60,7 @@ function decisionWithUsage(array $usage, ?string $invocationId = 'inv-decision-1
 }
 
 test('show exposes the capture invocation id when the run can become a case', function (): void {
-    $webhookEvent = decisionWithUsage(['is_benchmark' => false]);
+    $webhookEvent = webhookLogDecisionWithUsage(['is_benchmark' => false]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.webhook-log.show', $webhookEvent))
@@ -65,8 +68,18 @@ test('show exposes the capture invocation id when the run can become a case', fu
             ->where('event.agent_decision.capture_invocation_id', 'inv-decision-1'));
 });
 
+test('show hides the capture invocation id when AI is disabled', function (): void {
+    config()->set('mediamanager.ai.enabled', false);
+    $webhookEvent = webhookLogDecisionWithUsage(['is_benchmark' => false]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.webhook-log.show', $webhookEvent))
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('event.agent_decision.capture_invocation_id', null));
+});
+
 test('show hides the capture invocation id without a usage row, for benchmark rows and without an id', function (array $usage, ?string $invocationId): void {
-    $webhookEvent = decisionWithUsage($usage, $invocationId);
+    $webhookEvent = webhookLogDecisionWithUsage($usage, $invocationId);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.webhook-log.show', $webhookEvent))

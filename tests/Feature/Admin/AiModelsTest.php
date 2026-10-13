@@ -719,7 +719,7 @@ test('the benchmark judge accepts only one tier', function (): void {
 /**
  * @return array{BenchmarkRun, BenchmarkCase}
  */
-function prefillRun(AiTask $aiTask = AiTask::Title): array
+function aiModelsPrefillRun(AiTask $aiTask = AiTask::Title): array
 {
     $benchmarkCase = BenchmarkCase::factory()->forTask($aiTask)->create();
     $benchmarkRun = BenchmarkRun::factory()->completed()->withCandidates([
@@ -732,7 +732,7 @@ function prefillRun(AiTask $aiTask = AiTask::Title): array
 }
 
 test('a benchmark candidate prefills the index without writing anything', function (): void {
-    [$benchmarkRun] = prefillRun();
+    [$benchmarkRun] = aiModelsPrefillRun();
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
@@ -749,7 +749,7 @@ test('a benchmark candidate prefills the index without writing anything', functi
 });
 
 test('a prefill for a candidate without reasoning carries none', function (): void {
-    [$benchmarkRun, $benchmarkCase] = prefillRun(AiTask::Decision);
+    [$benchmarkRun, $benchmarkCase] = aiModelsPrefillRun(AiTask::Decision);
     BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->scored(0.5, true)->create();
 
     $this->actingAs(User::factory()->admin()->create())
@@ -759,7 +759,7 @@ test('a prefill for a candidate without reasoning carries none', function (): vo
 
 test('a task that inherits the chat model still gets the prefill prop', function (): void {
     expect(AiTask::Decision->inheritsChatModel())->toBeTrue();
-    [$benchmarkRun] = prefillRun(AiTask::Decision);
+    [$benchmarkRun] = aiModelsPrefillRun(AiTask::Decision);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'decision']))
@@ -780,7 +780,7 @@ test('the index has no prefill without a benchmark link', function (): void {
 });
 
 test('a stale benchmark link redirects to the plain page with a toast', function (array $query): void {
-    [$benchmarkRun] = prefillRun();
+    [$benchmarkRun] = aiModelsPrefillRun();
     $query = array_replace(['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title'], $query);
 
     $this->actingAs(User::factory()->admin()->create())

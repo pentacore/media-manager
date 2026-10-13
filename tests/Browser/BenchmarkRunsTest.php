@@ -319,7 +319,8 @@ test('use this pre-fills tier 1 on AI Models and saves only after Save', functio
         ->click('[data-benchmark-matrix-row="0"] [data-benchmark-use-candidate]')
         ->assertVisible('[data-ai-models-prefill]')
         ->assertSeeIn('[data-ai-models-prefill]', 'Tier 1 of Conversation titles pre-filled from benchmark run Title bake-off')
-        ->assertSeeIn('[data-task="title"] [data-model-select]', 'gpt-5-nano');
+        ->assertSeeIn('[data-task="title"] [data-model-select]', 'gpt-5-nano')
+        ->assertScript("(() => { const top = document.querySelector('[data-task=\"title\"]').getBoundingClientRect().top; return top >= 0 && top < window.innerHeight; })()", true);
 
     expect(AiTaskModel::query()->count())->toBe($existing);
 

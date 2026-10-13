@@ -12,6 +12,7 @@ use App\Models\ActivityLog;
 use App\Models\AiUsageRecord;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Providers\AIServiceProvider;
 use App\Services\Audit\AuditLogger;
 use App\Services\Audit\SettingsSnapshot;
 use App\Services\Benchmark\CaptureSource;
@@ -171,13 +172,13 @@ class WebhookLogController extends Controller
     }
 
     /**
-     * The decision run's invocation id when its usage row can become a benchmark case.
+     * The decision run's invocation id when AI is enabled and its usage row can become a benchmark case.
      */
     private function captureInvocationId(WebhookEvent $webhookEvent, CaptureSource $captureSource): ?string
     {
         $invocationId = $webhookEvent->agentDecision?->invocation_id;
 
-        if ($invocationId === null) {
+        if ($invocationId === null || ! AIServiceProvider::enabled()) {
             return null;
         }
 
