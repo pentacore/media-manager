@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\AnsweredBy;
 use App\Ai\ChatFailure;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Routing\ToolPayload;
-use App\Ai\TaskModelResolver;
 use App\Enums\AiMode;
-use App\Enums\AiTask;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
@@ -106,18 +105,12 @@ class ChatController extends Controller
             dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
         }
 
-        $resolvedSelection = resolve(TaskModelResolver::class)->resolve(AiTask::Chat);
-
         return response()->json([
             'text' => $response->text,
             'conversation_id' => $newConversationId,
             'workflow' => $workflowPayload,
-            'answered_by' => [
-                'provider' => $response->meta->provider,
-                'model' => $response->meta->model,
-                'reasoning_label' => $resolvedSelection->reasoning->label(),
-                'tier' => $resolvedSelection->tier?->toArray(),
-            ],
+            'invocation_id' => $response->invocationId,
+            'answered_by' => AnsweredBy::forChat($response->meta->provider, $response->meta->model),
         ]);
     }
 

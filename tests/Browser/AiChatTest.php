@@ -384,6 +384,43 @@ test('a stored attachment is shown when the conversation is reopened', function 
         ->assertSeeIn('[data-chat-thread] [data-attachment-chips]', 'screenshot.png');
 });
 
+test('a reopened reply links to the benchmark case form by its invocation or message id', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Benchmark chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'First question');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Traced answer', meta: ['invocation_id' => 'inv-abc-123']);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Second question');
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Old answer');
+
+    $this->actingAs($admin);
+
+    $oldMessageId = DB::table('agent_conversation_messages')->where('content', 'Old answer')->value('id');
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSee('Old answer')
+        ->assertVisible('[data-chat-thread] [data-chat-save-benchmark-case][href*="from_invocation=inv-abc-123"]')
+        ->assertVisible("[data-chat-thread] [data-chat-save-benchmark-case][href*=\"from_chat_message={$oldMessageId}\"]")
+        ->assertNoJavaScriptErrors();
+});
+
+test('a streamed reply links to the benchmark case form by its invocation id', function (): void {
+    MediaAgent::fake(['Streamed answer.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Say something')
+        ->click('Send')
+        ->assertSee('Streamed answer.')
+        ->assertVisible('[data-chat-thread] [data-chat-save-benchmark-case][href*="from_invocation="]')
+        ->assertNoJavaScriptErrors();
+});
+
 test('long conversations load earlier messages on demand', function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = (string) Str::uuid7();
@@ -428,8 +465,9 @@ function aiChatInsertConversation(User $user, string $conversationId, string $ti
 
 /**
  * @param  list<array<string, mixed>>  $attachments
+ * @param  array<string, mixed>  $meta
  */
-function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed'): void
+function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed', array $meta = []): void
 {
     DB::table('agent_conversation_messages')->insert([
         'id' => (string) Str::uuid7(),
@@ -444,7 +482,7 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
             ? '[]'
             : json_encode([['content' => $content, 'tool_calls' => [], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
         'usage' => '{}',
-        'meta' => '{}',
+        'meta' => json_encode($meta === [] ? new stdClass : $meta),
         'status' => $status,
         'created_at' => now()->addSeconds($position),
         'updated_at' => now()->addSeconds($position),

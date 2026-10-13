@@ -57,7 +57,24 @@ const props = withDefaults(
     },
 );
 
+const emit = defineEmits<{ 'structure-change': [] }>();
+
 const tiers = defineModel<TierForm[]>({ required: true });
+
+const rowKeys = new WeakMap<TierForm, number>();
+let nextRowKey = 0;
+
+/** Stable client-only row identity, so rows keep their state across reorders. */
+function keyFor(tier: TierForm): number {
+    let key = rowKeys.get(tier);
+
+    if (key === undefined) {
+        key = ++nextRowKey;
+        rowKeys.set(tier, key);
+    }
+
+    return key;
+}
 
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact' });
 
@@ -78,11 +95,13 @@ function isLast(index: number): boolean {
 /** New tiers go directly above the last one, so the fallback stays last. */
 function addTier(): void {
     tiers.value.splice(tiers.value.length - 1, 0, blankTier());
+    emit('structure-change');
 }
 
 function removeTier(index: number): void {
     tiers.value.splice(index, 1);
     clearLastConditions();
+    emit('structure-change');
 }
 
 function moveTier(index: number, offset: -1 | 1): void {
@@ -94,6 +113,7 @@ function moveTier(index: number, offset: -1 | 1): void {
 
     tiers.value.splice(index + offset, 0, tier);
     clearLastConditions();
+    emit('structure-change');
 }
 
 /** The last tier always runs, so it never keeps conditions. */
@@ -124,8 +144,14 @@ function setCondition(
     field: 'min_pool_percent' | 'min_pool_tokens',
     value: string | number,
 ): void {
-    const parsed = Number.parseInt(String(value), 10);
-    tier[field] = Number.isNaN(parsed) ? null : parsed;
+    if (value === '') {
+        tier[field] = null;
+
+        return;
+    }
+
+    const parsed = Number(value);
+    tier[field] = Number.isFinite(parsed) ? parsed : null;
 }
 
 function pairOf(tier: TierForm): { provider: string; model: string } {
@@ -201,7 +227,7 @@ function errorFor(index: number): string | undefined {
     <div class="flex min-w-0 flex-col gap-2">
         <div
             v-for="(tier, index) in tiers"
-            :key="index"
+            :key="keyFor(tier)"
             :class="[
                 'flex min-w-0 flex-col gap-2',
                 tiers.length > 1 && 'rounded-lg border border-border p-3',
@@ -255,6 +281,9 @@ function errorFor(index: number): string | undefined {
                     :inherit-label="isLast(index) ? inheritLabel : undefined"
                     :provider="tier.provider ?? ''"
                     :model="tier.model ?? ''"
+                    :aria-label="
+                        tiers.length > 1 ? `Tier ${index + 1} model` : 'Model'
+                    "
                     @update:provider="
                         (value: string) => setPair(tier, 'provider', value)
                     "
@@ -286,6 +315,7 @@ function errorFor(index: number): string | undefined {
                 <Input
                     type="number"
                     min="1"
+                    step="1"
                     max="100"
                     class="h-8 w-20 text-sm"
                     placeholder="—"
@@ -304,6 +334,7 @@ function errorFor(index: number): string | undefined {
                 <Input
                     type="number"
                     min="1"
+                    step="1"
                     class="h-8 w-32 text-sm"
                     placeholder="—"
                     :aria-label="`Tier ${index + 1} minimum tokens left`"

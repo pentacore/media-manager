@@ -36,13 +36,13 @@ test('a chat turn records which tier answered', function (): void {
 
     $response->assertOk();
     expect($response->json('answered_by.model'))->toBe('gpt-5-nano')
-        ->and($response->json('answered_by.tier'))->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)']);
+        ->and($response->json('answered_by.tier'))->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null]);
 
     $usage = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->latest('id')->first();
     expect($usage?->tier_position)->toBe(2);
 
     $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->latest('id')->value('meta'), true);
-    expect($meta['tier'] ?? null)->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)']);
+    expect($meta['tier'] ?? null)->toBe(['position' => 2, 'count' => 2, 'reason' => 'Tier 1: Luna free below 20% (10% left)', 'via' => null]);
 });
 
 test('the conversation history replays each answer tier', function (): void {

@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiUsageKind;
 use App\Models\AgentDecision;
+use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Models\WebhookEvent;
 
@@ -44,4 +46,26 @@ test('a classifier-resolved decision renders as a readable pill on the webhook l
     visit(route('admin.webhook-log.show', $webhookEvent, absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-decision-summary]', 'Resolved by the classifier');
+});
+
+test('a decision run with a capturable usage row offers saving it as a benchmark case', function (): void {
+    $webhookEvent = WebhookEvent::factory()->processed()->create();
+    AgentDecision::factory()->completed()->for($webhookEvent)->create(['invocation_id' => 'inv-browser-1']);
+    AiUsageRecord::factory()->create(['invocation_id' => 'inv-browser-1', 'kind' => AiUsageKind::Text, 'prompt_text' => 'Decide.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.webhook-log.show', $webhookEvent, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-webhook-save-benchmark-case]', 'Save as benchmark case');
+});
+
+test('a decision run without a usage row hides the benchmark shortcut', function (): void {
+    $webhookEvent = WebhookEvent::factory()->processed()->create();
+    AgentDecision::factory()->completed()->for($webhookEvent)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.webhook-log.show', $webhookEvent, absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-decision-summary]')
+        ->assertMissing('[data-webhook-save-benchmark-case]');
 });

@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Ai\TaskModelResolver;
+use App\Ai\TierEligibility;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Services\AiBudget\UnpricedModelDetector;
+use App\Services\AiUsage\PoolHeadroom;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
     config()->set('ai.default', 'openai');
@@ -76,5 +80,47 @@ test('a decision event override with its own model is reported under its event',
 
     expect(resolve(UnpricedModelDetector::class)->forHardCap())->toBe([
         ['role' => 'Decision agent (radarr:Grab)', 'provider' => 'openai', 'model' => 'event-model'],
+    ]);
+});
+
+test('unpriced lower tiers are reported with their tier number, live picks keep their role', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('chat-model', 'title-model', 'sub-agent-model', 'decision-model', 'chat-one');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-two')->position(1)->create();
+    AiTaskModel::factory()->event('some_event')->selecting('openai', 'event-one')->position(0)->create();
+    AiTaskModel::factory()->event('some_event')->selecting('openai', 'event-two')->position(1)->create();
+
+    $unpriced = resolve(UnpricedModelDetector::class)->forHardCap();
+
+    expect($unpriced)->toContain(
+        ['role' => 'Chat (tier 2)', 'provider' => 'openai', 'model' => 'chat-two'],
+        ['role' => 'Decision agent (some_event)', 'provider' => 'openai', 'model' => 'event-one'],
+        ['role' => 'Decision agent (some_event, tier 2)', 'provider' => 'openai', 'model' => 'event-two'],
+    )->and(array_column($unpriced, 'role'))->not->toContain('Chat (tier 1)', 'Decision agent (some_event, tier 1)');
+});
+
+test('a tier equal to the live pick of its role is not listed twice', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('title-model', 'sub-agent-model', 'decision-model');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->position(1)->create();
+
+    expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
+        ->toContain('Chat')->not->toContain('Chat (tier 2)');
+});
+
+test('a skipped tier one with an unpriced model is still reported as tier one', function (): void {
+    resolve(AiSettings::class)->setHardBudgetUsd(25.0);
+    priceModels('title-model', 'sub-agent-model', 'decision-model', 'chat-two');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-one')->conditions(50)->position(0)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'chat-two')->position(1)->create();
+    Exceptions::fake();
+    $this->mock(PoolHeadroom::class)->shouldReceive('forModel')->andThrow(new RuntimeException('pool unavailable'));
+    app()->forgetInstance(TaskModelResolver::class);
+    app()->forgetInstance(TierEligibility::class);
+
+    expect(resolve(UnpricedModelDetector::class)->forHardCap())->toBe([
+        ['role' => 'Chat (tier 1)', 'provider' => 'openai', 'model' => 'chat-one'],
     ]);
 });

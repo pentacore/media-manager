@@ -3,11 +3,17 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\TaskModelResolver;
+use App\Enums\AiReasoningLevel;
+use App\Enums\AiTask;
+use App\Enums\FreePoolOverflowBehavior;
 use App\Http\Streaming\ChatStreamProtocol;
 use App\Http\Streaming\ClientConnection;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Listeners\Ai\RecordAgentUsage;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\RunUsageAccumulator;
@@ -16,6 +22,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Events\AgentStreamed;
@@ -54,6 +61,95 @@ test('admin can stream a chat response as SSE', function (): void {
         ->and($body)->toContain('Hello')
         ->and($body)->toContain('"type":"RUN_FINISHED"')
         ->and($body)->not->toContain('[DONE]');
+});
+
+test('a completed streamed turn names the exact answered-by on RUN_FINISHED', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+
+    expect($frame['answeredBy'])->toMatchArray([
+        'provider' => 'openai',
+        'model' => 'gpt-5.6-luna',
+        'reasoning_label' => 'High',
+    ])
+        ->and($frame['answeredBy']['tier'])->toBeNull()
+        ->and($frame)->toHaveKeys(['threadId', 'usage']);
+});
+
+test('a completed streamed turn carries the invocation id that its stored reply recorded', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->create();
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($frame['invocationId'])->toBeString()->not->toBeEmpty()
+        ->and($meta['invocation_id'])->toBe($frame['invocationId']);
+});
+
+test('the streamed answered-by reports the tier that ran when tier 1 is skipped', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+
+    $pool = AiFreeUsagePool::factory()->unified(1_000_000)->overflow(FreePoolOverflowBehavior::Split)->create();
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'free_usage_pool_id' => $pool->id]);
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-nano']);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::Medium)->create(['min_pool_percent' => 20]);
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+
+    expect($frame['answeredBy']['model'])->toBe('gpt-5-nano')
+        ->and($frame['answeredBy']['reasoning_label'])->toBe('Low')
+        ->and($frame['answeredBy']['tier']['position'])->toBe(2)
+        ->and($frame['answeredBy']['tier']['count'])->toBe(2);
+});
+
+test('a resolver failure at the end of a stream leaves answeredBy off without breaking the run', function (): void {
+    MediaAgent::fake(['Hello from the stream.']);
+    $taskModelResolver = resolve(TaskModelResolver::class);
+    // Everything resolves normally except the lookup made for the closing frame.
+    Exceptions::fake();
+    app()->bind(function () use ($taskModelResolver): TaskModelResolver {
+        $closingFrame = array_filter(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), fn (array $frame): bool => ($frame['function'] ?? '') === 'completionAttributes');
+
+        return $closingFrame === [] ? $taskModelResolver : throw new RuntimeException('boom');
+    });
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect(chatStreamFrame($body, 'RUN_FINISHED'))->toContain('"threadId"')
+        ->and(chatStreamFrame($body, 'RUN_FINISHED'))->not->toContain('answeredBy');
+
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'boom');
 });
 
 test('streaming a first turn reports the minted conversation id as the run thread', function (): void {

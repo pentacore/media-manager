@@ -1,5 +1,5 @@
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import type { ChatOverride } from '@/components/ai/types';
+import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
 import type { ChatToolCall } from '@/composables/useAiChat';
 import { csrfToken } from '@/lib/http';
 
@@ -26,6 +26,10 @@ export interface StreamChatResult {
     text: string;
     reasoning: string;
     conversationId: string | null;
+    /** The exact answered-by the server named on RUN_FINISHED, when it did. */
+    answeredBy?: AnsweredBy;
+    /** The SDK invocation id the server named on RUN_FINISHED, when it did. */
+    invocationId?: string;
     /** True when the caller aborted the stream before it finished. */
     stopped: boolean;
 }
@@ -203,6 +207,8 @@ export function useChatStream(): UseChatStreamReturn {
         let text = '';
         let reasoning = '';
         let conversationId = options.conversationId;
+        let answeredBy: AnsweredBy | undefined;
+        let invocationId: string | undefined;
 
         const handle = (event: AgUiEvent): void => {
             switch (event.type) {
@@ -210,6 +216,21 @@ export function useChatStream(): UseChatStreamReturn {
                 case 'RUN_FINISHED':
                     if (typeof event.threadId === 'string') {
                         conversationId = event.threadId;
+                    }
+
+                    if (
+                        event.type === 'RUN_FINISHED' &&
+                        typeof event.answeredBy === 'object' &&
+                        event.answeredBy !== null
+                    ) {
+                        answeredBy = event.answeredBy as AnsweredBy;
+                    }
+
+                    if (
+                        event.type === 'RUN_FINISHED' &&
+                        typeof event.invocationId === 'string'
+                    ) {
+                        invocationId = event.invocationId;
                     }
 
                     break;
@@ -336,7 +357,14 @@ export function useChatStream(): UseChatStreamReturn {
             handleRawEvent(buffer);
         }
 
-        return { text, reasoning, conversationId, stopped: false };
+        return {
+            text,
+            reasoning,
+            conversationId,
+            answeredBy,
+            invocationId,
+            stopped: false,
+        };
     }
 
     return { streamChat };

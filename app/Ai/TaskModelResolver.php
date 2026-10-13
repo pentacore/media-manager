@@ -35,7 +35,7 @@ use LogicException;
  *   `mediamanager.ai.sub_agent_model`, then the Chat list.
  *
  * A scope without rows inherits the same way. Following another task's list
- * takes only its provider/model pair (and tier outcome), never its reasoning.
+ * takes only its provider/model pair (and tier outcome, labelled with `via`), never its reasoning.
  *
  * Reasoning: the conversation override (Chat and sub-agents), then the
  * picked tier's level (an inherit tier without one keeps what its same-task
@@ -136,6 +136,45 @@ final class TaskModelResolver
     }
 
     /**
+     * Every tier in the scope that names a model, with the pair it would run
+     * on (positions are one-based, like TierOutcome) — for checks (pricing,
+     * hard-cap warnings) that must cover tiers that are not live right now.
+     * Inherit tiers are left out: resolve() covers them.
+     *
+     * @return list<array{position: int, provider: string, model: string}>
+     */
+    public function configuredSelections(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): array
+    {
+        $selections = [];
+
+        foreach ($this->tiers($aiTask, $scope)->values() as $index => $aiTaskModel) {
+            if (blank($aiTaskModel->model)) {
+                continue;
+            }
+
+            [$provider, $model] = $this->tierPair($aiTask, $aiTaskModel);
+            $selections[] = ['position' => $index + 1, 'provider' => $provider, 'model' => $model];
+        }
+
+        return $selections;
+    }
+
+    /**
+     * Every scope the task has rows in, always including the default scope.
+     *
+     * @return Collection<int, string>
+     */
+    public function scopes(AiTask $aiTask): Collection
+    {
+        return $this->rows()
+            ->filter(static fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask)
+            ->pluck('scope')
+            ->push(AiTaskModel::DEFAULT_SCOPE)
+            ->unique()
+            ->values();
+    }
+
+    /**
      * The scope's first tier.
      */
     public function row(AiTask $aiTask, string $scope = AiTaskModel::DEFAULT_SCOPE): ?AiTaskModel
@@ -225,17 +264,17 @@ final class TaskModelResolver
     private function inherited(AiTask $aiTask, string $scope): TierPick
     {
         if ($scope !== AiTaskModel::DEFAULT_SCOPE) {
-            return $this->pick($aiTask, AiTaskModel::DEFAULT_SCOPE);
+            return $this->pick($aiTask, AiTaskModel::DEFAULT_SCOPE)->via($aiTask->label());
         }
 
         return match ($aiTask) {
             AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
             AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
-            AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
-            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
-            AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+            AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
-                ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(),
+                ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::Failover => throw new InvalidArgumentException('Resolve the failover task with failover().'),
         };
     }
