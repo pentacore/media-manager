@@ -14,6 +14,7 @@ use App\Http\Requests\Admin\StoreBenchmarkCaseRequest;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Services\Audit\AuditLogger;
+use App\Services\Benchmark\CaptureSource;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
@@ -70,14 +71,34 @@ class BenchmarkCaseController extends Controller
         ]);
     }
 
-    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage): Response|RedirectResponse
+    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage, CaptureSource $captureSource): Response|RedirectResponse
     {
         $draft = null;
         $warnings = [];
 
+        $aiUsageRecord = null;
+
         if ($request->filled('from_usage')) {
             $aiUsageRecord = AiUsageRecord::query()->findOrFail($request->integer('from_usage'));
+        } elseif ($request->filled('from_invocation')) {
+            $aiUsageRecord = $captureSource->forInvocation($request->string('from_invocation')->toString());
 
+            if (! $aiUsageRecord instanceof AiUsageRecord) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __("This run's AI Usage record was not found.")]);
+
+                return back();
+            }
+        } elseif ($request->filled('from_chat_message')) {
+            $aiUsageRecord = $captureSource->forChatMessage($request->string('from_chat_message')->toString());
+
+            if (! $aiUsageRecord instanceof AiUsageRecord) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __("This reply can't be traced to its AI Usage record.")]);
+
+                return back();
+            }
+        }
+
+        if ($aiUsageRecord instanceof AiUsageRecord) {
             try {
                 ['draft' => $draft, 'warnings' => $warnings] = $caseDraftFromUsage->draft($aiUsageRecord);
             } catch (CaseDraftRefused $caseDraftRefused) {

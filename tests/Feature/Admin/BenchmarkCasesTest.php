@@ -20,6 +20,7 @@ use App\Models\BenchmarkRun;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -501,4 +502,92 @@ test('a tool class the container cannot build does not break the draft', functio
 
     $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
         ->assertInertia(fn ($page) => $page->has('draft.fixtures', 1)->has('draft.scoring.expected', 0));
+});
+
+/**
+ * @param  array<string, mixed>  $meta
+ */
+function benchmarkChatReply(string $conversationId, CarbonInterface $at, array $meta = []): string
+{
+    DB::table('agent_conversations')->insertOrIgnore(['id' => $conversationId, 'title' => 'T', 'created_at' => now()->subHour(), 'updated_at' => now()->subHour()]);
+    $id = (string) Str::uuid7();
+    DB::table('agent_conversation_messages')->insert([
+        'id' => $id, 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+        'role' => 'assistant', 'content' => 'A reply', 'attachments' => '[]', 'steps' => '[]', 'usage' => '[]',
+        'meta' => json_encode($meta), 'created_at' => $at, 'updated_at' => $at,
+    ]);
+
+    return $id;
+}
+
+test('the create form pre-fills a draft from an invocation id', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Which films did Nolan direct?');
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_invocation' => $aiUsageRecord->invocation_id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input.prompt', 'Which films did Nolan direct?')
+            ->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('an unknown invocation id redirects back with an error toast', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_invocation' => 'nope']))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.message', "This run's AI Usage record was not found.");
+});
+
+test('a benchmark usage row captured by invocation id hits the existing refusal', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Prompt', ['is_benchmark' => true]);
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_invocation' => $aiUsageRecord->invocation_id]))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.type', 'error');
+});
+
+test('a chat reply with an invocation id in its meta pre-fills the draft', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'Meta prompt');
+    $messageId = benchmarkChatReply((string) Str::uuid(), now()->subDay(), ['invocation_id' => $aiUsageRecord->invocation_id]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('a chat reply without meta falls back to the earliest chat usage row at or after it', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+
+    benchmarkTextUsage(MediaAgent::class, 'Too early', ['conversation_id' => $conversationId, 'created_at' => $replyAt->subSecond()]);
+    benchmarkTextUsage(TitleAgent::class, 'Title decoy', ['conversation_id' => $conversationId, 'created_at' => $replyAt]);
+    benchmarkTextUsage(MediaAgent::class, 'Benchmark decoy', ['conversation_id' => $conversationId, 'created_at' => $replyAt, 'is_benchmark' => true]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, 'The turn', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSecond()]);
+    benchmarkTextUsage(MediaAgent::class, 'Next turn', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(10)]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input.prompt', 'The turn')
+            ->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+test('a chat reply that cannot be traced redirects back with an error toast', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $replyAt = now()->startOfSecond()->subMinute();
+    $messageId = benchmarkChatReply($conversationId, $replyAt);
+    benchmarkTextUsage(MediaAgent::class, 'Too late', ['conversation_id' => $conversationId, 'created_at' => $replyAt->addSeconds(10)]);
+
+    $this->from(route('admin.benchmarks.cases.index'))
+        ->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $messageId]))
+        ->assertRedirect(route('admin.benchmarks.cases.index'))
+        ->assertInertiaFlash('toast.message', "This reply can't be traced to its AI Usage record.");
 });
