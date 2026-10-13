@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Arr\ArrConnections;
+use App\Services\Arr\LibraryCacheSync;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -35,6 +36,21 @@ abstract class BaseArrController extends Controller
     protected function resolveConnection(): ServiceConnection|RedirectResponse
     {
         return ServiceConnection::findActive($this->serviceType()) ?? $this->noActiveConnectionRedirect($this->serviceType());
+    }
+
+    /**
+     * The index page's Sync button (Sonarr series, Radarr movies; every role
+     * that can open the page).
+     */
+    public function sync(LibraryCacheSync $libraryCacheSync): RedirectResponse
+    {
+        $connection = ServiceConnection::findActive($this->serviceType());
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect($this->serviceType(), back());
+        }
+
+        return $this->syncLibraryCache($connection, $libraryCacheSync);
     }
 
     /**

@@ -7,31 +7,20 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 
 /**
- * Delivers an ActivityLogCreated event on the admin-only audit channel
- * straight through the page's Pusher client (no Reverb in browser tests).
+ * An ActivityLogCreated payload for an audit row, as the event broadcasts it
+ * on the admin-only audit channel.
+ *
+ * @return array<string, mixed>
  */
-function emitAuditRowCreated(): string
+function auditLogCreatedPayload(): array
 {
-    return <<<'JS'
-        (() => {
-            const pusher = window.Pusher
-                && window.Pusher.instances
-                && window.Pusher.instances[0];
-            if (!pusher) { return 'NO_PUSHER'; }
-            const channel = pusher.channels.channels['private-activity.audit'];
-            if (!channel) { return 'NO_CHANNEL'; }
-            const bound = channel.callbacks._callbacks['_ActivityLogCreated'];
-            if (!bound || bound.length === 0) { return 'NO_CALLBACK'; }
-            channel.emit('ActivityLogCreated', {
-                id: 999999, action: 'connection.updated', category: 'audit',
-                description: 'Updated Radarr connection "Movies".', user_name: 'Ada Admin',
-                service_id: null, service_name: null, service_type: null,
-                subject_type: null, subject_id: null, metadata: null,
-                created_at: new Date().toISOString(),
-            });
-            return 'EMITTED';
-        })()
-        JS;
+    return [
+        'id' => 999_999, 'action' => 'connection.updated', 'category' => 'audit',
+        'description' => 'Updated Radarr connection "Movies".', 'user_name' => 'Ada Admin',
+        'service_id' => null, 'service_name' => null, 'service_type' => null,
+        'subject_type' => null, 'subject_id' => null, 'metadata' => null,
+        'created_at' => now()->toISOString(),
+    ];
 }
 
 test('an admin narrows the activity log to audit rows and expands the masked diff', function (): void {
@@ -79,7 +68,7 @@ test('changing a filter clears the pending new audit rows counter', function ():
         ->assertNoSmoke()
         ->assertSeeIn('[data-activity-feed]', 'Paused the SABnzbd queue.');
 
-    expect($webpage->script(emitAuditRowCreated()))->toBe('EMITTED');
+    $webpage->script(echoEmitScript('activity.audit', 'ActivityLogCreated', auditLogCreatedPayload()));
 
     $webpage->assertSeeIn('[data-activity-new-count]', '1 new')
         ->click('[data-category-option="audit"]')

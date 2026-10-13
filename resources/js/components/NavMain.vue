@@ -230,6 +230,7 @@ function rollupBadge(item: NavItem): number {
                     </SidebarMenuButton>
                     <SidebarMenuBadge
                         v-if="item.badge && item.badge() > 0"
+                        :data-nav-badge="item.title"
                         class="font-mono-tabular text-[10.5px]"
                         :class="[
                             isActiveItem(item)

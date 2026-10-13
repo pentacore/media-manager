@@ -28,11 +28,27 @@ class ActivityLogCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
 
     /**
      * Audit rows are admin-only: they go out on `activity.audit` and never on
-     * the `activity` channel every signed-in user may join.
+     * `activity` or anyone's own channel. Every other row goes to `activity`
+     * (manage-library readers) and to the private channel of the user it
+     * belongs to, so a viewer's dashboard — which lists only their own rows
+     * and never joins `activity` — stays live. A row without a user goes to
+     * `activity` only.
+     *
+     * @return list<PrivateChannel>
      */
-    public function broadcastOn(): PrivateChannel
+    public function broadcastOn(): array
     {
-        return new PrivateChannel($this->activityLog->isAudit() ? 'activity.audit' : 'activity');
+        if ($this->activityLog->isAudit()) {
+            return [new PrivateChannel('activity.audit')];
+        }
+
+        $channels = [new PrivateChannel('activity')];
+
+        if ($this->activityLog->user_id !== null) {
+            $channels[] = new PrivateChannel(sprintf('App.Models.User.%d', $this->activityLog->user_id));
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
