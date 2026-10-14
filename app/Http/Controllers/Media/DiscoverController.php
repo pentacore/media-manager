@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\DiscoverMediaRequest;
@@ -13,6 +14,7 @@ use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use App\Support\UpstreamErrorText;
 use Closure;
 use Illuminate\Http\Client\ConnectionException;
@@ -122,6 +124,11 @@ class DiscoverController extends Controller
                 $mediaType === 'tv' && $seasons !== [] ? $seasons : 'all',
                 $userId,
             );
+        } catch (SeerrWriteUnconfirmed) {
+            // Seerr may have filed it: drop the cached lists, and say so.
+            new SeerrCache($connection)->bustAll();
+
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __(SeerrWriteUnconfirmed::MESSAGE));
         } catch (RequestException $requestException) {
             return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException));
         } catch (ConnectionException) {

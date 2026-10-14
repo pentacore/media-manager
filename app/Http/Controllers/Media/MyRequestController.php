@@ -16,6 +16,7 @@ use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -113,6 +114,12 @@ class MyRequestController extends Controller
 
         try {
             $seerrClient->deleteRequest($id);
+        } catch (SeerrWriteUnconfirmed) {
+            // The cancel may have landed: drop the cached list, and say so.
+            new SeerrCache($serviceConnection)->bustAll();
+            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
+
+            return back();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
 

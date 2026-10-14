@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -336,4 +337,16 @@ test('title detail answers a refusal when Seerr answers with a login page', func
         ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
         ->assertStatus(502)
         ->assertJsonPath('message', 'Seerr refused the request — check the connection settings.');
+});
+
+test('a request behind a Seerr login page says the outcome is unknown and is sent once', function (): void {
+    discoverSeerr();
+    fakeDiscoverSeerr(['seerr.local:5055/api/v1/request' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])
+        ->assertSessionHas('inertia.flash_data.toast.message', SeerrWriteUnconfirmed::MESSAGE)
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+
+    expect(collect(Http::recorded())->filter(fn (array $pair): bool => $pair[0]->method() === 'POST'))->toHaveCount(1);
 });

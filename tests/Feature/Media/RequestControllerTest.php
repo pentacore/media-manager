@@ -7,6 +7,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -1091,3 +1092,17 @@ test('approving or declining is refused while a member cancel holds the request'
 
     Http::assertNothingSent();
 })->with(['media.requests.approve', 'media.requests.decline']);
+
+test('a request update behind a login page says the outcome is unknown', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42' => Http::sequence()
+            ->push(['id' => 42, 'media' => ['id' => 100, 'mediaType' => 'movie', 'tmdbId' => 603], 'serverId' => 0])
+            ->push('<html><body>Sign in</body></html>'),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->put(route('media.requests.update', 42), ['profile_id' => 9, 'root_folder' => '/movies'])
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+});

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Media;
 
 use App\Cache\Services\AnimeCache;
+use App\Cache\Services\SeerrCache;
 use App\Enums\AnimeSeason;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
@@ -26,6 +27,7 @@ use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -176,6 +178,11 @@ class AnimeController extends Controller
                 : 'all';
 
             $seerrClient->createRequest($tmdbId, $mediaType, $seasons, $resolved['userId']);
+        } catch (SeerrWriteUnconfirmed) {
+            // Seerr may have filed it: drop the cached lists, and say so.
+            new SeerrCache($connection)->bustAll();
+
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __(SeerrWriteUnconfirmed::MESSAGE));
         } catch (RequestException|ConnectionException) {
             // A failure still redirects (a successful Inertia visit), so signal
             // the outcome explicitly rather than letting the client assume the

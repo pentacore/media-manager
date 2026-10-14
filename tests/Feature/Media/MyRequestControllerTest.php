@@ -6,6 +6,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -243,4 +244,17 @@ test('a login page in front of Seerr is a refusal on my requests, worded for a v
             ->loadDeferredProps(fn ($reload) => $reload
                 ->where('requests.results', [])
                 ->where('requests.error', 'Seerr is unavailable — ask an admin to check the connection.')));
+});
+
+test('a cancel behind a Seerr login page says the outcome is unknown', function (): void {
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request/41' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response('<html><body>Sign in</body></html>')
+            : Http::response(['id' => 41, 'status' => 1, 'requestedBy' => ['id' => 7], 'media' => ['tmdbId' => 1, 'mediaType' => 'movie']]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
 });

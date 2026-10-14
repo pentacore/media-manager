@@ -10,6 +10,7 @@ use App\Models\AnimeIdMap;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -980,4 +981,15 @@ test('a match search behind a Seerr login page says Seerr refused it', function 
         ->post(route('media.anime.find-match'), ['title' => 'Example Show'])
         ->assertRedirect(route('media.anime.index'))
         ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'Seerr refused the request — check the connection settings.']);
+});
+
+test('an anime request behind a Seerr login page says the outcome is unknown', function (): void {
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), ['tmdbId' => 1396, 'mediaType' => 'tv', 'tmdbSeason' => 1, 'userId' => 42])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE])
+        ->assertSessionHas('inertia.flash_data.requestOutcome', ['ok' => false, 'tmdbId' => 1396, 'mediaType' => 'tv']);
 });
