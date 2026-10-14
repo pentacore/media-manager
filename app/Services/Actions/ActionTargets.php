@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemIndex;
 use Closure;
@@ -356,6 +357,8 @@ final readonly class ActionTargets
      */
     private function attempt(string $noun, int|string $identifier, ?string $fallbackName, bool $fallbackVerified, Closure $resolve): ActionTarget
     {
+        $refused = false;
+
         try {
             $target = $resolve();
         } catch (Throwable $throwable) {
@@ -366,6 +369,9 @@ final readonly class ActionTargets
                 'message' => $throwable->getMessage(),
             ]);
             $target = null;
+
+            // A login page in front of Seerr: the request may well exist.
+            $refused = $throwable instanceof SeerrUnexpectedResponse;
         }
 
         if ($target instanceof ActionTarget) {
@@ -377,7 +383,7 @@ final readonly class ActionTargets
 
         return $fallbackName !== ''
             ? new ActionTarget($noun, mb_substr($fallbackName, 0, 200), $identity, $fallbackVerified)
-            : new ActionTarget($noun, sprintf('#%s (not found)', $identifier), $identity, verified: false);
+            : new ActionTarget($noun, sprintf($refused ? '#%s (Seerr refused the lookup)' : '#%s (not found)', $identifier), $identity, verified: false);
     }
 
     /**

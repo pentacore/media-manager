@@ -156,6 +156,29 @@ test('GetTitleTool risk is Read', function (): void {
     expect((new GetTitleTool)->risk())->toBe(Risk::Read);
 });
 
+test('GetTitleTool tells the model a Seerr login page is a refusal, not a failure to retry', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/movie/603' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $result = json_decode((new GetTitleTool)->handle(new Request([
+        'tmdb_id' => 603,
+        'media_type' => 'movie',
+    ])), true);
+
+    expect($result['error'])->toBe('seerr_refused')
+        ->and($result['message'])->toContain('Retrying will not help');
+});
+
+test('GetTitleTool keeps an unknown title a plain tool failure', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/movie/603' => Http::response(['message' => 'Not found'], 404)]);
+
+    $result = json_decode((new GetTitleTool)->handle(new Request([
+        'tmdb_id' => 603,
+        'media_type' => 'movie',
+    ])), true);
+
+    expect($result['error'])->toBe('tool_failed');
+});
+
 // ListPendingRequestsTool
 
 test('ListPendingRequestsTool calls /request with filter=pending', function (): void {

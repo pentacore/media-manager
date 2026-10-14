@@ -311,3 +311,29 @@ test('a submitted discover request flashes the success toast and the whole outco
         ->assertSessionHas('inertia.flash_data.toast', ['type' => 'success', 'message' => 'Request submitted.'])
         ->assertSessionHas('inertia.flash_data.requestOutcome', ['ok' => true, 'tmdbId' => 95396, 'mediaType' => 'tv']);
 });
+
+test('a row Seerr answers with a login page reads as a refusal for who can fix it', function (string $role, string $error): void {
+    discoverSeerr();
+    fakeDiscoverSeerr(['seerr.local:5055/api/v1/discover/trending*' => Http::response('<html><body>Sign in</body></html>')]);
+    $user = $role === 'admin' ? User::factory()->admin()->create() : User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('media.discover.index'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('trending', fn ($reload) => $reload
+                ->where('trending.results', [])
+                ->where('trending.error', $error)));
+})->with([
+    'an admin' => ['admin', 'Seerr refused the request — check the connection settings.'],
+    'a viewer' => ['viewer', 'Seerr is unavailable — ask an admin to check the connection.'],
+]);
+
+test('title detail answers a refusal when Seerr answers with a login page', function (): void {
+    discoverSeerr();
+    Http::fake(['seerr.local:5055/api/v1/movie/1' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Seerr refused the request — check the connection settings.');
+});

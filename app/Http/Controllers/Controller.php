@@ -8,7 +8,7 @@ use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Arr\LibraryCacheSync;
-use App\Support\Abilities;
+use App\Support\UpstreamRefusal;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 
@@ -39,12 +39,11 @@ abstract class Controller
      * The sentence for a service that answered but refused the request (a
      * bad API key, a wrong base URL). Only an admin can fix a connection, so
      * only an admin is sent to its settings; everyone else is told to ask one.
+     * The copy lives in UpstreamRefusal so services can use it too.
      */
     protected function upstreamRefusedMessage(ServiceType $serviceType, ?User $user): string
     {
-        return $user?->can(Abilities::ADMIN) === true
-            ? __(':service refused the request — check the connection settings.', ['service' => $serviceType->label()])
-            : __(':service is unavailable — ask an admin to check the connection.', ['service' => $serviceType->label()]);
+        return UpstreamRefusal::message($serviceType, $user);
     }
 
     /**

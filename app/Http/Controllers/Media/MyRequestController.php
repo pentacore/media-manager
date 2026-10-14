@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitlePresenter;
@@ -61,8 +62,8 @@ class MyRequestController extends Controller
 
         try {
             $seerrUserId = $seerrUserResolver->resolve($connection, $request->user());
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (RequestException|ConnectionException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($exception, $request->user())]);
 
             return back();
         }
@@ -74,7 +75,7 @@ class MyRequestController extends Controller
         // The status check and the DELETE run under the request's lock, so an
         // approve sent from MediaManager cannot land between them.
         try {
-            return $seerrRequestLock->run($connection, $id, fn (): RedirectResponse => $this->cancelOwnPending($connection, $id, $seerrUserId));
+            return $seerrRequestLock->run($connection, $id, fn (): RedirectResponse => $this->cancelOwnPending($connection, $id, $seerrUserId, $request->user()));
         } catch (SeerrRequestBusy) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('This request is being updated right now — try again in a moment.')]);
 
@@ -82,7 +83,7 @@ class MyRequestController extends Controller
         }
     }
 
-    private function cancelOwnPending(ServiceConnection $serviceConnection, int $id, int $seerrUserId): RedirectResponse
+    private function cancelOwnPending(ServiceConnection $serviceConnection, int $id, int $seerrUserId, ?User $user): RedirectResponse
     {
         $seerrClient = new SeerrClient($serviceConnection);
 
@@ -91,11 +92,11 @@ class MyRequestController extends Controller
         } catch (RequestException $requestException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->status() === 404
                 ? __('That request no longer exists.')
-                : __('Seerr is unreachable right now.')]);
+                : SeerrReadFailure::message($requestException, $user)]);
 
             return back();
-        } catch (ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (ConnectionException $connectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($connectionException, $user)]);
 
             return back();
         }
@@ -140,8 +141,8 @@ class MyRequestController extends Controller
             }
 
             $response = $seerrClient->getRequestsByUser($seerrUserId, self::PER_PAGE, ($page - 1) * self::PER_PAGE);
-        } catch (RequestException|ConnectionException) {
-            return ['linked' => true, 'results' => [], 'meta' => $empty, 'error' => __('Seerr is unreachable right now.')];
+        } catch (RequestException|ConnectionException $exception) {
+            return ['linked' => true, 'results' => [], 'meta' => $empty, 'error' => SeerrReadFailure::message($exception, $user)];
         }
 
         $rows = is_array($response['results'] ?? null) ? array_values(array_filter($response['results'], is_array(...))) : [];

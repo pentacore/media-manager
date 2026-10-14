@@ -92,6 +92,7 @@ const props = defineProps<{
         users: RequestingUser[];
         defaultId: number | null;
         partial: boolean;
+        error: string | null;
     };
     entries?: SeasonEntry[];
 }>();
@@ -161,10 +162,8 @@ const selectedUserId = ref<string>('');
 
 const requestingReady = computed(() => Boolean(props.requestingUsers));
 
-// pickerOptions() never returns an `error` string, but an empty user list is
-// always either an outage (a failed/partial walk) or, in practice, never a
-// legitimate "zero Seerr users" state — so treat it the same way the other
-// choosers (Discover/Search) treat a picker outage.
+// An empty user list is always a failed or refused walk (pickerOptions()
+// then says which in `error`), never a legitimate "zero Seerr users" state.
 const seerrPickerUnreachable = computed(
     () =>
         requestingReady.value &&
@@ -707,7 +706,10 @@ const matchEntryContext = computed(() =>
                         class="text-xs text-destructive"
                         data-seerr-picker-unreachable
                     >
-                        Seerr is unreachable right now.
+                        {{
+                            requestingUsers?.error ??
+                            'Seerr is unreachable right now.'
+                        }}
                     </span>
                     <Select v-else v-model="userSelectValue">
                         <SelectTrigger

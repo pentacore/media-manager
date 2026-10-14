@@ -971,3 +971,13 @@ test('the anime and discover pages flash request outcomes through one shared tra
     expect(class_uses(AnimeController::class))->toContain(FlashesRequestOutcome::class)
         ->and(class_uses(DiscoverController::class))->toContain(FlashesRequestOutcome::class);
 });
+
+test('a match search behind a Seerr login page says Seerr refused it', function (): void {
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/search*' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.find-match'), ['title' => 'Example Show'])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'Seerr refused the request — check the connection settings.']);
+});

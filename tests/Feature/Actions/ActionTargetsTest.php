@@ -118,6 +118,16 @@ test('a seerr request resolves its media title and requester', function (): void
         ]);
 });
 
+test('a seerr request lookup behind a login page is named refused, not missing', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+    Http::fake(['seerr.local:5055/api/v1/request/12' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $actionTarget = resolve(ActionTargets::class)->seerrRequest(12);
+
+    expect($actionTarget->verified)->toBeFalse()
+        ->and($actionTarget->name)->toBe('#12 (Seerr refused the lookup)');
+});
+
 test('a download resolves its release from the arr queue', function (): void {
     targetsSonarr();
     Http::fake(['sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [

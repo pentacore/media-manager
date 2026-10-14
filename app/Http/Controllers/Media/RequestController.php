@@ -15,11 +15,11 @@ use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
-use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Support\UpstreamErrorText;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -569,18 +569,11 @@ class RequestController extends Controller
     }
 
     /**
-     * What the requests list says when Seerr could not be read. A refusal —
-     * a 4xx, or a 200 that is not JSON data (a login page in front of
-     * Seerr) — is worded for who can fix it; anything else is an outage.
+     * What the requests list says when Seerr could not be read (SeerrReadFailure).
      */
     private function requestsFailureMessage(RequestException|ConnectionException $throwable, ?User $user): string
     {
-        $refused = $throwable instanceof SeerrUnexpectedResponse
-            || ($throwable instanceof RequestException && $throwable->response->clientError());
-
-        return $refused
-            ? $this->upstreamRefusedMessage(ServiceType::Seerr, $user)
-            : __(':service is unreachable right now.', ['service' => ServiceType::Seerr->label()]);
+        return SeerrReadFailure::message($throwable, $user);
     }
 
     /**

@@ -366,3 +366,17 @@ test('a title Seerr blocklisted shows Blocklisted and offers no Request button',
         ->assertMissing('[data-anime-request]')
         ->assertNoSmoke();
 });
+
+test('an admin reads a refusal when Seerr answers the user picker with a login page', function (): void {
+    animeSeasonFixtureBasics();
+    Http::fake([
+        ...animeSeasonAniListFakes('TV'),
+        'seerr.local:5055/api/v1/user*' => Http::response('<html><body>Sign in</body></html>'),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-seerr-picker-unreachable]', 'Seerr refused the request — check the connection settings.')
+        ->assertNoSmoke();
+});

@@ -65,7 +65,11 @@ final readonly class SeerrUserResolver
      * incomplete list a caller must not treat as proof a chosen id is
      * unknown to Seerr.
      *
-     * @return array{users: list<array{id: int, label: string}>, defaultId: int|null, partial: bool}
+     * `error` is null while the picker has users. With none, it says why:
+     * the refusal copy for who can fix it when Seerr answered without its
+     * data (SeerrReadFailure), else that Seerr is unreachable.
+     *
+     * @return array{users: list<array{id: int, label: string}>, defaultId: int|null, partial: bool, error: string|null}
      */
     public function pickerOptions(ServiceConnection $serviceConnection, User $user): array
     {
@@ -73,20 +77,31 @@ final readonly class SeerrUserResolver
         $defaultId = null;
         $partialMatch = null;
         $partial = false;
+        $failure = null;
 
         try {
             $defaultId = $this->match($serviceConnection, $user, $users, $partialMatch);
             Cache::put($this->cacheKey($serviceConnection, $user), ['id' => $defaultId], self::CACHE_TTL_SECONDS);
-        } catch (RequestException|ConnectionException) {
+        } catch (RequestException|ConnectionException $exception) {
             // Keep whatever was collected before the failure, including the
             // best match found on a page fetched before a later page failed
             // — but never cache it, since the walk didn't complete and "no
             // match" is not a proven result.
             $defaultId = $partialMatch;
             $partial = true;
+            $failure = $exception;
         }
 
-        return ['users' => $users, 'defaultId' => $defaultId, 'partial' => $partial];
+        return [
+            'users' => $users,
+            'defaultId' => $defaultId,
+            'partial' => $partial,
+            'error' => match (true) {
+                $users !== [] => null,
+                $failure !== null => SeerrReadFailure::message($failure, $user),
+                default => __(self::UNREACHABLE),
+            },
+        ];
     }
 
     /**
@@ -102,14 +117,14 @@ final readonly class SeerrUserResolver
                 'userId' => $options['defaultId'],
                 'users' => $options['users'],
                 'partial' => $options['partial'],
-                'error' => $options['users'] === [] ? __(self::UNREACHABLE) : null,
+                'error' => $options['error'],
             ];
         }
 
         try {
             return ['canChooseUser' => false, 'userId' => $this->resolve($serviceConnection, $user), 'users' => [], 'partial' => false, 'error' => null];
-        } catch (RequestException|ConnectionException) {
-            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => __(self::UNREACHABLE)];
+        } catch (RequestException|ConnectionException $exception) {
+            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => SeerrReadFailure::message($exception, $user)];
         }
     }
 
@@ -118,7 +133,8 @@ final readonly class SeerrUserResolver
      * applying the same identity rules everywhere a request can be filed —
      * this is the single source of truth for both the rule and its messages,
      * shared by every controller that files a Seerr request:
-     *   - the context itself failed (Seerr unreachable) → UNREACHABLE
+     *   - the context itself failed → the context's own error (an outage, or
+     *     a refusal worded for who can fix it)
      *   - a non-chooser (viewer) has no own Seerr match → NO_SEERR_ACCOUNT;
      *     a posted id is ignored outright — a viewer can never choose
      *     someone else
@@ -137,7 +153,7 @@ final readonly class SeerrUserResolver
     public function resolveUserId(array $context, ?int $postedUserId): array
     {
         if ($context['error'] !== null) {
-            return ['userId' => null, 'error' => __(self::UNREACHABLE)];
+            return ['userId' => null, 'error' => $context['error']];
         }
 
         if (! $context['canChooseUser']) {

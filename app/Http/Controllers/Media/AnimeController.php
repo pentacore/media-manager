@@ -23,6 +23,7 @@ use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
 use App\Services\Anime\SeasonLibraryStatus;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use Illuminate\Http\Client\ConnectionException;
@@ -100,8 +101,8 @@ class AnimeController extends Controller
 
         try {
             $results = new SeerrClient($connection)->search($validated['title']);
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Search failed.')]);
+        } catch (RequestException|ConnectionException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($exception, $findAnimeMatchRequest->user())]);
 
             return back();
         }

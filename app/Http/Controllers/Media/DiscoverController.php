@@ -8,7 +8,9 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\DiscoverMediaRequest;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Support\UpstreamErrorText;
@@ -51,15 +53,15 @@ class DiscoverController extends Controller
 
         return Inertia::render('Discover/Index', [
             'seerr' => ['connected' => true],
-            'trending' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverTrending())), 'trending'),
-            'popularMovies' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverMovies(), 'movie')), 'popularMovies'),
-            'popularTv' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverTv(), 'tv')), 'popularTv'),
-            'upcoming' => Inertia::defer(fn (): array => $this->row(fn (): array => $this->upcoming($seerrClient, $seerrTitlePresenter)), 'upcoming'),
+            'trending' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverTrending()), $user), 'trending'),
+            'popularMovies' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverMovies(), 'movie'), $user), 'popularMovies'),
+            'popularTv' => Inertia::defer(fn (): array => $this->row(fn (): array => $seerrTitlePresenter->results($seerrClient->discoverTv(), 'tv'), $user), 'popularTv'),
+            'upcoming' => Inertia::defer(fn (): array => $this->row(fn (): array => $this->upcoming($seerrClient, $seerrTitlePresenter), $user), 'upcoming'),
             'requesting' => Inertia::defer(fn (): array => $seerrUserResolver->requestingContext($connection, $user), 'requesting'),
         ]);
     }
 
-    public function title(string $mediaType, int $tmdbId, SeerrTitlePresenter $seerrTitlePresenter): JsonResponse
+    public function title(string $mediaType, int $tmdbId, SeerrTitlePresenter $seerrTitlePresenter, Request $request): JsonResponse
     {
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
@@ -74,9 +76,9 @@ class DiscoverController extends Controller
         } catch (RequestException $requestException) {
             return $requestException->response->status() === 404
                 ? response()->json(['message' => __('Seerr does not know this title.')], 404)
-                : response()->json(['message' => __(self::UNREACHABLE)], 502);
-        } catch (ConnectionException) {
-            return response()->json(['message' => __(self::UNREACHABLE)], 502);
+                : response()->json(['message' => SeerrReadFailure::message($requestException, $request->user())], 502);
+        } catch (ConnectionException $connectionException) {
+            return response()->json(['message' => SeerrReadFailure::message($connectionException, $request->user())], 502);
         }
 
         $presented = $seerrTitlePresenter->detail($mediaType, $detail);
@@ -140,12 +142,12 @@ class DiscoverController extends Controller
      * @param  Closure(): list<array<string, mixed>>  $load
      * @return array{results: list<array<string, mixed>>, error: string|null}
      */
-    private function row(Closure $load): array
+    private function row(Closure $load, ?User $user): array
     {
         try {
             return ['results' => $load(), 'error' => null];
-        } catch (RequestException|ConnectionException) {
-            return ['results' => [], 'error' => __(self::UNREACHABLE)];
+        } catch (RequestException|ConnectionException $exception) {
+            return ['results' => [], 'error' => SeerrReadFailure::message($exception, $user)];
         }
     }
 

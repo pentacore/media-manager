@@ -153,8 +153,19 @@ test('a user with no Seerr account is forbidden before any request is ever read 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
 });
 
-test('a failure walking the Seerr user list is reported as unreachable, not "request no longer exists"', function (): void {
+test('a failure walking the Seerr user list reads as a refusal, not "request no longer exists"', function (): void {
     fakeMyRequestsSeerr(['seerr.local:5055/api/v1/user*' => Http::response([], 404)]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unavailable — ask an admin to check the connection.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
+});
+
+test('an outage walking the Seerr user list is reported as unreachable, not "request no longer exists"', function (): void {
+    Sleep::fake();
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/user*' => Http::response([], 503)]);
 
     $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
         ->delete(route('media.requests.mine.destroy', ['id' => 41]))
@@ -220,4 +231,16 @@ test('a cancel whose Seerr delete times out is sent once and reported as unreach
     expect($seen->deletes)->toBe(1)
         ->and($seen->lockHeldDuringDelete)->toBeTrue()
         ->and(Cache::lock($lockKey, 1)->get())->toBeTrue();
+});
+
+test('a login page in front of Seerr is a refusal on my requests, worded for a viewer', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/user*' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->get(route('media.requests.mine'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('requests.results', [])
+                ->where('requests.error', 'Seerr is unavailable — ask an admin to check the connection.')));
 });
