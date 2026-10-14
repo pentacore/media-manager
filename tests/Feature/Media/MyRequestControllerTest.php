@@ -61,6 +61,23 @@ test("my requests lists the resolved user's own requests with cancel only on pen
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request') && ($request['requestedBy'] ?? null) === 7);
 });
 
+test('my requests read a completed request for a title Seerr has since deleted as deleted', function (): void {
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1, 'results' => 1, 'pageSize' => 20], 'results' => [
+            ['id' => 43, 'status' => 5, 'type' => 'movie', 'createdAt' => '2026-09-18T10:00:00.000Z', 'media' => ['tmdbId' => 1, 'mediaType' => 'movie', 'status' => 7], 'requestedBy' => ['id' => 7]],
+        ]]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->get(route('media.requests.mine'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('requests.results.0.id', 43)
+                ->where('requests.results.0.status', 'deleted')
+                ->where('requests.results.0.can_cancel', false)));
+});
+
 test('a user with no Seerr account sees the unlinked state', function (): void {
     fakeMyRequestsSeerr();
 

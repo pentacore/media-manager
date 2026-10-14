@@ -17,6 +17,7 @@ use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUnexpectedResponse;
 use App\Support\UpstreamErrorText;
@@ -32,6 +33,7 @@ class RequestController extends Controller
 {
     public function __construct(
         private readonly SeerrTitleResolver $seerrTitleResolver,
+        private readonly SeerrTitlePresenter $seerrTitlePresenter,
     ) {}
 
     /**
@@ -650,6 +652,9 @@ class RequestController extends Controller
         return [
             'id' => $req['id'] ?? null,
             'status' => $status,
+            // A completed request whose title Seerr has since deleted: the
+            // copy it delivered is gone, and Discover offers the title again.
+            'title_deleted' => $this->seerrTitlePresenter->completedForDeletedTitle($req),
             'media_type' => $mediaType,
             'media_title' => $this->seerrTitleResolver->titleFor($req, $media),
             'poster_path' => $this->seerrTitleResolver->posterPathFor($req, $media),

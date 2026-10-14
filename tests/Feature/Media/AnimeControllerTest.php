@@ -135,6 +135,105 @@ test('index defers entries mapped against the id map with an overlaid status', f
         );
 });
 
+/**
+ * One mapped TV entry: AniList 154587 → TMDB tv 1396, with a TVDB season so
+ * the bootstrap sync job is not dispatched.
+ */
+function animeControllerMappedTvFixture(): void
+{
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function animeControllerAniListFake(): array
+{
+    return ['graphql.anilist.co' => Http::response(anilistSeasonResponse([[
+        'id' => 154587, 'idMal' => 52991, 'format' => 'TV', 'status' => 'RELEASING', 'episodes' => 12,
+        'popularity' => 5000, 'averageScore' => 88, 'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+        'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1], 'coverImage' => ['large' => 'https://img/test.jpg'],
+    ]]))];
+}
+
+test('a title Seerr blocklisted is not requestable, whether or not it was ever requested', function (array $requests, array $detail): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => $requests]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response($detail),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->where('entries.0.status', 'blocklisted');
+            })
+        );
+})->with([
+    'never requested' => [[], ['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 6]]],
+    'with an old request' => [[['status' => 5, 'media' => ['tmdbId' => 1396, 'mediaType' => 'tv', 'status' => 6]]], ['id' => 1396, 'name' => 'Test Show']],
+]);
+
+test('a completed request for a title Seerr deleted frees it, while an open request still holds it', function (int $requestStatus, string $expected): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => [
+            ['status' => $requestStatus, 'media' => ['tmdbId' => 1396, 'mediaType' => 'tv', 'status' => 7]],
+        ]]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 7]]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page) use ($expected): void {
+                $page->where('entries.0.status', $expected);
+            })
+        );
+})->with([
+    'completed' => [5, 'requestable'],
+    'approved' => [2, 'requested'],
+    'pending' => [1, 'requested'],
+]);
+
+test('a Seerr title detail that does not load leaves the title requestable', function (int $status, string $body): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response($body, $status),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->where('entries.0.status', 'requestable');
+            })
+        );
+})->with([
+    'a server error' => [503, '{}'],
+    'a login page' => [200, '<html><body>Sign in</body></html>'],
+]);
+
 test('index defers requesting users with an email-matched default', function (): void {
     Queue::fake();
     $member = User::factory()->member()->create(['email' => 'me@example.com']);

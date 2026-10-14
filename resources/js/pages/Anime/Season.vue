@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
+import { BLOCKLISTED_PILL } from '@/lib/seerr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
@@ -33,7 +34,12 @@ import type { FlashToast } from '@/types/ui';
 import MatchDialog from './MatchDialog.vue';
 
 type EntryStatus =
-    'in_library' | 'unmonitored' | 'requested' | 'requestable' | 'unmapped';
+    | 'in_library'
+    | 'unmonitored'
+    | 'requested'
+    | 'requestable'
+    | 'unmapped'
+    | 'blocklisted';
 type UnmonitoredScope = 'series' | 'season' | 'movie';
 
 interface EntryLibrary {
@@ -368,6 +374,7 @@ const STATUS_META: Record<EntryStatus, { status: string; label: string }> = {
     requested: { status: 'approved', label: 'Requested' },
     requestable: { status: 'ok', label: 'Available' },
     unmapped: { status: 'warn', label: 'Unmapped' },
+    blocklisted: BLOCKLISTED_PILL,
 };
 
 function statusLabel(entry: SeasonEntry): string {
@@ -901,6 +908,18 @@ const matchEntryContext = computed(() =>
                                 class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-muted-foreground"
                             >
                                 {{ STATUS_META[effectiveStatus(entry)].label }}
+                            </span>
+                        </template>
+
+                        <template
+                            v-else-if="effectiveStatus(entry) === 'blocklisted'"
+                        >
+                            <span
+                                class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-muted-foreground"
+                                title="Blocklisted in Seerr, so it cannot be requested"
+                                data-anime-blocklisted
+                            >
+                                {{ STATUS_META.blocklisted.label }}
                             </span>
                         </template>
 

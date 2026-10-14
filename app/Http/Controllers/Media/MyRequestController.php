@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUserResolver;
 use Illuminate\Http\Client\ConnectionException;
@@ -32,7 +33,7 @@ class MyRequestController extends Controller
 
     private const int MEDIA_AVAILABLE = 5;
 
-    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver): Response
+    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): Response
     {
         $page = max(1, (int) $request->query('page', 1));
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
@@ -46,7 +47,7 @@ class MyRequestController extends Controller
         return Inertia::render('Seerr/MyRequests', [
             'seerr' => ['connected' => true],
             'filters' => ['page' => $page],
-            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $user, $page, $seerrUserResolver, $seerrTitleResolver)),
+            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $user, $page, $seerrUserResolver, $seerrTitleResolver, $seerrTitlePresenter)),
         ]);
     }
 
@@ -126,7 +127,7 @@ class MyRequestController extends Controller
     /**
      * @return array{linked: bool, results: list<array<string, mixed>>, meta: array{current_page: int, last_page: int, total: int, per_page: int}, error: string|null}
      */
-    private function loadRequests(ServiceConnection $serviceConnection, User $user, int $page, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver): array
+    private function loadRequests(ServiceConnection $serviceConnection, User $user, int $page, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): array
     {
         $empty = ['current_page' => $page, 'last_page' => 1, 'total' => 0, 'per_page' => self::PER_PAGE];
         $seerrClient = new SeerrClient($serviceConnection);
@@ -156,7 +157,7 @@ class MyRequestController extends Controller
 
         return [
             'linked' => true,
-            'results' => array_map(fn (array $row): array => $this->mapRequest($row, $media, $seerrTitleResolver), $rows),
+            'results' => array_map(fn (array $row): array => $this->mapRequest($row, $media, $seerrTitleResolver, $seerrTitlePresenter), $rows),
             'meta' => [
                 'current_page' => (int) ($pageInfo['page'] ?? $page),
                 'last_page' => max(1, (int) ($pageInfo['pages'] ?? 1)),
@@ -172,12 +173,15 @@ class MyRequestController extends Controller
      * @param  array<string, array{title: string, poster_path: ?string}>  $media
      * @return array<string, mixed>
      */
-    private function mapRequest(array $row, array $media, SeerrTitleResolver $seerrTitleResolver): array
+    private function mapRequest(array $row, array $media, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): array
     {
         $requestStatus = (int) ($row['status'] ?? 0);
-        $status = (int) ($row['media']['status'] ?? 0) === self::MEDIA_AVAILABLE
-            ? 'available'
-            : (self::STATUSES[$requestStatus] ?? 'pending');
+        $status = match (true) {
+            (int) ($row['media']['status'] ?? 0) === self::MEDIA_AVAILABLE => 'available',
+            // The request belonged to a copy Seerr has since deleted.
+            $seerrTitlePresenter->completedForDeletedTitle($row) => 'deleted',
+            default => self::STATUSES[$requestStatus] ?? 'pending',
+        };
 
         return [
             'id' => (int) ($row['id'] ?? 0),

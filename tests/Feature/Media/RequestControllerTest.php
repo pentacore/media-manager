@@ -328,6 +328,34 @@ test('available media status is bubbled to the row status field', function (): v
         );
 });
 
+test('a completed request whose title Seerr has since deleted is flagged, unlike an available one', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 2]),
+        'seerr.local:5055/api/v1/movie/701' => Http::response(['id' => 701, 'title' => 'Example First Movie']),
+        'seerr.local:5055/api/v1/movie/702' => Http::response(['id' => 702, 'title' => 'Example Second Movie']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 2],
+            'results' => [
+                ['id' => 51, 'status' => 5, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 701, 'status' => 7]],
+                ['id' => 52, 'status' => 5, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 702, 'status' => 5]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.requests.index', ['status' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page->where('requests.data.0.id', 51)
+                    ->where('requests.data.0.title_deleted', true)
+                    ->where('requests.data.1.id', 52)
+                    ->where('requests.data.1.title_deleted', false)
+                    ->where('requests.data.1.status', 5);
+            })
+        );
+});
+
 test('processing filter passes through to Seerr filter=processing', function (): void {
     $member = User::factory()->member()->create();
 
