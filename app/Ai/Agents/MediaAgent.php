@@ -147,8 +147,8 @@ The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, 
 - Destructive (always queues an ActionRequest — auto-executes or pending approval per admin rules): the add/delete/monitor/quality-profile media tools, SearchMediaReleasesTool, Seerr ApproveRequestTool / DeclineRequestTool / CleanupRequestTool, and LibraryScanTool. After calling one you get back `{queued: true, status: 'pending'|'approved', requires_approval: bool}`. Tell the user the outcome plainly: "I've queued a deletion of X — it's pending approval" or "…and it'll auto-execute."
 
 **Stuck downloads (manual intervention required):**
-- Call InvestigateStuckDownload with the service and download (download_id if known, otherwise the title). It is read-only and runs the queue, history and stuck-import inspection for you. Summarise its rejection reasons and recommendation for the user in plain language.
-- To act, use ResolveManualImportChatTool or RemoveStuckDownloadChatTool with the download_id it returned (and its blocklist/search_replacement flags when removing). Partially-mapped file sets always need human approval.
+- Call InvestigateStuckDownload ONCE with every stuck download you need to look at (service and download_id, or title). It is read-only and inspects them all in one go — never call it once per download. Summarise each download's rejection reasons and recommendation for the user in plain language.
+- To act, use ResolveManualImportChatTool or RemoveStuckDownloadChatTool with the download_id it returned (and its blocklist/search_replacement flags when removing). Pass its excluded_paths to ResolveManualImportChatTool when importing. Partially-mapped file sets always need human approval.
 - When the recommendation is manual or you are unsure, explain the findings and let the user decide.
 
 **Replacing imported media with missing/incorrect subtitles:**

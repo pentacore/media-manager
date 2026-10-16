@@ -25,11 +25,11 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
 
 /**
- * Read-only investigation of a stuck Sonarr/Radarr download, run as a
+ * Read-only investigation of stuck Sonarr/Radarr downloads (one or many per call), run as a
  * MediaAgent sub-agent. It never imports or removes anything — MediaAgent
  * acts on the structured findings through its own destructive tools.
  */
-#[MaxSteps(8)]
+#[MaxSteps(10)]
 #[RepairToolCalls]
 final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMiddleware, HasProviderOptions, HasStructuredOutput, HasTools
 {
@@ -46,7 +46,7 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
 
     public function description(): string
     {
-        return 'Investigates why a Sonarr/Radarr download is stuck and recommends import, remove or manual handling. Read-only. In the task, name the service (sonarr or radarr) and the download (download_id if known, otherwise the title).';
+        return 'Investigates one or more stuck Sonarr/Radarr downloads in a single call and recommends import, remove or manual handling for each. Read-only. In the task, list EVERY download to look at (service and download_id if known, otherwise the title) — never call this once per download.';
     }
 
     public function aiTask(): AiTask
@@ -57,15 +57,16 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
     public function instructions(): string
     {
         return <<<'PROMPT'
-You investigate one stuck download for a media stack and report findings. You cannot change anything.
+You investigate stuck downloads for a media stack and report findings, one entry per download. You cannot change anything.
 
-1. If no download_id was given, find it with GetDownloadQueueTool (stuck_only=true) using the title.
-2. Call InspectStuckImportTool with the service and `download_ids` (all stuck downloads of the service in one call). Use GetDownloadHistoryTool only if the queue entry is gone.
-3. Recommend:
+1. For downloads without a download_id, find the ids with ONE GetDownloadQueueTool call (stuck_only=true) and match by title.
+2. Call InspectStuckImportTool ONCE per service with all of that service's `download_ids` (the Sonarr and Radarr calls may go in the same step). Use GetDownloadHistoryTool only if a queue entry is gone.
+3. For each download, recommend:
    - import: files map and the only rejection is benign (e.g. "matched by series id", "automatic import is not possible").
    - remove: the blocking rejection says it is not an upgrade / not a Custom Format upgrade. Set blocklist=true only if the release itself is bad (corrupt, fake, wrong content). Set search_replacement=true only if the content is still wanted.
    - manual: nothing maps, or you are unsure.
-Never invent IDs. Copy the download_id exactly as the tools returned it. List every candidate file as "<path> | mapped|unmapped | <rejections>".
+4. Samples: put the path of a sample file in `excluded_paths` and do not let it change the recommendation. `excluded_paths` is empty when there is nothing to leave out.
+Never invent IDs. Copy each download_id exactly as the tools returned it. List every candidate file as "<path> | mapped|unmapped | <rejections>".
 PROMPT;
     }
 
@@ -87,14 +88,17 @@ PROMPT;
     public function schema(JsonSchema $schema): array
     {
         return [
-            'service' => $schema->string()->enum(['sonarr', 'radarr'])->required(),
-            'download_id' => $schema->string()->description('Exactly as returned by the tools.')->required(),
-            'title' => $schema->string()->required(),
-            'files' => $schema->array()->items($schema->string())->description('One line per candidate file: "<path> | mapped|unmapped | <rejections>".')->required(),
-            'recommendation' => $schema->string()->enum(['import', 'remove', 'manual'])->required(),
-            'blocklist' => $schema->boolean()->required(),
-            'search_replacement' => $schema->boolean()->required(),
-            'reason' => $schema->string()->description('One or two plain-language sentences for the user.')->required(),
+            'downloads' => $schema->array()->items($schema->object([
+                'service' => $schema->string()->enum(['sonarr', 'radarr'])->required(),
+                'download_id' => $schema->string()->description('Exactly as returned by the tools.')->required(),
+                'title' => $schema->string()->required(),
+                'files' => $schema->array()->items($schema->string())->description('One line per candidate file: "<path> | mapped|unmapped | <rejections>".')->required(),
+                'recommendation' => $schema->string()->enum(['import', 'remove', 'manual'])->required(),
+                'blocklist' => $schema->boolean()->required(),
+                'search_replacement' => $schema->boolean()->required(),
+                'excluded_paths' => $schema->array()->items($schema->string())->description('Files to leave out of an import, such as samples. Empty when none.')->required(),
+                'reason' => $schema->string()->description('One or two plain-language sentences for the user.')->required(),
+            ]))->description('One entry per investigated download.')->required(),
         ];
     }
 }

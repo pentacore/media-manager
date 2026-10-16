@@ -26,9 +26,12 @@ test('MediaAgent delegates investigations and keeps the destructive tools', func
 
 test('the investigator returns structured findings to the parent and is billed as a linked child', function (): void {
     StuckDownloadInvestigatorAgent::fake([[
-        'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
-        'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
-        'blocklist' => false, 'search_replacement' => false, 'reason' => 'Existing file is better.',
+        'downloads' => [[
+            'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
+            'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
+            'blocklist' => false, 'search_replacement' => false, 'excluded_paths' => ['/dl/sample.mkv'],
+            'reason' => 'Existing file is better.',
+        ]],
     ]]);
     MediaAgent::fake([
         new ToolCall(id: 'c1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Why is download abc stuck?']),
@@ -59,9 +62,12 @@ test('a sub-agent called in the previous turn keeps its tool group loaded', func
 
 test('a streamed turn hands the investigator structured findings to the parent', function (): void {
     StuckDownloadInvestigatorAgent::fake([[
-        'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
-        'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
-        'blocklist' => false, 'search_replacement' => false, 'reason' => 'Existing file is better.',
+        'downloads' => [[
+            'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
+            'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
+            'blocklist' => false, 'search_replacement' => false, 'excluded_paths' => ['/dl/sample.mkv'],
+            'reason' => 'Existing file is better.',
+        ]],
     ]]);
     MediaAgent::fake([
         new ToolCall(id: 'c1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Why is download abc stuck?']),
@@ -75,7 +81,9 @@ test('a streamed turn hands the investigator structured findings to the parent',
 
     expect($stream->text)->toBe('It is not an upgrade; I can remove it.')
         ->and($toolResult)->toBeInstanceOf(StreamedToolResult::class)
-        ->and((string) $toolResult->toolResult->result)->toContain('"recommendation":"remove"')
+        ->and((string) $toolResult->toolResult->result)->toContain('"downloads":[{')
+        ->toContain('"recommendation":"remove"')
+        ->toContain('"excluded_paths":["\/dl\/sample.mkv"]')
         ->not->toContain('Agent failed');
 
     StuckDownloadInvestigatorAgent::assertPromptedTimes(1);
@@ -131,6 +139,18 @@ test('the stuck-download investigator only offers the services its tools support
     $stuckDownloadInvestigatorAgent = new StuckDownloadInvestigatorAgent;
     $schema = $stuckDownloadInvestigatorAgent->schema(new JsonSchemaTypeFactory);
 
+    $item = $schema['downloads']->toArray()['items'];
+
     expect($stuckDownloadInvestigatorAgent->description())->not->toContain('Whisparr')
-        ->and($schema['service']->toArray()['enum'])->toBe(['sonarr', 'radarr']);
+        ->and($item['properties']['service']['enum'])->toBe(['sonarr', 'radarr']);
+});
+
+test('the stuck-download investigator takes one or more downloads and answers under downloads', function (): void {
+    $investigator = new StuckDownloadInvestigatorAgent;
+    $schema = $investigator->schema(new JsonSchemaTypeFactory);
+    $item = $schema['downloads']->toArray()['items'];
+
+    expect($investigator->description())->toContain('one or more')
+        ->and(array_keys($schema))->toBe(['downloads'])
+        ->and($item['required'])->toEqualCanonicalizing(['service', 'download_id', 'title', 'files', 'recommendation', 'blocklist', 'search_replacement', 'excluded_paths', 'reason']);
 });
