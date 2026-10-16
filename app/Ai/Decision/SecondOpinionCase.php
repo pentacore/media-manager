@@ -33,10 +33,17 @@ final readonly class SecondOpinionCase
         public array $eventPayload = [],
     ) {}
 
+    /**
+     * Everything a model or a third party could have written sits inside an
+     * <untrusted_...> fence: the action payload, an unverified target title,
+     * the rationale and the webhook payload. Embedded text cannot close a
+     * fence early (see fenced()).
+     */
     public function toPrompt(): string
     {
+        $verified = $this->actionDescription->verified;
         $details = implode("\n", array_map(
-            static fn (array $detail): string => sprintf('- %s: %s', $detail['label'], $detail['value']),
+            fn (array $detail): string => sprintf('- %s: %s', $this->fenced($detail['label']), $this->fenced($detail['value'])),
             $this->actionDescription->details,
         ));
 
@@ -44,10 +51,12 @@ final readonly class SecondOpinionCase
             <<<'PROMPT'
 PROPOSED ACTION
 Type: %s (%s)
-Target: %s (%s)
+Target: %s
 Effect: %s
 %s
-Payload: %s
+<untrusted_proposed_payload>
+%sPayload: %s
+</untrusted_proposed_payload>
 
 PROPOSER'S RATIONALE
 <untrusted_proposer_rationale>
@@ -65,14 +74,16 @@ Should this action run as proposed?
 PROMPT,
             $this->actionType,
             $this->actionLabel,
-            $this->actionDescription->title,
-            $this->actionDescription->verified ? 'name verified by the server' : 'name NOT verified by the server',
-            $this->actionDescription->description,
+            $verified
+                ? sprintf('%s (name verified by the server)', $this->fenced($this->actionDescription->title))
+                : "name NOT verified by the server; the proposer's title is in the proposed payload below",
+            $this->fenced($this->actionDescription->description),
             $details === '' ? '' : "Details:\n".$details,
+            $verified ? '' : sprintf("Proposed title: %s\n", $this->fenced($this->actionDescription->title)),
             $this->json($this->payload, self::ACTION_PAYLOAD_CHARS),
-            $this->rationale,
-            $this->sourceService,
-            $this->eventType ?? 'unknown',
+            $this->fenced($this->rationale),
+            $this->fenced($this->sourceService),
+            $this->fenced($this->eventType ?? 'unknown'),
             $this->json($this->eventPayload, self::PAYLOAD_CHARS),
         );
     }
@@ -93,12 +104,25 @@ PROMPT,
     }
 
     /**
+     * Slashes stay escaped, so a string in the JSON cannot spell a closing
+     * fence tag ("</" becomes "<\/").
+     *
      * @param  array<string, mixed>  $value
      */
     private function json(array $value, int $limit): string
     {
-        $json = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $json = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
 
-        return $json === false ? '{}' : Str::limit($json, $limit, "\n… (truncated)");
+        return $json === false ? '{}' : $this->fenced(Str::limit($json, $limit, "\n… (truncated)"));
+    }
+
+    /**
+     * Neutralise any opening or closing <untrusted_...> tag in embedded text
+     * (a JSON-escaped "<\/" included), so it can neither end its own fence
+     * early nor open a fake one.
+     */
+    private function fenced(string $text): string
+    {
+        return (string) preg_replace('~<(\s*\\\\?/?\s*)untrusted_~i', '[$1untrusted_', $text);
     }
 }
