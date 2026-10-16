@@ -307,6 +307,49 @@ test('an admin imports a stuck download from its row menu', function (): void {
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'ManualImport');
 });
 
+test('an admin chooses which candidate files a manual import takes', function (): void {
+    fakeGrabQueueBrowser();
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            [
+                'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
+                'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+                'releaseType' => 'singleEpisode', 'rejections' => [],
+            ],
+            [
+                'path' => '/downloads/Sample/severance-sample.mkv', 'name' => 'severance-sample', 'size' => 20_000_000,
+                'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+                'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
+            ],
+        ]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-manual-import]')
+        ->assertCount('[data-manual-import-candidate]', 2)
+        ->assertSeeIn('[data-manual-import-sample]', 'Sample')
+        ->assertCount('[data-manual-import-sample]', 1)
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 1 of 2 file(s)')
+        ->assertAttribute('[data-manual-import-candidate]:nth-of-type(1) [data-manual-import-toggle]', 'data-state', 'checked')
+        ->assertAttribute('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]', 'data-state', 'unchecked')
+        ->click('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]')
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 2 of 2 file(s)')
+        ->click('[data-manual-import-candidate]:nth-of-type(1) [data-manual-import-toggle]')
+        ->click('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]')
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 0 of 2 file(s)')
+        ->assertAttribute('[data-manual-import-submit]', 'disabled', '')
+        ->assertNoSmoke();
+});
+
 test('a manual import whose connection was deactivated after the page loaded shows the refusal in the dialog and sends nothing', function (): void {
     fakeGrabQueueBrowser();
     $this->actingAs(User::factory()->admin()->create());

@@ -280,7 +280,7 @@ class ActivityController extends Controller
      * upstream ManualImportResource trimmed to what the modal needs.
      * Pinned to the connection the row was rendered from.
      */
-    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId, ArrConnections $arrConnections): JsonResponse
+    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId, ManualImportResolver $manualImportResolver, ArrConnections $arrConnections): JsonResponse
     {
         $validated = $manualImportCandidatesRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -298,7 +298,7 @@ class ActivityController extends Controller
 
         return new JsonResponse([
             'candidates' => array_values(array_map(
-                fn (array $candidate): array => $this->mapCandidate($candidate, $service),
+                fn (array $candidate): array => $this->mapCandidate($candidate, $service, $manualImportResolver),
                 $candidates,
             )),
         ]);
@@ -329,7 +329,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
 
-        $files = $manualImportResolver->toImportPayload($candidates, $service, $downloadId);
+        $files = $manualImportResolver->toImportPayload($candidates, $service, $downloadId, $validated['excluded_paths'] ?? []);
         if ($files === []) {
             return $this->flashAndBack('error', __('Sonarr/Radarr returned no importable files for this download.'));
         }
@@ -353,7 +353,7 @@ class ActivityController extends Controller
      * @param  array<string, mixed>  $candidate
      * @return array<string, mixed>
      */
-    private function mapCandidate(array $candidate, string $service): array
+    private function mapCandidate(array $candidate, string $service, ManualImportResolver $manualImportResolver): array
     {
         $shared = [
             'path' => $candidate['path'] ?? null,
@@ -372,6 +372,8 @@ class ActivityController extends Controller
                 ],
                 is_array($candidate['rejections'] ?? null) ? $candidate['rejections'] : [],
             )),
+            'mapped' => $manualImportResolver->maps($candidate, $service),
+            'sample' => $manualImportResolver->isSample($candidate),
         ];
 
         if ($service === 'sonarr') {

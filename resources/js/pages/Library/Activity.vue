@@ -12,6 +12,7 @@ import LibraryActivityController from '@/actions/App/Http/Controllers/Library/Ac
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -116,6 +117,8 @@ interface ManualImportCandidate {
     release_group: string | null;
     languages: string[];
     rejections: ManualImportRejection[];
+    mapped: boolean;
+    sample: boolean;
     series_title?: string | null;
     season?: number | null;
     episodes?: ManualImportEpisode[];
@@ -361,6 +364,7 @@ const importLoading = ref(false);
 const importError = ref<string | null>(null);
 const importCandidates = ref<ManualImportCandidate[]>([]);
 const importSubmitting = ref(false);
+const importSelected = ref<Set<string>>(new Set());
 
 function openManualImport(row: QueueRow): void {
     if (!row.download_id) {
@@ -369,6 +373,7 @@ function openManualImport(row: QueueRow): void {
 
     importingRow.value = row;
     importCandidates.value = [];
+    importSelected.value = new Set();
     importError.value = null;
     importLoading.value = true;
 
@@ -393,6 +398,11 @@ function openManualImport(row: QueueRow): void {
             }
 
             importCandidates.value = body.candidates ?? [];
+            importSelected.value = new Set(
+                importCandidates.value
+                    .filter((c) => c.path && c.mapped && !c.sample)
+                    .map((c) => c.path as string),
+            );
         })
         .catch((error: unknown) => {
             importError.value =
@@ -428,6 +438,9 @@ function submitManualImport(): void {
         {
             download_id: row.download_id,
             service_connection_id: row.service_connection_id,
+            excluded_paths: importCandidates.value
+                .filter((c) => c.path && !importSelected.value.has(c.path))
+                .map((c) => c.path),
         },
         {
             preserveScroll: true,
@@ -442,9 +455,16 @@ function submitManualImport(): void {
     );
 }
 
-function importableCount(): number {
-    return importCandidates.value.filter((c) => c.rejections.length === 0)
-        .length;
+function toggleImportCandidate(path: string, checked: boolean): void {
+    const next = new Set(importSelected.value);
+
+    if (checked) {
+        next.add(path);
+    } else {
+        next.delete(path);
+    }
+
+    importSelected.value = next;
 }
 
 function candidateLabel(candidate: ManualImportCandidate): string {
@@ -1301,38 +1321,80 @@ async function runQueueBulk(): Promise<void> {
                         v-for="(candidate, idx) in importCandidates"
                         :key="idx"
                         data-manual-import-candidate
-                        class="rounded-md border border-border bg-card p-3"
+                        :class="[
+                            'flex items-start gap-3 rounded-md border border-border bg-card p-3',
+                            !(
+                                candidate.path &&
+                                importSelected.has(candidate.path)
+                            ) && 'opacity-60',
+                        ]"
                     >
-                        <div class="text-[13px] font-medium">
-                            {{ candidateLabel(candidate) }}
-                        </div>
-                        <div
-                            class="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground"
-                        >
-                            <Pill v-if="candidate.quality" variant="info">
-                                {{ candidate.quality }}
-                            </Pill>
-                            <span v-if="candidate.release_group">{{
-                                candidate.release_group
-                            }}</span>
-                            <span v-if="candidate.languages.length > 0">
-                                {{ candidate.languages.join(', ') }}
-                            </span>
-                            <span v-if="candidate.size">{{
-                                formatBytes(candidate.size)
-                            }}</span>
-                        </div>
-                        <div
-                            v-if="candidate.rejections.length > 0"
-                            class="border-warn/30 bg-warn/5 text-warn mt-2 space-y-1 rounded border p-2 text-[11.5px]"
-                        >
+                        <Checkbox
+                            data-manual-import-toggle
+                            class="mt-0.5"
+                            :model-value="
+                                !!candidate.path &&
+                                importSelected.has(candidate.path)
+                            "
+                            :disabled="!candidate.path || importSubmitting"
+                            :aria-label="`Import ${candidateLabel(candidate)}`"
+                            @update:model-value="
+                                (value) =>
+                                    candidate.path &&
+                                    toggleImportCandidate(
+                                        candidate.path,
+                                        value === true,
+                                    )
+                            "
+                        />
+                        <div class="min-w-0 flex-1">
+                            <div class="text-[13px] font-medium">
+                                {{ candidateLabel(candidate) }}
+                            </div>
                             <div
-                                v-for="(rejection, ri) in candidate.rejections"
-                                :key="ri"
-                                class="flex items-start gap-1.5"
+                                class="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground"
                             >
-                                <AlertTriangle class="mt-0.5 size-3" />
-                                <span>{{ rejection.reason }}</span>
+                                <Pill
+                                    v-if="candidate.sample"
+                                    data-manual-import-sample
+                                    variant="warn"
+                                >
+                                    Sample
+                                </Pill>
+                                <Pill
+                                    v-if="!candidate.mapped"
+                                    data-manual-import-unmapped
+                                    variant="warn"
+                                >
+                                    Unmapped
+                                </Pill>
+                                <Pill v-if="candidate.quality" variant="info">
+                                    {{ candidate.quality }}
+                                </Pill>
+                                <span v-if="candidate.release_group">{{
+                                    candidate.release_group
+                                }}</span>
+                                <span v-if="candidate.languages.length > 0">
+                                    {{ candidate.languages.join(', ') }}
+                                </span>
+                                <span v-if="candidate.size">{{
+                                    formatBytes(candidate.size)
+                                }}</span>
+                            </div>
+                            <div
+                                v-if="candidate.rejections.length > 0"
+                                class="border-warn/30 bg-warn/5 text-warn mt-2 space-y-1 rounded border p-2 text-[11.5px]"
+                            >
+                                <div
+                                    v-for="(
+                                        rejection, ri
+                                    ) in candidate.rejections"
+                                    :key="ri"
+                                    class="flex items-start gap-1.5"
+                                >
+                                    <AlertTriangle class="mt-0.5 size-3" />
+                                    <span>{{ rejection.reason }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1350,14 +1412,14 @@ async function runQueueBulk(): Promise<void> {
                         :disabled="
                             importSubmitting ||
                             importLoading ||
-                            importCandidates.length === 0
+                            importSelected.size === 0
                         "
                         @click="submitManualImport"
                     >
                         <Loader2
                             v-if="importSubmitting"
                             class="mr-1.5 size-3.5 animate-spin"
-                        />Import {{ importableCount() }} of
+                        />Import {{ importSelected.size }} of
                         {{ importCandidates.length }} file(s)
                     </Button>
                 </DialogFooter>

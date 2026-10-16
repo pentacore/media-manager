@@ -378,6 +378,136 @@ test('admin can execute a Sonarr manual import end-to-end', function (): void {
     );
 });
 
+test('manual import candidates flag samples and files that do not map', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            [
+                'path' => '/downloads/Show.S01E01.mkv',
+                'series' => ['id' => 12, 'title' => 'Severance'],
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']],
+                'rejections' => [],
+            ],
+            [
+                'path' => '/downloads/Show.S01E01.sample.mkv',
+                'series' => ['id' => 12, 'title' => 'Severance'],
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']],
+                'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
+            ],
+            [
+                'path' => '/downloads/Mystery.mkv',
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']],
+                'rejections' => [],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('media.library.activity.manual-import.candidates', [
+            'service' => 'sonarr',
+            'downloadId' => 'ABC123',
+            'service_connection_id' => $connection->id,
+        ]))
+        ->assertOk()
+        ->assertJsonPath('candidates.0.mapped', true)
+        ->assertJsonPath('candidates.0.sample', false)
+        ->assertJsonPath('candidates.1.mapped', true)
+        ->assertJsonPath('candidates.1.sample', true)
+        ->assertJsonPath('candidates.2.mapped', false)
+        ->assertJsonPath('candidates.2.sample', false);
+});
+
+/**
+ * @return array<string, mixed>
+ */
+function activityManualImportCandidate(string $path, int $episodeId, array $rejections = []): array
+{
+    return [
+        'path' => $path,
+        'series' => ['id' => 12, 'title' => 'Severance'],
+        'episodes' => [['id' => $episodeId, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+        'quality' => ['quality' => ['id' => 4]],
+        'languages' => [['id' => 1]],
+        'releaseType' => 'singleEpisode',
+        'rejections' => $rejections,
+    ];
+}
+
+test('a manual import leaves out the excluded paths', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            activityManualImportCandidate('/downloads/Show.S01E01.mkv', 555),
+            activityManualImportCandidate('/downloads/Show.S01E02.mkv', 556),
+        ]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 99]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
+            'download_id' => 'ABC123',
+            'service_connection_id' => $connection->id,
+            'excluded_paths' => ['/downloads/Show.S01E02.mkv'],
+        ])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v3/command')
+        && count($request->data()['files']) === 1
+        && $request->data()['files'][0]['path'] === '/downloads/Show.S01E01.mkv'
+    );
+});
+
+test('excluding every file flashes the no importable files error and sends nothing', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            activityManualImportCandidate('/downloads/Show.S01E01.mkv', 555),
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
+            'download_id' => 'ABC123',
+            'service_connection_id' => $connection->id,
+            'excluded_paths' => ['/downloads/Show.S01E01.mkv'],
+        ])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Sonarr/Radarr returned no importable files for this download.');
+
+    Http::assertNotSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v3/command'));
+});
+
+test('a sample is never sent to a manual import even without exclusions', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            activityManualImportCandidate('/downloads/Show.S01E01.mkv', 555),
+            activityManualImportCandidate('/downloads/Sample/Show.S01E01.mkv', 555),
+        ]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 99]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
+            'download_id' => 'ABC123',
+            'service_connection_id' => $connection->id,
+        ]);
+
+    Http::assertSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v3/command')
+        && count($request->data()['files']) === 1
+        && $request->data()['files'][0]['path'] === '/downloads/Show.S01E01.mkv'
+    );
+});
+
 test('manual import drops candidates without a foreign key', function (): void {
     $connection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
