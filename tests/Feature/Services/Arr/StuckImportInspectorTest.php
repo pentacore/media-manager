@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Services\Arr\StuckImportInspector;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -38,3 +39,26 @@ test('inspect lets a failed lookup surface to the caller', function (): void {
 
     resolve(StuckImportInspector::class)->inspect($sonarr, 'sonarr', 'dl-1');
 })->throws(ConnectionException::class);
+
+test('inspectMany returns one entry per download and marks an unreadable one lookup_failed', function (): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(function (Request $request) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return ($query['downloadId'] ?? null) === 'A'
+            ? Http::response([[
+                'path' => '/dl/show.s01e01.mkv',
+                'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+                'series' => ['id' => 5],
+                'episodes' => [['id' => 11]],
+                'rejections' => [],
+            ]])
+            : Http::response([], 500);
+    });
+
+    $entries = resolve(StuckImportInspector::class)->inspectMany($sonarr, 'sonarr', ['A', 'B', 'A']);
+
+    expect($entries)->toHaveCount(2)
+        ->and($entries[0])->toMatchArray(['download_id' => 'A', 'ok' => true, 'total' => 1, 'importable' => 1])
+        ->and($entries[1])->toBe(['download_id' => 'B', 'ok' => false, 'reason' => 'lookup_failed']);
+});

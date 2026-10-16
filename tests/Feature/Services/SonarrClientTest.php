@@ -251,3 +251,55 @@ test('fetchSeriesByIds does not hide a request no fake answers', function (): vo
 
     expect(fn (): array => $this->client->fetchSeriesByIds([1, 2]))->toThrow(StrayRequestException::class);
 });
+
+test('getManualImports reads every download concurrently and maps a failed id to null', function (): void {
+    Http::fake(function (Request $request) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return match ($query['downloadId'] ?? null) {
+            'A' => Http::response([['path' => '/dl/a.mkv']]),
+            'B' => Http::response('<html>login</html>', 200),
+            default => Http::response([], 500),
+        };
+    });
+
+    $result = $this->client->getManualImports(['A', 'B', 'C', 'A']);
+
+    expect($result)->toHaveKeys(['A', 'B', 'C'])
+        ->and($result['A'])->toBe([['path' => '/dl/a.mkv']])
+        ->and($result['B'])->toBeNull()
+        ->and($result['C'])->toBeNull();
+    Http::assertSentCount(3);
+});
+
+test('getManualImports maps an object body to null', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response(['message' => 'nope'])]);
+
+    expect($this->client->getManualImports(['A']))->toBe(['A' => null]);
+});
+
+test('getManualImports requests every id when there are more than one batch of ten', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([])]);
+
+    $ids = array_map(static fn (int $n): string => 'dl-'.$n, range(1, 11));
+    $result = $this->client->getManualImports($ids);
+
+    expect(array_keys($result))->toBe($ids);
+    Http::assertSentCount(11);
+});
+
+test('getManualImports stops after a batch that failed entirely to connect', function (): void {
+    $attempts = 0;
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => function (Request $request) use (&$attempts) {
+            $attempts++;
+
+            return Http::failedConnection()($request);
+        },
+    ]);
+
+    $ids = array_map(static fn (int $n): string => 'dl-'.$n, range(1, 23));
+
+    expect($this->client->getManualImports($ids))->toBe(array_fill_keys($ids, null))
+        ->and($attempts)->toBe(10);
+});

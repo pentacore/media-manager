@@ -200,6 +200,24 @@ test('resolve_manual_import summarises the import assessment', function (): void
         ->and($actionDescription->details)->toContain(['label' => 'Notes', 'value' => 'One file could not be matched.']);
 });
 
+test('resolve_manual_import lists the files it leaves out', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake(['radarr.local:7878/api/v3/queue*' => Http::response(['records' => [
+        ['downloadId' => 'XYZ', 'title' => 'Dune.2021.2160p'],
+    ]])]);
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('resolve_manual_import', [
+        'service' => 'radarr',
+        'download_id' => 'XYZ',
+        'assessment' => [
+            'total' => 1, 'importable' => 1, 'fully_mapped' => true, 'reasons' => [],
+            'skipped' => [['path' => '/dl/sample.mkv', 'why' => 'sample'], ['path' => '/dl/extra.mkv', 'why' => 'excluded']],
+        ],
+    ]);
+
+    expect($actionDescription->details)->toContain(['label' => 'Left out', 'value' => '/dl/sample.mkv, /dl/extra.mkv']);
+});
+
 test('an llm fallback name produces an unverified description', function (): void {
     $actionDescription = resolve(ActionDescriber::class)->describe('delete_series', ['sonarr_series_id' => 142], fallbackName: 'Old Show');
 

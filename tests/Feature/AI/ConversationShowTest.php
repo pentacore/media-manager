@@ -3,10 +3,16 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\ActionRequestStatus;
+use App\Jobs\Ai\GenerateConversationTitle;
+use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -196,4 +202,142 @@ test('history links a user turn to attachments sent through the provider Files A
 
     expect(collect($messages[0]['attachments'])->pluck('id')->all())->toEqualCanonicalizing([$image->id, $document->id])
         ->and(collect($messages[0]['attachments'])->pluck('name')->all())->toContain('notes.pdf');
+});
+
+test('assistant messages carry choice and approval cards with the live action status', function (): void {
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['title' => 'Replace X', 'status' => ActionRequestStatus::Approved]);
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Hi', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Pick one',
+        'steps' => json_encode([[
+            ...conversationStep('Pick one', ''),
+            'tool_calls' => [
+                ['id' => 'call_1', 'name' => 'OfferChoicesTool', 'arguments' => [], 'result' => json_encode(['choices' => ['question' => 'Which?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null], ['label' => 'B', 'description' => null]]]]), 'result_id' => null],
+                ['id' => 'call_2', 'name' => 'DeleteMediaTool', 'arguments' => [], 'result' => json_encode(['queued' => true, 'action_request_id' => $actionRequest->id, 'status' => 'pending', 'requires_approval' => true, 'title' => 'Old']), 'result_id' => null],
+            ],
+        ]]),
+    ]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages[0]['cards'])->toBe([])
+        ->and($messages[1]['cards'])->toHaveCount(2)
+        ->and($messages[1]['cards'][0]['type'])->toBe('choices')
+        ->and($messages[1]['cards'][1])->toMatchArray(['type' => 'action_request', 'id' => $actionRequest->id, 'title' => 'Replace X', 'status' => 'approved']);
+});
+
+test('an assistant message with no text still returns its choices card', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Hi', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => '',
+        'steps' => json_encode([[
+            ...conversationStep('', ''),
+            'tool_calls' => [
+                ['id' => 'call_1', 'name' => 'OfferChoicesTool', 'arguments' => [], 'result' => json_encode(['choices' => ['question' => 'Which?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null], ['label' => 'B', 'description' => null]]]]), 'result_id' => null],
+            ],
+        ]]),
+    ]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages)->toHaveCount(2)
+        ->and($messages[1]['text'])->toBe('')
+        ->and($messages[1]['cards'])->toHaveCount(1)
+        ->and($messages[1]['cards'][0]['type'])->toBe('choices')
+        ->and($messages[1]['cards'][0]['id'])->toBe('call_1');
+});
+
+test('action cards across messages are hydrated with a single action_requests query', function (): void {
+    $admin = User::factory()->admin()->create();
+    $first = ActionRequest::factory()->create();
+    $second = ActionRequest::factory()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    foreach ([$first, $second] as $actionRequest) {
+        insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Hi', 'steps' => '[]']);
+        insertConversationRow($conversationId, $admin, [
+            'role' => 'assistant',
+            'content' => 'Queued',
+            'steps' => json_encode([[
+                ...conversationStep('Queued', ''),
+                'tool_calls' => [
+                    ['id' => 'call_'.$actionRequest->id, 'name' => 'DeleteMediaTool', 'arguments' => [], 'result' => json_encode(['queued' => true, 'action_request_id' => $actionRequest->id, 'status' => 'pending', 'requires_approval' => true, 'title' => 'T']), 'result_id' => null],
+                ],
+            ]]),
+        ]);
+    }
+
+    DB::enableQueryLog();
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+    $actionRequestQueries = collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'action_requests'));
+    DB::disableQueryLog();
+
+    expect($messages[1]['cards'][0]['id'])->toBe($first->id)
+        ->and($messages[3]['cards'][0]['id'])->toBe($second->id)
+        ->and($actionRequestQueries)->toHaveCount(1);
+});
+
+test('a choices card persisted through the real conversation store comes back on reload', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'OfferChoicesTool', arguments: ['question' => 'Which?', 'options' => [['label' => 'A'], ['label' => 'B', 'description' => 'The second']]]),
+        'Pick one.',
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $conversationId = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'Which one?'])
+        ->assertOk()
+        ->json('conversation_id');
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages)->toHaveCount(2)
+        ->and($messages[1]['cards'])->toHaveCount(1)
+        ->and($messages[1]['cards'][0])->toMatchArray(['type' => 'choices', 'id' => 'call-1', 'question' => 'Which?', 'multiple' => false])
+        ->and($messages[1]['cards'][0]['options'])->toBe([
+            ['label' => 'A', 'description' => null],
+            ['label' => 'B', 'description' => 'The second'],
+        ]);
+});
+
+test('an action request card persisted through the real conversation store comes back on reload', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'is_enabled' => true, 'requires_approval' => true]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'LibraryScanTool', arguments: []),
+        'Queued.',
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $conversationId = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'Scan Emby'])
+        ->assertOk()
+        ->json('conversation_id');
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages[1]['cards'])->toHaveCount(1)
+        ->and($messages[1]['cards'][0])->toMatchArray(['type' => 'action_request', 'id' => $actionRequest->id, 'status' => 'pending', 'requires_approval' => true]);
 });

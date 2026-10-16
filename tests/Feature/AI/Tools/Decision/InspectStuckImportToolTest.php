@@ -7,6 +7,7 @@ use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Models\ServiceConnection;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
@@ -26,14 +27,14 @@ test('returns per-file mapping, episodes and raw rejections', function (): void 
     ])]);
 
     $result = json_decode((new InspectStuckImportTool)->handle(new Request([
-        'service' => 'sonarr', 'download_id' => 'dl-1',
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
     ])), true);
 
     expect($result['ok'])->toBeTrue();
-    expect($result['fully_mapped'])->toBeTrue();
-    expect($result['files'][0]['mapped'])->toBeTrue();
-    expect($result['files'][0]['episodes'])->toBe(['S01E01']);
-    expect($result['files'][0]['rejections'][0])->toContain('matched by series id');
+    expect($result['downloads'][0]['fully_mapped'])->toBeTrue();
+    expect($result['downloads'][0]['files'][0]['mapped'])->toBeTrue();
+    expect($result['downloads'][0]['files'][0]['episodes'])->toBe(['S01E01']);
+    expect($result['downloads'][0]['files'][0]['rejections'][0])->toContain('matched by series id');
 });
 
 test('inspection works even when the import capability is off (read-only)', function (): void {
@@ -41,16 +42,16 @@ test('inspection works even when the import capability is off (read-only)', func
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([])]);
 
     $result = json_decode((new InspectStuckImportTool)->handle(new Request([
-        'service' => 'sonarr', 'download_id' => 'dl-1',
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
     ])), true);
 
     expect($result['ok'])->toBeTrue();
-    expect($result['importable'])->toBe(0);
+    expect($result['downloads'][0]['importable'])->toBe(0);
 });
 
 test('rejects an invalid service', function (): void {
     $result = json_decode((new InspectStuckImportTool)->handle(new Request([
-        'service' => 'plex', 'download_id' => 'dl-1',
+        'service' => 'plex', 'download_ids' => ['dl-1'],
     ])), true);
 
     expect($result['ok'])->toBeFalse();
@@ -64,7 +65,7 @@ test('inspects candidates on the connection that triggered the event when a deci
     Http::fake(['sonarr-b.local:8989/api/v3/manualimport*' => Http::response([])]);
 
     $result = json_decode((new InspectStuckImportTool)->handle(new Request([
-        'service' => 'sonarr', 'download_id' => 'dl-1',
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
     ])), true);
 
     app()->forgetInstance(DecisionRunContext::class);
@@ -79,7 +80,7 @@ test('uses the active connection when no decision run context is bound', functio
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([])]);
 
     $result = json_decode((new InspectStuckImportTool)->handle(new Request([
-        'service' => 'sonarr', 'download_id' => 'dl-1',
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
     ])), true);
 
     expect($result['ok'])->toBeTrue();
@@ -102,7 +103,64 @@ test("a non-string argument is refused in the tool's own words", function (array
         ->and($result['errors'][$field][0])->toBe($message);
     Http::assertNothingSent();
 })->with([
-    'a numeric service' => [['service' => 5, 'download_id' => 'dl-1'], 'service', 'service must be "sonarr" or "radarr".'],
-    'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1']], 'download_id', 'download_id must be a string (from the event payload).'],
-    'a boolean as the download id' => [['service' => 'sonarr', 'download_id' => true], 'download_id', 'download_id must be a string (from the event payload).'],
+    'a numeric service' => [['service' => 5, 'download_ids' => ['dl-1']], 'service', 'service must be "sonarr" or "radarr".'],
+    'a string instead of a list' => [['service' => 'sonarr', 'download_ids' => 'dl-1'], 'download_ids', 'download_ids must be a list of downloadIds (from the event payload).'],
+    'a non-string id in the list' => [['service' => 'sonarr', 'download_ids' => [['dl-1']]], 'download_ids.0', 'every download id must be a string (from the event payload).'],
+    'a duplicated id' => [['service' => 'sonarr', 'download_ids' => ['dl-1', 'dl-1']], 'download_ids.0', 'download_ids must not repeat an id.'],
+    'an empty list' => [['service' => 'sonarr', 'download_ids' => []], 'download_ids', 'download_ids needs at least one downloadId (from the event payload).'],
+    'more than twenty ids' => [['service' => 'sonarr', 'download_ids' => array_map(fn (int $i): string => "id{$i}", range(1, 21))], 'download_ids', 'download_ids takes at most 20 downloadIds per call.'],
 ]);
+
+test('it inspects several downloads in one call', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*downloadId=A*' => Http::response([]),
+        'sonarr.local:8989/api/v3/manualimport*downloadId=B*' => Http::response('boom', 500),
+    ]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_ids' => ['A', 'B'],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['service'])->toBe('sonarr')
+        ->and($result['downloads'])->toHaveCount(2)
+        ->and($result['downloads'][0])->toMatchArray(['download_id' => 'A', 'ok' => true])
+        ->and($result['downloads'][1])->toMatchArray(['download_id' => 'B', 'ok' => false, 'reason' => 'lookup_failed']);
+});
+
+test('a single download keeps the client retry when the first read is a server error', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::sequence()
+            ->push('upstream hiccup', 503)
+            ->push([[
+                'path' => '/dl/show.s01e01.mkv',
+                'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+                'series' => ['id' => 5, 'title' => 'Demo'],
+                'episodes' => [['id' => 11, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+                'rejections' => [],
+            ]]),
+    ]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['service'])->toBe('sonarr')
+        ->and($result['downloads'])->toHaveCount(1)
+        ->and($result['downloads'][0])->toMatchArray(['ok' => true, 'download_id' => 'dl-1', 'fully_mapped' => true]);
+    Http::assertSentCount(2);
+});
+
+test('a single download whose reads all fail is a lookup failure for the whole call', function (): void {
+    Sleep::fake();
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('down', 503)]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
+    ])), true);
+
+    expect($result)->toBe(['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.']);
+});

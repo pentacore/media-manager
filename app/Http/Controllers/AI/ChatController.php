@@ -23,6 +23,7 @@ use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\AiModelRateLimitExceededException;
 use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ChatCardExtractor;
 use App\Services\Chat\ChatWorkflowContinuation;
 use App\Services\Chat\ConversationModelOverride;
 use App\Services\Chat\WorkflowContinuationRefused;
@@ -40,7 +41,9 @@ use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Responses\TextResponse;
 use Throwable;
@@ -52,7 +55,7 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
@@ -111,6 +114,12 @@ class ChatController extends Controller
             'workflow' => $workflowPayload,
             'invocation_id' => $response->invocationId,
             'answered_by' => AnsweredBy::forChat($response->meta->provider, $response->meta->model),
+            'cards' => $chatCardExtractor->hydrate($chatCardExtractor->fromToolResults(
+                collect($response->steps)
+                    ->flatMap(fn (Step $step): array => $step->toolResults)
+                    ->map(fn (ToolResult $toolResult): array => $toolResult->toArray())
+                    ->all(),
+            )),
         ]);
     }
 

@@ -83,7 +83,7 @@ class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTool
     private const string STUCK_IMPORTS_SECTION = <<<'PROMPT'
 STUCK IMPORTS (ManualInteractionRequired)
 For a Sonarr/Radarr "manual interaction required" event, decide what to do by reading the actual import rejections — do NOT use ProposeActionTool for these.
-1. Call InspectStuckImportTool (service + download_id from the payload). It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
+1. Call InspectStuckImportTool with the service and `download_ids: [<the payload's download_id>]`. It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
 2. Read the rejections and choose:
    - The files map and there are no rejections, OR the only obstacle is a benign "we know what it is but won't auto-import" reason — e.g. "matched by series id" / "automatic import is not possible" → IMPORT it with ResolveManualImportTool.
    - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade. Pass blocklist=true only when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; leave it off for a plain non-upgrade. Pass search_replacement=true when a replacement should be grabbed (e.g. blocklisted a bad release but the content is still wanted); leave it false when the content shouldn't be retried.

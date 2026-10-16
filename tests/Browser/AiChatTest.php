@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Enums\ActionRequestStatus;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Jobs\ExecuteActionRequest;
+use App\Models\ActionRequest;
 use App\Models\AiProposedWorkflow;
 use App\Models\ChatAttachment;
 use App\Models\User;
@@ -13,6 +16,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
@@ -466,8 +470,9 @@ function aiChatInsertConversation(User $user, string $conversationId, string $ti
 /**
  * @param  list<array<string, mixed>>  $attachments
  * @param  array<string, mixed>  $meta
+ * @param  list<array<string, mixed>>  $toolCalls  stored tool calls, each carrying its folded-in `result` as the conversation store writes them
  */
-function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed', array $meta = []): void
+function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed', array $meta = [], array $toolCalls = []): void
 {
     DB::table('agent_conversation_messages')->insert([
         'id' => (string) Str::uuid7(),
@@ -480,13 +485,60 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
         'attachments' => json_encode($attachments),
         'steps' => $role === 'user'
             ? '[]'
-            : json_encode([['content' => $content, 'tool_calls' => [], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
+            : json_encode([['content' => $content, 'tool_calls' => $toolCalls, 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
         'usage' => '{}',
         'meta' => json_encode($meta === [] ? new stdClass : $meta),
         'status' => $status,
         'created_at' => now()->addSeconds($position),
         'updated_at' => now()->addSeconds($position),
     ]);
+}
+
+/**
+ * A stored OfferChoicesTool call (with its result) offering the given labels.
+ *
+ * @param  list<string>  $labels
+ * @param  array<string, string>  $descriptions  keyed by label
+ * @return array<string, mixed>
+ */
+function aiChatChoicesResult(string $toolCallId, string $question, array $labels, bool $multiple = false, array $descriptions = []): array
+{
+    return [
+        'id' => $toolCallId,
+        'name' => 'OfferChoicesTool',
+        'arguments' => [],
+        'result' => json_encode([
+            'choices' => [
+                'question' => $question,
+                'multiple' => $multiple,
+                'options' => array_map(fn (string $label): array => ['label' => $label, 'description' => $descriptions[$label] ?? null], $labels),
+            ],
+            'instruction' => 'End your turn now.',
+        ]),
+        'result_id' => null,
+    ];
+}
+
+/**
+ * A stored destructive-tool call (with its result) that queued the given action request.
+ *
+ * @return array<string, mixed>
+ */
+function aiChatQueuedActionResult(ActionRequest $actionRequest): array
+{
+    return [
+        'id' => 'call_queue',
+        'name' => 'DeleteMediaTool',
+        'arguments' => [],
+        'result' => json_encode([
+            'queued' => true,
+            'action_request_id' => $actionRequest->id,
+            'status' => 'pending',
+            'requires_approval' => true,
+            'title' => $actionRequest->title,
+        ]),
+        'result_id' => null,
+    ];
 }
 
 /**
@@ -589,4 +641,238 @@ test('switching to advisory mode changes the composer hint', function (): void {
         ->click('[data-chat-mode="advisory"]')
         ->assertAttribute('[data-chat-input]', 'placeholder', 'Ask MediaAgent · advisory mode (read-only)…')
         ->assertNoJavaScriptErrors();
+});
+
+test('a streamed OfferChoices call renders a choice card that takes a pick', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    $calls = 0;
+    MediaAgent::fake(function () use (&$calls): ToolCall|string {
+        $calls++;
+
+        return match ($calls) {
+            1 => new ToolCall(id: 'call_pick', name: 'OfferChoicesTool', arguments: [
+                'question' => 'Which download should I import?',
+                'options' => [['label' => 'Import the first'], ['label' => 'Import the second', 'description' => 'The 1080p release']],
+            ]),
+            2 => 'Pick one below.',
+            default => 'Importing the second one.',
+        };
+    });
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Two downloads are stuck')
+        ->click('Send')
+        // The card arrives mid-stream; it takes a pick once the turn ends.
+        ->assertSeeIn('[data-chat-thread]', 'Pick one below.')
+        ->assertSeeIn('[data-chat-thread] [data-choice-card]', 'Which download should I import?')
+        ->assertSeeIn('[data-choice-option="Import the second"] [data-choice-description]', 'The 1080p release')
+        ->click('[data-choice-option="Import the second"]')
+        ->assertSeeIn('[data-chat-thread]', 'Importing the second one.')
+        ->assertDisabled('[data-choice-option="Import the first"]')
+        ->assertVisible('[data-choice-option="Import the second"][data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+
+    expect(DB::table('agent_conversation_messages')->where('role', 'user')->where('content', 'Import the second')->exists())->toBeTrue();
+});
+
+test('a reloaded conversation ending in a choices card sends the clicked option', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Going with B.']);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Choice chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which release?');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', toolCalls: [
+        aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B'], descriptions: ['B' => 'Smaller 720p file']),
+    ]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread] [data-choice-card]', 'Pick a release')
+        ->assertSeeIn('[data-choice-card] [data-choice-option="B"] [data-choice-description]', 'Smaller 720p file')
+        ->click('[data-choice-option="B"]')
+        ->assertSeeIn('[data-chat-thread]', 'Going with B.')
+        ->assertVisible('[data-save-as-template][href*="body=B"]')
+        ->assertDisabled('[data-choice-option="A"]')
+        ->assertDisabled('[data-choice-option="B"]')
+        ->assertVisible('[data-choice-option="B"][data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+
+    expect(DB::table('agent_conversation_messages')->where('role', 'user')->where('content', 'B')->exists())->toBeTrue();
+});
+
+test('a multi-select choices card confirms the ticked options together', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Importing A and C.']);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Multi choice chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which files?');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick the files to import.', toolCalls: [
+        aiChatChoicesResult('call_1', 'Which files should I import?', ['A', 'B', 'C'], multiple: true),
+    ]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread] [data-choice-card]', 'Which files should I import?')
+        ->assertDisabled('[data-choice-confirm]')
+        ->click('[data-choice-toggle="C"]')
+        ->click('[data-choice-toggle="A"]')
+        ->assertEnabled('[data-choice-confirm]')
+        ->click('[data-choice-confirm]')
+        ->assertSeeIn('[data-chat-thread]', 'Importing A and C.')
+        ->assertDisabled('[data-choice-confirm]')
+        ->assertVisible('[data-choice-toggle="A"][data-choice-chosen]')
+        ->assertVisible('[data-choice-toggle="C"][data-choice-chosen]')
+        ->assertMissing('[data-choice-toggle="B"][data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+
+    expect(DB::table('agent_conversation_messages')->where('role', 'user')->where('content', 'A, C')->exists())->toBeTrue();
+});
+
+test('an answered choices card on an older reply stays locked and shows the pick', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Answered choice chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which release?');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick one.', toolCalls: [
+        aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'B');
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Grabbed release B.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Grabbed release B.')
+        ->assertVisible('[data-chat-thread] [data-choice-card]')
+        ->assertDisabled('[data-choice-option="A"]')
+        ->assertDisabled('[data-choice-option="B"]')
+        ->assertVisible('[data-choice-option="B"][data-choice-chosen]')
+        ->assertMissing('[data-choice-option="A"][data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('a queued action card approves the pending request inline', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Approval chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
+        aiChatQueuedActionResult($actionRequest),
+    ]);
+
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-action-approval-card]', 'Delete series "Severance"')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending');
+
+    // The pending-actions badge follows the ActionRequest broadcast, so an
+    // inline review must not reload the open page.
+    $webpage->script(<<<'JS'
+        (() => {
+            window.__inertiaVisitsAfterReview = [];
+            document.addEventListener('inertia:before', (event) => window.__inertiaVisitsAfterReview.push(String(event.detail.visit.url)));
+        })()
+        JS);
+
+    $webpage->click('[data-action-approve]')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'approved')
+        ->assertMissing('[data-action-approve]')
+        ->assertMissing('[data-action-reject]')
+        ->assertVisible("[data-action-queue-link][href*=\"request={$actionRequest->id}\"]")
+        ->assertNoJavaScriptErrors();
+
+    expect($webpage->script('window.__inertiaVisitsAfterReview'))->toBe([])
+        ->and($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('a queued action card rejects the pending request inline', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Rejection chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
+        aiChatQueuedActionResult($actionRequest),
+    ]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending')
+        ->click('[data-action-reject]')
+        ->assertSee('1 rejected')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'rejected')
+        ->assertMissing('[data-action-approve]')
+        ->assertMissing('[data-action-reject]')
+        ->assertNoJavaScriptErrors();
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Rejected);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('a queued action card reviewed elsewhere first shows it changed and leaves the request alone', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Raced approval chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
+        aiChatQueuedActionResult($actionRequest),
+    ]);
+
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending');
+
+    // Approved from the Action Queue after the chat loaded.
+    $actionRequest->update(['status' => ActionRequestStatus::Approved]);
+
+    $webpage->click('[data-action-approve]')
+        ->assertSee('1 skipped')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'Changed elsewhere')
+        ->assertMissing('[data-action-approve]')
+        ->assertMissing('[data-action-reject]')
+        ->assertVisible('[data-action-queue-link]')
+        ->assertNoJavaScriptErrors();
+
+    expect($actionRequest->fresh())
+        ->status->toBe(ActionRequestStatus::Approved)
+        ->approved_by->toBeNull();
+    Queue::assertNotPushed(ExecuteActionRequest::class);
 });

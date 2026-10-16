@@ -7,10 +7,12 @@ import { useAiChat } from '@/composables/useAiChat';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { cn } from '@/lib/utils';
 import { create as createBenchmarkCase } from '@/routes/admin/benchmarks/cases';
+import ActionApprovalCard from './ActionApprovalCard.vue';
 import AttachmentChips from './AttachmentChips.vue';
+import ChoiceCard from './ChoiceCard.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import ToolCallChip from './ToolCallChip.vue';
-import type { ChatMessage } from './types';
+import type { ActionRequestCard, ChatMessage } from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
 
 defineProps<{
@@ -20,11 +22,17 @@ defineProps<{
     streaming: boolean;
     /** A turn is in flight, so the workflow buttons stay disabled. */
     busy: boolean;
+    /** This is the newest message and an assistant reply. */
+    isLatestAssistant: boolean;
+    /** Action request ids whose approve/reject is in flight. */
+    reviewingActionIds: number[];
 }>();
 
 const emit = defineEmits<{
     (e: 'approve'): void;
     (e: 'decline'): void;
+    (e: 'choose', labels: string[]): void;
+    (e: 'review', card: ActionRequestCard, action: 'approve' | 'reject'): void;
 }>();
 
 const { render: renderMarkdown } = useMarkdown();
@@ -103,6 +111,25 @@ function benchmarkCaseQuery(
                     :call="call"
                 />
             </div>
+            <template
+                v-for="card in message.cards ?? []"
+                :key="`${card.type}-${card.id}`"
+            >
+                <ChoiceCard
+                    v-if="card.type === 'choices'"
+                    :card="card"
+                    :interactive="isLatestAssistant && !busy && !message.chosen"
+                    :chosen="message.chosen ?? null"
+                    @choose="(labels) => emit('choose', labels)"
+                />
+                <ActionApprovalCard
+                    v-else
+                    :card="card"
+                    :busy="reviewingActionIds.includes(card.id)"
+                    @approve="emit('review', card, 'approve')"
+                    @reject="emit('review', card, 'reject')"
+                />
+            </template>
             <p
                 v-if="message.failed && !message.text"
                 class="text-[13px] text-destructive"

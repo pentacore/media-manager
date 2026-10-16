@@ -19,11 +19,52 @@ final readonly class StuckImportInspector
     ) {}
 
     /**
+     * Counts leave samples out; `files` lists every candidate (see shape()).
+     *
      * @return array{service: string, download_id: string, total: int, importable: int, fully_mapped: bool, files: array<int, array<string, mixed>>}
      */
     public function inspect(ServiceConnection $serviceConnection, string $service, string $downloadId): array
     {
         $candidates = $this->arrConnections->client($serviceConnection)->getManualImport(['downloadId' => $downloadId]);
+
+        return $this->shape($candidates, $service, $downloadId);
+    }
+
+    /**
+     * Inspect several downloads with one pooled read. One entry per unique id,
+     * in input order: the inspect() shape plus `ok => true`, or a
+     * `lookup_failed` marker for an id the upstream could not answer.
+     *
+     * @param  list<string>  $downloadIds
+     * @return list<array<string, mixed>>
+     */
+    public function inspectMany(ServiceConnection $serviceConnection, string $service, array $downloadIds): array
+    {
+        $candidatesById = $this->arrConnections->client($serviceConnection)->getManualImports($downloadIds);
+        $entries = [];
+
+        foreach (array_keys($candidatesById) as $downloadId) {
+            $downloadId = (string) $downloadId;
+            $candidates = $candidatesById[$downloadId];
+
+            $entries[] = $candidates === null
+                ? ['download_id' => $downloadId, 'ok' => false, 'reason' => 'lookup_failed']
+                : ['ok' => true, ...$this->shape($candidates, $service, $downloadId)];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * `total`, `importable` and `fully_mapped` come from assess() and leave
+     * samples out, while `files` lists every candidate (samples included)
+     * with its `sample` flag, so the reader sees what was set aside.
+     *
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @return array{service: string, download_id: string, total: int, importable: int, fully_mapped: bool, files: array<int, array<string, mixed>>}
+     */
+    private function shape(array $candidates, string $service, string $downloadId): array
+    {
         $assessment = $this->manualImportResolver->assess($candidates, $service, $downloadId);
 
         return [
