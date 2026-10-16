@@ -121,10 +121,10 @@ test('isSample recognises samples', function (array $candidate, bool $expected):
 
 test('a mapped episode with a sample beside it is fully mapped and imports only the episode', function (): void {
     $candidates = [mappedSonarrCandidate('/dl/x/show.s01e01.mkv'), mappedSonarrCandidate('/dl/x/Sample/show.s01e01.mkv')];
-    $resolver = resolve(ManualImportResolver::class);
+    $manualImportResolver = resolve(ManualImportResolver::class);
 
-    expect($resolver->toImportPayload($candidates, 'sonarr', 'D'))->toHaveCount(1)
-        ->and($resolver->assess($candidates, 'sonarr', 'D'))->toMatchArray([
+    expect($manualImportResolver->toImportPayload($candidates, 'sonarr', 'D'))->toHaveCount(1)
+        ->and($manualImportResolver->assess($candidates, 'sonarr', 'D'))->toMatchArray([
             'total' => 1, 'importable' => 1, 'fully_mapped' => true,
             'skipped' => [['path' => '/dl/x/Sample/show.s01e01.mkv', 'why' => 'sample']],
         ]);
@@ -132,11 +132,11 @@ test('a mapped episode with a sample beside it is fully mapped and imports only 
 
 test('an explicit exclusion removes a file, an unknown path is ignored, excluding everything leaves nothing importable', function (): void {
     $candidates = [mappedSonarrCandidate('/dl/x/a.mkv'), unmappedCandidate('/dl/x/extra.mkv')];
-    $resolver = resolve(ManualImportResolver::class);
+    $manualImportResolver = resolve(ManualImportResolver::class);
 
-    expect($resolver->assess($candidates, 'sonarr', 'D', ['/dl/x/extra.mkv', '/not/a/candidate.mkv']))
+    expect($manualImportResolver->assess($candidates, 'sonarr', 'D', ['/dl/x/extra.mkv', '/not/a/candidate.mkv']))
         ->toMatchArray(['total' => 1, 'importable' => 1, 'fully_mapped' => true])
-        ->and($resolver->assess($candidates, 'sonarr', 'D', ['/dl/x/a.mkv', '/dl/x/extra.mkv']))
+        ->and($manualImportResolver->assess($candidates, 'sonarr', 'D', ['/dl/x/a.mkv', '/dl/x/extra.mkv']))
         ->toMatchArray(['total' => 0, 'importable' => 0, 'fully_mapped' => false]);
 });
 

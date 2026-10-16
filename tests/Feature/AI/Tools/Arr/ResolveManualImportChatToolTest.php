@@ -211,6 +211,9 @@ test("a non-string download id or reason is refused in the tool's own words befo
     'a list as the reason' => [['reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the approver.'],
 ]);
 
+/**
+ * @return array<int, non-empty-array>
+ */
 function mappedAndExtraCandidates(array $extra = []): array
 {
     return [

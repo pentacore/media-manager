@@ -253,6 +253,7 @@ test('every tool media agent declares is core or in a routable group', function 
     resolve(AiSettings::class)->setStuckImportFastPathEnabled(true);
     config()->set('services.tmdb.api_key', 'tmdb-test');
     config()->set('services.trakt.client_id', 'trakt-test');
+
     $routable = array_merge(ToolGroup::core(), ...array_map(fn (ToolGroup $toolGroup): array => $toolGroup->toolClasses(), ToolGroup::cases()));
 
     $declared = array_map(fn (object $tool): string => $tool::class, [...(new MediaAgent)->tools()]);

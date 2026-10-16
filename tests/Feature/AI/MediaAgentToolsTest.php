@@ -48,7 +48,7 @@ test('media agent offers the stuck-import verdict tool only while the fast path 
 });
 
 test('both stuck-download prompts cap an inspection at 20 download ids per service', function (): void {
-    $investigator = (string) (new StuckDownloadInvestigatorAgent)->instructions();
+    $investigator = (new StuckDownloadInvestigatorAgent)->instructions();
     $mediaAgent = (string) (new MediaAgent)->instructions();
 
     expect($investigator)->toContain('at most 20 download_ids per call')
