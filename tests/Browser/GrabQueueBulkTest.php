@@ -325,6 +325,11 @@ test('an admin chooses which candidate files a manual import takes', function ()
                 'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
                 'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
             ],
+            [
+                'path' => '/downloads/Extras/featurette.mkv', 'name' => 'featurette', 'size' => 300_000_000,
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+                'rejections' => [['reason' => 'Unknown Series', 'type' => 'permanent']],
+            ],
         ]),
     ]);
     $this->actingAs(User::factory()->admin()->create());
@@ -335,17 +340,20 @@ test('an admin chooses which candidate files a manual import takes', function ()
 
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-manual-import]')
-        ->assertCount('[data-manual-import-candidate]', 2)
+        ->assertCount('[data-manual-import-candidate]', 3)
         ->assertSeeIn('[data-manual-import-sample]', 'Sample')
         ->assertCount('[data-manual-import-sample]', 1)
-        ->assertSeeIn('[data-manual-import-submit]', 'Import 1 of 2 file(s)')
-        ->assertAttribute('[data-manual-import-candidate]:nth-of-type(1) [data-manual-import-toggle]', 'data-state', 'checked')
-        ->assertAttribute('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]', 'data-state', 'unchecked')
-        ->click('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]')
-        ->assertSeeIn('[data-manual-import-submit]', 'Import 2 of 2 file(s)')
-        ->click('[data-manual-import-candidate]:nth-of-type(1) [data-manual-import-toggle]')
-        ->click('[data-manual-import-candidate]:nth-of-type(2) [data-manual-import-toggle]')
-        ->assertSeeIn('[data-manual-import-submit]', 'Import 0 of 2 file(s)')
+        ->assertCount('[data-manual-import-unmapped]', 1)
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 1 of 3 file(s)')
+        ->assertAttribute('[data-manual-import-path="/downloads/Severance.S01E01.mkv"] [data-manual-import-toggle]', 'data-state', 'checked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'data-state', 'unchecked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'disabled', '')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'aria-label', 'Import Severance · S01E01')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'data-state', 'unchecked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'disabled', '')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'aria-label', 'Import featurette')
+        ->click('[data-manual-import-path="/downloads/Severance.S01E01.mkv"] [data-manual-import-toggle]')
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 0 of 3 file(s)')
         ->assertAttribute('[data-manual-import-submit]', 'disabled', '')
         ->assertNoSmoke();
 });

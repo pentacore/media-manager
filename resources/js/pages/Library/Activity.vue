@@ -1321,6 +1321,7 @@ async function runQueueBulk(): Promise<void> {
                         v-for="(candidate, idx) in importCandidates"
                         :key="idx"
                         data-manual-import-candidate
+                        :data-manual-import-path="candidate.path"
                         :class="[
                             'flex items-start gap-3 rounded-md border border-border bg-card p-3',
                             !(
@@ -1336,7 +1337,12 @@ async function runQueueBulk(): Promise<void> {
                                 !!candidate.path &&
                                 importSelected.has(candidate.path)
                             "
-                            :disabled="!candidate.path || importSubmitting"
+                            :disabled="
+                                !candidate.path ||
+                                !candidate.mapped ||
+                                candidate.sample ||
+                                importSubmitting
+                            "
                             :aria-label="`Import ${candidateLabel(candidate)}`"
                             @update:model-value="
                                 (value) =>
