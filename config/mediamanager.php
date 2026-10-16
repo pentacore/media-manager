@@ -203,6 +203,13 @@ return [
 
         // Caps how many ActionRequests one decision may spawn.
         'max_actions_per_run' => 3,
+
+        // Second opinion on automated proposals (Action Rules choose which
+        // types are checked): 'llm', 'jev_then_llm' or 'jev'.
+        'second_opinion_engine' => env('MEDIAMANAGER_DECISION_AGENT_SECOND_OPINION_ENGINE', 'llm'),
+
+        // Jev probability at or above which the classifier agrees.
+        'second_opinion_jev_threshold' => 0.8,
     ],
 
     /*

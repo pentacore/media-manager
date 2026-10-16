@@ -10,6 +10,7 @@ use App\Enums\ClassificationVerdict;
 use App\Jobs\RunDecisionAgent;
 use App\Models\ClassificationOutcome;
 use App\Settings\AiSettings;
+use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -23,7 +24,7 @@ final readonly class ClassificationGateReporting
 {
     private const int BANDS = 10;
 
-    public function __construct(private AiSettings $aiSettings) {}
+    public function __construct(private AiSettings $aiSettings, private DecisionAgentSettings $decisionAgentSettings) {}
 
     /**
      * @return list<array{gate: string, label: string, threshold: float, total: int, resolved: int, positive: int, verdicts: array<string, int>, audit_runs: int, audit_resolved: int, audit_positive: int, bands: list<array{label: string, count: int, resolved: int, positive_rate: float|null}>}>
@@ -89,7 +90,7 @@ final readonly class ClassificationGateReporting
             ClassificationGate::StuckImport => $this->aiSettings->stuckImportThreshold(),
             ClassificationGate::SubtitleTriage => $this->aiSettings->subtitleTriageThreshold(),
             ClassificationGate::ChatRouting => ChatToolRouter::INCLUDE_AT,
-            ClassificationGate::SecondOpinion => 0.8,
+            ClassificationGate::SecondOpinion => $this->decisionAgentSettings->secondOpinionJevThreshold(),
         };
     }
 }
