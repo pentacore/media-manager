@@ -54,13 +54,21 @@ use Throwable;
  * serialized model could vanish before this job dequeues.
  */
 #[Queue(QueueLane::Ai)]
-#[Timeout(240)]
+#[Timeout(self::TIMEOUT_SECONDS)]
 #[UniqueFor(600)]
 class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
+
+    public const int TIMEOUT_SECONDS = 240;
+
+    /**
+     * Seconds of the job timeout kept back past the run's deadline for
+     * recording the decision and sending its notification.
+     */
+    public const int RUN_DEADLINE_RESERVE_SECONDS = 30;
 
     /** Cap on the event payload size handed to the model, in characters. */
     private const int MAX_PAYLOAD_CHARS = 8000;
@@ -109,6 +117,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         StuckImportDecider $stuckImportDecider,
         StuckImportResolver $stuckImportResolver,
     ): void {
+        $startedAt = now();
+
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
         }
@@ -171,6 +181,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
             eventType: $this->eventType,
             actionKind: $actionKind,
+            deadline: $startedAt->addSeconds(self::TIMEOUT_SECONDS - self::RUN_DEADLINE_RESERVE_SECONDS),
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 

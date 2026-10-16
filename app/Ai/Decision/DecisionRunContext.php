@@ -10,6 +10,7 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
@@ -48,6 +49,10 @@ class DecisionRunContext
      * $actionKind is the action kind the gate scoped this run to, or null for
      * the full toolset.
      *
+     * $deadline is when the run must be done to finish inside its job
+     * timeout (null when nothing bounds it); the second-opinion check stops
+     * short of it.
+     *
      * @param  array<string, mixed>  $eventPayload
      */
     public function __construct(
@@ -58,6 +63,7 @@ class DecisionRunContext
         public readonly ?int $originConnectionId = null,
         public readonly ?string $eventType = null,
         public readonly ?DecisionActionKind $actionKind = null,
+        public readonly ?CarbonImmutable $deadline = null,
     ) {}
 
     /**

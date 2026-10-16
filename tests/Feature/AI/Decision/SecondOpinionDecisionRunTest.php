@@ -166,3 +166,41 @@ test('the run notification counts only queued actions and names the held and rej
         && $decisionAgentActed->heldBySecondOpinion === 1
         && $decisionAgentActed->rejectedBySecondOpinion === 1);
 });
+
+test('a run gives its proposals a deadline inside the job timeout', function (): void {
+    $this->freezeTime();
+    $deadline = null;
+    DecisionAgent::fake([function () use (&$deadline): string {
+        $deadline = resolve(DecisionRunContext::class)->deadline;
+
+        return 'Nothing to do.';
+    }]);
+    $webhookEvent = secondOpinionSeriesEvent();
+
+    app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
+
+    expect($deadline?->toIso8601String())->toBe(now()->addSeconds(RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS)->toIso8601String());
+});
+
+test('a proposal made late in a run is held without asking the verifier', function (): void {
+    $this->freezeTime();
+    secondOpinionDeleteRule(SecondOpinionMode::Reject);
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+    DecisionAgent::fake([
+        function (): ToolCall {
+            $this->travel(RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS - 30)->seconds();
+
+            return new ToolCall(id: 'c1', name: 'ProposeActionTool', arguments: secondOpinionDeleteProposal());
+        },
+        'Queued a deletion for approval.',
+    ]);
+    $webhookEvent = secondOpinionSeriesEvent();
+
+    app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
+
+    $actionRequest = ActionRequest::query()->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->second_opinion)->toMatchArray(['failed' => true, 'reason' => 'Skipped: the decision run is out of time.'])
+        ->and(AgentDecision::query()->sole()->summary)->toBe('Queued a deletion for approval.');
+    DecisionVerifierAgent::assertNeverPrompted();
+});

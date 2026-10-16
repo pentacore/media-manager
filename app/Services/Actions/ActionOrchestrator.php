@@ -211,7 +211,7 @@ class ActionOrchestrator
                 sourceService: $sourceService,
                 eventType: $decisionRunContext?->eventType,
                 eventPayload: $decisionRunContext?->eventPayload ?? [],
-            ));
+            ), $decisionRunContext?->deadline);
 
         // A second opinion can only tighten the gate: hold or reject, never release.
         $rejectedBySecondOpinion = $secondOpinionVerdict?->rejects($secondOpinionMode) ?? false;

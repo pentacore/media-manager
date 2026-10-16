@@ -17,6 +17,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\DecisionAgentSettings;
 use App\Support\UpstreamErrorText;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Responses\StructuredAgentResponse;
@@ -34,6 +35,24 @@ final readonly class SecondOpinionVerifier
     public const string JEV_QUESTION = 'Is this proposed media-server action correct, proportionate and justified by the triggering event?';
 
     public const int LLM_TIMEOUT_SECONDS = 30;
+
+    /**
+     * A check that would start with less of the decision run left than this
+     * is skipped as failed (held), so the run can still record its summary.
+     */
+    public const int MIN_RUN_SECONDS_LEFT = 60;
+
+    /**
+     * Run time kept back after the LLM check for the proposer to finish.
+     */
+    public const int RUN_SECONDS_RESERVED = 30;
+
+    public const string OUT_OF_TIME_REASON = 'Skipped: the decision run is out of time.';
+
+    /**
+     * The shortest LLM call per provider worth making.
+     */
+    private const int MIN_LLM_TIMEOUT_SECONDS = 10;
 
     private const string OUTCOME_QUESTION = 'second_opinion';
 
@@ -60,13 +79,25 @@ final readonly class SecondOpinionVerifier
         return ClassificationOutcome::subjectKey('action_request', $actionRequestId);
     }
 
-    public function verify(SecondOpinionCase $secondOpinionCase): SecondOpinionVerdict
+    /**
+     * $deadline is when the decision run must be done (null outside a run):
+     * a check too close to it is skipped, and the LLM call is cut to fit.
+     */
+    public function verify(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline = null): SecondOpinionVerdict
     {
+        $secondOpinionEngine = null;
+
         try {
-            return match ($this->decisionAgentSettings->secondOpinionEngine()) {
-                SecondOpinionEngine::Llm => $this->askLlm($secondOpinionCase),
+            $secondOpinionEngine = $this->decisionAgentSettings->secondOpinionEngine();
+
+            if ($deadline instanceof CarbonImmutable && $this->secondsLeft($deadline) < self::MIN_RUN_SECONDS_LEFT) {
+                return SecondOpinionVerdict::failure($this->failureEngine($secondOpinionEngine), self::OUT_OF_TIME_REASON);
+            }
+
+            return match ($secondOpinionEngine) {
+                SecondOpinionEngine::Llm => $this->askLlm($secondOpinionCase, $deadline),
                 SecondOpinionEngine::Jev => $this->jevDecides($secondOpinionCase),
-                SecondOpinionEngine::JevThenLlm => $this->jevThenLlm($secondOpinionCase),
+                SecondOpinionEngine::JevThenLlm => $this->jevThenLlm($secondOpinionCase, $deadline),
             };
         } catch (Throwable $throwable) {
             Log::warning('SecondOpinionVerifier: check failed unexpectedly', [
@@ -75,7 +106,7 @@ final readonly class SecondOpinionVerifier
                 'message' => $throwable->getMessage(),
             ]);
 
-            return SecondOpinionVerdict::failure(SecondOpinionVerdict::ENGINE_LLM, 'The second-opinion check failed unexpectedly.');
+            return SecondOpinionVerdict::failure($this->failureEngine($secondOpinionEngine), 'The second-opinion check failed unexpectedly.');
         }
     }
 
@@ -155,13 +186,13 @@ final readonly class SecondOpinionVerifier
      * unavailable classifier go to the LLM, whose verdict is final. Jev
      * never rejects alone here.
      */
-    private function jevThenLlm(SecondOpinionCase $secondOpinionCase): SecondOpinionVerdict
+    private function jevThenLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline): SecondOpinionVerdict
     {
         $threshold = $this->decisionAgentSettings->secondOpinionJevThreshold();
         $probability = $this->askJev($secondOpinionCase);
 
         if ($probability === null) {
-            return $this->askLlm($secondOpinionCase);
+            return $this->askLlm($secondOpinionCase, $deadline);
         }
 
         $confident = $probability >= $threshold;
@@ -177,7 +208,7 @@ final readonly class SecondOpinionVerifier
             );
         }
 
-        return $this->askLlm($secondOpinionCase)->withJev(
+        return $this->askLlm($secondOpinionCase, $deadline)->withJev(
             $probability,
             $confident ? ClassificationVerdict::AuditRun : ClassificationVerdict::Fallback,
             $threshold,
@@ -189,12 +220,19 @@ final readonly class SecondOpinionVerifier
         return $this->classifier->probability(self::class, $secondOpinionCase->toClassificationState(), self::JEV_QUESTION);
     }
 
-    private function askLlm(SecondOpinionCase $secondOpinionCase): SecondOpinionVerdict
+    private function askLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline): SecondOpinionVerdict
     {
         try {
             $this->aiBudgetGuard->enforce();
 
-            $agentResponse = resolve(DecisionVerifierAgent::class)->prompt($secondOpinionCase->toPrompt(), timeout: self::LLM_TIMEOUT_SECONDS);
+            $decisionVerifierAgent = resolve(DecisionVerifierAgent::class);
+            $timeout = $this->llmTimeout($decisionVerifierAgent, $deadline);
+
+            if ($timeout === null) {
+                return SecondOpinionVerdict::failure(SecondOpinionVerdict::ENGINE_LLM, self::OUT_OF_TIME_REASON);
+            }
+
+            $agentResponse = $decisionVerifierAgent->prompt($secondOpinionCase->toPrompt(), timeout: $timeout);
 
             $agrees = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['agrees'] ?? null) : null;
             $reason = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['reason'] ?? null) : null;
@@ -222,6 +260,36 @@ final readonly class SecondOpinionVerifier
                 UpstreamErrorText::sanitize($throwable->getMessage(), 300, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
             );
         }
+    }
+
+    /**
+     * The per-provider timeout that lets the whole failover chain finish
+     * before the run's reserve, or null when that leaves too little time.
+     */
+    private function llmTimeout(DecisionVerifierAgent $decisionVerifierAgent, ?CarbonImmutable $deadline): ?int
+    {
+        if (! $deadline instanceof CarbonImmutable) {
+            return self::LLM_TIMEOUT_SECONDS;
+        }
+
+        $providers = max(1, count($decisionVerifierAgent->provider()));
+        $timeout = min(self::LLM_TIMEOUT_SECONDS, intdiv($this->secondsLeft($deadline) - self::RUN_SECONDS_RESERVED, $providers));
+
+        return $timeout >= self::MIN_LLM_TIMEOUT_SECONDS ? $timeout : null;
+    }
+
+    private function secondsLeft(CarbonImmutable $deadline): int
+    {
+        return $deadline->getTimestamp() - now()->getTimestamp();
+    }
+
+    /**
+     * Whose answer a failed check stands in for: Jev's in jev mode, the
+     * LLM's otherwise (including when the engine could not be read).
+     */
+    private function failureEngine(?SecondOpinionEngine $secondOpinionEngine): string
+    {
+        return $secondOpinionEngine === SecondOpinionEngine::Jev ? SecondOpinionVerdict::ENGINE_JEV : SecondOpinionVerdict::ENGINE_LLM;
     }
 
     private function jevReason(float $probability, float $threshold): string

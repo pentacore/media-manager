@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionVerifierAgent;
+use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
 use App\Enums\SecondOpinionMode;
 use App\Events\ActionRequestCreated;
@@ -116,4 +118,45 @@ test('system and chat dispatches are never verified', function (): void {
 
     expect($actionRequest->second_opinion)->toBeNull();
     DecisionVerifierAgent::assertNeverPrompted();
+});
+
+test('a dispatch near the run deadline holds without asking the verifier', function (): void {
+    secondOpinionRule('monitor_series', SecondOpinionMode::Reject);
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'monitor_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: ['series_id' => 7],
+        rationale: 'The series was added unmonitored.',
+        description: new ActionDescription('Monitor Severance', 'Turns monitoring on.'),
+        decisionRunContext: new DecisionRunContext(webhookEventId: null, maxActions: 3, deadline: now()->addSeconds(SecondOpinionVerifier::MIN_RUN_SECONDS_LEFT - 1)),
+    );
+
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->requires_approval)->toBeTrue()
+        ->and($actionRequest->second_opinion)->toMatchArray(['engine' => 'llm', 'failed' => true, 'reason' => 'Skipped: the decision run is out of time.']);
+    DecisionVerifierAgent::assertNeverPrompted();
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('a dispatch with time to spare is verified as usual', function (): void {
+    secondOpinionRule('monitor_series', SecondOpinionMode::Reject);
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Justified.']]);
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'monitor_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: ['series_id' => 7],
+        rationale: 'The series was added unmonitored.',
+        description: new ActionDescription('Monitor Severance', 'Turns monitoring on.'),
+        decisionRunContext: new DecisionRunContext(webhookEventId: null, maxActions: 3, deadline: now()->addSeconds(200)),
+    );
+
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved)
+        ->and($actionRequest->second_opinion)->toMatchArray(['agrees' => true, 'failed' => false]);
+    DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === SecondOpinionVerifier::LLM_TIMEOUT_SECONDS);
+    Queue::assertPushed(ExecuteActionRequest::class);
 });

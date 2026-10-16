@@ -19,6 +19,7 @@ use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Mockery\MockInterface;
 
 function secondOpinionCase(): SecondOpinionCase
 {
@@ -191,3 +192,106 @@ test('only types an automated proposer can produce support a second opinion', fu
     ['grab_release', false],
     ['replace_media_file', false],
 ]);
+
+test('a check too close to the run deadline is skipped as failed without asking anyone', function (SecondOpinionEngine $secondOpinionEngine, string $engine): void {
+    secondOpinionEngine($secondOpinionEngine);
+    Classification::fake()->preventStrayClassifications();
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase(), now()->addSeconds(SecondOpinionVerifier::MIN_RUN_SECONDS_LEFT - 1));
+
+    expect($secondOpinionVerdict->failed)->toBeTrue()
+        ->and($secondOpinionVerdict->agrees)->toBeFalse()
+        ->and($secondOpinionVerdict->engine)->toBe($engine)
+        ->and($secondOpinionVerdict->reason)->toBe('Skipped: the decision run is out of time.');
+    DecisionVerifierAgent::assertNeverPrompted();
+    Classification::assertNothingClassified();
+})->with([
+    'llm' => [SecondOpinionEngine::Llm, 'llm'],
+    'jev' => [SecondOpinionEngine::Jev, 'jev'],
+    'jev then llm' => [SecondOpinionEngine::JevThenLlm, 'llm'],
+]);
+
+test('the llm call keeps its full timeout when the run has time to spare', function (): void {
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Fine.']]);
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase(), now()->addSeconds(200));
+
+    expect($secondOpinionVerdict->failed)->toBeFalse()->and($secondOpinionVerdict->agrees)->toBeTrue();
+    DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === SecondOpinionVerifier::LLM_TIMEOUT_SECONDS);
+});
+
+test('the llm call is cut to fit what jev left of the run', function (): void {
+    $this->freezeTime();
+    secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
+    Classification::fake([function (): array {
+        $this->travel(20)->seconds();
+
+        return ['decision' => new BooleanAnswer(0.4)];
+    }]);
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Fine.']]);
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase(), now()->addSeconds(65));
+
+    expect($secondOpinionVerdict->failed)->toBeFalse()->and($secondOpinionVerdict->agrees)->toBeTrue();
+    DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === 15);
+});
+
+test('an llm call jev left too little time for is a failed check that keeps the jev answer', function (): void {
+    $this->freezeTime();
+    secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
+    Classification::fake([function (): array {
+        $this->travel(30)->seconds();
+
+        return ['decision' => new BooleanAnswer(0.4)];
+    }]);
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase(), now()->addSeconds(65));
+
+    expect($secondOpinionVerdict->failed)->toBeTrue()
+        ->and($secondOpinionVerdict->reason)->toBe('Skipped: the decision run is out of time.')
+        ->and($secondOpinionVerdict->confidence)->toBe(0.4)
+        ->and($secondOpinionVerdict->jevVerdict)->toBe(ClassificationVerdict::Fallback);
+    DecisionVerifierAgent::assertNeverPrompted();
+});
+
+test('an unexpected failure is labelled with the configured engine', function (?SecondOpinionEngine $secondOpinionEngine, string $engine): void {
+    $this->mock(DecisionAgentSettings::class, function (MockInterface $mock) use ($secondOpinionEngine): void {
+        $secondOpinionEngine instanceof SecondOpinionEngine
+            ? $mock->shouldReceive('secondOpinionEngine')->andReturn($secondOpinionEngine)
+            : $mock->shouldReceive('secondOpinionEngine')->andThrow(new RuntimeException('settings unavailable'));
+        $mock->shouldReceive('secondOpinionJevThreshold')->andThrow(new RuntimeException('settings unavailable'));
+    });
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase());
+
+    expect($secondOpinionVerdict->failed)->toBeTrue()
+        ->and($secondOpinionVerdict->engine)->toBe($engine)
+        ->and($secondOpinionVerdict->reason)->toBe('The second-opinion check failed unexpectedly.');
+})->with([
+    'jev' => [SecondOpinionEngine::Jev, 'jev'],
+    'jev then llm' => [SecondOpinionEngine::JevThenLlm, 'llm'],
+    'engine unreadable' => [null, 'llm'],
+]);
+
+test('a cascade whose llm fails after a doubtful jev answer holds and leaves the jev answer open', function (): void {
+    secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
+    Classification::fake([['decision' => new BooleanAnswer(0.4)]]);
+    DecisionVerifierAgent::fake(fn () => throw new RuntimeException('upstream 502'));
+    $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
+
+    $secondOpinionVerdict = $secondOpinionVerifier->verify(secondOpinionCase());
+    $secondOpinionVerifier->recordOutcome($secondOpinionVerdict, 42);
+
+    $classificationOutcome = ClassificationOutcome::query()->sole();
+    expect($secondOpinionVerdict->failed)->toBeTrue()
+        ->and($secondOpinionVerdict->agrees)->toBeFalse()
+        ->and($secondOpinionVerdict->holds(SecondOpinionMode::Reject))->toBeTrue()
+        ->and($secondOpinionVerdict->confidence)->toBe(0.4)
+        ->and($secondOpinionVerdict->jevVerdict)->toBe(ClassificationVerdict::Fallback)
+        ->and($classificationOutcome->subject_key)->toBe('action_request:42')
+        ->and($classificationOutcome->probability)->toBe(0.4)
+        ->and($classificationOutcome->outcome_at)->toBeNull();
+});
