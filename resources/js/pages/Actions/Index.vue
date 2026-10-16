@@ -16,6 +16,7 @@ import {
     compareLiveStatus,
     failureReasonLabel,
     isUncertainOutcome,
+    liveChangeKey,
     mergeLiveResult,
     reconcileWithLive,
     retryConfirmation,
@@ -130,9 +131,17 @@ watch(
 // broadcast; reseeding from it must not roll the row back.
 const liveStatuses = new Map<number, LiveStatusChange>();
 
+// The live change each kept failure already fetched its message for: a
+// reseed that keeps a live failure reloads `requests` once more for it, and
+// only once, so a row the server keeps reading stale cannot loop.
+const failureFollowUps = new Map<number, string>();
+
 /** The user's own review settles these rows: their next server row wins. */
 function forgetLiveStatuses(ids: number[]): void {
-    ids.forEach((id) => liveStatuses.delete(id));
+    ids.forEach((id) => {
+        liveStatuses.delete(id);
+        failureFollowUps.delete(id);
+    });
 }
 
 function reconcileReloadedRow(row: ActionRequestRow): ActionRequestRow {
@@ -144,8 +153,23 @@ function reconcileReloadedRow(row: ActionRequestRow): ActionRequestRow {
 
     if (compareLiveStatus(live, row) <= 0) {
         liveStatuses.delete(row.id);
+        failureFollowUps.delete(row.id);
 
         return row;
+    }
+
+    // The reload read the row before the failure was written, so the row
+    // keeps only the broadcast's member-safe result. An admin's message and
+    // outcome flag come with a later `requests` reload: ask for one.
+    const key = liveChangeKey(live);
+
+    if (
+        live.status === 'failed' &&
+        isAdmin.value &&
+        failureFollowUps.get(row.id) !== key
+    ) {
+        failureFollowUps.set(row.id, key);
+        scheduleRequestsReload();
     }
 
     return reconcileWithLive(row, live);
@@ -260,14 +284,17 @@ function applyStatusChange(payload: LiveStatusChange): void {
         return;
     }
 
-    // Delivered out of order: an event older than one already applied
+    // Delivered out of order: an event older than one already applied — or,
+    // when both carry a status version, older than the row on screen —
     // changes nothing.
     const remembered = liveStatuses.get(payload.id);
+    const older =
+        remembered !== undefined
+            ? compareLiveStatus(payload, remembered) < 0
+            : typeof payload.status_version === 'number' &&
+              compareLiveStatus(payload, target) < 0;
 
-    if (
-        remembered !== undefined &&
-        compareLiveStatus(payload, remembered) < 0
-    ) {
+    if (older) {
         return;
     }
 
@@ -281,6 +308,13 @@ function applyStatusChange(payload: LiveStatusChange): void {
         !statusChanged,
     );
     target.status = payload.status;
+    // Keep the row's own order fields in step with what it shows, as
+    // reconcileWithLive() does.
+    target.updated_at = payload.updated_at;
+
+    if (typeof payload.status_version === 'number') {
+        target.status_version = payload.status_version;
+    }
 
     // The broadcast carries only the member-safe result. An admin's failure
     // message and outcome flag come with the server-rendered `requests`, so

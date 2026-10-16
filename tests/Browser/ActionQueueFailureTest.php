@@ -517,3 +517,141 @@ test('a live status with an unreadable timestamp still applies over a remembered
     $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
         ->assertNoSmoke();
 });
+
+/**
+ * A live status change carrying a status version: the row's own version
+ * plus $versionsAfterRow (negative for an older change).
+ *
+ * @return array<string, mixed>
+ */
+function actionQueueFailureVersionedStatus(ActionRequest $actionRequest, string $status, int $versionsAfterRow, int $secondsAfterRow = 0): array
+{
+    return [
+        ...actionQueueFailureLiveStatus($actionRequest, $status, $secondsAfterRow),
+        'status_version' => $actionRequest->status_version + $versionsAfterRow,
+    ];
+}
+
+/**
+ * Rests inside the page well past the Action Queue's 500 ms reload debounce.
+ */
+function actionQueueFailureRestScript(): string
+{
+    return '(async () => { await new Promise((resolve) => setTimeout(resolve, 1200)); })()';
+}
+
+test('a same-second change by someone else is ordered by its status version, not its lifecycle step', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', 1), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id));
+
+    // Another admin retried in the same second: failed → approved, a step back.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'approved', 2), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'approved'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test('a live change from a host whose clock runs behind still applies when its version is newer', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', 1, 60), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    // Written later, stamped 30 s earlier by a host whose clock is behind.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'approved', 2, 30), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'approved'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test('a live status older than the listed row is ignored, whatever its timestamp says', function (): void {
+    // Created first, so the listed row's version has an older one below it.
+    ActionRequest::factory()->described()->create();
+    $actionRequest = ActionRequest::factory()->described()->completed()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', -1, 3600), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureRestScript());
+
+    $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test("a reload read before a live failure keeps it even when the worker's clock runs behind", function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // Newer by version, stamped an hour before the row the reload reads.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', 1, -3600), 3));
+    $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
+    $webpage->script(actionQueueFailureWaitForReloadScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThan(0);
+
+    $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
+        ->assertNoSmoke();
+});
+
+test('after a reload keeps a live failure, one more reload brings the admin its message', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueFailureReloadRecorderScript());
+
+    // The broadcast lands before the worker's write is readable: the reload it
+    // schedules still reads the Executing row.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', 1, 60), 3));
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmRequestsReloads >= 1'));
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBeGreaterThanOrEqual(1);
+
+    // Now the failure is written (the observer gives it the next version:
+    // the broadcast's, or a later one); the follow-up reload, 500 ms after
+    // the first reseed, must bring its message.
+    $actionRequest->update(['status' => ActionRequestStatus::Failed, 'result' => [
+        'success' => false,
+        'reason' => 'execution_failed',
+        'message' => 'HTTP 404: Sonarr could not find the item — it may already have been removed.',
+    ]]);
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmRequestsReloads >= 2'));
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBe(2);
+
+    $webpage->assertSeeIn('[data-action-failure-message]', 'HTTP 404: Sonarr could not find the item — it may already have been removed.');
+
+    // Once per live change: no third reload.
+    $webpage->script(actionQueueFailureRestScript());
+
+    expect($webpage->script('window.__mmRequestsReloads'))->toBe(2);
+    $webpage->assertNoSmoke();
+});
