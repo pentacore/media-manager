@@ -44,6 +44,7 @@ use App\Ai\Tools\Seerr\GetTitleTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\Seerr\SearchCatalogTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
+use App\Ai\Tools\System\OfferChoicesTool;
 use App\Ai\Tools\System\QueryActivityTool;
 use App\Ai\Tools\System\SemanticLibrarySearchTool;
 use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
@@ -200,6 +201,7 @@ PROMPT;
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
             resolve(SemanticLibrarySearchTool::class),
+            resolve(OfferChoicesTool::class),
             // Downloads — read-only investigation runs in a sub-agent
             resolve(StuckDownloadInvestigatorAgent::class),
             resolve(ResolveManualImportChatTool::class),

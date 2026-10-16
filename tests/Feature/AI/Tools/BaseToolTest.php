@@ -248,6 +248,7 @@ test('Destructive tool routes through ActionOrchestrator', function (): void {
     expect($decoded['queued'])->toBeTrue();
     expect($decoded['action_request_id'])->toBeInt();
     expect($decoded['status'])->toBe(ActionRequestStatus::Pending->value);
+    expect($decoded['title'])->toBe(ActionRequest::query()->find($decoded['action_request_id'])->title);
 
     expect(ActionRequest::where('type', 'delete_series')->count())->toBe(1);
 });

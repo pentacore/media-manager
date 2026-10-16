@@ -12,6 +12,7 @@ use App\Http\Requests\AI\RenameConversationRequest;
 use App\Http\Requests\AI\UpdateConversationModelRequest;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ChatCardExtractor;
 use App\Services\Chat\ConversationModelOverride;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,7 +54,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -91,6 +92,9 @@ class ConversationController extends Controller
                 'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
                 'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                 'failed' => $storedMessage->status === MessageStatus::Failed,
+                'cards' => $storedMessage->role === 'assistant'
+                    ? $chatCardExtractor->fromToolResults(collect($storedMessage->steps)->pluck('tool_results')->filter()->flatten(1)->all())
+                    : [],
                 'answered_by' => $storedMessage->role === 'assistant' ? [
                     'provider' => $storedMessage->meta['provider'] ?? null,
                     'model' => $storedMessage->meta['model'] ?? null,
@@ -98,7 +102,13 @@ class ConversationController extends Controller
                     'tier' => is_array($storedMessage->meta['tier'] ?? null) ? $storedMessage->meta['tier'] : null,
                 ] : null,
             ])
-            ->values()
+            ->values();
+
+        $cardGroups = $chatCardExtractor->hydrateGroups($messages
+            ->map(fn (array $message): array => $message['cards'])
+            ->all());
+        $messages = $messages
+            ->map(fn (array $message, int $index): array => [...$message, 'cards' => $cardGroups[$index]])
             ->all();
 
         return response()->json([

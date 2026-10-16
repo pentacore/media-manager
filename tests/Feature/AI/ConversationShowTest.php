@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\ActionRequestStatus;
+use App\Models\ActionRequest;
 use App\Models\ChatAttachment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -196,4 +198,32 @@ test('history links a user turn to attachments sent through the provider Files A
 
     expect(collect($messages[0]['attachments'])->pluck('id')->all())->toEqualCanonicalizing([$image->id, $document->id])
         ->and(collect($messages[0]['attachments'])->pluck('name')->all())->toContain('notes.pdf');
+});
+
+test('assistant messages carry choice and approval cards with the live action status', function (): void {
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['title' => 'Replace X', 'status' => ActionRequestStatus::Approved]);
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Hi', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Pick one',
+        'steps' => json_encode([[
+            ...conversationStep('Pick one', ''),
+            'tool_results' => [
+                ['id' => 'call_1', 'name' => 'OfferChoicesTool', 'arguments' => [], 'result' => json_encode(['choices' => ['question' => 'Which?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null], ['label' => 'B', 'description' => null]]]]), 'result_id' => null],
+                ['id' => 'call_2', 'name' => 'DeleteMediaTool', 'arguments' => [], 'result' => json_encode(['queued' => true, 'action_request_id' => $actionRequest->id, 'status' => 'pending', 'requires_approval' => true, 'title' => 'Old']), 'result_id' => null],
+            ],
+        ]]),
+    ]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages[0]['cards'])->toBe([])
+        ->and($messages[1]['cards'])->toHaveCount(2)
+        ->and($messages[1]['cards'][0]['type'])->toBe('choices')
+        ->and($messages[1]['cards'][1])->toMatchArray(['type' => 'action_request', 'id' => $actionRequest->id, 'title' => 'Replace X', 'status' => 'approved']);
 });
