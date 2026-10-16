@@ -1,3 +1,31 @@
+# [1.44.0](https://github.com/pentacore/media-manager/compare/v1.43.0...v1.44.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* **activity:** lock sample and unmapped candidates out of a manual import ([481d65e](https://github.com/pentacore/media-manager/commit/481d65e50ed201bc4e6d872d984aa40855e1fb5b))
+* **ai:** compare OfferChoicesTool labels after trimming ([97058bf](https://github.com/pentacore/media-manager/commit/97058bf3b59976a5dd7b73185b7ec7fa50d625ec))
+* **ai:** keep OfferChoicesTool on routed chat turns ([59e07ff](https://github.com/pentacore/media-manager/commit/59e07ff8eb8cf8fe703a79d1f9fdfc22ea02e0f3))
+* **ai:** keep text-less assistant replies that carry cards; cover send cards ([6e0b955](https://github.com/pentacore/media-manager/commit/6e0b955c2d70910e46237478238c99ac0795bbfc))
+* **ai:** keep the client retry for a single stuck-import inspection ([1ac41e6](https://github.com/pentacore/media-manager/commit/1ac41e6619c7e6dde04e5f6e19f0b1209698c257))
+* **ai:** tell both stuck-download prompts about the 20-id inspection cap ([72c6369](https://github.com/pentacore/media-manager/commit/72c6369e6803d8fbe20ad7d9cf8767f63e614825))
+* **chat:** rebuild cards from the stored tool_calls shape on reload ([7fe0c07](https://github.com/pentacore/media-manager/commit/7fe0c07782a857af6e2491ae72c84b04ae990979))
+* **chat:** show choice descriptions, reject duplicate labels, cover inline reject ([688fcf1](https://github.com/pentacore/media-manager/commit/688fcf14b0a950eaa7bda2e4ae5d34e423b3c6f1))
+* **chat:** stop reloading nav after an inline action review ([2e46ae4](https://github.com/pentacore/media-manager/commit/2e46ae42764c3c115b264399e27471aa45fc17f9))
+
+
+### Features
+
+* **ai:** choice and approval cards from chat tool results ([ba5fac9](https://github.com/pentacore/media-manager/commit/ba5fac9f3396cb4b7bcff670f3f4e8a5fc641e4f))
+* **ai:** inspect several stuck downloads in one InspectStuckImportTool call ([8d026e5](https://github.com/pentacore/media-manager/commit/8d026e5f369530fa0abe929f256f3fb9102dc9b2))
+* **ai:** investigate every stuck download in one sub-agent call ([0459a46](https://github.com/pentacore/media-manager/commit/0459a46f4e908e8ec843ffa89f27ddc2604eb3db))
+* **ai:** let manual imports leave out excluded files ([f2aee24](https://github.com/pentacore/media-manager/commit/f2aee24dbf8019ad39d396cfa3244b6926de18d6))
+* **ai:** tell MediaAgent about choice and approval cards ([4910047](https://github.com/pentacore/media-manager/commit/49100474dc6095b7fd7c89f692b5452c3b45034a))
+* **arr:** pooled manual-import reads for batched stuck-download inspection ([42f5aa0](https://github.com/pentacore/media-manager/commit/42f5aa0f3d6e335b7cb33b0f55939da6985b5f51))
+* **arr:** skip samples and excluded paths when resolving manual imports ([5150847](https://github.com/pentacore/media-manager/commit/51508473c54355580f3bb81eec37317e8af01546))
+* **chat:** clickable choice cards and inline approval for queued actions ([87b4d8e](https://github.com/pentacore/media-manager/commit/87b4d8e332f8b3121ee53842fdae537d37c96a2a))
+* **library:** choose which files a manual import takes ([69ad3f1](https://github.com/pentacore/media-manager/commit/69ad3f109e3d1d456172627eabfbd8e8d764b603))
+
 # [1.43.0](https://github.com/pentacore/media-manager/compare/v1.42.0...v1.43.0) (2026-10-13)
 
 
