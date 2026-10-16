@@ -24,6 +24,8 @@ type ActionRequestCountPayload = {
     id: number;
     /** Every pending request when the broadcast was sent. */
     pending_count?: number;
+    /** The newest status version that count reflects (absent from an older broadcast). */
+    pending_version?: number;
 };
 
 type ReplacementAttemptPayload = {
@@ -64,6 +66,14 @@ export function useNavCounts(): NavCounts {
     const initialNav = page.props.nav;
 
     const pendingActions = ref(initialNav?.pendingActions ?? 0);
+    // The status version the pending badge reflects (the newest
+    // status_version behind its count). null while unknown — a broadcast or
+    // a history entry from before versions existed — so applyNav() falls
+    // back to the client-clock rule for this counter.
+    let pendingVersion: number | null =
+        typeof initialNav?.pendingActionsVersion === 'number'
+            ? initialNav.pendingActionsVersion
+            : null;
     const activeSessions = ref(initialNav?.activeSessions ?? 0);
     const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
@@ -129,8 +139,21 @@ export function useNavCounts(): NavCounts {
             (liveChangedAt.get(counter) ?? Number.NEGATIVE_INFINITY) <=
             snapshotAt;
 
-        if (isCurrent('pendingActions')) {
+        // With versions on both sides the newer count wins, whatever the
+        // clock says: a history back/forward restores an old `nav` without
+        // any request. Otherwise the client-clock rule.
+        const snapshotVersion =
+            typeof nav.pendingActionsVersion === 'number'
+                ? nav.pendingActionsVersion
+                : null;
+        const pendingIsCurrent =
+            snapshotVersion !== null && pendingVersion !== null
+                ? snapshotVersion >= pendingVersion
+                : isCurrent('pendingActions');
+
+        if (pendingIsCurrent) {
             pendingActions.value = nav.pendingActions ?? 0;
+            pendingVersion = snapshotVersion;
         }
 
         if (isCurrent('activeSessions')) {
@@ -295,7 +318,8 @@ export function useNavCounts(): NavCounts {
         if (can('manage-library')) {
             // Both events carry the server's pending count, taken as is: a
             // per-id delta could not lower the badge for a request that was
-            // pending before this tab opened.
+            // pending before this tab opened; `pending_version` orders counts
+            // that land out of order.
             const applyPendingCount = (
                 event: ActionRequestCountPayload,
             ): void => {
@@ -303,7 +327,25 @@ export function useNavCounts(): NavCounts {
                     return;
                 }
 
+                const version =
+                    typeof event.pending_version === 'number'
+                        ? event.pending_version
+                        : null;
+
+                // Counted by parallel queue workers, broadcasts can land out
+                // of order: a count older than the one shown changes nothing.
+                // A count without a version makes the version unknown again,
+                // so the clock rule judges the next `nav` snapshot.
+                if (
+                    version !== null &&
+                    pendingVersion !== null &&
+                    version < pendingVersion
+                ) {
+                    return;
+                }
+
                 pendingActions.value = event.pending_count;
+                pendingVersion = version;
                 markLive('pendingActions');
             };
 
