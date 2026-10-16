@@ -14,9 +14,12 @@ use App\Models\ActionTypeConfig;
 use App\Models\AgentDecision;
 use App\Models\AiUsageRecord;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\DecisionAgentActed;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Tools\Request;
@@ -137,4 +140,29 @@ test('a verifier crash inside a run still queues the proposal for approval', fun
     $actionRequest = ActionRequest::query()->sole();
     expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
         ->and($actionRequest->second_opinion['failed'])->toBeTrue();
+});
+
+test('the run notification counts only queued actions and names the held and rejected ones', function (): void {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    secondOpinionDeleteRule(SecondOpinionMode::Reject);
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => false, 'is_enabled' => true, 'second_opinion' => SecondOpinionMode::Hold]);
+    DecisionVerifierAgent::fake([
+        ['agrees' => false, 'reason' => 'Already monitored.'],
+        ['agrees' => false, 'reason' => 'Destructive without cause.'],
+    ]);
+    DecisionAgent::fake([
+        new ToolCall(id: 'c1', name: 'ProposeActionTool', arguments: ['type' => 'monitor_series', 'target_service' => 'sonarr', 'rationale' => 'It was unmonitored.', 'payload' => ['series_id' => 7, 'monitored' => true]]),
+        new ToolCall(id: 'c2', name: 'ProposeActionTool', arguments: secondOpinionDeleteProposal()),
+        'Queued a monitor; the deletion was rejected.',
+    ]);
+    $webhookEvent = secondOpinionSeriesEvent();
+
+    app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
+
+    expect(ActionRequest::query()->pluck('status', 'type')->all())
+        ->toBe(['monitor_series' => ActionRequestStatus::Pending, 'delete_series' => ActionRequestStatus::Rejected]);
+    Notification::assertSentTo($admin, DecisionAgentActed::class, fn (DecisionAgentActed $decisionAgentActed): bool => $decisionAgentActed->actionCount === 1
+        && $decisionAgentActed->heldBySecondOpinion === 1
+        && $decisionAgentActed->rejectedBySecondOpinion === 1);
 });

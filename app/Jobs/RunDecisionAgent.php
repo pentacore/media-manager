@@ -530,15 +530,14 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return '';
         }
 
+        $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
+
         if ($reason === 'second_opinion_rejected') {
-            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
             $summary = sprintf('%s The second opinion rejected it, so nothing will run.', $verdictLine);
             $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
 
             return $summary;
         }
-
-        $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
 
         // "nothing_importable" is resolved negative right away: nothing
         // downstream ever learns this row's eventual outcome (there is no
@@ -740,7 +739,7 @@ PROMPT;
 
         resolve(AdminNotifier::class)->send(new DecisionAgentActed(
             disposition: $disposition,
-            actionCount: $decisionRunContext->count(),
+            actionCount: $suggested + $acted,
             summary: Str::limit($summary, 500, '…'),
             eventLabel: $this->service.' '.$this->eventType,
             heldBySecondOpinion: $decisionRunContext->heldBySecondOpinionCount(),

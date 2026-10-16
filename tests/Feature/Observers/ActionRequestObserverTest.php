@@ -62,6 +62,14 @@ test('a request the second opinion created rejected is logged as rejected, never
         ->and($log->metadata['status'])->toBe('rejected');
 });
 
+test('a request created rejected for any other reason gets no second-opinion label', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected, 'requires_approval' => true]);
+
+    expect(ActivityLog::where('subject_id', $request->id)->sole()->description)
+        ->not->toContain('second opinion')
+        ->toContain('requires approval');
+});
+
 test('logs approval transition with approver name', function (): void {
     $approver = User::factory()->create(['name' => 'Alice']);
     $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);

@@ -29,7 +29,7 @@ final readonly class ActionRequestActivityLogger
             $actionRequest->target_service,
             $actionRequest->type,
             match (true) {
-                $actionRequest->status === ActionRequestStatus::Rejected => 'rejected by second opinion',
+                ($actionRequest->result['reason'] ?? null) === 'second_opinion_rejected' => 'rejected by second opinion',
                 $actionRequest->requires_approval => 'requires approval',
                 default => 'auto-execute',
             },
