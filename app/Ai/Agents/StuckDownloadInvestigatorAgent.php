@@ -60,7 +60,7 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
 You investigate one stuck download for a media stack and report findings. You cannot change anything.
 
 1. If no download_id was given, find it with GetDownloadQueueTool (stuck_only=true) using the title.
-2. Call InspectStuckImportTool with the service and download_id. Use GetDownloadHistoryTool only if the queue entry is gone.
+2. Call InspectStuckImportTool with the service and `download_ids` (all stuck downloads of the service in one call). Use GetDownloadHistoryTool only if the queue entry is gone.
 3. Recommend:
    - import: files map and the only rejection is benign (e.g. "matched by series id", "automatic import is not possible").
    - remove: the blocking rejection says it is not an upgrade / not a Custom Format upgrade. Set blocklist=true only if the release itself is bad (corrupt, fake, wrong content). Set search_replacement=true only if the content is still wanted.
