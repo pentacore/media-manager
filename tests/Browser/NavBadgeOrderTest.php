@@ -96,3 +96,90 @@ test('going back restores the earlier page but not its older pending count', fun
         ->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
         ->assertNoSmoke();
 });
+
+/**
+ * Holds back the answer to the page's next full Inertia visit (no partial
+ * reload header), as a slow network would: it is sent and answered at once,
+ * but the page only sees the answer when window.__mmReleaseHeld() runs.
+ */
+function navBadgeOrderHoldFullVisitScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmHeldAnswered = false;
+            window.__mmReleaseHeld = () => {};
+            let armed = true;
+            const setRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+            XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+                const header = String(name).toLowerCase();
+                if (header === 'x-inertia') {
+                    this.__mmInertia = true;
+                }
+                if (header === 'x-inertia-partial-data' || header === 'purpose') {
+                    this.__mmNotFull = true;
+                }
+                return setRequestHeader.call(this, name, value);
+            };
+            const send = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function (body) {
+                if (armed && this.__mmInertia && !this.__mmNotFull) {
+                    armed = false;
+                    const onload = this.onload;
+                    this.onload = (...args) => {
+                        window.__mmReleaseHeld = () => onload.apply(this, args);
+                        window.__mmHeldAnswered = true;
+                    };
+                }
+                return send.call(this, body);
+            };
+        })()
+    JS;
+}
+
+test('a full visit sent after a too-high pending version arrived brings the badge back to the server count', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $newest = navBadgeOrderNewestVersion();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(appHydratedScript());
+
+    // A version the database cannot reach (a restored database, a bogus
+    // payload): every later real count would look older than it.
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', navBadgeOrderApproved($pending[0], $newest + 1000, 7)));
+    $webpage->script(navBadgeOrderWaitForScript('7'));
+
+    // A full visit (the Pending tab), sent after that version arrived.
+    $webpage->click('[data-test="tab-pending"]');
+    $webpage->script(navBadgeOrderWaitForScript('3'));
+
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '3')
+        ->assertNoSmoke();
+});
+
+test('a full visit sent before a newer pending count arrived still yields to it', function (): void {
+    $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
+    $newest = navBadgeOrderNewestVersion();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-nav-badge="Action Queue"]', '3');
+    $webpage->script(appHydratedScript());
+    $webpage->script(navBadgeOrderHoldFullVisitScript());
+
+    // The visit reads the count (3) first; its answer lands after a newer
+    // broadcast (2) arrived.
+    $webpage->click('[data-test="tab-pending"]');
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmHeldAnswered === true'));
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', navBadgeOrderApproved($pending[0], $newest + 1, 2)));
+    $webpage->script(navBadgeOrderWaitForScript('2'));
+    $webpage->script('window.__mmReleaseHeld()');
+    $webpage->script(confirmDialogWaitUntilScript("new URLSearchParams(window.location.search).get('status') === 'pending'"));
+    $webpage->script(navBadgeOrderRestScript());
+
+    $webpage->assertSeeIn('[data-nav-badge="Action Queue"]', '2')
+        ->assertNoSmoke();
+});

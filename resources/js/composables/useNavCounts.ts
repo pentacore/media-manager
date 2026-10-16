@@ -74,6 +74,12 @@ export function useNavCounts(): NavCounts {
         typeof initialNav?.pendingActionsVersion === 'number'
             ? initialNav.pendingActionsVersion
             : null;
+    // When the badge's version arrived and when each full visit started, on
+    // one counter: a visit sent after the version arrived read the database
+    // later, so its `nav` wins even with a lower version (the versions went
+    // backwards: a restored database, a bogus payload).
+    let navClock = 0;
+    let pendingVersionArrivedAt = navClock;
     const activeSessions = ref(initialNav?.activeSessions ?? 0);
     const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
@@ -130,6 +136,7 @@ export function useNavCounts(): NavCounts {
     function applyNav(
         nav: typeof page.props.nav | undefined,
         snapshotAt = Number.POSITIVE_INFINITY,
+        requestStartedAt: number | null = null,
     ): void {
         if (!nav) {
             return;
@@ -141,19 +148,25 @@ export function useNavCounts(): NavCounts {
 
         // With versions on both sides the newer count wins, whatever the
         // clock says: a history back/forward restores an old `nav` without
-        // any request. Otherwise the client-clock rule.
+        // any request, and a visit that started before a newer broadcast
+        // brings an older count. A response to a request sent after the
+        // badge's version arrived ($requestStartedAt) wins anyway. Without a
+        // version on either side, the client-clock rule.
         const snapshotVersion =
             typeof nav.pendingActionsVersion === 'number'
                 ? nav.pendingActionsVersion
                 : null;
         const pendingIsCurrent =
             snapshotVersion !== null && pendingVersion !== null
-                ? snapshotVersion >= pendingVersion
+                ? snapshotVersion >= pendingVersion ||
+                  (requestStartedAt !== null &&
+                      requestStartedAt > pendingVersionArrivedAt)
                 : isCurrent('pendingActions');
 
         if (pendingIsCurrent) {
             pendingActions.value = nav.pendingActions ?? 0;
             pendingVersion = snapshotVersion;
+            pendingVersionArrivedAt = ++navClock;
         }
 
         if (isCurrent('activeSessions')) {
@@ -236,7 +249,8 @@ export function useNavCounts(): NavCounts {
     // `nav` by an older prefetch of the same URL; this re-apply makes it
     // current. A click that reuses a prefetch sends no request, so it fires
     // no 'start' and keeps the prefetch's date.
-    const pendingFullVisitIds = new Set<string>();
+    // Each in-flight visit that brings `nav`, with when it started (navClock).
+    const pendingFullVisitIds = new Map<string, number>();
     let stopStartListener: VoidFunction | null = null;
     let stopSuccessListener: VoidFunction | null = null;
     let stopFinishListener: VoidFunction | null = null;
@@ -260,7 +274,7 @@ export function useNavCounts(): NavCounts {
                 (visit.only.length === 0 && visit.except.length === 0) ||
                 visit.only.includes('nav')
             ) {
-                pendingFullVisitIds.add(visit.id);
+                pendingFullVisitIds.set(visit.id, ++navClock);
             }
         });
 
@@ -276,9 +290,14 @@ export function useNavCounts(): NavCounts {
 
         stopSuccessListener = router.on('success', (event) => {
             const visitId = event.detail.visitId;
+            const startedAt =
+                visitId === undefined
+                    ? undefined
+                    : pendingFullVisitIds.get(visitId);
 
-            if (visitId !== undefined && pendingFullVisitIds.delete(visitId)) {
-                applyNav(page.props.nav);
+            if (visitId !== undefined && startedAt !== undefined) {
+                pendingFullVisitIds.delete(visitId);
+                applyNav(page.props.nav, Number.POSITIVE_INFINITY, startedAt);
             }
         });
 
@@ -346,6 +365,7 @@ export function useNavCounts(): NavCounts {
 
                 pendingActions.value = event.pending_count;
                 pendingVersion = version;
+                pendingVersionArrivedAt = ++navClock;
                 markLive('pendingActions');
             };
 
