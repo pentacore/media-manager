@@ -119,10 +119,10 @@ test('the replacement instructions keep Bazarr out of the replacement flow', fun
         ->and($replacementSection)->toContain('Do not re-check Bazarr first');
 });
 
-test('tool list has the 30 core tools when no optional integration is configured', function (): void {
+test('tool list has the 31 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(30);
+    expect($tools->count())->toBe(31);
 });
 
 test('Prowlarr tools appear only with an active Prowlarr connection', function (): void {
