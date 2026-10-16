@@ -265,11 +265,12 @@ export function useNavCounts(): NavCounts {
             }
 
             // A request that is really sent never forgets its URL's prefetch
-            // date: Inertia keeps the cached prefetch reusable for its whole
-            // `cacheFor` window (a partial reload carries other params, so it
-            // never replaces it), and a later click can still bring that
-            // hover-time `nav`. The `nav` this request brings back is
-            // re-applied as current on 'success' instead.
+            // date: until a non-prefetch response for the URL completes
+            // (Inertia then flushes the cached prefetch), the prefetch stays
+            // reusable, and a request cancelled by navigating away (a
+            // deferred reload in flight) never completes, so a later click
+            // can still bring that hover-time `nav`. The `nav` this request
+            // brings back is re-applied as current on 'success' instead.
             if (
                 (visit.only.length === 0 && visit.except.length === 0) ||
                 visit.only.includes('nav')
