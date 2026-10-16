@@ -37,6 +37,7 @@ use App\Ai\Tools\Seerr\GetTitleTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\Seerr\SearchCatalogTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
+use App\Ai\Tools\System\OfferChoicesTool;
 use App\Ai\Tools\System\QueryActivityTool;
 use App\Ai\Tools\System\SemanticLibrarySearchTool;
 use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
@@ -167,6 +168,7 @@ enum ToolGroup: string
             GetServiceStatusTool::class,
             QueryActivityTool::class,
             SemanticLibrarySearchTool::class,
+            OfferChoicesTool::class,
             SearchMediaTool::class,
             GetMediaTool::class,
             ProposeWorkflowTool::class,

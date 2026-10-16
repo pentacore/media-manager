@@ -11,6 +11,7 @@ import {
     watch,
 } from 'vue';
 import { toast } from 'vue-sonner';
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatModelOptionsController from '@/actions/App/Http/Controllers/AI/ChatModelOptionsController';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
@@ -25,14 +26,18 @@ import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
 import { useChatTemplates } from '@/composables/useChatTemplates';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
+import { submitBulk } from '@/lib/bulk';
 import { csrfToken, jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
+import { inferChosenLabels } from './chatCards';
 import ChatComposer from './ChatComposer.vue';
 import ChatHeader from './ChatHeader.vue';
 import ChatMessageBubble from './ChatMessageBubble.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
 import type {
+    ActionRequestCard,
     AnsweredBy,
+    ChatCard,
     ChatMessage,
     ChatMode,
     ChatOverride,
@@ -424,6 +429,7 @@ async function sendBlockingTurn(
         workflow: WorkflowProposal | null;
         answered_by?: AnsweredBy | null;
         invocation_id?: string | null;
+        cards?: ChatCard[];
     };
 
     if (
@@ -442,6 +448,7 @@ async function sendBlockingTurn(
         workflowResolved: null,
         answered_by: data.answered_by ?? null,
         invocation_id: data.invocation_id ?? null,
+        cards: data.cards ?? [],
     });
 
     if (data.conversation_id) {
@@ -468,6 +475,7 @@ async function sendStreamingTurn(
             uid: messageUid(),
             reasoning: '',
             toolCalls: [],
+            cards: [],
             workflow: null,
             workflowResolved: null,
         }) - 1;
@@ -506,6 +514,9 @@ async function sendStreamingTurn(
                 status: call.status === 'running' ? 'started' : 'finished',
                 occurredAt: new Date().toISOString(),
             });
+        },
+        onCard: (card) => {
+            assistantMessage.cards = [...(assistantMessage.cards ?? []), card];
         },
     })
         .catch((e: unknown) => {
@@ -648,6 +659,7 @@ async function openConversation(id: string): Promise<void> {
             ...m,
             uid: messageUid(),
         }));
+        inferChoices();
         olderCursor.value = data.next_cursor;
         setOverride(data.override);
 
@@ -711,6 +723,7 @@ async function loadEarlier(): Promise<void> {
             ...page.messages.map((m) => ({ ...m, uid: messageUid() })),
             ...messages.value,
         ];
+        inferChoices();
         olderCursor.value = page.next_cursor;
 
         await nextTick();
@@ -833,6 +846,83 @@ async function resolveWorkflow(
     }
 }
 
+/**
+ * A loaded reply's choices card does not remember its pick: read it back
+ * from the user message that answered it.
+ */
+function inferChoices(): void {
+    messages.value.forEach((message, index) => {
+        const next = messages.value[index + 1];
+
+        if (
+            message.chosen === undefined &&
+            next?.role === 'user' &&
+            message.cards?.some((card) => card.type === 'choices')
+        ) {
+            message.chosen = inferChosenLabels(message.cards, next.text);
+        }
+    });
+}
+
+/** Send the picked option labels as the user's answer. */
+function choose(message: ChatMessage, labels: string[]): void {
+    if (sending.value || labels.length === 0) {
+        return;
+    }
+
+    message.chosen = labels;
+    void sendUserMessage({ text: labels.join(', '), pendingFiles: [] });
+}
+
+/** Action request ids whose approve/reject request is in flight. */
+const reviewingActionIds = ref<number[]>([]);
+
+/**
+ * Approve or reject a queued action through the Action Queue's bulk review.
+ * A review that did not start (reviewed elsewhere first) marks the card
+ * 'changed'; a refused request leaves it as it was.
+ */
+async function reviewAction(
+    card: ActionRequestCard,
+    action: 'approve' | 'reject',
+): Promise<void> {
+    if (reviewingActionIds.value.includes(card.id)) {
+        return;
+    }
+
+    reviewingActionIds.value = [...reviewingActionIds.value, card.id];
+
+    const summary = await submitBulk(ActionRequestController.bulk.url(), {
+        ids: [card.id],
+        action,
+    });
+
+    reviewingActionIds.value = reviewingActionIds.value.filter(
+        (id) => id !== card.id,
+    );
+
+    if (summary === null) {
+        return;
+    }
+
+    if (summary.started !== 1) {
+        card.status = 'changed';
+
+        return;
+    }
+
+    // The pending-actions badge follows the ActionRequest broadcast's
+    // pending_count; reloading `nav` would re-run whichever page is open.
+    card.status = action === 'approve' ? 'approved' : 'rejected';
+}
+
+/** The newest message, when it is an assistant reply. */
+const latestAssistant = computed<ChatMessage | null>(() => {
+    const last = messages.value[messages.value.length - 1];
+
+    return last?.role === 'assistant' ? last : null;
+});
+
 function newConversation(): void {
     startNewConversation();
     messages.value = [];
@@ -918,8 +1008,12 @@ function newConversation(): void {
                 :is-sheet="isSheet"
                 :streaming="sending && streamingIndex === index"
                 :busy="sending"
+                :is-latest-assistant="latestAssistant === m"
+                :reviewing-action-ids="reviewingActionIds"
                 @approve="approveWorkflow(m)"
                 @decline="declineWorkflow(m)"
+                @choose="(labels) => choose(m, labels)"
+                @review="reviewAction"
             />
 
             <div

@@ -28,7 +28,8 @@ class ResolveManualImportChatTool extends BaseTool
     {
         return 'Import a stuck Sonarr/Radarr download. ALWAYS inspect first with InspectStuckImportTool and '
             .'tell the user what you found. Queues an ActionRequest; partially-mapped file sets are always '
-            .'held for human approval. If the download should NOT be imported (e.g. "not an upgrade"), use '
+            .'held for human approval. Sample files are skipped automatically; pass excluded_paths to leave out other '
+            .'candidate files (extras or a wrong file). If the download should NOT be imported (e.g. "not an upgrade"), use '
             .'RemoveStuckDownloadChatTool instead.';
     }
 
@@ -45,6 +46,8 @@ class ResolveManualImportChatTool extends BaseTool
         $validated = $request->validate([
             'download_id' => ['required', 'string'],
             'reason' => ['required', 'string'],
+            'excluded_paths' => ['nullable', 'array', 'max:50'],
+            'excluded_paths.*' => ['string', 'max:1024'],
         ], [
             'download_id.required' => 'download_id is required.',
             'download_id.string' => 'download_id must be a string.',
@@ -55,6 +58,7 @@ class ResolveManualImportChatTool extends BaseTool
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) $validated['download_id'];
         $reason = trim((string) $validated['reason']);
+        $excludedPaths = array_values(array_filter((array) ($validated['excluded_paths'] ?? []), is_string(...)));
 
         $type = match ($service) {
             'sonarr' => ServiceType::Sonarr,
@@ -66,7 +70,7 @@ class ResolveManualImportChatTool extends BaseTool
         $client = resolve(ArrConnections::class)->client($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
-        $assessment = resolve(ManualImportResolver::class)->assess($candidates, $service, $downloadId);
+        $assessment = resolve(ManualImportResolver::class)->assess($candidates, $service, $downloadId, $excludedPaths);
 
         throw_if($assessment['importable'] === 0, InvalidArgumentException::class, 'No candidate file can be mapped to a series/movie — nothing to import. '
         .'Use RemoveStuckDownloadChatTool or leave it for a human.');
@@ -80,6 +84,7 @@ class ResolveManualImportChatTool extends BaseTool
             'payload' => [
                 'service' => $service,
                 'download_id' => $downloadId,
+                'excluded_paths' => $excludedPaths,
                 'assessment' => $assessment,
                 'agent_rationale' => mb_substr($reason, 0, 1000),
             ],
@@ -102,6 +107,9 @@ class ResolveManualImportChatTool extends BaseTool
             'reason' => $schema->string()
                 ->description('Short plain-English justification for importing (shown to the human approver).')
                 ->required(),
+            'excluded_paths' => $schema->array()
+                ->items($schema->string())
+                ->description('Optional: candidate paths to leave out of the import (e.g. extras or a wrong file). Samples are skipped automatically.'),
         ];
     }
 }

@@ -172,6 +172,10 @@ final readonly class ActionDescriber
         $importable = (int) ($assessment['importable'] ?? 0);
         $total = (int) ($assessment['total'] ?? 0);
         $reasons = is_array($assessment['reasons'] ?? null) ? array_filter($assessment['reasons'], is_string(...)) : [];
+        $skipped = array_values(array_filter(array_map(
+            static fn (mixed $file): ?string => is_array($file) && is_string($file['path'] ?? null) ? $file['path'] : null,
+            is_array($assessment['skipped'] ?? null) ? $assessment['skipped'] : [],
+        )));
 
         return $actionTarget->describe(
             sprintf('Import %s', $actionTarget->label()),
@@ -179,7 +183,8 @@ final readonly class ActionDescriber
         )
             ->withDetail('Importable files', sprintf('%d of %d', $importable, $total))
             ->withDetail('Fully matched', ($assessment['fully_mapped'] ?? false) === true)
-            ->withDetail('Notes', $reasons === [] ? null : implode(' ', $reasons));
+            ->withDetail('Notes', $reasons === [] ? null : implode(' ', $reasons))
+            ->withDetail('Left out', $skipped === [] ? null : implode(', ', $skipped));
     }
 
     /**

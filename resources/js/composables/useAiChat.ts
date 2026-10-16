@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
-import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
+import type { AnsweredBy, ChatCard, ChatOverride } from '@/components/ai/types';
 import { jsonRequest } from '@/lib/http';
 
 export interface ConversationSummary {
@@ -37,6 +37,8 @@ export interface ConversationMessage {
     failed?: boolean;
     /** The model behind an assistant reply; null when it is not known. */
     answered_by?: AnsweredBy | null;
+    /** Choice and approval cards under an assistant reply. */
+    cards?: ChatCard[];
 }
 
 export interface ConversationPage {

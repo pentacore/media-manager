@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Risk;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
+use App\Enums\ActionRequestStatus;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -209,3 +210,77 @@ test("a non-string download id or reason is refused in the tool's own words befo
     'a number as the download id' => [['download_id' => 42], 'download_id', 'download_id must be a string.'],
     'a list as the reason' => [['reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the approver.'],
 ]);
+
+/**
+ * @return array<int, non-empty-array>
+ */
+function mappedAndExtraCandidates(array $extra = []): array
+{
+    return [
+        [
+            'path' => '/downloads/Show.S01E01.mkv',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'series' => ['id' => 5, 'title' => 'Show'],
+            'episodes' => [['id' => 42, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+            'rejections' => [],
+        ],
+        array_replace([
+            'path' => '/downloads/unknown-file.mkv',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'rejections' => [['reason' => 'Unknown series']],
+        ], $extra),
+    ];
+}
+
+test('excluding the unmapped file follows the action rule instead of forcing approval', function (): void {
+    DB::table('action_type_configs')
+        ->where('type', 'resolve_manual_import')
+        ->update(['requires_approval' => false, 'is_enabled' => true]);
+    fakeSonarrManualImport(mappedAndExtraCandidates());
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'Leave out the unmapped extra.',
+        'excluded_paths' => ['/downloads/unknown-file.mkv'],
+    ])), true);
+
+    $actionRequest = ActionRequest::findOrFail($result['action_request_id']);
+    expect($actionRequest->requires_approval)->toBeFalse()
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Approved)
+        ->and($actionRequest->payload['excluded_paths'])->toBe(['/downloads/unknown-file.mkv'])
+        ->and($actionRequest->payload['assessment']['total'])->toBe(1);
+});
+
+test('a sample next to a mapped file is skipped without forcing approval', function (): void {
+    DB::table('action_type_configs')
+        ->where('type', 'resolve_manual_import')
+        ->update(['requires_approval' => false, 'is_enabled' => true]);
+    fakeSonarrManualImport(mappedAndExtraCandidates(['path' => '/downloads/Sample/sample.mkv']));
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'Sample is skipped automatically.',
+    ])), true);
+
+    $actionRequest = ActionRequest::findOrFail($result['action_request_id']);
+    expect($actionRequest->requires_approval)->toBeFalse()
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Approved)
+        ->and($actionRequest->payload['excluded_paths'])->toBe([]);
+});
+
+test('excluded_paths must be a list of strings', function (): void {
+    Http::fake();
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'x',
+        'excluded_paths' => 'not-a-list',
+    ])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('excluded_paths');
+    Http::assertNothingSent();
+});

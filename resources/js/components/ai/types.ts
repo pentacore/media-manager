@@ -53,11 +53,50 @@ export interface WorkflowProposal {
     steps: Array<{ action: string; target: string; reason: string }>;
 }
 
+/** One answer a choices card offers. */
+export interface ChoiceOption {
+    label: string;
+    description: string | null;
+}
+
+/**
+ * A card under an assistant reply, derived from a tool result: clickable
+ * choices (OfferChoicesTool) or an inline approval for a queued
+ * ActionRequest. The shapes match `ChatCardExtractor` on the server.
+ */
+export type ChatCard =
+    | {
+          type: 'choices';
+          /** The tool call id that offered the choices. */
+          id: string;
+          question: string;
+          multiple: boolean;
+          options: ChoiceOption[];
+      }
+    | {
+          type: 'action_request';
+          /** The ActionRequest id. */
+          id: number;
+          title: string | null;
+          /** An ActionRequestStatus, or 'changed' once a review lost a race. */
+          status: string;
+          requires_approval: boolean;
+      };
+
+export type ChoicesCard = Extract<ChatCard, { type: 'choices' }>;
+
+export type ActionRequestCard = Extract<ChatCard, { type: 'action_request' }>;
+
 export interface ChatMessage extends ConversationMessage {
     workflow?: WorkflowProposal | null;
     workflowResolved?: 'approved' | 'declined' | null;
     /** True when the user stopped the reply before it finished. */
     stopped?: boolean;
+    /**
+     * The option labels picked on this reply's choices card: set on a click,
+     * or inferred from the next user message when the conversation loads.
+     */
+    chosen?: string[] | null;
     /**
      * Client-local monotonic key. Backend timestamps have second resolution
      * (a user message and its reply routinely collide) and Date.now() can
