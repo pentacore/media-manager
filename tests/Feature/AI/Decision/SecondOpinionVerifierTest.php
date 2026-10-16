@@ -17,6 +17,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
+use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Mockery\MockInterface;
@@ -294,4 +295,10 @@ test('a cascade whose llm fails after a doubtful jev answer holds and leaves the
         ->and($classificationOutcome->subject_key)->toBe('action_request:42')
         ->and($classificationOutcome->probability)->toBe(0.4)
         ->and($classificationOutcome->outcome_at)->toBeNull();
+});
+
+test('the verifier leaves room for reasoning tokens before its structured answer', function (): void {
+    $reflectionClass = new ReflectionClass(DecisionVerifierAgent::class);
+
+    expect($reflectionClass->getAttributes(MaxTokens::class)[0]->newInstance()->value)->toBe(4096);
 });

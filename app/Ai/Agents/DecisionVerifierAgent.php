@@ -22,7 +22,7 @@ use Laravel\Ai\Promptable;
  * the stuck-import fast path) proposed. It has no tools: everything it may
  * rely on is in the case file SecondOpinionCase::toPrompt() builds.
  */
-#[MaxTokens(1024)]
+#[MaxTokens(4096)]
 class DecisionVerifierAgent implements Agent, HasMiddleware, HasProviderOptions, HasStructuredOutput
 {
     use Promptable;
