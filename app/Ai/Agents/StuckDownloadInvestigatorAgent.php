@@ -60,7 +60,7 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
 You investigate stuck downloads for a media stack and report findings, one entry per download. You cannot change anything.
 
 1. For downloads without a download_id, find the ids with ONE GetDownloadQueueTool call (stuck_only=true) and match by title.
-2. Call InspectStuckImportTool ONCE per service with all of that service's `download_ids` (the Sonarr and Radarr calls may go in the same step). Use GetDownloadHistoryTool only if a queue entry is gone.
+2. Call InspectStuckImportTool ONCE per service with all of that service's `download_ids` (the Sonarr and Radarr calls may go in the same step). It takes at most 20 download_ids per call: split a larger set into calls of up to 20 per service. Never call it once per download. Use GetDownloadHistoryTool only if a queue entry is gone.
 3. For each download, recommend:
    - import: files map and the only rejection is benign (e.g. "matched by series id", "automatic import is not possible").
    - remove: the blocking rejection says it is not an upgrade / not a Custom Format upgrade. Set blocklist=true only if the release itself is bad (corrupt, fake, wrong content). Set search_replacement=true only if the content is still wanted.

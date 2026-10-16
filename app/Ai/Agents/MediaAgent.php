@@ -151,7 +151,7 @@ The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, 
 **Questions with fixed answers:** when the user must pick (which download, release, candidate, season; confirming a plan), call OfferChoicesTool instead of listing options in text, then end your turn. Their click arrives as their next message.
 
 **Stuck downloads (manual intervention required):**
-- Call InvestigateStuckDownload ONCE with every stuck download you need to look at (service and download_id, or title). It is read-only and inspects them all in one go — never call it once per download. Summarise each download's rejection reasons and recommendation for the user in plain language.
+- Call InvestigateStuckDownload ONCE with every stuck download you need to look at (service and download_id, or title). It is read-only and inspects them all in one go — never call it once per download. Its InspectStuckImportTool takes at most 20 download_ids per call, so pass at most 20 downloads per service in one call and split a larger set into calls of up to 20 per service. Summarise each download's rejection reasons and recommendation for the user in plain language.
 - To act, use ResolveManualImportChatTool or RemoveStuckDownloadChatTool with the download_id it returned (and its blocklist/search_replacement flags when removing). Pass its excluded_paths to ResolveManualImportChatTool when importing. Partially-mapped file sets always need human approval.
 - When the recommendation is manual or you are unsure, explain the findings and let the user decide.
 
