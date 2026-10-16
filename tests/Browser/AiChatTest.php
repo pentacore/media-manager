@@ -778,20 +778,31 @@ test('a queued action card approves the pending request inline', function (): vo
 
     $this->actingAs($admin);
 
-    visit(route('ai.chat', absolute: false))
+    $webpage = visit(route('ai.chat', absolute: false))
         ->assertNoSmoke()
         ->click('[data-conversation-picker]')
         ->click("[data-conversation-id=\"{$conversationId}\"]")
         ->assertSeeIn('[data-action-approval-card]', 'Delete series "Severance"')
-        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending')
-        ->click('[data-action-approve]')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending');
+
+    // The pending-actions badge follows the ActionRequest broadcast, so an
+    // inline review must not reload the open page.
+    $webpage->script(<<<'JS'
+        (() => {
+            window.__inertiaVisitsAfterReview = [];
+            document.addEventListener('inertia:before', (event) => window.__inertiaVisitsAfterReview.push(String(event.detail.visit.url)));
+        })()
+        JS);
+
+    $webpage->click('[data-action-approve]')
         ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'approved')
         ->assertMissing('[data-action-approve]')
         ->assertMissing('[data-action-reject]')
         ->assertVisible("[data-action-queue-link][href*=\"request={$actionRequest->id}\"]")
         ->assertNoJavaScriptErrors();
 
-    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
+    expect($webpage->script('window.__inertiaVisitsAfterReview'))->toBe([])
+        ->and($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
 
 test('a queued action card rejects the pending request inline', function (): void {

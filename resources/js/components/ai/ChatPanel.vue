@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router, usePage } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
 import {
     computed,
@@ -911,10 +911,9 @@ async function reviewAction(
         return;
     }
 
+    // The pending-actions badge follows the ActionRequest broadcast's
+    // pending_count; reloading `nav` would re-run whichever page is open.
     card.status = action === 'approve' ? 'approved' : 'rejected';
-    // A JSON request, not a visit: refresh the Action Queue badge now
-    // rather than wait for the broadcast.
-    router.reload({ only: ['nav'] });
 }
 
 /** The newest message, when it is an assistant reply. */
