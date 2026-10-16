@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Tools\Decision;
 
 use App\Ai\Decision\DecisionRunContext;
+use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
 use App\Services\Actions\ActionDescriber;
@@ -160,6 +161,7 @@ class ProposeActionTool extends DecisionTool
                 webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
                 pinnedConnectionId: $decisionRunContext->originConnectionId,
+                decisionRunContext: $decisionRunContext,
             );
         } catch (Throwable $throwable) {
             Log::warning('ProposeActionTool: dispatch failed', [
@@ -183,7 +185,11 @@ class ProposeActionTool extends DecisionTool
             ];
         }
 
-        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordDispatched($actionRequest);
+
+        if ($actionRequest->status === ActionRequestStatus::Rejected) {
+            return $decisionRunContext->secondOpinionRejection($actionRequest->id);
+        }
 
         return [
             'queued' => true,

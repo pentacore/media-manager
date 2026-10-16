@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionDescriber;
@@ -89,6 +90,7 @@ final readonly class StuckImportResolver
                 webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: $partial ? true : null,
                 pinnedConnectionId: $decisionRunContext->originConnectionId,
+                decisionRunContext: $decisionRunContext,
             );
         } catch (Throwable $throwable) {
             Log::warning('ResolveManualImportTool: dispatch failed', [
@@ -108,7 +110,11 @@ final readonly class StuckImportResolver
             ];
         }
 
-        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordDispatched($actionRequest);
+
+        if ($actionRequest->status === ActionRequestStatus::Rejected) {
+            return $decisionRunContext->secondOpinionRejection($actionRequest->id);
+        }
 
         return [
             'queued' => true,
@@ -152,6 +158,7 @@ final readonly class StuckImportResolver
                 webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: true,
                 pinnedConnectionId: $decisionRunContext->originConnectionId,
+                decisionRunContext: $decisionRunContext,
             );
         } catch (Throwable $throwable) {
             Log::warning('RemoveStuckDownloadTool: dispatch failed', [
@@ -171,7 +178,11 @@ final readonly class StuckImportResolver
             ];
         }
 
-        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordDispatched($actionRequest);
+
+        if ($actionRequest->status === ActionRequestStatus::Rejected) {
+            return $decisionRunContext->secondOpinionRejection($actionRequest->id);
+        }
 
         return [
             'queued' => true,

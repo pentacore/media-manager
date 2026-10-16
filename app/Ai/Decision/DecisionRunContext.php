@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Ai\Decision;
 
 use App\Ai\Routing\DecisionActionKind;
+use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -26,6 +28,11 @@ class DecisionRunContext
 
     /** @var array<int, array{action_request_id: int, requires_approval: bool}> */
     private array $queued = [];
+
+    /** @var array<int, int> */
+    private array $rejectedIds = [];
+
+    private int $heldBySecondOpinion = 0;
 
     /**
      * $eventPayload and $originConnectionId are the triggering event's
@@ -149,6 +156,54 @@ class DecisionRunContext
         $this->queued[] = [
             'action_request_id' => $actionRequestId,
             'requires_approval' => $requiresApproval,
+        ];
+    }
+
+    /**
+     * Tally a request dispatchFromAgent() created. A request the second
+     * opinion rejected still uses up the run's cap and is linked to the
+     * decision, but is neither suggested nor acted.
+     */
+    public function recordDispatched(ActionRequest $actionRequest): void
+    {
+        if ($actionRequest->status === ActionRequestStatus::Rejected) {
+            $this->actionRequestIds[] = $actionRequest->id;
+            $this->rejectedIds[] = $actionRequest->id;
+
+            return;
+        }
+
+        $this->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+
+        if ($actionRequest->requires_approval && ($actionRequest->second_opinion['agrees'] ?? true) === false) {
+            $this->heldBySecondOpinion++;
+        }
+    }
+
+    public function rejectedCount(): int
+    {
+        return count($this->rejectedIds);
+    }
+
+    public function heldBySecondOpinionCount(): int
+    {
+        return $this->heldBySecondOpinion;
+    }
+
+    /**
+     * The tool result for a proposal the second opinion rejected. It never
+     * carries the verifier's reason, so the proposer cannot argue with it.
+     *
+     * @return array<string, mixed>
+     */
+    public function secondOpinionRejection(int $actionRequestId): array
+    {
+        return [
+            'queued' => false,
+            'reason' => 'second_opinion_rejected',
+            'action_request_id' => $actionRequestId,
+            'remaining_budget' => $this->remainingBudget(),
+            'message' => 'An independent second-opinion check rejected this action, so it will not run. Do not propose it again; mention it in your summary.',
         ];
     }
 

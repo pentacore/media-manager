@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Agents\DecisionVerifierAgent;
+use App\Enums\ActionRequestStatus;
 use App\Enums\AgentDecisionStatus;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
+use App\Enums\SecondOpinionMode;
+use App\Jobs\ExecuteActionRequest;
 use App\Jobs\RunDecisionAgent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -267,5 +271,23 @@ test('a confident manual call sends nothing', function (): void {
 
     runStuckImportJob();
 
+    Notification::assertNothingSent();
+});
+
+test('a confident import the second opinion rejects is recorded as resolved and never runs', function (): void {
+    Notification::fake();
+    User::factory()->admin()->create();
+    ActionTypeConfig::query()->where('type', 'resolve_manual_import')->sole()->update(['second_opinion' => SecondOpinionMode::Reject]);
+    fakeStuckImportApis(stuckImportCandidates());
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'The files belong to another show.']]);
+
+    runStuckImportJob();
+
+    DecisionAgent::assertNeverPrompted();
+    expect(ActionRequest::sole())->status->toBe(ActionRequestStatus::Rejected)
+        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('The second opinion rejected it');
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+    // Nothing was suggested or acted, so the Action Queue is the only place it shows.
     Notification::assertNothingSent();
 });

@@ -17,6 +17,10 @@ final readonly class ActionRequestActivityLogger
 {
     public function __construct(private ActionRequestBrowserPayload $actionRequestBrowserPayload) {}
 
+    /**
+     * A request the second opinion rejected is created already Rejected; its
+     * line says so rather than "auto-execute", since it never runs.
+     */
     public function created(ActionRequest $actionRequest): void
     {
         $this->writeLog($actionRequest, 'action_request.created', sprintf(
@@ -24,7 +28,11 @@ final readonly class ActionRequestActivityLogger
             $actionRequest->source_service,
             $actionRequest->target_service,
             $actionRequest->type,
-            $actionRequest->requires_approval ? 'requires approval' : 'auto-execute',
+            match (true) {
+                $actionRequest->status === ActionRequestStatus::Rejected => 'rejected by second opinion',
+                $actionRequest->requires_approval => 'requires approval',
+                default => 'auto-execute',
+            },
         ));
     }
 

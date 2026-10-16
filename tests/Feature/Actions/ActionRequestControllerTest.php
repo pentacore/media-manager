@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\ClassificationOutcome;
 use App\Models\MediaReplacementAttempt;
 use App\Models\User;
+use App\Services\Actions\ActionRequestReviewer;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -392,4 +398,22 @@ test('a legacy action request exposes null description fields', function (): voi
             ->where('requests.data.0.title', null)
             ->where('requests.data.0.details', [])
             ->where('requests.data.0.agent_rationale', null));
+});
+
+test('approving a held action resolves the jev second opinion as positive', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, engine: 'jev', confidence: 0.3)->create(['status' => ActionRequestStatus::Pending]);
+    resolve(ClassificationOutcomeRecorder::class)->record(ClassificationGate::SecondOpinion, SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id), 'second_opinion', 0.3, ClassificationVerdict::Skipped, 0.8);
+
+    resolve(ActionRequestReviewer::class)->approve($actionRequest, User::factory()->admin()->create());
+
+    expect(ClassificationOutcome::query()->sole()->outcome_positive)->toBeTrue();
+});
+
+test('rejecting a held action resolves the jev second opinion as negative', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, engine: 'jev', confidence: 0.3)->create(['status' => ActionRequestStatus::Pending]);
+    resolve(ClassificationOutcomeRecorder::class)->record(ClassificationGate::SecondOpinion, SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id), 'second_opinion', 0.3, ClassificationVerdict::Skipped, 0.8);
+
+    resolve(ActionRequestReviewer::class)->reject($actionRequest, User::factory()->admin()->create());
+
+    expect(ClassificationOutcome::query()->sole()->outcome_positive)->toBeFalse();
 });

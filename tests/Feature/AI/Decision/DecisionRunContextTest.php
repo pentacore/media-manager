@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
+use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -96,4 +98,18 @@ test('proposalReason is generic when neither eventType nor a persisted event row
     $context = new DecisionRunContext(null, 3, 'sonarr');
 
     expect($context->proposalReason())->toBe('Proposed by the decision agent.');
+});
+
+test('a rejected proposal counts toward the cap but is neither suggested nor acted', function (): void {
+    $decisionRunContext = new DecisionRunContext(webhookEventId: null, maxActions: 2);
+
+    $decisionRunContext->recordDispatched(ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected, 'requires_approval' => false]));
+    $decisionRunContext->recordDispatched(ActionRequest::factory()->secondOpinion(agrees: false)->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]));
+
+    expect($decisionRunContext->count())->toBe(2)
+        ->and($decisionRunContext->capReached())->toBeTrue()
+        ->and($decisionRunContext->rejectedCount())->toBe(1)
+        ->and($decisionRunContext->heldBySecondOpinionCount())->toBe(1)
+        ->and($decisionRunContext->suggestedCount())->toBe(1)
+        ->and($decisionRunContext->actedCount())->toBe(0);
 });

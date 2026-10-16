@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Actions;
 
+use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\SecondOpinionCase;
+use App\Ai\Decision\SecondOpinionVerdict;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiMode;
+use App\Enums\SecondOpinionMode;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
@@ -16,7 +21,10 @@ use Illuminate\Support\Facades\Log;
 
 class ActionOrchestrator
 {
-    public function __construct(private readonly AiSettings $aiSettings) {}
+    public function __construct(
+        private readonly AiSettings $aiSettings,
+        private readonly SecondOpinionVerifier $secondOpinionVerifier,
+    ) {}
 
     /**
      * Dispatch an action request. Looks up the ActionTypeConfig for the given type:
@@ -128,6 +136,15 @@ class ActionOrchestrator
      * over a lookup through $webhookEventId, and keeps pinning enforced when
      * webhook capture already trimmed the event row.
      *
+     * $decisionRunContext is the run's context, for the second opinion's
+     * view of the triggering event.
+     *
+     * Second opinion: when the type's rule sets one (anything but Off), an
+     * independent verifier checks the proposal before it is stored. A
+     * disagreement under Hold forces approval; under Reject the request is
+     * created already Rejected and never runs. A failed check always holds,
+     * never rejects. The verdict is stored on the request.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatchFromAgent(
@@ -140,6 +157,7 @@ class ActionOrchestrator
         ?int $webhookEventId = null,
         ?bool $forceRequiresApproval = null,
         ?int $pinnedConnectionId = null,
+        ?DecisionRunContext $decisionRunContext = null,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -181,6 +199,24 @@ class ActionOrchestrator
             }
         }
 
+        $secondOpinionMode = $config->second_opinion;
+        $secondOpinionVerdict = $secondOpinionMode === SecondOpinionMode::Off
+            ? null
+            : $this->secondOpinionVerifier->verify(new SecondOpinionCase(
+                actionType: $type,
+                actionLabel: $config->label,
+                actionDescription: $description,
+                payload: $payload,
+                rationale: $rationale,
+                sourceService: $sourceService,
+                eventType: $decisionRunContext?->eventType,
+                eventPayload: $decisionRunContext?->eventPayload ?? [],
+            ));
+
+        // A second opinion can only tighten the gate: hold or reject, never release.
+        $rejectedBySecondOpinion = $secondOpinionVerdict?->rejects($secondOpinionMode) ?? false;
+        $requiresApproval = $requiresApproval || ($secondOpinionVerdict?->holds($secondOpinionMode) ?? false);
+
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEventId,
             'type' => $type,
@@ -188,16 +224,28 @@ class ActionOrchestrator
             ...$description->toAttributes(),
             'source_service' => $sourceService,
             'target_service' => $targetService,
-            'status' => $requiresApproval
-                ? ActionRequestStatus::Pending
-                : ActionRequestStatus::Approved,
+            'status' => match (true) {
+                $rejectedBySecondOpinion => ActionRequestStatus::Rejected,
+                $requiresApproval => ActionRequestStatus::Pending,
+                default => ActionRequestStatus::Approved,
+            },
             'requires_approval' => $requiresApproval,
             'payload' => [...$payload, 'agent_rationale' => $rationale],
+            'result' => $rejectedBySecondOpinion ? [
+                'success' => false,
+                'reason' => 'second_opinion_rejected',
+                'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict?->reason ?? 'no reason given.'),
+            ] : null,
+            'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode),
         ]);
+
+        if ($secondOpinionVerdict instanceof SecondOpinionVerdict) {
+            $this->secondOpinionVerifier->recordOutcome($secondOpinionVerdict, $actionRequest->id);
+        }
 
         event(new ActionRequestCreated($actionRequest));
 
-        if (! $requiresApproval) {
+        if (! $requiresApproval && ! $rejectedBySecondOpinion) {
             dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
         }
 
