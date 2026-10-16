@@ -10,10 +10,12 @@ use App\Ai\Routing\ToolGroup;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
+use App\Ai\Tools\System\OfferChoicesTool;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Enums\ClassificationVerdict;
 use App\Models\AiProposedWorkflow;
 use App\Models\ClassificationOutcome;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
@@ -243,4 +245,20 @@ test('recording tool use never lets a group lookup failure escape', function ():
     }
 
     expect($escaped)->toBeNull();
+});
+
+test('every tool media agent declares is core or in a routable group', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    ServiceConnection::factory()->bazarr()->create();
+    resolve(AiSettings::class)->setStuckImportFastPathEnabled(true);
+    config()->set('services.tmdb.api_key', 'tmdb-test');
+    config()->set('services.trakt.client_id', 'trakt-test');
+    $routable = array_merge(ToolGroup::core(), ...array_map(fn (ToolGroup $toolGroup): array => $toolGroup->toolClasses(), ToolGroup::cases()));
+
+    $declared = array_map(fn (object $tool): string => $tool::class, [...(new MediaAgent)->tools()]);
+
+    $keptWithNoGroups = array_map(fn (object $tool): string => $tool::class, resolve(ChatToolRouter::class)->filter([...(new MediaAgent)->tools()], []));
+
+    expect(array_values(array_diff($declared, $routable)))->toBe([])
+        ->and($keptWithNoGroups)->toContain(OfferChoicesTool::class);
 });
