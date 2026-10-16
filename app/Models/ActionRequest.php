@@ -9,6 +9,7 @@ use App\Observers\ActionRequestObserver;
 use App\Observers\ActionRequestStatusVersionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\ActionRequestFactory;
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -126,17 +127,32 @@ class ActionRequest extends Model
     }
 
     /**
-     * The next status version. ActionRequestStatusVersionObserver takes one
-     * for every create and every saved status change; a query-builder update
-     * that changes `status` skips the observer and must set
-     * `'status_version' => ActionRequest::nextStatusVersion()` in the same
-     * array (ActionRequestStatusVersionArchTest).
+     * The next status version, for a model save. ActionRequestStatusVersionObserver
+     * takes one for every create and every saved status change; those savers
+     * hold the row lock (the reviewer, the retry) or are the row's only writer
+     * at that point, so the number is never lower than the row's.
      */
     public static function nextStatusVersion(): int
     {
         $row = DB::selectOne(sprintf("select nextval('%s') as version", self::STATUS_VERSION_SEQUENCE));
 
         return (int) $row->version;
+    }
+
+    /**
+     * The next status version, for a query-builder update that changes
+     * `status`: it skips the observer, so it sets
+     * `'status_version' => ActionRequest::statusVersionExpression()` in the same
+     * array (ActionRequestStatusVersionArchTest). The number is taken by the
+     * UPDATE itself, after it holds the row: a writer that waited on another's
+     * row lock re-evaluates its SET list against the committed row (Postgres
+     * EvalPlanQual, READ COMMITTED), so it can never write a number lower than
+     * the one the other writer just committed. A number taken in PHP before
+     * the UPDATE could.
+     */
+    public static function statusVersionExpression(): Expression
+    {
+        return DB::raw(sprintf("nextval('%s')", self::STATUS_VERSION_SEQUENCE));
     }
 
     public function isPending(): bool

@@ -9,9 +9,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * action_requests.status_version and the sequence it is taken from. PHP
- * numbers every create and every status change (ActionRequest::
- * nextStatusVersion(), through ActionRequestStatusVersionObserver or the
- * query-builder writer itself). The column default numbers an insert that
+ * numbers every create and every status change: model saves through
+ * ActionRequestStatusVersionObserver (ActionRequest::nextStatusVersion()),
+ * query-builder writers in their own UPDATE
+ * (ActionRequest::statusVersionExpression()). The column default numbers an insert that
  * bypasses Eloquent, including from code still running right after this
  * migration. Existing rows are numbered by when they last changed
  * (updated_at, then id); the sequence continues above the highest.

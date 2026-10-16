@@ -346,8 +346,9 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             ->where('status', ActionRequestStatus::Approved->value)
             ->update([
                 'status' => ActionRequestStatus::Executing,
-                // A builder update skips the observer that numbers status changes.
-                'status_version' => ActionRequest::nextStatusVersion(),
+                // A builder update skips the observer that numbers status changes;
+                // the UPDATE takes the number once it holds the row.
+                'status_version' => ActionRequest::statusVersionExpression(),
             ]);
 
         $this->actionRequest->refresh();

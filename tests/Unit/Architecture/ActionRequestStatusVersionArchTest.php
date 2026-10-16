@@ -8,23 +8,28 @@ use Symfony\Component\Finder\Finder;
  * Query-builder updates that change an action request's status without also
  * setting status_version, as "path: first line" strings. A builder update
  * skips the model observers, so ActionRequestStatusVersionObserver never sees
- * it: the writer must set 'status_version' => ActionRequest::nextStatusVersion()
- * in the same array.
+ * it: the writer must set 'status_version' => ActionRequest::statusVersionExpression()
+ * in the same array, so the UPDATE takes the number once it holds the row.
  *
  * It flags an `->update([...])` whose chain starts at `ActionRequest::` (not
  * a longer name ending in it, such as `ExecuteActionRequest::`) or at
  * `table('action_requests')` in the same statement and whose array literal
  * has a 'status' key but no 'status_version' key. A chain that loads a model
- * first (`->first()`, `->firstOrFail()`, `->find()`, `->findOrFail()`,
- * `->sole()`) ends in a model save, which the observer numbers.
+ * first (`first()`, `firstOrFail()`, `firstWhere()`, `firstOr()`, `find()`,
+ * `findOrFail()`, `sole()`, called with `->` or statically with `::`) ends in
+ * a model save, which the observer numbers.
  *
  * It cannot see:
  * - a builder kept in a variable and updated in a later statement;
+ * - a relation builder (`$attempt->actionRequest()->update([...])`,
+ *   `$webhookEvent->actionRequests()->update([...])`) or `newQuery()` on an
+ *   instance, because the chain does not start at `ActionRequest::`;
+ * - a chain with a `;` inside it before `->update(`, such as a closure
+ *   (`->where(function ($query) { ...; })`) or a string;
  * - raw SQL (`DB::update()`, `DB::statement()`, `DB::unprepared()`);
  * - other builder writes (`upsert()`, `insert()`, `insertOrIgnore()`, `updateOrInsert()`, `increment()`);
  * - an update array built in a variable, or merged in with `+` or a spread;
- * - a status key spelled through a constant;
- * - a `;` inside a string between the chain's start and `->update(`.
+ * - a status key spelled through a constant.
  *
  * Review those by hand.
  *
@@ -42,7 +47,7 @@ function actionRequestStatusVersionOffenders(string $path, string $code): array
     );
 
     foreach ($matches as [$statement, $array]) {
-        if (preg_match('/->(?:first|firstOrFail|find|findOrFail|sole)\(/', $statement) === 1) {
+        if (preg_match('/(?:->|::)(?:first|firstOrFail|firstWhere|firstOr|find|findOrFail|sole)\(/', $statement) === 1) {
             continue;
         }
 
@@ -61,12 +66,15 @@ test('the status-version scanner flags a builder status update without a version
             ->whereKey($id)
             ->update([
                 'status' => ActionRequestStatus::Failed->value,
-                'status_version' => ActionRequest::nextStatusVersion(),
+                'status_version' => ActionRequest::statusVersionExpression(),
                 'result' => json_encode(['reason' => 'x']),
             ]);
         DB::table('action_requests')->where('id', $id)->update(['status' => 'failed']);
         ActionRequest::query()->whereKey($id)->update(['updated_at' => now()]);
         ActionRequest::query()->whereKey($id)->firstOrFail()->update(['status' => ActionRequestStatus::Rejected]);
+        ActionRequest::find($id)->update(['status' => ActionRequestStatus::Rejected]);
+        ActionRequest::findOrFail($id)->update(['status' => ActionRequestStatus::Rejected]);
+        ActionRequest::query()->firstWhere('id', $id)->update(['status' => ActionRequestStatus::Rejected]);
         $actionRequest->update(['status' => ActionRequestStatus::Approved]);
         ExecuteActionRequest::dispatch($x);
         StagedActionRequest::query()->whereKey($id)->update(['status' => 'failed']);

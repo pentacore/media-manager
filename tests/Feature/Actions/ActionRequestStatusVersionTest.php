@@ -8,6 +8,7 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Sonarr\SonarrActions;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
@@ -68,6 +69,55 @@ test('claiming a request for execution takes a new version', function (): void {
 
     expect($seen->version)->toBeGreaterThan($created)
         ->and($actionRequest->fresh()->status_version)->toBeGreaterThan($seen->version);
+});
+
+test('a claim that waited behind another writer is numbered above that writer, not before it', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_series']);
+    $competing = new class
+    {
+        public bool $ran = false;
+
+        public ?int $version = null;
+
+        public ?int $claimedVersion = null;
+    };
+    // Stand in for a retry that held the row lock and committed while the
+    // claim's UPDATE waited: just before the claim's UPDATE runs, another
+    // writer saves the row through the observer (Failed, then Approved again).
+    DB::beforeExecuting(function (string $query) use ($actionRequest, $competing): void {
+        if ($competing->ran || ! str_starts_with($query, 'update "action_requests" set "status"')) {
+            return;
+        }
+
+        $competing->ran = true;
+        $retried = ActionRequest::query()->findOrFail($actionRequest->id);
+        $retried->update(['status' => ActionRequestStatus::Failed]);
+        $retried->update(['status' => ActionRequestStatus::Approved]);
+
+        $competing->version = $retried->status_version;
+    });
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturnUsing(function (ActionRequest $claimed) use ($competing): array {
+        $competing->claimedVersion = $claimed->status_version;
+
+        return [];
+    });
+    $this->app->bind(SonarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($actionRequest)->handle();
+
+    expect($competing->ran)->toBeTrue()
+        ->and($competing->claimedVersion)->toBeGreaterThan($competing->version);
+});
+
+test('an insert that bypasses Eloquent is numbered by the column default, above every earlier version', function (): void {
+    $earlier = ActionRequest::factory()->create();
+    $attributes = ActionRequest::factory()->make()->getAttributes();
+    unset($attributes['status_version']);
+
+    $id = DB::table('action_requests')->insertGetId([...$attributes, 'created_at' => now(), 'updated_at' => now()]);
+
+    expect(DB::table('action_requests')->where('id', $id)->value('status_version'))->toBeGreaterThan($earlier->status_version);
 });
 
 test('failing a stuck run and a never-started request takes a new version', function (): void {
