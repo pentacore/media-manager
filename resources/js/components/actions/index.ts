@@ -1,4 +1,5 @@
 export { default as ActionFailureDetails } from './ActionFailureDetails.vue';
+export { default as SecondOpinionVerdict } from './SecondOpinionVerdict.vue';
 export {
     failureMessage,
     failureReasonLabel,
