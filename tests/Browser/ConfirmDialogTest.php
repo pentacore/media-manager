@@ -79,11 +79,20 @@ test('clicking the overlay closes the confirm as a cancel', function (): void {
 
     // A real click lands on the centered dialog content, not the overlay
     // behind it, so dismiss via the same pointerdown-outside event reka's
-    // DismissableLayer listens for on the overlay element itself.
+    // DismissableLayer listens for on the overlay element itself. Reka only
+    // attaches that document listener a tick after the dialog mounts, so keep
+    // dispatching until the dialog goes rather than firing once and racing it.
     $webpage->script(<<<'JS'
-        document
-            .querySelector('[data-slot="dialog-overlay"]')
-            .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+        (async () => {
+            for (let attempt = 0; attempt < 100; attempt++) {
+                const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+                if (!overlay || !document.querySelector('[data-confirm-dialog]')) {
+                    return;
+                }
+                overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+        })()
         JS);
     $webpage->script(confirmDialogGoneScript());
     $webpage->assertCount('[data-confirm-dialog]', 0);
