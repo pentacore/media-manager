@@ -22,14 +22,17 @@ function grabQueueBrowserRecord(int $id, string $series): array
     ];
 }
 
-function fakeGrabQueueBrowser(): void
+/**
+ * @param  list<array<string, mixed>>|null  $manualImportCandidates  Overrides the default single manual-import candidate.
+ */
+function fakeGrabQueueBrowser(?array $manualImportCandidates = null): void
 {
     Http::fake([
         'sonarr.local:8989/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
             ? Http::response('', 200)
             : Http::response(['records' => [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]),
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
-        'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response($manualImportCandidates ?? [[
             'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
             'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
             'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
@@ -305,6 +308,54 @@ test('an admin imports a stuck download from its row menu', function (): void {
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'GET' && str_contains($request->url(), '/api/v3/manualimport?downloadId=SABnzbd_nzo_41'));
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'ManualImport');
+});
+
+test('an admin chooses which candidate files a manual import takes', function (): void {
+    fakeGrabQueueBrowser([
+        [
+            'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
+            'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'releaseType' => 'singleEpisode', 'rejections' => [],
+        ],
+        [
+            'path' => '/downloads/Sample/severance-sample.mkv', 'name' => 'severance-sample', 'size' => 20_000_000,
+            'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
+        ],
+        [
+            'path' => '/downloads/Extras/featurette.mkv', 'name' => 'featurette', 'size' => 300_000_000,
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'rejections' => [['reason' => 'Unknown Series', 'type' => 'permanent']],
+        ],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-manual-import]')
+        ->assertCount('[data-manual-import-candidate]', 3)
+        ->assertSeeIn('[data-manual-import-sample]', 'Sample')
+        ->assertCount('[data-manual-import-sample]', 1)
+        ->assertCount('[data-manual-import-unmapped]', 1)
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 1 of 3 file(s)')
+        ->assertAttribute('[data-manual-import-path="/downloads/Severance.S01E01.mkv"] [data-manual-import-toggle]', 'data-state', 'checked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'data-state', 'unchecked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'disabled', '')
+        ->assertAttribute('[data-manual-import-path="/downloads/Sample/severance-sample.mkv"] [data-manual-import-toggle]', 'aria-label', 'Import Severance · S01E01')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'data-state', 'unchecked')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'disabled', '')
+        ->assertAttribute('[data-manual-import-path="/downloads/Extras/featurette.mkv"] [data-manual-import-toggle]', 'aria-label', 'Import featurette')
+        ->click('[data-manual-import-path="/downloads/Severance.S01E01.mkv"] [data-manual-import-toggle]')
+        ->assertSeeIn('[data-manual-import-submit]', 'Import 0 of 3 file(s)')
+        ->assertAttribute('[data-manual-import-submit]', 'disabled', '')
+        ->assertNoSmoke();
 });
 
 test('a manual import whose connection was deactivated after the page loaded shows the refusal in the dialog and sends nothing', function (): void {

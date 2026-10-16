@@ -32,9 +32,10 @@ final readonly class StuckImportResolver
     ) {}
 
     /**
+     * @param  list<string>  $excludedPaths
      * @return array<string, mixed>
      */
-    public function import(DecisionRunContext $decisionRunContext, string $service, string $downloadId): array
+    public function import(DecisionRunContext $decisionRunContext, string $service, string $downloadId, array $excludedPaths = []): array
     {
         $type = $service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr;
 
@@ -58,7 +59,7 @@ final readonly class StuckImportResolver
             return ['queued' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates. Note this and do not retry the identical call.'];
         }
 
-        $assessment = $this->manualImportResolver->assess($candidates, $service, $downloadId);
+        $assessment = $this->manualImportResolver->assess($candidates, $service, $downloadId, $excludedPaths);
 
         if ($assessment['importable'] === 0) {
             return [
@@ -69,13 +70,15 @@ final readonly class StuckImportResolver
             ];
         }
 
-        // Structural safety rail: a partial/unmapped set is never auto-imported,
-        // regardless of the action rule or the caller's judgement.
+        // Structural safety rail: a set that is still partial after the
+        // exclusions is never auto-imported, regardless of the action rule or
+        // the caller's judgement. Excluding the unmapped files (a sample, an
+        // extra) can turn a partial set into a fully mapped one; that is intended.
         $partial = ! $assessment['fully_mapped'];
         $rationale = $this->buildRationale($service, $downloadId, $assessment, $partial);
 
         try {
-            $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'assessment' => $assessment];
+            $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'excluded_paths' => $excludedPaths, 'assessment' => $assessment];
 
             $actionRequest = $this->actionOrchestrator->dispatchFromAgent(
                 type: 'resolve_manual_import',

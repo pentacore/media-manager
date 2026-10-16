@@ -127,6 +127,25 @@ abstract class ArrClient
     }
 
     /**
+     * A pooled answer's body when it is a JSON list. Stray-request failures
+     * are rethrown for the same reason as in readableItem().
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function readableList(mixed $response): ?array
+    {
+        throw_if($response instanceof StrayRequestException, $response);
+
+        if (! $response instanceof Response || ! $response->successful()) {
+            return null;
+        }
+
+        $body = $response->json();
+
+        return is_array($body) && array_is_list($body) ? $body : null;
+    }
+
+    /**
      * The decoded body of a read. A 200 whose body is not JSON data — an SSO
      * or reverse-proxy login page, an HTML error page, a bare scalar — is an
      * upstream failure, never an empty result; thrown inside a cache closure
@@ -363,6 +382,42 @@ abstract class ArrClient
         return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/manualimport', $this->apiVersion), $params)
             ->throw());
+    }
+
+    /**
+     * Manual-import candidates for several downloads at once: one pooled
+     * `manualimport?downloadId=` read per id, chunks of ten, one attempt each
+     * (see fetchResourcesByIds() for why there is no retry). An id maps to its
+     * candidate list, or to null when it could not be read.
+     *
+     * @param  list<string>  $downloadIds
+     * @return array<string, list<array<string, mixed>>|null>
+     */
+    public function getManualImports(array $downloadIds): array
+    {
+        $uniqueIds = array_values(array_unique($downloadIds));
+        $results = array_fill_keys($uniqueIds, null);
+
+        foreach (array_chunk($uniqueIds, 10) as $batch) {
+            $responses = Http::pool(function (Pool $pool) use ($batch): void {
+                foreach ($batch as $downloadId) {
+                    $this->configureRequest($pool->as($downloadId))
+                        ->get(sprintf('/api/%s/manualimport', $this->apiVersion), ['downloadId' => $downloadId]);
+                }
+            });
+
+            foreach ($batch as $downloadId) {
+                $results[$downloadId] = $this->readableList($responses[$downloadId] ?? null);
+            }
+
+            $unreachable = array_filter($batch, static fn (string $id): bool => ($responses[$id] ?? null) instanceof ConnectionException);
+
+            if (count($unreachable) === count($batch)) {
+                break;
+            }
+        }
+
+        return $results;
     }
 
     /**

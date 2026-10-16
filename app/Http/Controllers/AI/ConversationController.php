@@ -12,6 +12,7 @@ use App\Http\Requests\AI\RenameConversationRequest;
 use App\Http\Requests\AI\UpdateConversationModelRequest;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ChatCardExtractor;
 use App\Services\Chat\ConversationModelOverride;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,7 +54,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -80,25 +81,42 @@ class ConversationController extends Controller
 
         $messages = collect($cursorPaginator->items())
             ->reverse()
-            ->filter(fn (StoredMessage $storedMessage): bool => in_array($storedMessage->role, ['user', 'assistant'], true)
-                && (trim($storedMessage->content) !== '' || $storedMessage->status === MessageStatus::Failed || $storedMessage->attachments !== []))
             ->map(fn (StoredMessage $storedMessage): array => [
-                'id' => $storedMessage->id,
-                'invocation_id' => $storedMessage->role === 'assistant' && is_string($storedMessage->meta['invocation_id'] ?? null) ? $storedMessage->meta['invocation_id'] : null,
-                'role' => $storedMessage->role,
-                'text' => $storedMessage->content,
-                'ts' => ($storedMessage->createdAt?->getTimestamp() ?? 0) * 1000,
-                'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
-                'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
-                'failed' => $storedMessage->status === MessageStatus::Failed,
-                'answered_by' => $storedMessage->role === 'assistant' ? [
-                    'provider' => $storedMessage->meta['provider'] ?? null,
-                    'model' => $storedMessage->meta['model'] ?? null,
-                    'reasoning_label' => AiReasoningLevel::tryFrom((string) ($storedMessage->meta['reasoning_level'] ?? ''))?->label(),
-                    'tier' => is_array($storedMessage->meta['tier'] ?? null) ? $storedMessage->meta['tier'] : null,
-                ] : null,
+                'stored' => $storedMessage,
+                'cards' => $storedMessage->role === 'assistant'
+                    ? $chatCardExtractor->fromToolResults(collect($storedMessage->steps)->pluck('tool_calls')->filter()->flatten(1)->all())
+                    : [],
             ])
-            ->values()
+            ->filter(fn (array $entry): bool => in_array($entry['stored']->role, ['user', 'assistant'], true)
+                && (trim($entry['stored']->content) !== '' || $entry['stored']->status === MessageStatus::Failed || $entry['stored']->attachments !== [] || $entry['cards'] !== []))
+            ->map(function (array $entry) use ($chatAttachmentStore): array {
+                $storedMessage = $entry['stored'];
+
+                return [
+                    'id' => $storedMessage->id,
+                    'invocation_id' => $storedMessage->role === 'assistant' && is_string($storedMessage->meta['invocation_id'] ?? null) ? $storedMessage->meta['invocation_id'] : null,
+                    'role' => $storedMessage->role,
+                    'text' => $storedMessage->content,
+                    'ts' => ($storedMessage->createdAt?->getTimestamp() ?? 0) * 1000,
+                    'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
+                    'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
+                    'failed' => $storedMessage->status === MessageStatus::Failed,
+                    'cards' => $entry['cards'],
+                    'answered_by' => $storedMessage->role === 'assistant' ? [
+                        'provider' => $storedMessage->meta['provider'] ?? null,
+                        'model' => $storedMessage->meta['model'] ?? null,
+                        'reasoning_label' => AiReasoningLevel::tryFrom((string) ($storedMessage->meta['reasoning_level'] ?? ''))?->label(),
+                        'tier' => is_array($storedMessage->meta['tier'] ?? null) ? $storedMessage->meta['tier'] : null,
+                    ] : null,
+                ];
+            })
+            ->values();
+
+        $cardGroups = $chatCardExtractor->hydrateGroups($messages
+            ->map(fn (array $message): array => $message['cards'])
+            ->all());
+        $messages = $messages
+            ->map(fn (array $message, int $index): array => [...$message, 'cards' => $cardGroups[$index]])
             ->all();
 
         return response()->json([

@@ -1,5 +1,6 @@
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import type { AnsweredBy, ChatOverride } from '@/components/ai/types';
+import { cardFromToolResult } from '@/components/ai/chatCards';
+import type { AnsweredBy, ChatCard, ChatOverride } from '@/components/ai/types';
 import type { ChatToolCall } from '@/composables/useAiChat';
 import { csrfToken } from '@/lib/http';
 
@@ -9,6 +10,8 @@ export interface StreamCallbacks {
     onText: (accumulated: string) => void;
     onReasoning?: (accumulated: string) => void;
     onToolCall?: (call: ChatToolCall) => void;
+    /** A tool result that shows a choices or approval card under the reply. */
+    onCard?: (card: ChatCard) => void;
 }
 
 interface StreamChatOptions extends StreamCallbacks {
@@ -287,6 +290,17 @@ export function useChatStream(): UseChatStreamReturn {
                             ? 'failed'
                             : 'done';
                         options.onToolCall?.({ ...call });
+                    }
+
+                    // The result names no tool; TOOL_CALL_START did.
+                    const card = cardFromToolResult(
+                        event.content,
+                        String(event.toolCallId),
+                        call?.name ?? '',
+                    );
+
+                    if (card) {
+                        options.onCard?.(card);
                     }
 
                     break;

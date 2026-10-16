@@ -144,6 +144,7 @@ abstract class BaseTool implements Tool
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
+            'title' => $actionRequest->title,
         ]);
     }
 

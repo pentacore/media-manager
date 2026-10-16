@@ -52,7 +52,8 @@ class ManualImportActions implements ActionExecutor
         $client = $this->arrConnections->client($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
-        $files = $this->manualImportResolver->toImportPayload($candidates, $service, $downloadId);
+        $excludedPaths = array_values(array_filter((array) ($payload['excluded_paths'] ?? []), is_string(...)));
+        $files = $this->manualImportResolver->toImportPayload($candidates, $service, $downloadId, $excludedPaths);
 
         throw_if($files === [], InvalidArgumentException::class, 'No importable files for this download.');
 

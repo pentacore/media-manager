@@ -39,6 +39,35 @@ test('resolve_manual_import enumerates candidates and posts ManualImport', funct
         && $r['importMode'] === 'auto');
 });
 
+test('excluded paths and samples never reach the ManualImport command', function (): void {
+    $candidate = fn (string $path): array => [
+        'path' => $path,
+        'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+        'series' => ['id' => 5],
+        'episodes' => [['id' => 11]],
+    ];
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            $candidate('/dl/a.mkv'),
+            $candidate('/dl/b.mkv'),
+            $candidate('/dl/Sample/sample.mkv'),
+        ]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'resolve_manual_import',
+        'target_service' => 'sonarr',
+        'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => ['/dl/a.mkv']],
+    ]);
+
+    expect(resolve(ManualImportActions::class)->execute($request))->toMatchArray(['files_imported' => 1]);
+
+    Http::assertSent(fn ($r): bool => str_contains((string) $r->url(), '/api/v3/command')
+        && count($r['files']) === 1
+        && $r['files'][0]['path'] === '/dl/b.mkv');
+});
+
 test('throws when no files are importable', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([])]);
 

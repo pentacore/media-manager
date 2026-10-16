@@ -103,6 +103,13 @@ test('tool list includes the subtitle replacement tools', function (): void {
         ->not->toContain('FindReplacementCandidatesTool');
 });
 
+test('the instructions tell the agent about choice buttons and inline approval', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    expect($instructions)->toContain('OfferChoicesTool')
+        ->and($instructions)->toContain('Approve/Reject buttons');
+});
+
 test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {
     $instructions = (string) (new MediaAgent)->instructions();
 
@@ -119,10 +126,10 @@ test('the replacement instructions keep Bazarr out of the replacement flow', fun
         ->and($replacementSection)->toContain('Do not re-check Bazarr first');
 });
 
-test('tool list has the 30 core tools when no optional integration is configured', function (): void {
+test('tool list has the 31 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(30);
+    expect($tools->count())->toBe(31);
 });
 
 test('Prowlarr tools appear only with an active Prowlarr connection', function (): void {
@@ -196,7 +203,8 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
     // Tool routing that lives in the prompt (not in any schema)
     expect($instructions)->toContain('SemanticLibrarySearchTool')
         ->toContain('ProposeWorkflowTool')
-        ->toContain('InvestigateStuckDownload')
+        ->toContain('InvestigateStuckDownload ONCE')
+        ->toContain('excluded_paths')
         ->toContain('ResolveManualImportChatTool')
         ->toContain('RemoveStuckDownloadChatTool')
         ->toContain('SearchMediaTool')
