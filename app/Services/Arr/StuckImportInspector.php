@@ -19,6 +19,8 @@ final readonly class StuckImportInspector
     ) {}
 
     /**
+     * Counts leave samples out; `files` lists every candidate (see shape()).
+     *
      * @return array{service: string, download_id: string, total: int, importable: int, fully_mapped: bool, files: array<int, array<string, mixed>>}
      */
     public function inspect(ServiceConnection $serviceConnection, string $service, string $downloadId): array
@@ -54,6 +56,10 @@ final readonly class StuckImportInspector
     }
 
     /**
+     * `total`, `importable` and `fully_mapped` come from assess() and leave
+     * samples out, while `files` lists every candidate (samples included)
+     * with its `sample` flag, so the reader sees what was set aside.
+     *
      * @param  array<int, array<string, mixed>>  $candidates
      * @return array{service: string, download_id: string, total: int, importable: int, fully_mapped: bool, files: array<int, array<string, mixed>>}
      */

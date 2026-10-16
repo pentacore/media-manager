@@ -123,7 +123,7 @@ class ManualImportResolver
      *
      * @param  array<int, array<string, mixed>>  $candidates
      * @param  list<string>  $excludedPaths
-     * @return array{total: int, importable: int, fully_mapped: bool, reasons: list<string>, skipped: list<array{path: string, why: string}>}
+     * @return array{total: int, importable: int, fully_mapped: bool, reasons: list<string>, skipped: list<array{path: string, why: 'sample'|'excluded'}>}
      */
     public function assess(array $candidates, string $service, string $downloadId, array $excludedPaths = []): array
     {
@@ -214,7 +214,7 @@ class ManualImportResolver
      *
      * @param  array<int, array<string, mixed>>  $candidates
      * @param  list<string>  $excludedPaths
-     * @return array{0: list<array<string, mixed>>, 1: list<array{path: string, why: string}>}
+     * @return array{0: list<array<string, mixed>>, 1: list<array{path: string, why: 'sample'|'excluded'}>}
      */
     private function kept(array $candidates, array $excludedPaths): array
     {

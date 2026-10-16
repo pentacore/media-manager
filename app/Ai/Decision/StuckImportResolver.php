@@ -70,8 +70,10 @@ final readonly class StuckImportResolver
             ];
         }
 
-        // Structural safety rail: a partial/unmapped set is never auto-imported,
-        // regardless of the action rule or the caller's judgement.
+        // Structural safety rail: a set that is still partial after the
+        // exclusions is never auto-imported, regardless of the action rule or
+        // the caller's judgement. Excluding the unmapped files (a sample, an
+        // extra) can turn a partial set into a fully mapped one; that is intended.
         $partial = ! $assessment['fully_mapped'];
         $rationale = $this->buildRationale($service, $downloadId, $assessment, $partial);
 
