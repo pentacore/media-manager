@@ -214,6 +214,7 @@ test('an override for an event that is not allowlisted survives saves and is fla
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), [
         'enabled' => true, 'event_allowlist' => [], 'allow_manual_import' => false,
         'notify_on_suggest' => false, 'notify_on_act' => false, 'max_actions_per_run' => 3,
+        'second_opinion_engine' => 'llm', 'second_opinion_jev_threshold' => 0.8,
     ])
         ->assertSessionHasNoErrors()
         ->assertRedirect();

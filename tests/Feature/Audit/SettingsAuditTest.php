@@ -43,6 +43,8 @@ test('a decision agent save records its changed keys once and a repeat save reco
         'notify_on_suggest' => false,
         'notify_on_act' => true,
         'max_actions_per_run' => 5,
+        'second_opinion_engine' => 'llm',
+        'second_opinion_jev_threshold' => 0.8,
     ];
 
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), $payload)->assertRedirect(route('admin.decision-agent.index'));
