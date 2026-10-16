@@ -14,6 +14,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
@@ -175,6 +176,31 @@ test('GetTitleTool keeps an unknown title a plain tool failure', function (): vo
         'tmdb_id' => 603,
         'media_type' => 'movie',
     ])), true);
+
+    expect($result['error'])->toBe('tool_failed');
+});
+
+test('every Seerr read tool tells the model a refusal is not worth retrying', function (string $tool, string $path, array $arguments, int $status, string $body): void {
+    Http::fake([sprintf('seerr.local:5055/api/v1/%s', $path) => Http::response($body, $status)]);
+
+    $result = json_decode((new $tool)->handle(new Request($arguments)), true);
+
+    expect($result['error'])->toBe('seerr_refused')
+        ->and($result['message'])->toContain('Retrying will not help');
+})->with([
+    'search, a login page' => [SearchCatalogTool::class, 'search*', ['query' => 'inception'], 200, '<html><body>Sign in</body></html>'],
+    'discover movies, a login page' => [DiscoverMoviesTool::class, 'discover/movies*', [], 200, '<html><body>Sign in</body></html>'],
+    'discover tv, a login page' => [DiscoverTvTool::class, 'discover/tv*', [], 200, '<html><body>Sign in</body></html>'],
+    'pending requests, a login page' => [ListPendingRequestsTool::class, 'request*', [], 200, '<html><body>Sign in</body></html>'],
+    'pending requests, a rejected API key' => [ListPendingRequestsTool::class, 'request*', [], 401, '{"message":"Unauthorized"}'],
+    'title, a rejected API key' => [GetTitleTool::class, 'movie/603', ['tmdb_id' => 603, 'media_type' => 'movie'], 401, '{"message":"Unauthorized"}'],
+]);
+
+test('a Seerr read tool keeps an outage a plain tool failure', function (): void {
+    Sleep::fake();
+    Http::fake(['seerr.local:5055/api/v1/search*' => Http::response('boom', 503)]);
+
+    $result = json_decode((new SearchCatalogTool)->handle(new Request(['query' => 'inception'])), true);
 
     expect($result['error'])->toBe('tool_failed');
 });

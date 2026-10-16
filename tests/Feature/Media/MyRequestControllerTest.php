@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
@@ -247,6 +249,10 @@ test('a login page in front of Seerr is a refusal on my requests, worded for a v
 });
 
 test('a cancel behind a Seerr login page says the outcome is unknown', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(ServiceConnection::findActive(ServiceType::Seerr));
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
     fakeMyRequestsSeerr([
         'seerr.local:5055/api/v1/request/41' => fn (Request $request) => $request->method() === 'DELETE'
             ? Http::response('<html><body>Sign in</body></html>')
@@ -257,4 +263,23 @@ test('a cancel behind a Seerr login page says the outcome is unknown', function 
         ->delete(route('media.requests.mine.destroy', ['id' => 41]))
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
 });
+
+test('a cancel whose Seerr delete is refused is worded like the status read, never as an outage', function (int $status, string $expected): void {
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request/41' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response(['message' => 'nope'], $status)
+            : Http::response(['id' => 41, 'status' => 1, 'requestedBy' => ['id' => 7], 'media' => ['tmdbId' => 1, 'mediaType' => 'movie']]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => $expected]);
+})->with([
+    'removed in between (404)' => [404, 'That request no longer exists.'],
+    'refused (403)' => [403, 'Seerr is unavailable — ask an admin to check the connection.'],
+]);

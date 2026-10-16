@@ -9,6 +9,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionTargets;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -126,6 +127,29 @@ test('a seerr request lookup behind a login page is named refused, not missing',
 
     expect($actionTarget->verified)->toBeFalse()
         ->and($actionTarget->name)->toBe('#12 (Seerr refused the lookup)');
+});
+
+test('a seerr request lookup tells a refusal, an outage and a missing request apart', function (int $status, string $body, string $expected): void {
+    Sleep::fake();
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+    Http::fake(['seerr.local:5055/api/v1/request/12' => Http::response($body, $status)]);
+
+    $actionTarget = resolve(ActionTargets::class)->seerrRequest(12);
+
+    expect($actionTarget->verified)->toBeFalse()
+        ->and($actionTarget->name)->toBe($expected);
+})->with([
+    'a rejected API key' => [401, '{"message":"Unauthorized"}', '#12 (Seerr refused the lookup)'],
+    'an outage' => [503, 'boom', '#12 (Seerr unreachable)'],
+    'a removed request' => [404, '{"message":"Not found"}', '#12 (not found)'],
+]);
+
+test('a seerr request lookup that cannot connect is named unreachable', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+    Http::fake(['seerr.local:5055/api/v1/request/12' => Http::failedConnection()]);
+
+    expect(resolve(ActionTargets::class)->seerrRequest(12)->name)->toBe('#12 (Seerr unreachable)');
 });
 
 test('a download resolves its release from the arr queue', function (): void {

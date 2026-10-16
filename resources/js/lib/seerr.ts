@@ -6,6 +6,15 @@ export const BLOCKLISTED_PILL = {
     label: 'Blocklisted',
 } as const;
 
+/**
+ * The pill for a title nobody has requested yet. Neutral, because
+ * "Available" means "in the library" on every Seerr surface.
+ */
+export const NOT_REQUESTED_PILL = {
+    status: 'none',
+    label: 'Not requested',
+} as const;
+
 /** StatusPill props for a Seerr title state; `none` renders no pill. */
 export function titleStatusPill(
     status: TitleStatus,

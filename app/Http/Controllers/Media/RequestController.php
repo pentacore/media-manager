@@ -103,11 +103,7 @@ class RequestController extends Controller
             new SeerrClient($connection)->deleteRequest($id);
             new SeerrCache($connection)->bustAll();
         } catch (SeerrWriteUnconfirmed) {
-            // The change may have landed: drop the cached list, and say so.
-            new SeerrCache($connection)->bustAll();
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
-
-            return back();
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to delete request.')]);
 
@@ -141,11 +137,7 @@ class RequestController extends Controller
             new SeerrClient($connection)->retryRequest($id);
             new SeerrCache($connection)->bustAll();
         } catch (SeerrWriteUnconfirmed) {
-            // The change may have landed: drop the cached list, and say so.
-            new SeerrCache($connection)->bustAll();
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
-
-            return back();
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to retry request.')]);
 
@@ -279,11 +271,7 @@ class RequestController extends Controller
             $seerrClient->updateRequest($id, $payload);
             new SeerrCache($connection)->bustAll();
         } catch (SeerrWriteUnconfirmed) {
-            // The change may have landed: drop the cached list, and say so.
-            new SeerrCache($connection)->bustAll();
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
-
-            return back();
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException $throwable) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr rejected the update: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())])]);
 
@@ -696,11 +684,7 @@ class RequestController extends Controller
 
             return back();
         } catch (SeerrWriteUnconfirmed) {
-            // The change may have landed: drop the cached list, and say so.
-            new SeerrCache($connection)->bustAll();
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
-
-            return back();
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $failureMessage]);
 

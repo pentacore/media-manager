@@ -9,9 +9,11 @@ use App\Http\Controllers\Controller;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Services\Arr\ArrConnections;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Support\Abilities;
@@ -91,7 +93,7 @@ class SearchController extends Controller
                 : Inertia::defer(fn (): array => $this->searchRadarr($term, $arrConnections), 'radarr'),
             'requestResults' => $term === ''
                 ? $empty
-                : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter), 'seerr'),
+                : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter, $request->user()), 'seerr'),
             'requesting' => $seerrConnection instanceof ServiceConnection
                 ? Inertia::defer(fn (): array => $seerrUserResolver->requestingContext($seerrConnection, $request->user()), 'requesting')
                 : null,
@@ -329,11 +331,13 @@ class SearchController extends Controller
     /**
      * Seerr's TMDB-backed multi-search, one row per movie/TV title whatever its
      * request state — unrequested titles included, so the detail sheet can
-     * request them. Status comes from the hit's own `mediaInfo`.
+     * request them. Status comes from the hit's own `mediaInfo`. A failure is
+     * worded through SeerrReadFailure, so a login page in front of Seerr reads
+     * as a refusal for who can fix it, not as an outage.
      *
      * @return array{results: list<array<string, mixed>>, error: ?string}
      */
-    private function searchSeerr(string $term, SeerrTitlePresenter $seerrTitlePresenter): array
+    private function searchSeerr(string $term, SeerrTitlePresenter $seerrTitlePresenter, ?User $user): array
     {
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
@@ -344,7 +348,13 @@ class SearchController extends Controller
         try {
             $response = new SeerrClient($connection)->search($term);
         } catch (RequestException|ConnectionException $exception) {
-            return $this->serviceFailure('seerr', $exception);
+            Log::warning('Media search failed.', [
+                'service' => 'seerr',
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return ['results' => [], 'error' => SeerrReadFailure::message($exception, $user)];
         }
 
         return [

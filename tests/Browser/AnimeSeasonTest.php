@@ -367,6 +367,29 @@ test('a title Seerr blocklisted shows Blocklisted and offers no Request button',
         ->assertNoSmoke();
 });
 
+test('a title nobody requested reads Not requested, never Available, and offers Request', function (): void {
+    animeSeasonFixtureBasics();
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+    Http::fake([
+        ...animeSeasonAniListFakes('TV'),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 7]]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-anime-status]', 'Not requested')
+        ->assertPresent('[data-anime-request]');
+
+    expect($webpage->text('[data-anime-status]'))->not->toContain('Available');
+});
+
 test('an admin reads a refusal when Seerr answers the user picker with a login page', function (): void {
     animeSeasonFixtureBasics();
     Http::fake([

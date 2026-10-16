@@ -115,13 +115,17 @@ class MyRequestController extends Controller
         try {
             $seerrClient->deleteRequest($id);
         } catch (SeerrWriteUnconfirmed) {
-            // The cancel may have landed: drop the cached list, and say so.
-            new SeerrCache($serviceConnection)->bustAll();
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
+            return $this->seerrWriteUnconfirmedRedirect($serviceConnection);
+        } catch (RequestException $requestException) {
+            // Worded like the status read above: a 404 means someone removed
+            // the request in between, any other 4xx is a refusal.
+            Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->status() === 404
+                ? __('That request no longer exists.')
+                : SeerrReadFailure::message($requestException, $user)]);
 
             return back();
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (ConnectionException $connectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($connectionException, $user)]);
 
             return back();
         }

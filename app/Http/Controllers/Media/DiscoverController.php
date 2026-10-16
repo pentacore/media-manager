@@ -40,8 +40,6 @@ class DiscoverController extends Controller
      */
     private const string UNREACHABLE = SeerrUserResolver::UNREACHABLE;
 
-    private const string CONNECTION_REJECTED = 'Seerr rejected the request — check the Seerr connection.';
-
     public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
     {
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
@@ -130,7 +128,7 @@ class DiscoverController extends Controller
 
             return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __(SeerrWriteUnconfirmed::MESSAGE));
         } catch (RequestException $requestException) {
-            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException, $user));
         } catch (ConnectionException) {
             // createRequest never retries: Seerr may have filed it already.
             return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Seerr did not answer — check My requests before trying again.'));
@@ -177,7 +175,13 @@ class DiscoverController extends Controller
         return array_slice($rows, 0, self::UPCOMING_LIMIT);
     }
 
-    private function refusal(RequestException $requestException): string
+    /**
+     * A refused request (a 4xx). Seerr's own 409 and 403 answers say what is
+     * wrong; any other 4xx is a refusal worded for who can fix the connection
+     * (a viewer or member is never sent to settings they cannot open). Only a
+     * 5xx is an outage.
+     */
+    private function refusal(RequestException $requestException, ?User $user): string
     {
         $status = $requestException->response->status();
         $json = $requestException->response->json('message');
@@ -192,7 +196,7 @@ class DiscoverController extends Controller
             $status === 409 => __('This title has already been requested.'),
             $status === 403 && Str::contains($message, 'quota', ignoreCase: true) => __('Seerr quota reached — try again later.'),
             $status === 403 && $message !== '' => __('Seerr refused the request: :message', ['message' => $message]),
-            in_array($status, [400, 401], true) => __(self::CONNECTION_REJECTED),
+            $requestException->response->clientError() => $this->upstreamRefusedMessage(ServiceType::Seerr, $user),
             default => __(self::UNREACHABLE),
         };
     }

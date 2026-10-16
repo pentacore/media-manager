@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ServiceType;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -1094,6 +1096,10 @@ test('approving or declining is refused while a member cancel holds the request'
 })->with(['media.requests.approve', 'media.requests.decline']);
 
 test('a request update behind a login page says the outcome is unknown', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(ServiceConnection::findActive(ServiceType::Seerr));
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
     Http::fake([
         'seerr.local:5055/api/v1/request/42' => Http::sequence()
             ->push(['id' => 42, 'media' => ['id' => 100, 'mediaType' => 'movie', 'tmdbId' => 603], 'serverId' => 0])
@@ -1105,4 +1111,7 @@ test('a request update behind a login page says the outcome is unknown', functio
         ->put(route('media.requests.update', 42), ['profile_id' => 9, 'root_folder' => '/movies'])
         ->assertRedirect(route('media.requests.index'))
         ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
 });

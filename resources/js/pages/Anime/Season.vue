@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
-import { BLOCKLISTED_PILL } from '@/lib/seerr';
+import { BLOCKLISTED_PILL, NOT_REQUESTED_PILL } from '@/lib/seerr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
@@ -371,7 +371,7 @@ const STATUS_META: Record<EntryStatus, { status: string; label: string }> = {
     in_library: { status: 'available', label: 'In library' },
     unmonitored: { status: 'warn', label: 'Unmonitored' },
     requested: { status: 'approved', label: 'Requested' },
-    requestable: { status: 'ok', label: 'Available' },
+    requestable: NOT_REQUESTED_PILL,
     unmapped: { status: 'warn', label: 'Unmapped' },
     blocklisted: BLOCKLISTED_PILL,
 };

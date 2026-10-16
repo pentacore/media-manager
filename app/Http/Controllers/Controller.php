@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Arr\LibraryCacheSync;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use App\Support\UpstreamRefusal;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -44,6 +46,19 @@ abstract class Controller
     protected function upstreamRefusedMessage(ServiceType $serviceType, ?User $user): string
     {
         return UpstreamRefusal::message($serviceType, $user);
+    }
+
+    /**
+     * A synchronous Seerr write whose outcome is unknown (SeerrWriteUnconfirmed):
+     * the change may have landed, so drop the connection's cached Seerr reads,
+     * flash the fixed sentence (never the exception's text) and go back.
+     */
+    protected function seerrWriteUnconfirmedRedirect(ServiceConnection $serviceConnection): RedirectResponse
+    {
+        new SeerrCache($serviceConnection)->bustAll();
+        Inertia::flash('toast', ['type' => 'error', 'message' => __(SeerrWriteUnconfirmed::MESSAGE)]);
+
+        return back();
     }
 
     /**

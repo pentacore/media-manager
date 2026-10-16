@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrWriteUnconfirmed;
@@ -251,12 +252,24 @@ test('Seerr errors become clear toasts', function (int $status, array $body, str
     'permission' => [403, ['message' => 'You do not have permission to request 4K movies.'], 'Seerr refused the request: You do not have permission to request 4K movies.'],
     'duplicate' => [409, ['message' => 'Request for this media already exists.'], 'This title has already been requested.'],
     'server error' => [500, [], 'Seerr is unreachable right now.'],
-    'bad request' => [400, ['message' => 'Malformed request.'], 'Seerr rejected the request — check the Seerr connection.'],
-    'unauthorized' => [401, ['message' => 'Invalid API key.'], 'Seerr rejected the request — check the Seerr connection.'],
-    'non-string message' => [403, ['message' => ['nested' => 'oops']], 'Seerr is unreachable right now.'],
+    'bad request' => [400, ['message' => 'Malformed request.'], 'Seerr is unavailable — ask an admin to check the connection.'],
+    'unauthorized' => [401, ['message' => 'Invalid API key.'], 'Seerr is unavailable — ask an admin to check the connection.'],
+    'not found' => [404, ['message' => 'Not found.'], 'Seerr is unavailable — ask an admin to check the connection.'],
+    'unprocessable' => [422, ['message' => 'Invalid seasons.'], 'Seerr is unavailable — ask an admin to check the connection.'],
+    'non-string message' => [403, ['message' => ['nested' => 'oops']], 'Seerr is unavailable — ask an admin to check the connection.'],
     'permission naming a path' => [403, ['message' => 'Cannot write /config/db/settings.json'], 'Seerr refused the request: Cannot write [redacted path]'],
-    'blank message' => [403, ['message' => '   '], 'Seerr is unreachable right now.'],
+    'blank message' => [403, ['message' => '   '], 'Seerr is unavailable — ask an admin to check the connection.'],
 ]);
+
+test('an admin whose request Seerr refuses is sent to the connection settings', function (int $status): void {
+    discoverSeerr();
+    fakeDiscoverSeerr(['seerr.local:5055/api/v1/request' => Http::response(['message' => 'Invalid API key.'], $status)]);
+
+    $this->actingAs(User::factory()->admin()->create(['email' => 'viewer@example.com']))
+        ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr refused the request — check the connection settings.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+})->with([400, 401, 404]);
 
 test('a lost Seerr response tells the user to check before retrying', function (): void {
     discoverSeerr();
@@ -340,7 +353,10 @@ test('title detail answers a refusal when Seerr answers with a login page', func
 });
 
 test('a request behind a Seerr login page says the outcome is unknown and is sent once', function (): void {
-    discoverSeerr();
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(discoverSeerr());
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
     fakeDiscoverSeerr(['seerr.local:5055/api/v1/request' => Http::response('<html><body>Sign in</body></html>')]);
 
     $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
@@ -349,4 +365,7 @@ test('a request behind a Seerr login page says the outcome is unknown and is sen
         ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
 
     expect(collect(Http::recorded())->filter(fn (array $pair): bool => $pair[0]->method() === 'POST'))->toHaveCount(1);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
 });

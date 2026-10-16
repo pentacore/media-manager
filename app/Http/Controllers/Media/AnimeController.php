@@ -247,7 +247,7 @@ class AnimeController extends Controller
     {
         $owned = $seasonLibraryStatus->resolve($rows);
         $seerrClient = new SeerrClient($serviceConnection);
-        $requestStates = $this->seerrRequestStates($seerrClient, $seerrTitlePresenter);
+        ['states' => $requestStates, 'complete' => $requestListComplete] = $this->seerrRequestStates($seerrClient, $seerrTitlePresenter);
         $unrequested = [];
 
         foreach ($rows as $row) {
@@ -259,7 +259,12 @@ class AnimeController extends Controller
             }
         }
 
-        $blocklisted = $this->blocklistedWithoutRequest($seerrClient, $seerrTitlePresenter, array_values($unrequested));
+        // A failed request walk says nothing about which titles are
+        // unrequested, and the title details would fail the same way on every
+        // load: skip them, so those titles stay requestable.
+        $blocklisted = $requestListComplete
+            ? $this->blocklistedWithoutRequest($seerrClient, $seerrTitlePresenter, array_values($unrequested))
+            : [];
 
         return collect($rows)->map(function (array $row) use ($owned, $requestStates, $blocklisted): array {
             $mapping = $row['mapping'];
@@ -297,12 +302,12 @@ class AnimeController extends Controller
      * blocklisted in Seerr, else `requested`. A completed request for a title
      * Seerr has since deleted is skipped: it belonged to the deleted copy.
      * Every page reported by `pageInfo` is walked so older requests are never
-     * missed. A failed walk keeps what it read: the page stays usable, and
-     * Seerr itself refuses a request it cannot take.
+     * missed. A failed walk keeps what it read and reports `complete: false`:
+     * the page stays usable, and Seerr itself refuses a request it cannot take.
      *
-     * @return Collection<string, string>
+     * @return array{states: Collection<string, string>, complete: bool}
      */
-    private function seerrRequestStates(SeerrClient $seerrClient, SeerrTitlePresenter $seerrTitlePresenter): Collection
+    private function seerrRequestStates(SeerrClient $seerrClient, SeerrTitlePresenter $seerrTitlePresenter): array
     {
         /** @var Collection<string, string> $states */
         $states = collect();
@@ -328,10 +333,10 @@ class AnimeController extends Controller
                 }
             }
         } catch (RequestException|ConnectionException) {
-            return $states;
+            return ['states' => $states, 'complete' => false];
         }
 
-        return $states;
+        return ['states' => $states, 'complete' => true];
     }
 
     /**
