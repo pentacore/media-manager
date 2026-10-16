@@ -27,6 +27,10 @@ class OfferChoicesTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        if (isset($request['options'])) {
+            $request['options'] = $this->withTrimmedLabels($request['options']);
+        }
+
         $validated = $request->validate([
             'question' => ['required', 'string', 'max:300'],
             'options' => ['required', 'array', 'min:2', 'max:10'],
@@ -35,17 +39,17 @@ class OfferChoicesTool extends BaseTool
             'multiple' => ['sometimes', 'boolean'],
         ]);
 
+        /** @var list<array{label: string, description?: string|null}> $options */
+        $options = array_values($validated['options']);
+
         return [
             'choices' => [
                 'question' => trim($validated['question']),
                 'multiple' => (bool) ($validated['multiple'] ?? false),
-                'options' => collect($validated['options'])
-                    ->map(fn (array $option): array => [
-                        'label' => trim($option['label']),
-                        'description' => filled($option['description'] ?? null) ? trim($option['description']) : null,
-                    ])
-                    ->values()
-                    ->all(),
+                'options' => array_map(static fn (array $option): array => [
+                    'label' => $option['label'],
+                    'description' => filled($option['description'] ?? null) ? trim($option['description']) : null,
+                ], $options),
             ],
             'instruction' => 'The options are shown to the user as buttons. End your turn now and wait for their answer; do not repeat the options as text.',
         ];
@@ -64,5 +68,23 @@ class OfferChoicesTool extends BaseTool
             ]))->description('2 to 10 options.')->required(),
             'multiple' => $schema->boolean()->description('True when the user may pick several options.'),
         ];
+    }
+
+    /**
+     * Trim each label before validation, so `distinct` compares the text the
+     * buttons show rather than the raw argument.
+     */
+    private function withTrimmedLabels(mixed $options): mixed
+    {
+        if (! is_array($options)) {
+            return $options;
+        }
+
+        return array_map(
+            static fn (mixed $option): mixed => is_array($option) && is_string($option['label'] ?? null)
+                ? [...$option, 'label' => trim($option['label'])]
+                : $option,
+            $options,
+        );
     }
 }

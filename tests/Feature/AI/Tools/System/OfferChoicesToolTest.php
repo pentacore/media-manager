@@ -41,16 +41,24 @@ test('multiple is passed through', function (): void {
     expect($result['choices']['multiple'])->toBeTrue();
 });
 
-test('rejects too few, too many, too long and duplicate arguments', function (array $options, array $extra = []): void {
+test('rejects too few, too many, too long, blank and duplicate arguments', function (array $options, array $extra = []): void {
     expect(offerChoices($options, $extra)['error'])->toBe('invalid_arguments');
 })->with([
     'one option' => [[['label' => 'A']]],
-    'eleven options' => [array_fill(0, 11, ['label' => 'A'])],
+    'eleven options' => [array_map(fn (int $i): array => ['label' => "L{$i}"], range(1, 11))],
     'question over 300 chars' => [[['label' => 'A'], ['label' => 'B']], ['question' => str_repeat('q', 301)]],
     'description over 160 chars' => [[['label' => 'A', 'description' => str_repeat('d', 161)], ['label' => 'B']]],
     'label over 80 chars' => [[['label' => str_repeat('x', 81)], ['label' => 'B']]],
     'duplicate labels' => [[['label' => 'A'], ['label' => 'A']]],
+    'labels duplicate once trimmed' => [[['label' => ' A'], ['label' => 'A']]],
+    'blank label' => [[['label' => '   '], ['label' => 'A']]],
 ]);
+
+test('ten distinctly labelled options are accepted', function (): void {
+    $result = offerChoices(array_map(fn (int $i): array => ['label' => "L{$i}"], range(1, 10)));
+
+    expect($result['choices']['options'])->toHaveCount(10);
+});
 
 test('risk is Read', function (): void {
     expect((new OfferChoicesTool)->risk())->toBe(Risk::Read);
