@@ -103,6 +103,13 @@ test('tool list includes the subtitle replacement tools', function (): void {
         ->not->toContain('FindReplacementCandidatesTool');
 });
 
+test('the instructions tell the agent about choice buttons and inline approval', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    expect($instructions)->toContain('OfferChoicesTool')
+        ->and($instructions)->toContain('Approve/Reject buttons');
+});
+
 test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {
     $instructions = (string) (new MediaAgent)->instructions();
 
