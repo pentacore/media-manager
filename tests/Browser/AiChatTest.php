@@ -498,9 +498,10 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
  * A stored OfferChoicesTool result offering the given labels.
  *
  * @param  list<string>  $labels
+ * @param  array<string, string>  $descriptions  keyed by label
  * @return array<string, mixed>
  */
-function aiChatChoicesResult(string $toolCallId, string $question, array $labels, bool $multiple = false): array
+function aiChatChoicesResult(string $toolCallId, string $question, array $labels, bool $multiple = false, array $descriptions = []): array
 {
     return [
         'id' => $toolCallId,
@@ -510,7 +511,7 @@ function aiChatChoicesResult(string $toolCallId, string $question, array $labels
             'choices' => [
                 'question' => $question,
                 'multiple' => $multiple,
-                'options' => array_map(fn (string $label): array => ['label' => $label, 'description' => null], $labels),
+                'options' => array_map(fn (string $label): array => ['label' => $label, 'description' => $descriptions[$label] ?? null], $labels),
             ],
             'instruction' => 'End your turn now.',
         ]),
@@ -647,7 +648,7 @@ test('a streamed OfferChoices call renders a choice card that takes a pick', fun
     MediaAgent::fake([
         new ToolCall(id: 'call_pick', name: 'OfferChoicesTool', arguments: [
             'question' => 'Which download should I import?',
-            'options' => [['label' => 'Import the first'], ['label' => 'Import the second']],
+            'options' => [['label' => 'Import the first'], ['label' => 'Import the second', 'description' => 'The 1080p release']],
         ]),
         'Pick one below.',
         'Importing the second one.',
@@ -658,8 +659,10 @@ test('a streamed OfferChoices call renders a choice card that takes a pick', fun
         ->assertNoSmoke()
         ->type('textarea[placeholder^="Ask"]', 'Two downloads are stuck')
         ->click('Send')
+        // The card arrives mid-stream; it takes a pick once the turn ends.
+        ->assertSeeIn('[data-chat-thread]', 'Pick one below.')
         ->assertSeeIn('[data-chat-thread] [data-choice-card]', 'Which download should I import?')
-        ->assertEnabled('[data-choice-option="Import the second"]')
+        ->assertSeeIn('[data-choice-option="Import the second"] [data-choice-description]', 'The 1080p release')
         ->click('[data-choice-option="Import the second"]')
         ->assertSeeIn('[data-chat-thread]', 'Importing the second one.')
         ->assertDisabled('[data-choice-option="Import the first"]')
@@ -678,7 +681,7 @@ test('a reloaded conversation ending in a choices card sends the clicked option'
     aiChatInsertConversation($admin, $conversationId, 'Choice chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which release?');
     aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', toolResults: [
-        aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B']),
+        aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B'], descriptions: ['B' => 'Smaller 720p file']),
     ]);
 
     $this->actingAs($admin);
@@ -688,6 +691,7 @@ test('a reloaded conversation ending in a choices card sends the clicked option'
         ->click('[data-conversation-picker]')
         ->click("[data-conversation-id=\"{$conversationId}\"]")
         ->assertSeeIn('[data-chat-thread] [data-choice-card]', 'Pick a release')
+        ->assertSeeIn('[data-choice-card] [data-choice-option="B"] [data-choice-description]', 'Smaller 720p file')
         ->click('[data-choice-option="B"]')
         ->assertSeeIn('[data-chat-thread]', 'Going with B.')
         ->assertVisible('[data-save-as-template][href*="body=B"]')
@@ -788,6 +792,36 @@ test('a queued action card approves the pending request inline', function (): vo
         ->assertNoJavaScriptErrors();
 
     expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('a queued action card rejects the pending request inline', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Rejection chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolResults: [
+        aiChatQueuedActionResult($actionRequest),
+    ]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending')
+        ->click('[data-action-reject]')
+        ->assertSee('1 rejected')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'rejected')
+        ->assertMissing('[data-action-approve]')
+        ->assertMissing('[data-action-reject]')
+        ->assertNoJavaScriptErrors();
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Rejected);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
 test('a queued action card reviewed elsewhere first shows it changed and leaves the request alone', function (): void {

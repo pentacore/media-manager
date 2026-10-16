@@ -54,41 +54,48 @@ function confirmPicked(): void {
 
         <div v-if="!card.multiple" class="flex flex-wrap gap-1.5">
             <Button
-                v-for="option in card.options"
-                :key="option.label"
+                v-for="(option, index) in card.options"
+                :key="index"
                 size="sm"
                 variant="outline"
                 :class="
                     cn(
-                        'h-7 text-xs',
+                        'h-auto min-h-7 max-w-full flex-col items-start gap-0 py-1 text-left text-xs whitespace-normal',
                         isChosen(option.label) &&
                             'border-accent/28 bg-accent/18 text-accent disabled:opacity-100',
                     )
                 "
-                :title="option.description ?? undefined"
                 :disabled="!interactive"
                 :data-choice-option="option.label"
                 :data-choice-chosen="isChosen(option.label) || undefined"
                 @click="emit('choose', [option.label])"
             >
-                <Check v-if="isChosen(option.label)" class="size-3" />
-                {{ option.label }}
+                <span class="inline-flex items-center gap-1.5">
+                    <Check v-if="isChosen(option.label)" class="size-3" />
+                    {{ option.label }}
+                </span>
+                <span
+                    v-if="option.description"
+                    class="block text-[11px] font-normal text-fg-subtle"
+                    data-choice-description
+                    >{{ option.description }}</span
+                >
             </Button>
         </div>
 
         <div v-else class="flex flex-col gap-1.5">
             <label
-                v-for="option in card.options"
-                :key="option.label"
+                v-for="(option, index) in card.options"
+                :key="index"
                 :class="
                     cn(
-                        'flex items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px]',
+                        'flex items-start gap-2 rounded-md px-1.5 py-1 text-[12.5px]',
                         isChosen(option.label) && 'bg-accent/18 text-accent',
                     )
                 "
-                :title="option.description ?? undefined"
             >
                 <Checkbox
+                    class="mt-0.5"
                     :model-value="
                         interactive
                             ? picked.includes(option.label)
@@ -101,8 +108,18 @@ function confirmPicked(): void {
                         (value) => toggle(option.label, value === true)
                     "
                 />
-                <span>{{ option.label }}</span>
-                <Check v-if="isChosen(option.label)" class="size-3" />
+                <span class="flex min-w-0 flex-col">
+                    <span class="inline-flex items-center gap-1.5">
+                        {{ option.label }}
+                        <Check v-if="isChosen(option.label)" class="size-3" />
+                    </span>
+                    <span
+                        v-if="option.description"
+                        class="block text-[11px] text-fg-subtle"
+                        data-choice-description
+                        >{{ option.description }}</span
+                    >
+                </span>
             </label>
             <div>
                 <Button

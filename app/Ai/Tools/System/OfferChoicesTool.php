@@ -30,7 +30,7 @@ class OfferChoicesTool extends BaseTool
         $validated = $request->validate([
             'question' => ['required', 'string', 'max:300'],
             'options' => ['required', 'array', 'min:2', 'max:10'],
-            'options.*.label' => ['required', 'string', 'max:80'],
+            'options.*.label' => ['required', 'string', 'max:80', 'distinct'],
             'options.*.description' => ['nullable', 'string', 'max:160'],
             'multiple' => ['sometimes', 'boolean'],
         ]);

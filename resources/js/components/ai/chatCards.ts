@@ -72,8 +72,8 @@ export function cardFromToolResult(
 
 /**
  * The labels a reloaded reply's choices were answered with: the next user
- * message split on ", " (how a pick is sent), kept only where it names an
- * offered option.
+ * message when it is one offered label, else that message split on ", "
+ * (how a multi pick is sent), kept only where it names an offered option.
  */
 export function inferChosenLabels(cards: ChatCard[], answer: string): string[] {
     const labels = new Set(
@@ -84,7 +84,14 @@ export function inferChosenLabels(cards: ChatCard[], answer: string): string[] {
         ),
     );
 
-    return answer
+    const whole = answer.trim();
+
+    // A label may itself hold ", " ("Dune, Part Two").
+    if (labels.has(whole)) {
+        return [whole];
+    }
+
+    return whole
         .split(', ')
         .map((part) => part.trim())
         .filter((part) => labels.has(part));
