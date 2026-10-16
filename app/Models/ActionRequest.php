@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\ActionRequestStatus;
 use App\Observers\ActionRequestObserver;
+use App\Observers\ActionRequestStatusVersionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\ActionRequestFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 use Override;
 
 /**
@@ -31,6 +33,7 @@ use Override;
  * @property string $source_service
  * @property string $target_service
  * @property ActionRequestStatus $status
+ * @property int $status_version
  * @property bool $requires_approval
  * @property int|null $approved_by
  * @property array<array-key, mixed> $payload
@@ -59,6 +62,7 @@ use Override;
  * @method static Builder<static>|ActionRequest whereSecondOpinion($value)
  * @method static Builder<static>|ActionRequest whereSourceService($value)
  * @method static Builder<static>|ActionRequest whereStatus($value)
+ * @method static Builder<static>|ActionRequest whereStatusVersion($value)
  * @method static Builder<static>|ActionRequest whereTargetService($value)
  * @method static Builder<static>|ActionRequest whereTitle($value)
  * @method static Builder<static>|ActionRequest whereType($value)
@@ -67,7 +71,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[ObservedBy(ActionRequestObserver::class)]
+#[ObservedBy([ActionRequestObserver::class, ActionRequestStatusVersionObserver::class])]
 #[Fillable(['webhook_event_id', 'type', 'origin', 'title', 'description', 'details', 'description_verified', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result', 'second_opinion'])]
 class ActionRequest extends Model
 {
@@ -75,6 +79,9 @@ class ActionRequest extends Model
     use HasFactory;
 
     use MassPrunable;
+
+    /** The sequence status_version is taken from. */
+    public const string STATUS_VERSION_SEQUENCE = 'action_request_status_versions';
 
     /**
      * @return array<string, string>
@@ -84,6 +91,7 @@ class ActionRequest extends Model
     {
         return [
             'status' => ActionRequestStatus::class,
+            'status_version' => 'integer',
             'requires_approval' => 'boolean',
             'payload' => 'array',
             'result' => 'array',
@@ -115,6 +123,20 @@ class ActionRequest extends Model
     public function mediaReplacementAttempt(): HasOne
     {
         return $this->hasOne(MediaReplacementAttempt::class);
+    }
+
+    /**
+     * The next status version. ActionRequestStatusVersionObserver takes one
+     * for every create and every saved status change; a query-builder update
+     * that changes `status` skips the observer and must set
+     * `'status_version' => ActionRequest::nextStatusVersion()` in the same
+     * array (ActionRequestStatusVersionArchTest).
+     */
+    public static function nextStatusVersion(): int
+    {
+        $row = DB::selectOne(sprintf("select nextval('%s') as version", self::STATUS_VERSION_SEQUENCE));
+
+        return (int) $row->version;
     }
 
     public function isPending(): bool

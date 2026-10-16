@@ -219,6 +219,8 @@ final readonly class StaleApprovedRequestRedispatcher
             ->where('updated_at', '<', $ageBound)
             ->update([
                 'status' => ActionRequestStatus::Failed->value,
+                // A builder update skips the observer that numbers status changes.
+                'status_version' => ActionRequest::nextStatusVersion(),
                 'result' => json_encode([
                     'success' => false,
                     'reason' => 'needs_reconciliation',

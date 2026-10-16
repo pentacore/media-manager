@@ -39,6 +39,8 @@ class ReconcileStuckActionRequests extends Command
                 ->where('updated_at', '<', $cutoff)
                 ->update([
                     'status' => ActionRequestStatus::Failed->value,
+                    // A builder update skips the observer that numbers status changes.
+                    'status_version' => ActionRequest::nextStatusVersion(),
                     'result' => json_encode([
                         'success' => false,
                         'reason' => 'needs_reconciliation',

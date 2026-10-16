@@ -344,7 +344,11 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         $claimed = ActionRequest::query()
             ->whereKey($this->actionRequest->id)
             ->where('status', ActionRequestStatus::Approved->value)
-            ->update(['status' => ActionRequestStatus::Executing]);
+            ->update([
+                'status' => ActionRequestStatus::Executing,
+                // A builder update skips the observer that numbers status changes.
+                'status_version' => ActionRequest::nextStatusVersion(),
+            ]);
 
         $this->actionRequest->refresh();
 

@@ -432,3 +432,14 @@ test('the browser payload carries a bounded second opinion', function (): void {
 test('a request without a second opinion carries none', function (): void {
     expect(resolve(ActionRequestBrowserPayload::class)->description(ActionRequest::factory()->create())['second_opinion'])->toBeNull();
 });
+
+test('each listed request carries its status version', function (): void {
+    $actionRequest = ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.id', $actionRequest->id)
+            ->where('requests.data.0.status_version', $actionRequest->status_version));
+});
