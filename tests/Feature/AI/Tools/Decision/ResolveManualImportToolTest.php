@@ -214,3 +214,58 @@ test("a non-string argument is refused in the tool's own words", function (array
     'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1']], 'download_id', 'download_id must be a string (take it from the event payload).'],
     'a boolean as the download id' => [['service' => 'sonarr', 'download_id' => true], 'download_id', 'download_id must be a string (take it from the event payload).'],
 ]);
+
+test('an explicit exclusion of the unmapped file lets the import follow the auto-execute rule', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    fakeCandidates([cleanCandidate(), array_replace(cleanCandidate(), ['path' => '/dl/extra.mkv', 'series' => [], 'episodes' => []])]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => ['/dl/extra.mkv'],
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and($result['partial'])->toBeFalse()
+        ->and($result['requires_approval'])->toBeFalse();
+    expect(ActionRequest::firstWhere('type', 'resolve_manual_import')->payload['excluded_paths'])->toBe(['/dl/extra.mkv']);
+});
+
+test('a sample file is skipped without any exclusion and does not force approval', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    fakeCandidates([cleanCandidate(), array_replace(cleanCandidate(), ['path' => '/dl/Sample/sample.mkv', 'series' => [], 'episodes' => []])]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and($result['partial'])->toBeFalse()
+        ->and($result['requires_approval'])->toBeFalse();
+    expect(ActionRequest::firstWhere('type', 'resolve_manual_import')->payload['excluded_paths'])->toBe([]);
+});
+
+test('a set still partially mapped after exclusions is forced to approval', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    fakeCandidates([
+        cleanCandidate(),
+        array_replace(cleanCandidate(), ['path' => '/dl/a.mkv', 'series' => [], 'episodes' => []]),
+        array_replace(cleanCandidate(), ['path' => '/dl/b.mkv', 'series' => [], 'episodes' => []]),
+    ]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => ['/dl/a.mkv'],
+    ])), true);
+
+    expect($result['partial'])->toBeTrue()
+        ->and($result['requires_approval'])->toBeTrue();
+});
+
+test('excluded_paths must be a list of strings', function (): void {
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => [['x']],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('excluded_paths.0');
+    expect(ActionRequest::count())->toBe(0);
+});

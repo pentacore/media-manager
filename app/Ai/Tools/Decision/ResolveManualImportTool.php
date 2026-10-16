@@ -28,7 +28,7 @@ class ResolveManualImportTool extends DecisionTool
 {
     public function description(): Stringable|string
     {
-        return 'Import a stuck Sonarr/Radarr download (after inspecting it with InspectStuckImportTool). Provide the service and download_id. Fully-mapped imports may auto-run per the action rule; partially-mapped sets are always queued for human approval. If a download should NOT be imported (e.g. "not an upgrade"), use RemoveStuckDownloadTool instead.';
+        return 'Import a stuck Sonarr/Radarr download (after inspecting it with InspectStuckImportTool). Provide the service and download_id; sample files are skipped automatically and excluded_paths leaves out other candidate files. Fully-mapped imports may auto-run per the action rule; partially-mapped sets are always queued for human approval. If a download should NOT be imported (e.g. "not an upgrade"), use RemoveStuckDownloadTool instead.';
     }
 
     /**
@@ -56,6 +56,8 @@ class ResolveManualImportTool extends DecisionTool
         $validated = $request->validate([
             'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
             'download_id' => ['required', 'string'],
+            'excluded_paths' => ['nullable', 'array', 'max:50'],
+            'excluded_paths.*' => ['string', 'max:1024'],
         ], [
             'service.required' => 'service must be "sonarr" or "radarr".',
             'service.string' => 'service must be "sonarr" or "radarr".',
@@ -65,8 +67,9 @@ class ResolveManualImportTool extends DecisionTool
         ]);
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];
+        $excludedPaths = array_values(array_filter((array) ($validated['excluded_paths'] ?? []), is_string(...)));
 
-        return resolve(StuckImportResolver::class)->import($decisionRunContext, $service, $downloadId);
+        return resolve(StuckImportResolver::class)->import($decisionRunContext, $service, $downloadId, $excludedPaths);
     }
 
     /**
@@ -81,6 +84,9 @@ class ResolveManualImportTool extends DecisionTool
             'download_id' => $schema->string()
                 ->description('The downloadId from the ManualInteractionRequired event payload (download_id / downloadId field).')
                 ->required(),
+            'excluded_paths' => $schema->array()
+                ->items($schema->string())
+                ->description('Optional: candidate paths to leave out of the import (e.g. extras or a wrong file). Samples are skipped automatically.'),
         ];
     }
 }
