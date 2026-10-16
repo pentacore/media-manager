@@ -41,11 +41,13 @@ test('multiple is passed through', function (): void {
     expect($result['choices']['multiple'])->toBeTrue();
 });
 
-test('rejects too few, too many and too long options', function (array $options): void {
-    expect(offerChoices($options)['error'])->toBe('invalid_arguments');
+test('rejects too few, too many and too long arguments', function (array $options, array $extra = []): void {
+    expect(offerChoices($options, $extra)['error'])->toBe('invalid_arguments');
 })->with([
     'one option' => [[['label' => 'A']]],
     'eleven options' => [array_fill(0, 11, ['label' => 'A'])],
+    'question over 300 chars' => [[['label' => 'A'], ['label' => 'B']], ['question' => str_repeat('q', 301)]],
+    'description over 160 chars' => [[['label' => 'A', 'description' => str_repeat('d', 161)], ['label' => 'B']]],
     'label over 80 chars' => [[['label' => str_repeat('x', 81)], ['label' => 'B']]],
 ]);
 

@@ -7,6 +7,8 @@ use App\Ai\Routing\ToolGroup;
 use App\Enums\AiTask;
 use App\Enums\ClassificationVerdict;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
@@ -23,6 +25,7 @@ use Laravel\Ai\Classification;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -376,4 +379,41 @@ test('a routed chat turn records which tool groups the reply used', function ():
         ->verdict->toBe(ClassificationVerdict::Included)
         ->outcome_positive->toBeFalse()
         ->and(ClassificationOutcome::query()->where('question', 'indexers')->sole()->verdict)->toBe(ClassificationVerdict::Excluded);
+});
+
+test('send returns a choices card from an OfferChoices tool call', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'OfferChoicesTool', arguments: ['question' => 'Which?', 'options' => [['label' => 'A'], ['label' => 'B']]]),
+        'Pick one.',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Which one?'])
+        ->assertOk()
+        ->assertJsonPath('cards.0.type', 'choices')
+        ->assertJsonPath('cards.0.id', 'call-1')
+        ->assertJsonPath('cards.0.question', 'Which?')
+        ->assertJsonPath('cards.0.options.1.label', 'B');
+});
+
+test('send returns an action_request card for a queued destructive tool', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'is_enabled' => true, 'requires_approval' => true]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'LibraryScanTool', arguments: []),
+        'Queued.',
+    ]);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Scan Emby'])
+        ->assertOk()
+        ->assertJsonPath('cards.0.type', 'action_request')
+        ->assertJsonPath('cards.0.status', 'pending')
+        ->assertJsonPath('cards.0.requires_approval', true);
+
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->firstOrFail();
+    expect($response->json('cards.0.id'))->toBe($actionRequest->id)
+        ->and($response->json('cards.0.title'))->toBe($actionRequest->title)
+        ->and($actionRequest->title)->not->toBeNull();
 });
