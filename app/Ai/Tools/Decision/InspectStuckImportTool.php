@@ -77,7 +77,12 @@ class InspectStuckImportTool extends DecisionTool
             $connection = $context instanceof DecisionRunContext
                 ? $context->resolveConnection($type)
                 : ServiceConnection::resolveActive($type);
-            $inspections = resolve(StuckImportInspector::class)->inspectMany($connection, $service, $downloadIds);
+            $stuckImportInspector = resolve(StuckImportInspector::class);
+            // One id keeps buildClient()'s retry (a throw is this tool's lookup_failed);
+            // the pooled read for several makes one attempt per id.
+            $inspections = count($downloadIds) === 1
+                ? [['ok' => true, ...$stuckImportInspector->inspect($connection, $service, $downloadIds[0])]]
+                : $stuckImportInspector->inspectMany($connection, $service, $downloadIds);
         } catch (Throwable $throwable) {
             Log::warning('InspectStuckImportTool: lookup failed', [
                 'service' => $service,

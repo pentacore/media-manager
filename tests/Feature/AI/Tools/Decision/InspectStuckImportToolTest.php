@@ -7,6 +7,7 @@ use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Models\ServiceConnection;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
@@ -126,4 +127,40 @@ test('it inspects several downloads in one call', function (): void {
         ->and($result['downloads'])->toHaveCount(2)
         ->and($result['downloads'][0])->toMatchArray(['download_id' => 'A', 'ok' => true])
         ->and($result['downloads'][1])->toMatchArray(['download_id' => 'B', 'ok' => false, 'reason' => 'lookup_failed']);
+});
+
+test('a single download keeps the client retry when the first read is a server error', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::sequence()
+            ->push('upstream hiccup', 503)
+            ->push([[
+                'path' => '/dl/show.s01e01.mkv',
+                'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+                'series' => ['id' => 5, 'title' => 'Demo'],
+                'episodes' => [['id' => 11, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+                'rejections' => [],
+            ]]),
+    ]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
+    ])), true);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['service'])->toBe('sonarr')
+        ->and($result['downloads'])->toHaveCount(1)
+        ->and($result['downloads'][0])->toMatchArray(['ok' => true, 'download_id' => 'dl-1', 'fully_mapped' => true]);
+    Http::assertSentCount(2);
+});
+
+test('a single download whose reads all fail is a lookup failure for the whole call', function (): void {
+    Sleep::fake();
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('down', 503)]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_ids' => ['dl-1'],
+    ])), true);
+
+    expect($result)->toBe(['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.']);
 });
