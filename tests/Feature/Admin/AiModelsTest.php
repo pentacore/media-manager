@@ -800,3 +800,20 @@ test('a stale benchmark link redirects to the plain page with a toast', function
     'failover task' => [['task' => 'failover']],
     'unknown task' => [['task' => 'nope']],
 ]);
+
+test('the decision verifier row warns when it resolves to the decision agent model', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.3.task', 'decision_verifier')
+            ->where('tasks.3.warning', 'Runs on the same model as the Decision agent, so its second opinion is less independent.')
+            ->where('tasks.2.warning', null));
+});
+
+test('the warning clears once the verifier runs on another model', function (): void {
+    AiTaskModel::factory()->task(AiTask::DecisionVerifier)->selecting('openai', 'gpt-verifier')->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page->where('tasks.3.warning', null));
+});
