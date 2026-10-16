@@ -95,3 +95,57 @@ test('describe exposes per-file mapping, episodes and raw rejections', function 
     expect($files[0]['rejections'][0])->toContain('matched by series id');
     expect($files[1]['mapped'])->toBeFalse();
 });
+
+function mappedSonarrCandidate(string $path): array
+{
+    return sonarrCandidate(['path' => $path]);
+}
+
+function unmappedCandidate(string $path): array
+{
+    return sonarrCandidate(['path' => $path, 'series' => [], 'episodes' => []]);
+}
+
+dataset('sample candidates', [
+    'Sonarr Sample rejection' => [['path' => '/dl/Show.S01E01/show.s01e01.mkv', 'rejections' => [['reason' => 'Sample']]], true],
+    'basename token' => [['path' => '/dl/Show.S01E01/show.s01e01-sample.mkv', 'rejections' => []], true],
+    'Sample folder' => [['path' => '/dl/Show.S01E01/Sample/show.s01e01.mkv', 'rejections' => []], true],
+    'undetermined is not a sample' => [['path' => '/dl/Show.S01E01/show.s01e01.mkv', 'rejections' => [['reason' => 'Unable to determine if file is a sample']]], false],
+    'word inside a title' => [['path' => '/dl/Samples.and.Sinners.S01E01/samples.and.sinners.s01e01.mkv', 'rejections' => []], false],
+    'regular file' => [['path' => '/dl/Show.S01E01/show.s01e01.mkv', 'rejections' => []], false],
+]);
+
+test('isSample recognises samples', function (array $candidate, bool $expected): void {
+    expect(resolve(ManualImportResolver::class)->isSample($candidate))->toBe($expected);
+})->with('sample candidates');
+
+test('a mapped episode with a sample beside it is fully mapped and imports only the episode', function (): void {
+    $candidates = [mappedSonarrCandidate('/dl/x/show.s01e01.mkv'), mappedSonarrCandidate('/dl/x/Sample/show.s01e01.mkv')];
+    $resolver = resolve(ManualImportResolver::class);
+
+    expect($resolver->toImportPayload($candidates, 'sonarr', 'D'))->toHaveCount(1)
+        ->and($resolver->assess($candidates, 'sonarr', 'D'))->toMatchArray([
+            'total' => 1, 'importable' => 1, 'fully_mapped' => true,
+            'skipped' => [['path' => '/dl/x/Sample/show.s01e01.mkv', 'why' => 'sample']],
+        ]);
+});
+
+test('an explicit exclusion removes a file, an unknown path is ignored, excluding everything leaves nothing importable', function (): void {
+    $candidates = [mappedSonarrCandidate('/dl/x/a.mkv'), unmappedCandidate('/dl/x/extra.mkv')];
+    $resolver = resolve(ManualImportResolver::class);
+
+    expect($resolver->assess($candidates, 'sonarr', 'D', ['/dl/x/extra.mkv', '/not/a/candidate.mkv']))
+        ->toMatchArray(['total' => 1, 'importable' => 1, 'fully_mapped' => true])
+        ->and($resolver->assess($candidates, 'sonarr', 'D', ['/dl/x/a.mkv', '/dl/x/extra.mkv']))
+        ->toMatchArray(['total' => 0, 'importable' => 0, 'fully_mapped' => false]);
+});
+
+test('describe marks a sample', function (): void {
+    $described = resolve(ManualImportResolver::class)->describe([
+        mappedSonarrCandidate('/dl/x/show.s01e01.mkv'),
+        mappedSonarrCandidate('/dl/x/Sample/show.s01e01.mkv'),
+    ], 'sonarr');
+
+    expect($described[0]['sample'])->toBeFalse()
+        ->and($described[1]['sample'])->toBeTrue();
+});
