@@ -48,6 +48,7 @@ function aiModelsPayload(array $overrides = []): array
             'chat' => ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium'],
             'title' => $blank,
             'decision' => $blank,
+            'decision_verifier' => $blank,
             'file_inspector' => $blank,
             'stuck_download_investigator' => $blank,
             'price_updater' => $blank,
@@ -96,7 +97,7 @@ test('the index shows each task with its resolved selection', function (): void 
             ->where('tasks.2.resolved.model', 'gpt-5.6-luna')
             ->has('models.openai')
             ->has('reasoningLevels')
-            ->has('tasks', 7));
+            ->has('tasks', 8));
 });
 
 test('the index exposes what an inherit tier runs on beside the live resolution', function (): void {
@@ -292,8 +293,8 @@ test('the index exposes each task saved provider, the resolved default provider 
             ->where('tasks.0.tiers.0.model', 'anthropic/claude-sonnet-5')
             ->where('tasks.1.tiers.0.provider', null)
             ->where('tasks.1.resolved.provider', 'openai')
-            ->where('tasks.3.tiers.0.provider', null)
-            ->where('tasks.3.resolved.provider', 'openrouter')
+            ->where('tasks.4.tiers.0.provider', null)
+            ->where('tasks.4.resolved.provider', 'openrouter')
             ->where('failover', ['provider' => null, 'model' => null])
             ->has('models.openrouter')
             ->where('providers', fn ($providers): bool => collect($providers)->contains('openrouter')));
@@ -340,11 +341,11 @@ test('a legacy row with a model and no provider shows the default provider', fun
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
         ->assertInertia(fn ($page) => $page
-            ->where('tasks.3.task', 'file_inspector')
-            ->where('tasks.3.tiers.0.provider', 'openai')
-            ->where('tasks.3.tiers.0.model', 'gpt-5-nano')
-            ->where('tasks.3.resolved.provider', 'openai')
-            ->where('tasks.4.tiers.0.provider', null)
+            ->where('tasks.4.task', 'file_inspector')
+            ->where('tasks.4.tiers.0.provider', 'openai')
+            ->where('tasks.4.tiers.0.model', 'gpt-5-nano')
+            ->where('tasks.4.resolved.provider', 'openai')
+            ->where('tasks.5.tiers.0.provider', null)
             ->where('eventOverrides.0.tiers.0.provider', 'openai'));
 });
 
@@ -699,11 +700,11 @@ test('the index marks the benchmark judge as a single selection', function (): v
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
         ->assertInertia(fn ($page) => $page
-            ->where('tasks.6.task', 'benchmark_judge')
-            ->where('tasks.6.allow_tiers', false)
+            ->where('tasks.7.task', 'benchmark_judge')
+            ->where('tasks.7.allow_tiers', false)
             ->where('tasks.0.allow_tiers', true)
-            ->where('tasks.6.inherits_chat', true)
-            ->where('tasks.6.resolved.model', 'gpt-5.6-luna'));
+            ->where('tasks.7.inherits_chat', true)
+            ->where('tasks.7.resolved.model', 'gpt-5.6-luna'));
 });
 
 test('the benchmark judge accepts only one tier', function (): void {

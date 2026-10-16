@@ -89,6 +89,7 @@ final readonly class ClassificationGateReporting
             ClassificationGate::StuckImport => $this->aiSettings->stuckImportThreshold(),
             ClassificationGate::SubtitleTriage => $this->aiSettings->subtitleTriageThreshold(),
             ClassificationGate::ChatRouting => ChatToolRouter::INCLUDE_AT,
+            ClassificationGate::SecondOpinion => 0.8,
         };
     }
 }

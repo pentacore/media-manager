@@ -121,6 +121,7 @@ test('an AI Models save records its changes once and a repeat save records nothi
             'chat' => ['tiers' => [['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium', 'min_pool_percent' => null, 'min_pool_tokens' => null]]],
             'title' => $blank,
             'decision' => $blank,
+            'decision_verifier' => $blank,
             'file_inspector' => $blank,
             'stuck_download_investigator' => $blank,
             'price_updater' => $blank,
