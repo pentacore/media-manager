@@ -645,14 +645,19 @@ test('switching to advisory mode changes the composer hint', function (): void {
 
 test('a streamed OfferChoices call renders a choice card that takes a pick', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
-    MediaAgent::fake([
-        new ToolCall(id: 'call_pick', name: 'OfferChoicesTool', arguments: [
-            'question' => 'Which download should I import?',
-            'options' => [['label' => 'Import the first'], ['label' => 'Import the second', 'description' => 'The 1080p release']],
-        ]),
-        'Pick one below.',
-        'Importing the second one.',
-    ]);
+    $calls = 0;
+    MediaAgent::fake(function () use (&$calls): ToolCall|string {
+        $calls++;
+
+        return match ($calls) {
+            1 => new ToolCall(id: 'call_pick', name: 'OfferChoicesTool', arguments: [
+                'question' => 'Which download should I import?',
+                'options' => [['label' => 'Import the first'], ['label' => 'Import the second', 'description' => 'The 1080p release']],
+            ]),
+            2 => 'Pick one below.',
+            default => 'Importing the second one.',
+        };
+    });
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('ai.chat', absolute: false))

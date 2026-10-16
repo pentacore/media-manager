@@ -22,14 +22,17 @@ function grabQueueBrowserRecord(int $id, string $series): array
     ];
 }
 
-function fakeGrabQueueBrowser(): void
+/**
+ * @param  list<array<string, mixed>>|null  $manualImportCandidates  Overrides the default single manual-import candidate.
+ */
+function fakeGrabQueueBrowser(?array $manualImportCandidates = null): void
 {
     Http::fake([
         'sonarr.local:8989/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
             ? Http::response('', 200)
             : Http::response(['records' => [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]),
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
-        'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response($manualImportCandidates ?? [[
             'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
             'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
             'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
@@ -308,29 +311,26 @@ test('an admin imports a stuck download from its row menu', function (): void {
 });
 
 test('an admin chooses which candidate files a manual import takes', function (): void {
-    fakeGrabQueueBrowser();
-    Http::fake([
-        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
-            [
-                'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
-                'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
-                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
-                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
-                'releaseType' => 'singleEpisode', 'rejections' => [],
-            ],
-            [
-                'path' => '/downloads/Sample/severance-sample.mkv', 'name' => 'severance-sample', 'size' => 20_000_000,
-                'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
-                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
-                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
-                'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
-            ],
-            [
-                'path' => '/downloads/Extras/featurette.mkv', 'name' => 'featurette', 'size' => 300_000_000,
-                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
-                'rejections' => [['reason' => 'Unknown Series', 'type' => 'permanent']],
-            ],
-        ]),
+    fakeGrabQueueBrowser([
+        [
+            'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
+            'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'releaseType' => 'singleEpisode', 'rejections' => [],
+        ],
+        [
+            'path' => '/downloads/Sample/severance-sample.mkv', 'name' => 'severance-sample', 'size' => 20_000_000,
+            'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
+        ],
+        [
+            'path' => '/downloads/Extras/featurette.mkv', 'name' => 'featurette', 'size' => 300_000_000,
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'rejections' => [['reason' => 'Unknown Series', 'type' => 'permanent']],
+        ],
     ]);
     $this->actingAs(User::factory()->admin()->create());
 
