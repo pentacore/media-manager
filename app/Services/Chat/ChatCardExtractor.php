@@ -16,6 +16,11 @@ use Laravel\Ai\Tools\ToolNameResolver;
 class ChatCardExtractor
 {
     /**
+     * Reads live tool results (`ToolResult::toArray()`) and stored tool calls
+     * alike: the conversation store keeps each step's results folded into its
+     * `tool_calls` entries, so both carry `id`, `name` and `result` (a call
+     * still awaiting approval has no `result` and yields no card).
+     *
      * @param  iterable<array{id?: string, name?: string, result?: mixed}>  $toolResults
      * @return list<array<string, mixed>>
      */
@@ -113,6 +118,7 @@ class ChatCardExtractor
             'question' => (string) ($choices['question'] ?? ''),
             'multiple' => (bool) ($choices['multiple'] ?? false),
             'options' => collect(is_array($choices['options'] ?? null) ? $choices['options'] : [])
+                ->filter(fn (mixed $option): bool => is_array($option))
                 ->map(fn (array $option): array => [
                     'label' => (string) ($option['label'] ?? ''),
                     'description' => is_string($option['description'] ?? null) ? $option['description'] : null,

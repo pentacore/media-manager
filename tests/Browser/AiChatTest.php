@@ -470,9 +470,9 @@ function aiChatInsertConversation(User $user, string $conversationId, string $ti
 /**
  * @param  list<array<string, mixed>>  $attachments
  * @param  array<string, mixed>  $meta
- * @param  list<array<string, mixed>>  $toolResults
+ * @param  list<array<string, mixed>>  $toolCalls  stored tool calls, each carrying its folded-in `result` as the conversation store writes them
  */
-function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed', array $meta = [], array $toolResults = []): void
+function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed', array $meta = [], array $toolCalls = []): void
 {
     DB::table('agent_conversation_messages')->insert([
         'id' => (string) Str::uuid7(),
@@ -485,7 +485,7 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
         'attachments' => json_encode($attachments),
         'steps' => $role === 'user'
             ? '[]'
-            : json_encode([['content' => $content, 'tool_calls' => [], 'tool_results' => $toolResults, 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
+            : json_encode([['content' => $content, 'tool_calls' => $toolCalls, 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
         'usage' => '{}',
         'meta' => json_encode($meta === [] ? new stdClass : $meta),
         'status' => $status,
@@ -495,7 +495,7 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
 }
 
 /**
- * A stored OfferChoicesTool result offering the given labels.
+ * A stored OfferChoicesTool call (with its result) offering the given labels.
  *
  * @param  list<string>  $labels
  * @param  array<string, string>  $descriptions  keyed by label
@@ -520,7 +520,7 @@ function aiChatChoicesResult(string $toolCallId, string $question, array $labels
 }
 
 /**
- * A stored destructive-tool result that queued the given action request.
+ * A stored destructive-tool call (with its result) that queued the given action request.
  *
  * @return array<string, mixed>
  */
@@ -680,7 +680,7 @@ test('a reloaded conversation ending in a choices card sends the clicked option'
 
     aiChatInsertConversation($admin, $conversationId, 'Choice chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which release?');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', toolCalls: [
         aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B'], descriptions: ['B' => 'Smaller 720p file']),
     ]);
 
@@ -711,7 +711,7 @@ test('a multi-select choices card confirms the ticked options together', functio
 
     aiChatInsertConversation($admin, $conversationId, 'Multi choice chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which files?');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick the files to import.', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick the files to import.', toolCalls: [
         aiChatChoicesResult('call_1', 'Which files should I import?', ['A', 'B', 'C'], multiple: true),
     ]);
 
@@ -743,7 +743,7 @@ test('an answered choices card on an older reply stays locked and shows the pick
 
     aiChatInsertConversation($admin, $conversationId, 'Answered choice chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Which release?');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick one.', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Pick one.', toolCalls: [
         aiChatChoicesResult('call_1', 'Pick a release', ['A', 'B']),
     ]);
     aiChatInsertMessage($admin, $conversationId, 3, 'user', 'B');
@@ -772,7 +772,7 @@ test('a queued action card approves the pending request inline', function (): vo
 
     aiChatInsertConversation($admin, $conversationId, 'Approval chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
         aiChatQueuedActionResult($actionRequest),
     ]);
 
@@ -802,7 +802,7 @@ test('a queued action card rejects the pending request inline', function (): voi
 
     aiChatInsertConversation($admin, $conversationId, 'Rejection chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
         aiChatQueuedActionResult($actionRequest),
     ]);
 
@@ -832,7 +832,7 @@ test('a queued action card reviewed elsewhere first shows it changed and leaves 
 
     aiChatInsertConversation($admin, $conversationId, 'Raced approval chat');
     aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Delete Severance');
-    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolResults: [
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'I queued the deletion for approval.', toolCalls: [
         aiChatQueuedActionResult($actionRequest),
     ]);
 

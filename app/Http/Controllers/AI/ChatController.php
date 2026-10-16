@@ -41,7 +41,9 @@ use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Responses\TextResponse;
 use Throwable;
@@ -113,7 +115,10 @@ class ChatController extends Controller
             'invocation_id' => $response->invocationId,
             'answered_by' => AnsweredBy::forChat($response->meta->provider, $response->meta->model),
             'cards' => $chatCardExtractor->hydrate($chatCardExtractor->fromToolResults(
-                collect($response->steps)->flatMap(fn ($step) => $step->toolResults)->map->toArray()->all(),
+                collect($response->steps)
+                    ->flatMap(fn (Step $step): array => $step->toolResults)
+                    ->map(fn (ToolResult $toolResult): array => $toolResult->toArray())
+                    ->all(),
             )),
         ]);
     }

@@ -84,7 +84,7 @@ class ConversationController extends Controller
             ->map(fn (StoredMessage $storedMessage): array => [
                 'stored' => $storedMessage,
                 'cards' => $storedMessage->role === 'assistant'
-                    ? $chatCardExtractor->fromToolResults(collect($storedMessage->steps)->pluck('tool_results')->filter()->flatten(1)->all())
+                    ? $chatCardExtractor->fromToolResults(collect($storedMessage->steps)->pluck('tool_calls')->filter()->flatten(1)->all())
                     : [],
             ])
             ->filter(fn (array $entry): bool => in_array($entry['stored']->role, ['user', 'assistant'], true)

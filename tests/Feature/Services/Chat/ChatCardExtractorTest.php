@@ -34,9 +34,9 @@ test('extracts choices and action request cards in order', function (): void {
 
 test('hydrate takes the live status and drops deleted rows', function (): void {
     $live = ActionRequest::factory()->create(['title' => 'Live title', 'status' => ActionRequestStatus::Approved]);
-    $extractor = resolve(ChatCardExtractor::class);
+    $chatCardExtractor = resolve(ChatCardExtractor::class);
 
-    $cards = $extractor->hydrate($extractor->fromToolResults(mixedToolResults($live->id)));
+    $cards = $chatCardExtractor->hydrate($chatCardExtractor->fromToolResults(mixedToolResults($live->id)));
 
     expect($cards)->toHaveCount(2)
         ->and($cards[1]['status'])->toBe(ActionRequestStatus::Approved->value)
@@ -44,5 +44,28 @@ test('hydrate takes the live status and drops deleted rows', function (): void {
 
     $live->delete();
 
-    expect($extractor->hydrate($extractor->fromToolResults(mixedToolResults($live->id))))->toHaveCount(1);
+    expect($chatCardExtractor->hydrate($chatCardExtractor->fromToolResults(mixedToolResults($live->id))))->toHaveCount(1);
+});
+
+test('skips choice options that are not objects', function (): void {
+    $cards = resolve(ChatCardExtractor::class)->fromToolResults([
+        ['id' => 'call_1', 'name' => 'OfferChoicesTool', 'result' => json_encode([
+            'choices' => ['question' => 'Which?', 'options' => ['loose string', ['label' => 'A'], null, 7]],
+        ])],
+    ]);
+
+    expect($cards[0]['options'])->toBe([['label' => 'A', 'description' => null]]);
+});
+
+test('reads stored tool calls and skips one still awaiting approval', function (): void {
+    $cards = resolve(ChatCardExtractor::class)->fromToolResults([
+        ['id' => 'call_1', 'name' => 'DeleteMediaTool', 'arguments' => [], 'result_id' => null, 'approval_reason' => 'Needs approval'],
+        ['id' => 'call_2', 'name' => 'OfferChoicesTool', 'arguments' => [], 'result_id' => null, 'result' => json_encode([
+            'choices' => ['question' => 'Which?', 'options' => [['label' => 'A']]],
+        ])],
+    ]);
+
+    expect($cards)->toBe([
+        ['type' => 'choices', 'id' => 'call_2', 'question' => 'Which?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null]]],
+    ]);
 });
