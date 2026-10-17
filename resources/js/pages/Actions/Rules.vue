@@ -2,7 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
-import { Toggle } from '@/components/mm';
+import { SegmentedControl, Toggle } from '@/components/mm';
 import { dashboard } from '@/routes';
 import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
 
@@ -38,6 +38,7 @@ function persist(rule: RuleRow) {
         {
             requires_approval: rule.requires_approval,
             is_enabled: rule.is_enabled,
+            second_opinion: rule.second_opinion,
         },
         { preserveScroll: true, preserveState: true },
     );
@@ -50,6 +51,20 @@ function setEnabled(rule: RuleRow, value: boolean) {
 
 function setApproval(rule: RuleRow, value: boolean) {
     rule.requires_approval = value;
+    persist(rule);
+}
+
+const secondOpinionOptions: Array<{
+    value: RuleRow['second_opinion'];
+    label: string;
+}> = [
+    { value: 'off', label: 'Off' },
+    { value: 'hold', label: 'Hold' },
+    { value: 'reject', label: 'Reject' },
+];
+
+function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
+    rule.second_opinion = value;
     persist(rule);
 }
 </script>
@@ -69,7 +84,10 @@ function setApproval(rule: RuleRow, value: boolean) {
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                 Per-action toggles. Disabled rules are silently dropped at the
                 orchestrator. Approval-gated actions wait for an admin/member to
-                confirm.
+                confirm. Second opinion asks an independent check before an
+                automated decision-agent proposal runs: Hold queues a
+                disagreement for approval, Reject drops it. A failed check
+                always holds.
             </p>
         </div>
 
@@ -94,6 +112,7 @@ function setApproval(rule: RuleRow, value: boolean) {
                                     'Description',
                                     'Enabled',
                                     'Requires approval',
+                                    'Second opinion',
                                 ]"
                                 :key="h"
                                 class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
@@ -144,6 +163,21 @@ function setApproval(rule: RuleRow, value: boolean) {
                                         (v) => setApproval(rule, v)
                                     "
                                 />
+                            </td>
+                            <td
+                                class="px-3 py-3"
+                                :data-rule-second-opinion="rule.type"
+                            >
+                                <SegmentedControl
+                                    v-if="rule.second_opinion_supported"
+                                    :options="secondOpinionOptions"
+                                    :model-value="rule.second_opinion"
+                                    option-attribute="second-opinion-option"
+                                    @update:model-value="
+                                        (v) => setSecondOpinion(rule, v)
+                                    "
+                                />
+                                <span v-else class="text-fg-subtle">—</span>
                             </td>
                         </tr>
                     </tbody>

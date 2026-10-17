@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
+use App\Enums\SecondOpinionEngine;
+
 /**
  * Configuration for the autonomous DecisionAgent — the background agent
  * that reasons over inbound webhook events and either suggests or takes
@@ -26,6 +28,10 @@ class DecisionAgentSettings
     public const string NOTIFY_ON_ACT_KEY = 'decision_agent.notify_on_act';
 
     public const string MAX_ACTIONS_KEY = 'decision_agent.max_actions_per_run';
+
+    public const string SECOND_OPINION_ENGINE_KEY = 'decision_agent.second_opinion_engine';
+
+    public const string SECOND_OPINION_JEV_THRESHOLD_KEY = 'decision_agent.second_opinion_jev_threshold';
 
     public function __construct(private readonly AppSettings $appSettings) {}
 
@@ -192,5 +198,49 @@ class DecisionAgentSettings
     public function setMaxActionsPerRun(int $max): void
     {
         $this->appSettings->set(self::MAX_ACTIONS_KEY, max(1, $max));
+    }
+
+    /**
+     * Which verifier gives the second opinion on automated proposals. An
+     * unknown stored value falls back to the LLM.
+     */
+    public function secondOpinionEngine(): SecondOpinionEngine
+    {
+        $value = $this->appSettings->get(
+            self::SECOND_OPINION_ENGINE_KEY,
+            config('mediamanager.decision_agent.second_opinion_engine', SecondOpinionEngine::Llm->value),
+        );
+
+        return SecondOpinionEngine::tryFrom(is_string($value) ? $value : '') ?? SecondOpinionEngine::Llm;
+    }
+
+    /**
+     * Persist the engine. A null value clears it back to the config default.
+     */
+    public function setSecondOpinionEngine(?SecondOpinionEngine $secondOpinionEngine): void
+    {
+        $this->appSettings->set(self::SECOND_OPINION_ENGINE_KEY, $secondOpinionEngine?->value);
+    }
+
+    /**
+     * Jev probability at or above which the classifier agrees with a
+     * proposal, clamped to [0, 1].
+     */
+    public function secondOpinionJevThreshold(): float
+    {
+        $value = $this->appSettings->get(
+            self::SECOND_OPINION_JEV_THRESHOLD_KEY,
+            config('mediamanager.decision_agent.second_opinion_jev_threshold', 0.8),
+        );
+
+        return is_numeric($value) ? max(0.0, min(1.0, (float) $value)) : 0.8;
+    }
+
+    /**
+     * Persist the threshold. A null value clears it back to the config default.
+     */
+    public function setSecondOpinionJevThreshold(?float $threshold): void
+    {
+        $this->appSettings->set(self::SECOND_OPINION_JEV_THRESHOLD_KEY, $threshold);
     }
 }

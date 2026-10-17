@@ -65,6 +65,8 @@ test('a settings save whose audit row cannot be written keeps every earlier sett
         'notify_on_suggest' => false,
         'notify_on_act' => true,
         'max_actions_per_run' => 5,
+        'second_opinion_engine' => 'llm',
+        'second_opinion_jev_threshold' => 0.8,
     ]],
     'media replacement' => ['admin.media-replacement.update', fn (): array => ['media_replacement' => [
         'automatic_selection_enabled' => true,

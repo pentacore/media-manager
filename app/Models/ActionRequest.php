@@ -35,6 +35,7 @@ use Override;
  * @property int|null $approved_by
  * @property array<array-key, mixed> $payload
  * @property array<array-key, mixed>|null $result
+ * @property array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null}|null $second_opinion
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read User|null $approvedByUser
@@ -55,6 +56,7 @@ use Override;
  * @method static Builder<static>|ActionRequest wherePayload($value)
  * @method static Builder<static>|ActionRequest whereRequiresApproval($value)
  * @method static Builder<static>|ActionRequest whereResult($value)
+ * @method static Builder<static>|ActionRequest whereSecondOpinion($value)
  * @method static Builder<static>|ActionRequest whereSourceService($value)
  * @method static Builder<static>|ActionRequest whereStatus($value)
  * @method static Builder<static>|ActionRequest whereTargetService($value)
@@ -66,7 +68,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[ObservedBy(ActionRequestObserver::class)]
-#[Fillable(['webhook_event_id', 'type', 'origin', 'title', 'description', 'details', 'description_verified', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
+#[Fillable(['webhook_event_id', 'type', 'origin', 'title', 'description', 'details', 'description_verified', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result', 'second_opinion'])]
 class ActionRequest extends Model
 {
     /** @use HasFactory<ActionRequestFactory> */
@@ -85,6 +87,7 @@ class ActionRequest extends Model
             'requires_approval' => 'boolean',
             'payload' => 'array',
             'result' => 'array',
+            'second_opinion' => 'array',
             'details' => 'array',
             'description_verified' => 'boolean',
         ];

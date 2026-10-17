@@ -43,6 +43,8 @@ test('a decision agent save records its changed keys once and a repeat save reco
         'notify_on_suggest' => false,
         'notify_on_act' => true,
         'max_actions_per_run' => 5,
+        'second_opinion_engine' => 'llm',
+        'second_opinion_jev_threshold' => 0.8,
     ];
 
     $this->actingAs($admin)->put(route('admin.decision-agent.update'), $payload)->assertRedirect(route('admin.decision-agent.index'));
@@ -121,6 +123,7 @@ test('an AI Models save records its changes once and a repeat save records nothi
             'chat' => ['tiers' => [['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'reasoning' => 'medium', 'min_pool_percent' => null, 'min_pool_tokens' => null]]],
             'title' => $blank,
             'decision' => $blank,
+            'decision_verifier' => $blank,
             'file_inspector' => $blank,
             'stuck_download_investigator' => $blank,
             'price_updater' => $blank,
