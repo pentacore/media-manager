@@ -663,7 +663,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->get(route('admin.ai-usage.export', ['tier' => 'fell_through']))
         ->streamedContent();
 
-    expect($csv)->toContain(',tier')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
+    expect($csv)->toContain(',tier,tier_via')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
 
     // Verify header and data row column counts match
     $lines = array_filter(explode("\n", trim($csv)));
@@ -677,7 +677,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
     $tierValues = [];
     foreach (array_slice($lines, 1) as $line) {
         $row = str_getcsv($line, escape: '\\');
-        $tierValues[] = end($row);
+        $tierValues[] = $row[array_search('tier', str_getcsv($lines[0], escape: '\\'), true)];
     }
 
     expect($tierValues)->toContain('2')
@@ -698,7 +698,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
     $firstTierValues = [];
     foreach (array_slice($firstTierLines, 1) as $line) {
         $row = str_getcsv($line, escape: '\\');
-        $firstTierValues[] = end($row);
+        $firstTierValues[] = $row[array_search('tier', str_getcsv($firstTierLines[0], escape: '\\'), true)];
     }
 
     expect($firstTierValues)->toContain('')
@@ -812,4 +812,24 @@ test('usage rows of a deleted run stay benchmark-tagged', function (): void {
         ->assertOk()
         ->assertJsonPath('capturable', false)
         ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");
+});
+
+test('a run that followed another list stays out of fell through and counts as first tier', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-own-tier-two', 'tier_position' => 2, 'tier_via' => null, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-via-chat', 'tier_position' => 2, 'tier_via' => 'Chat', 'created_at' => now()->subSeconds(1)]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'fell_through']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-own-tier-two')
+            ->where('recent.0.tier_via', null));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'first']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-via-chat')
+            ->where('recent.0.tier_via', 'Chat'));
 });

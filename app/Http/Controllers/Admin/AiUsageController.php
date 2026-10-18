@@ -204,7 +204,7 @@ class AiUsageController extends Controller
             fputcsv($handle, [
                 'id', 'created_at', 'user', 'provider', 'model',
                 'prompt_tokens', 'completion_tokens', 'tool_calls',
-                'total_tokens', 'cost_usd', 'status', 'tier',
+                'total_tokens', 'cost_usd', 'status', 'tier', 'tier_via',
             ],
                 escape: '\\');
 
@@ -222,6 +222,7 @@ class AiUsageController extends Controller
                     number_format((float) $row->cost, 6, '.', ''),
                     $row->status,
                     $row->tier_position ?? '',
+                    $row->tier_via ?? '',
                 ],
                     escape: '\\');
             }

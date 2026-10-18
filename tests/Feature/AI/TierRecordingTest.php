@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
@@ -83,4 +84,23 @@ test('a failed run records the tier it fell through to', function (): void {
 
     expect($usage?->status)->toBe('failed')
         ->and($usage?->tier_position)->toBe(2);
+});
+
+test('a run that follows the chat list records the list it followed', function (): void {
+    DecisionAgent::fake(['No action needed.']);
+
+    (new DecisionAgent)->prompt('Anything to do?');
+
+    $usage = AiUsageRecord::query()->where('agent_class', DecisionAgent::class)->latest('id')->first();
+
+    expect($usage?->tier_position)->toBe(2)
+        ->and($usage?->tier_via)->toBe('Chat');
+});
+
+test('a run on its own list records no via', function (): void {
+    MediaAgent::fake(['Hello there']);
+
+    $this->actingAs(User::factory()->admin()->create())->postJson(route('ai.chat.send'), ['message' => 'Hi']);
+
+    expect(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->latest('id')->value('tier_via'))->toBeNull();
 });

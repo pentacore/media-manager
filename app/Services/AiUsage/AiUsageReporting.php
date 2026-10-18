@@ -181,14 +181,15 @@ class AiUsageReporting
                 ai_usage_records.kind,
                 ai_usage_records.error_message,
                 ai_usage_records.tier_position,
+                ai_usage_records.tier_via,
                 ai_usage_records.benchmark_run_id,
                 ai_usage_records.is_benchmark,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
             ', $costBindings)
-            ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
-            ->when($fellThrough === false, fn (Builder $builder) => $builder->where(fn (Builder $query) => $query->whereNull('ai_usage_records.tier_position')->orWhere('ai_usage_records.tier_position', 1)))
+            ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2)->whereNull('ai_usage_records.tier_via'))
+            ->when($fellThrough === false, fn (Builder $builder) => $builder->where(fn (Builder $query) => $query->whereNull('ai_usage_records.tier_position')->orWhere('ai_usage_records.tier_position', 1)->orWhereNotNull('ai_usage_records.tier_via')))
             ->when($benchmark === true, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', true))
             ->when($benchmark === false, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', false))
             ->latest('ai_usage_records.created_at')

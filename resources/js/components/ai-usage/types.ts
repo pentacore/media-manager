@@ -26,6 +26,7 @@ export interface RecentRow {
     status: string;
     kind: string;
     tier_position: number | null;
+    tier_via: string | null;
     benchmark_run_id: number | null;
     is_benchmark: boolean;
     error_message: string | null;

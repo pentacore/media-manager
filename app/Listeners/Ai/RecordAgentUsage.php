@@ -33,6 +33,7 @@ class RecordAgentUsage
             'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompted->prompt->agent::class,
             'tier_position' => TierOutcome::positionFor($agentPrompted->prompt->agent),
+            'tier_via' => TierOutcome::viaFor($agentPrompted->prompt->agent),
             'provider' => $meta->provider,
             'model' => $meta->model,
             ...UsageColumns::fromText($response->usage),

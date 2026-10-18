@@ -63,6 +63,26 @@ final readonly class TierOutcome
         }
     }
 
+    /**
+     * The label of the list an agent run followed (e.g. "Chat") when its tier
+     * came from another task's list; null for its own list or no tiers. Never
+     * throws, like positionFor().
+     */
+    public static function viaFor(object $agent): ?string
+    {
+        if (! method_exists($agent, 'resolvedSelection')) {
+            return null;
+        }
+
+        try {
+            return $agent->resolvedSelection()->tier?->via;
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            return null;
+        }
+    }
+
     public function reason(): ?string
     {
         return $this->reasons === [] ? null : implode('; ', $this->reasons);
