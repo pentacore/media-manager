@@ -10,10 +10,13 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -32,7 +35,7 @@ class MyRequestController extends Controller
 
     private const int MEDIA_AVAILABLE = 5;
 
-    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver): Response
+    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): Response
     {
         $page = max(1, (int) $request->query('page', 1));
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
@@ -46,7 +49,7 @@ class MyRequestController extends Controller
         return Inertia::render('Seerr/MyRequests', [
             'seerr' => ['connected' => true],
             'filters' => ['page' => $page],
-            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $user, $page, $seerrUserResolver, $seerrTitleResolver)),
+            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $user, $page, $seerrUserResolver, $seerrTitleResolver, $seerrTitlePresenter)),
         ]);
     }
 
@@ -60,8 +63,8 @@ class MyRequestController extends Controller
 
         try {
             $seerrUserId = $seerrUserResolver->resolve($connection, $request->user());
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (RequestException|ConnectionException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($exception, $request->user())]);
 
             return back();
         }
@@ -73,7 +76,7 @@ class MyRequestController extends Controller
         // The status check and the DELETE run under the request's lock, so an
         // approve sent from MediaManager cannot land between them.
         try {
-            return $seerrRequestLock->run($connection, $id, fn (): RedirectResponse => $this->cancelOwnPending($connection, $id, $seerrUserId));
+            return $seerrRequestLock->run($connection, $id, fn (): RedirectResponse => $this->cancelOwnPending($connection, $id, $seerrUserId, $request->user()));
         } catch (SeerrRequestBusy) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('This request is being updated right now — try again in a moment.')]);
 
@@ -81,7 +84,7 @@ class MyRequestController extends Controller
         }
     }
 
-    private function cancelOwnPending(ServiceConnection $serviceConnection, int $id, int $seerrUserId): RedirectResponse
+    private function cancelOwnPending(ServiceConnection $serviceConnection, int $id, int $seerrUserId, ?User $user): RedirectResponse
     {
         $seerrClient = new SeerrClient($serviceConnection);
 
@@ -90,11 +93,11 @@ class MyRequestController extends Controller
         } catch (RequestException $requestException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->status() === 404
                 ? __('That request no longer exists.')
-                : __('Seerr is unreachable right now.')]);
+                : SeerrReadFailure::message($requestException, $user)]);
 
             return back();
-        } catch (ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (ConnectionException $connectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($connectionException, $user)]);
 
             return back();
         }
@@ -111,8 +114,18 @@ class MyRequestController extends Controller
 
         try {
             $seerrClient->deleteRequest($id);
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+        } catch (SeerrWriteUnconfirmed) {
+            return $this->seerrWriteUnconfirmedRedirect($serviceConnection);
+        } catch (RequestException $requestException) {
+            // Worded like the status read above: a 404 means someone removed
+            // the request in between, any other 4xx is a refusal.
+            Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->status() === 404
+                ? __('That request no longer exists.')
+                : SeerrReadFailure::message($requestException, $user)]);
+
+            return back();
+        } catch (ConnectionException $connectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($connectionException, $user)]);
 
             return back();
         }
@@ -126,7 +139,7 @@ class MyRequestController extends Controller
     /**
      * @return array{linked: bool, results: list<array<string, mixed>>, meta: array{current_page: int, last_page: int, total: int, per_page: int}, error: string|null}
      */
-    private function loadRequests(ServiceConnection $serviceConnection, User $user, int $page, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver): array
+    private function loadRequests(ServiceConnection $serviceConnection, User $user, int $page, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): array
     {
         $empty = ['current_page' => $page, 'last_page' => 1, 'total' => 0, 'per_page' => self::PER_PAGE];
         $seerrClient = new SeerrClient($serviceConnection);
@@ -139,8 +152,8 @@ class MyRequestController extends Controller
             }
 
             $response = $seerrClient->getRequestsByUser($seerrUserId, self::PER_PAGE, ($page - 1) * self::PER_PAGE);
-        } catch (RequestException|ConnectionException) {
-            return ['linked' => true, 'results' => [], 'meta' => $empty, 'error' => __('Seerr is unreachable right now.')];
+        } catch (RequestException|ConnectionException $exception) {
+            return ['linked' => true, 'results' => [], 'meta' => $empty, 'error' => SeerrReadFailure::message($exception, $user)];
         }
 
         $rows = is_array($response['results'] ?? null) ? array_values(array_filter($response['results'], is_array(...))) : [];
@@ -156,7 +169,7 @@ class MyRequestController extends Controller
 
         return [
             'linked' => true,
-            'results' => array_map(fn (array $row): array => $this->mapRequest($row, $media, $seerrTitleResolver), $rows),
+            'results' => array_map(fn (array $row): array => $this->mapRequest($row, $media, $seerrTitleResolver, $seerrTitlePresenter), $rows),
             'meta' => [
                 'current_page' => (int) ($pageInfo['page'] ?? $page),
                 'last_page' => max(1, (int) ($pageInfo['pages'] ?? 1)),
@@ -172,12 +185,15 @@ class MyRequestController extends Controller
      * @param  array<string, array{title: string, poster_path: ?string}>  $media
      * @return array<string, mixed>
      */
-    private function mapRequest(array $row, array $media, SeerrTitleResolver $seerrTitleResolver): array
+    private function mapRequest(array $row, array $media, SeerrTitleResolver $seerrTitleResolver, SeerrTitlePresenter $seerrTitlePresenter): array
     {
         $requestStatus = (int) ($row['status'] ?? 0);
-        $status = (int) ($row['media']['status'] ?? 0) === self::MEDIA_AVAILABLE
-            ? 'available'
-            : (self::STATUSES[$requestStatus] ?? 'pending');
+        $status = match (true) {
+            (int) ($row['media']['status'] ?? 0) === self::MEDIA_AVAILABLE => 'available',
+            // The request belonged to a copy Seerr has since deleted.
+            $seerrTitlePresenter->completedForDeletedTitle($row) => 'deleted',
+            default => self::STATUSES[$requestStatus] ?? 'pending',
+        };
 
         return [
             'id' => (int) ($row['id'] ?? 0),

@@ -30,7 +30,8 @@ interface MyRequest {
         | 'declined'
         | 'failed'
         | 'completed'
-        | 'available';
+        | 'available'
+        | 'deleted';
     requested_at: string | null;
     can_cancel: boolean;
 }

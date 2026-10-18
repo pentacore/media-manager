@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Seerr;
 
+use App\Ai\Concerns\AnswersSeerrRefusals;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
@@ -16,6 +17,8 @@ use Stringable;
 
 class ListPendingRequestsTool extends BaseTool
 {
+    use AnswersSeerrRefusals;
+
     public function description(): Stringable|string
     {
         return 'List all Seerr requests currently in "pending" status (awaiting approval).';
@@ -33,7 +36,7 @@ class ListPendingRequestsTool extends BaseTool
     {
         $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
 
-        return new SeerrClient($serviceConnection)->getRequests(['filter' => 'pending']);
+        return $this->readSeerr(fn (): array => new SeerrClient($serviceConnection)->getRequests(['filter' => 'pending']));
     }
 
     /**

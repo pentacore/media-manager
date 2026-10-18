@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionRequestBrowserPayload;
+use App\Services\Actions\PendingActionCount;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -39,18 +39,28 @@ class ActionRequestStatusChanged implements ShouldBroadcast
      * `pending_count` is every pending request at the time the queued
      * broadcast runs: the sidebar badge takes it as is, so it never drifts
      * the way per-id deltas did (a request pending before the tab opened, or
-     * settled by a bulk review).
+     * settled by a bulk review). `pending_version` is the newest
+     * `status_version` that count reflects (`PendingActionCount::snapshot()`),
+     * so a count that lands late never overwrites a newer one.
      *
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
     {
+        $pending = resolve(PendingActionCount::class)->snapshot();
+
         return [
             'id' => $this->actionRequest->id,
             'status' => $this->actionRequest->status->value,
             'result' => resolve(ActionRequestBrowserPayload::class)->safeResult($this->actionRequest),
             'updated_at' => $this->actionRequest->updated_at->toISOString(),
-            'pending_count' => ActionRequest::query()->where('status', ActionRequestStatus::Pending)->count(),
+            // The row's status version: the browser orders live changes by it
+            // (a database sequence, so it survives a same-second change and
+            // host clock skew). The model was re-read when the queued
+            // broadcast ran (SerializesModels), so it is the stored number.
+            'status_version' => $this->actionRequest->status_version,
+            'pending_count' => $pending['count'],
+            'pending_version' => $pending['version'],
         ];
     }
 }

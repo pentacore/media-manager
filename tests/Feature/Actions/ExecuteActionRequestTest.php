@@ -25,6 +25,7 @@ use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrUnexpectedResponse;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
 use App\Support\UpstreamErrorText;
@@ -856,3 +857,35 @@ test('an arr write answered with a login page fails for reconciliation after one
     Http::assertSentCount(1);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
+
+test('a Seerr write answered with a login page or a JSON scalar fails for reconciliation after one request and is never retried', function (string $type, string $method, string $body): void {
+    Http::preventStrayRequests();
+    $seerr = ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    Http::fake(['seerr.local:5055/*' => Http::response($body)]);
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => $type,
+        'target_service' => 'seerr',
+        'payload' => ['seerr_request_id' => 77, 'service_connection_id' => $seerr->id],
+    ]);
+
+    executeActionRequestOnAttempt($request, 1)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toBe([
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => SeerrWriteUnconfirmed::MESSAGE,
+            'indeterminate' => true,
+            'exception' => SeerrWriteUnconfirmed::class,
+        ]);
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === $method);
+})->with([
+    'approve' => ['approve_seerr_request', 'POST'],
+    'decline' => ['decline_seerr_request', 'POST'],
+    'cleanup' => ['cleanup_seerr_request', 'DELETE'],
+])->with([
+    'a login page' => ['<html><body>Sign in</body></html>'],
+    'a JSON scalar' => ['true'],
+]);

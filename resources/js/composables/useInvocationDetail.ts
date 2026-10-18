@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/vue3';
 import type { Ref } from 'vue';
-import { ref } from 'vue';
+import { onUnmounted, ref } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import type { InvocationDetail, ScenarioRates } from '@/components/ai-usage';
 
@@ -19,7 +19,10 @@ export type UseInvocationDetailReturn = {
  * The AI usage drill-down: fetches one invocation's detail as JSON (priced
  * under the active scenario, when there is one) and retroactively assigns a
  * catalog price to it, re-fetching the detail afterwards. `scenario` reads the
- * page's current scenario prop.
+ * page's current scenario prop. Only the newest request counts: opening
+ * another row or closing the dialog aborts the one in flight, so the dialog
+ * can be closed while it loads and a late answer never reopens or
+ * overwrites it.
  */
 export function useInvocationDetail(
     scenario: () => ScenarioRates | null,
@@ -29,8 +32,18 @@ export function useInvocationDetail(
     const detailError = ref<string | null>(null);
     const assignKey = ref<string>('');
     const assigning = ref(false);
+    let detailRequest: AbortController | null = null;
+
+    function abortDetailRequest(): void {
+        detailRequest?.abort();
+        detailRequest = null;
+    }
 
     async function openDetail(row: { id: number }) {
+        abortDetailRequest();
+        const controller = new AbortController();
+        detailRequest = controller;
+
         detail.value = null;
         detailError.value = null;
         detailLoading.value = true;
@@ -47,24 +60,39 @@ export function useInvocationDetail(
             const response = await fetch(url, {
                 headers: { Accept: 'application/json' },
                 credentials: 'same-origin',
+                signal: controller.signal,
             });
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
 
-            detail.value = (await response.json()) as InvocationDetail;
+            const loaded = (await response.json()) as InvocationDetail;
+
+            if (!controller.signal.aborted) {
+                detail.value = loaded;
+            }
         } catch (error) {
+            // Closed or replaced while loading: nothing to show.
+            if (controller.signal.aborted) {
+                return;
+            }
+
             detailError.value =
                 error instanceof Error
                     ? error.message
                     : 'Failed to load detail';
         } finally {
-            detailLoading.value = false;
+            if (detailRequest === controller) {
+                detailRequest = null;
+                detailLoading.value = false;
+            }
         }
     }
 
     function closeDetail() {
+        abortDetailRequest();
+        detailLoading.value = false;
         detail.value = null;
         detailError.value = null;
         assignKey.value = '';
@@ -96,6 +124,8 @@ export function useInvocationDetail(
             },
         );
     }
+
+    onUnmounted(abortDetailRequest);
 
     return {
         detail,

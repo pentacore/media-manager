@@ -15,10 +15,12 @@ use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrTitleResolver;
-use App\Services\Seerr\SeerrUnexpectedResponse;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use App\Support\UpstreamErrorText;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -32,6 +34,7 @@ class RequestController extends Controller
 {
     public function __construct(
         private readonly SeerrTitleResolver $seerrTitleResolver,
+        private readonly SeerrTitlePresenter $seerrTitlePresenter,
     ) {}
 
     /**
@@ -99,6 +102,8 @@ class RequestController extends Controller
         try {
             new SeerrClient($connection)->deleteRequest($id);
             new SeerrCache($connection)->bustAll();
+        } catch (SeerrWriteUnconfirmed) {
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to delete request.')]);
 
@@ -131,6 +136,8 @@ class RequestController extends Controller
         try {
             new SeerrClient($connection)->retryRequest($id);
             new SeerrCache($connection)->bustAll();
+        } catch (SeerrWriteUnconfirmed) {
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to retry request.')]);
 
@@ -263,6 +270,8 @@ class RequestController extends Controller
         try {
             $seerrClient->updateRequest($id, $payload);
             new SeerrCache($connection)->bustAll();
+        } catch (SeerrWriteUnconfirmed) {
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException $throwable) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr rejected the update: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())])]);
 
@@ -567,18 +576,11 @@ class RequestController extends Controller
     }
 
     /**
-     * What the requests list says when Seerr could not be read. A refusal —
-     * a 4xx, or a 200 that is not JSON data (a login page in front of
-     * Seerr) — is worded for who can fix it; anything else is an outage.
+     * What the requests list says when Seerr could not be read (SeerrReadFailure).
      */
     private function requestsFailureMessage(RequestException|ConnectionException $throwable, ?User $user): string
     {
-        $refused = $throwable instanceof SeerrUnexpectedResponse
-            || ($throwable instanceof RequestException && $throwable->response->clientError());
-
-        return $refused
-            ? $this->upstreamRefusedMessage(ServiceType::Seerr, $user)
-            : __(':service is unreachable right now.', ['service' => ServiceType::Seerr->label()]);
+        return SeerrReadFailure::message($throwable, $user);
     }
 
     /**
@@ -650,6 +652,9 @@ class RequestController extends Controller
         return [
             'id' => $req['id'] ?? null,
             'status' => $status,
+            // A completed request whose title Seerr has since deleted: the
+            // copy it delivered is gone, and Discover offers the title again.
+            'title_deleted' => $this->seerrTitlePresenter->completedForDeletedTitle($req),
             'media_type' => $mediaType,
             'media_title' => $this->seerrTitleResolver->titleFor($req, $media),
             'poster_path' => $this->seerrTitleResolver->posterPathFor($req, $media),
@@ -678,6 +683,8 @@ class RequestController extends Controller
             Inertia::flash('toast', ['type' => 'error', 'message' => __('This request is being updated right now — try again in a moment.')]);
 
             return back();
+        } catch (SeerrWriteUnconfirmed) {
+            return $this->seerrWriteUnconfirmedRedirect($connection);
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $failureMessage]);
 

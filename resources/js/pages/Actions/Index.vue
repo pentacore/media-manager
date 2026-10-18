@@ -16,6 +16,7 @@ import {
     compareLiveStatus,
     failureReasonLabel,
     isUncertainOutcome,
+    liveChangeKey,
     mergeLiveResult,
     reconcileWithLive,
     retryConfirmation,
@@ -130,9 +131,28 @@ watch(
 // broadcast; reseeding from it must not roll the row back.
 const liveStatuses = new Map<number, LiveStatusChange>();
 
+// When each remembered status arrived, and when each visit that brings
+// `requests` started, on one counter. A request sent after a status arrived
+// read the database after that status was broadcast (a broadcast is built
+// from a committed row), so its row is the truth even when its version is
+// lower: the versions went backwards (a restored database, a bogus payload),
+// and keeping the remembered status would pin the row until a remount.
+let liveClock = 0;
+const liveStatusArrivedAt = new Map<number, number>();
+const requestsVisitStartedAt = new Map<string, number>();
+
+// The live change each kept failure already fetched its message for: a
+// reseed that keeps a live failure reloads `requests` once more for it, and
+// only once, so a row the server keeps reading stale cannot loop.
+const failureFollowUps = new Map<number, string>();
+
 /** The user's own review settles these rows: their next server row wins. */
 function forgetLiveStatuses(ids: number[]): void {
-    ids.forEach((id) => liveStatuses.delete(id));
+    ids.forEach((id) => {
+        liveStatuses.delete(id);
+        liveStatusArrivedAt.delete(id);
+        failureFollowUps.delete(id);
+    });
 }
 
 function reconcileReloadedRow(row: ActionRequestRow): ActionRequestRow {
@@ -143,7 +163,7 @@ function reconcileReloadedRow(row: ActionRequestRow): ActionRequestRow {
     }
 
     if (compareLiveStatus(live, row) <= 0) {
-        liveStatuses.delete(row.id);
+        forgetLiveStatuses([row.id]);
 
         return row;
     }
@@ -159,6 +179,51 @@ watch(
     () => props.requests.data,
     (rows) => reseed(rows.map(reconcileReloadedRow)),
 );
+
+/**
+ * A visit that brought `requests` succeeded. Its rows win over every status
+ * remembered before it started; a status that arrived after it started is
+ * still ordered against its rows (the reload may have read the row before
+ * the change was written). Then, for an admin, a kept live failure asks for
+ * one more `requests` reload: the reseeded row only has the broadcast's
+ * member-safe result, and the message and outcome flag come with a later read.
+ */
+function settleRequestsVisit(
+    rows: ActionRequestRow[],
+    startedAt: number,
+): void {
+    const superseded = rows
+        .map((row) => row.id)
+        .filter((id) => (liveStatusArrivedAt.get(id) ?? Infinity) < startedAt);
+
+    if (superseded.length > 0) {
+        forgetLiveStatuses(superseded);
+        reseed(rows.map(reconcileReloadedRow));
+    }
+
+    if (!isAdmin.value) {
+        return;
+    }
+
+    rows.forEach((row) => {
+        const live = liveStatuses.get(row.id);
+
+        if (
+            live === undefined ||
+            live.status !== 'failed' ||
+            compareLiveStatus(live, row) <= 0
+        ) {
+            return;
+        }
+
+        const key = liveChangeKey(live);
+
+        if (failureFollowUps.get(row.id) !== key) {
+            failureFollowUps.set(row.id, key);
+            scheduleRequestsReload();
+        }
+    });
+}
 
 const visibleRequests = computed<ActionRequestRow[]>(() =>
     merge.value ? liveRequests.value : props.requests.data,
@@ -260,18 +325,23 @@ function applyStatusChange(payload: LiveStatusChange): void {
         return;
     }
 
-    // Delivered out of order: an event older than one already applied
-    // changes nothing.
+    // Delivered out of order: an event older than one already applied — or,
+    // when both it and the row on screen carry a status version, older than
+    // the row — changes nothing.
     const remembered = liveStatuses.get(payload.id);
+    const older =
+        remembered !== undefined
+            ? compareLiveStatus(payload, remembered) < 0
+            : typeof payload.status_version === 'number' &&
+              typeof target.status_version === 'number' &&
+              compareLiveStatus(payload, target) < 0;
 
-    if (
-        remembered !== undefined &&
-        compareLiveStatus(payload, remembered) < 0
-    ) {
+    if (older) {
         return;
     }
 
     liveStatuses.set(payload.id, payload);
+    liveStatusArrivedAt.set(payload.id, ++liveClock);
 
     const statusChanged = target.status !== payload.status;
 
@@ -281,6 +351,13 @@ function applyStatusChange(payload: LiveStatusChange): void {
         !statusChanged,
     );
     target.status = payload.status;
+    // Keep the row's own order fields in step with what it shows, as
+    // reconcileWithLive() does.
+    target.updated_at = payload.updated_at;
+
+    if (typeof payload.status_version === 'number') {
+        target.status_version = payload.status_version;
+    }
 
     // The broadcast carries only the member-safe result. An admin's failure
     // message and outcome flag come with the server-rendered `requests`, so
@@ -322,8 +399,51 @@ function scheduleRequestsReload(): void {
     }, 500);
 }
 
+let stopVisitStartListener: VoidFunction | null = null;
+let stopVisitSuccessListener: VoidFunction | null = null;
+let stopVisitFinishListener: VoidFunction | null = null;
+
 onMounted(() => {
     subscribeCreated();
+
+    stopVisitStartListener = router.on('start', (event) => {
+        const visit = event.detail.visit;
+
+        if (
+            !visit.prefetch &&
+            ((visit.only.length === 0 && visit.except.length === 0) ||
+                visit.only.includes('requests'))
+        ) {
+            requestsVisitStartedAt.set(visit.id, ++liveClock);
+        }
+    });
+
+    stopVisitSuccessListener = router.on('success', (event) => {
+        const visitId = event.detail.visitId;
+        const startedAt =
+            visitId === undefined
+                ? undefined
+                : requestsVisitStartedAt.get(visitId);
+
+        if (visitId === undefined || startedAt === undefined) {
+            return;
+        }
+
+        requestsVisitStartedAt.delete(visitId);
+
+        const requests = event.detail.page.props.requests as
+            typeof props.requests | undefined;
+
+        if (requests !== undefined) {
+            settleRequestsVisit(requests.data, startedAt);
+        }
+    });
+
+    // Visits that never reach 'success' (cancelled, errored) would
+    // otherwise leak their start.
+    stopVisitFinishListener = router.on('finish', (event) => {
+        requestsVisitStartedAt.delete(event.detail.visit.id);
+    });
 
     statusLease = acquirePrivateChannel(ACTIONS_CHANNEL)
         .listen('.ActionRequestStatusChanged', (event: LiveStatusChange) => {
@@ -353,6 +473,10 @@ onMounted(() => {
 onUnmounted(() => {
     statusLease?.release();
     statusLease = null;
+
+    stopVisitStartListener?.();
+    stopVisitSuccessListener?.();
+    stopVisitFinishListener?.();
 
     if (statusCountsReloadTimer !== null) {
         clearTimeout(statusCountsReloadTimer);
@@ -398,6 +522,9 @@ function refresh(): void {
     }
 
     refreshing.value = true;
+    // Refresh asks for the server's rows as they are now: forget every
+    // remembered live status, so none of them can outrank the answer.
+    forgetLiveStatuses([...liveStatuses.keys()]);
     // The prop watcher reseeds the realtime list from the fresh payload;
     // pause/resume stays governed by the merge watcher, so a refresh in a
     // filtered view no longer un-pauses the invisible live list.
@@ -695,6 +822,7 @@ function pipelineState(
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 px-2 text-xs"
+                    data-action-refresh
                     :disabled="refreshing"
                     @click="refresh"
                 >

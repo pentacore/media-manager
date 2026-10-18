@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -59,6 +62,23 @@ test("my requests lists the resolved user's own requests with cancel only on pen
                 ->where('requests.meta.total', 2)));
 
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request') && ($request['requestedBy'] ?? null) === 7);
+});
+
+test('my requests read a completed request for a title Seerr has since deleted as deleted', function (): void {
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1, 'results' => 1, 'pageSize' => 20], 'results' => [
+            ['id' => 43, 'status' => 5, 'type' => 'movie', 'createdAt' => '2026-09-18T10:00:00.000Z', 'media' => ['tmdbId' => 1, 'mediaType' => 'movie', 'status' => 7], 'requestedBy' => ['id' => 7]],
+        ]]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->get(route('media.requests.mine'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('requests.results.0.id', 43)
+                ->where('requests.results.0.status', 'deleted')
+                ->where('requests.results.0.can_cancel', false)));
 });
 
 test('a user with no Seerr account sees the unlinked state', function (): void {
@@ -136,8 +156,19 @@ test('a user with no Seerr account is forbidden before any request is ever read 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
 });
 
-test('a failure walking the Seerr user list is reported as unreachable, not "request no longer exists"', function (): void {
+test('a failure walking the Seerr user list reads as a refusal, not "request no longer exists"', function (): void {
     fakeMyRequestsSeerr(['seerr.local:5055/api/v1/user*' => Http::response([], 404)]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unavailable — ask an admin to check the connection.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
+});
+
+test('an outage walking the Seerr user list is reported as unreachable, not "request no longer exists"', function (): void {
+    Sleep::fake();
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/user*' => Http::response([], 503)]);
 
     $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
         ->delete(route('media.requests.mine.destroy', ['id' => 41]))
@@ -204,3 +235,51 @@ test('a cancel whose Seerr delete times out is sent once and reported as unreach
         ->and($seen->lockHeldDuringDelete)->toBeTrue()
         ->and(Cache::lock($lockKey, 1)->get())->toBeTrue();
 });
+
+test('a login page in front of Seerr is a refusal on my requests, worded for a viewer', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/user*' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->get(route('media.requests.mine'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('requests.results', [])
+                ->where('requests.error', 'Seerr is unavailable — ask an admin to check the connection.')));
+});
+
+test('a cancel behind a Seerr login page says the outcome is unknown', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(ServiceConnection::findActive(ServiceType::Seerr));
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request/41' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response('<html><body>Sign in</body></html>')
+            : Http::response(['id' => 41, 'status' => 1, 'requestedBy' => ['id' => 7], 'media' => ['tmdbId' => 1, 'mediaType' => 'movie']]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
+});
+
+test('a cancel whose Seerr delete is refused is worded like the status read, never as an outage', function (int $status, string $expected): void {
+    fakeMyRequestsSeerr([
+        'seerr.local:5055/api/v1/request/41' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response(['message' => 'nope'], $status)
+            : Http::response(['id' => 41, 'status' => 1, 'requestedBy' => ['id' => 7], 'media' => ['tmdbId' => 1, 'mediaType' => 'movie']]),
+    ]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => $expected]);
+})->with([
+    'removed in between (404)' => [404, 'That request no longer exists.'],
+    'refused (403)' => [403, 'Seerr is unavailable — ask an admin to check the connection.'],
+]);

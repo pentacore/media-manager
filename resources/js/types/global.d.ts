@@ -33,6 +33,7 @@ declare module '@inertiajs/core' {
             };
             nav: {
                 pendingActions: number;
+                pendingActionsVersion?: number;
                 activeSessions: number;
                 unreadNotifications: number;
                 libraryIntervention: number;

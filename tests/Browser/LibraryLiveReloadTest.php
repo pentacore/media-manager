@@ -161,3 +161,56 @@ test('the Whisparr library and title page reload after a Whisparr webhook was pr
 
     expect($title->script(libraryLiveReloadCountScript('item,scenes')))->toBe(1);
 });
+
+test('a series page reloads only after its own Sonarr connection processed a webhook', function (): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/7' => Http::response([
+            'id' => 7, 'title' => 'Example Show Series', 'titleSlug' => 'example-show-series', 'year' => 2024, 'status' => 'continuing',
+            'monitored' => true, 'qualityProfileId' => 1, 'images' => [], 'seasons' => [],
+            'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0],
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(libraryLiveRecorderScript());
+
+    // Another Sonarr connection, then another service: neither is this page's.
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id + 1000)));
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', $sonarr->id)));
+    $webpage->script(libraryLiveRestScript());
+
+    expect($webpage->script(libraryLiveReloadCountScript('series,episodes')))->toBe(0);
+
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id)));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('series,episodes'))));
+
+    expect($webpage->script(libraryLiveReloadCountScript('series,episodes')))->toBe(1);
+    $webpage->assertNoSmoke();
+});
+
+test('a movie page reloads for a viewer after its Radarr connection processed a webhook', function (): void {
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'Example Movie Title', 'titleSlug' => 'example-movie-title', 'year' => 2021, 'monitored' => true,
+            'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => [],
+        ]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+    $this->actingAs(User::factory()->create());
+
+    $webpage = visit(route('media.movies.show', ['id' => 42], absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(libraryLiveRecorderScript());
+
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', $radarr->id)));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('movie'))));
+
+    expect($webpage->script(libraryLiveReloadCountScript('movie')))->toBe(1);
+    $webpage->assertNoSmoke();
+});

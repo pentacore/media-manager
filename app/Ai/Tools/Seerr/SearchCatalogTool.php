@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Seerr;
 
+use App\Ai\Concerns\AnswersSeerrRefusals;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
@@ -16,6 +17,8 @@ use Stringable;
 
 class SearchCatalogTool extends BaseTool
 {
+    use AnswersSeerrRefusals;
+
     public function description(): Stringable|string
     {
         return 'Search the Seerr catalog by title (multi-search across movies, TV shows, and people).';
@@ -34,7 +37,7 @@ class SearchCatalogTool extends BaseTool
         $query = (string) ($request->toArray()['query'] ?? '');
         $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
 
-        return new SeerrClient($serviceConnection)->search($query);
+        return $this->readSeerr(fn (): array => new SeerrClient($serviceConnection)->search($query));
     }
 
     /**

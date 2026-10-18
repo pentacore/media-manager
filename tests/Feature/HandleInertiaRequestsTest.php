@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\UserRole;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -388,4 +390,17 @@ test('the shared integrations read every optional connection type in one query',
         ->filter(static fn (string $sql): bool => str_contains($sql, '"service_connections"'));
 
     expect($connectionQueries)->toHaveCount(1);
+});
+
+test('nav.pendingActionsVersion is the newest status version the pending count reflects', function (): void {
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $settled = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $settled->update(['status' => ActionRequestStatus::Rejected]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('nav.pendingActions', 1)
+            ->where('nav.pendingActionsVersion', $settled->fresh()->status_version));
 });

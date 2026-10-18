@@ -281,6 +281,43 @@ function prefetchLandedRecorderScript(): string
     JS;
 }
 
+/**
+ * Keeps the page's partial reloads of $path in flight: they are sent (so
+ * Inertia fires `inertia:start`) but their answer never reaches the page.
+ * Inertia flushes a URL's cached prefetch when any non-prefetch response for
+ * that URL completes (`Response.process()` → `router.flush()`), so a deferred
+ * reload that lands before the next click would make that click send a fresh
+ * visit; one still in flight when the user navigates away is cancelled, and
+ * the prefetch stays reusable. Holding the reload makes the second case
+ * deterministic.
+ */
+function prefetchHoldPartialReloadsScript(string $path): string
+{
+    return <<<JS
+        (() => {
+            const setRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+            XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+                if (String(name).toLowerCase() === 'x-inertia-partial-data') {
+                    this.__mmPartial = true;
+                }
+                return setRequestHeader.call(this, name, value);
+            };
+            const open = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+                this.__mmPath = new URL(url, window.location.origin).pathname;
+                return open.call(this, method, url, ...rest);
+            };
+            const send = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function (body) {
+                if (this.__mmPartial && this.__mmPath === '{$path}') {
+                    this.onload = () => {};
+                }
+                return send.call(this, body);
+            };
+        })()
+    JS;
+}
+
 test('a click that reuses a prefetch keeps a badge count that changed live after the hover', function (): void {
     $pending = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending]);
     $this->actingAs(User::factory()->admin()->create());
@@ -330,6 +367,7 @@ test("a page's own deferred reload does not make a later click forget its prefet
     $webpage->script(appHydratedScript());
     $webpage->script(prefetchRecorderScript());
     $webpage->script(prefetchLandedRecorderScript());
+    $webpage->script(prefetchHoldPartialReloadsScript($dashboardPath));
 
     // Hover prefetch of the Dashboard (its `nav` says 3), reused by the click.
     $webpage->hover('[data-nav-item="Dashboard"]');
@@ -339,7 +377,9 @@ test("a page's own deferred reload does not make a later click forget its prefet
     $webpage->click('[data-nav-item="Dashboard"]');
     $webpage->script(prefetchWaitForPathScript($dashboardPath));
 
-    // The Dashboard's deferred `nowPlaying` reload: a real request for its URL.
+    // The Dashboard's deferred `nowPlaying` reload: a real request for its
+    // URL, still in flight when the next click navigates away (held above),
+    // so it is cancelled and Inertia keeps the Dashboard prefetch.
     $webpage->script(confirmDialogWaitUntilScript(sprintf("window.__mmVisits.some((visit) => visit.path === '%s' && visit.partial)", $dashboardPath)));
 
     expect($webpage->script(sprintf("window.__mmVisits.filter((visit) => visit.path === '%s' && visit.partial).length", $dashboardPath)))->toBeGreaterThan(0);

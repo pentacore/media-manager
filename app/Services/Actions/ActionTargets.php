@@ -11,10 +11,13 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemIndex;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -144,7 +147,7 @@ final readonly class ActionTargets
      */
     public function seerrRequest(int $requestId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
-        return $this->attempt('request', $requestId, $fallbackName, false, function () use ($requestId, $pinContext): ?ActionTarget {
+        return $this->attempt('request', $requestId, $fallbackName, false, resolve: function () use ($requestId, $pinContext): ?ActionTarget {
             $seerrClient = new SeerrClient(ServiceConnection::resolvePinned($pinContext, ServiceType::Seerr));
             $request = $seerrClient->getRequestById($requestId);
             $mediaType = (string) ($request['type'] ?? $request['media']['mediaType'] ?? '');
@@ -171,7 +174,7 @@ final readonly class ActionTargets
                 is_string($requester) ? ['label' => 'Requested by', 'value' => $requester] : null,
                 ['label' => 'Request ID', 'value' => (string) $requestId],
             ])));
-        });
+        }, lookupService: ServiceType::Seerr);
     }
 
     /**
@@ -352,10 +355,16 @@ final readonly class ActionTargets
     }
 
     /**
+     * Resolve a target, or name it by its id with why the lookup failed. For a
+     * Seerr lookup ($lookupService) that says whether Seerr refused it, was
+     * unreachable, or had no such item; any other lookup says "not found".
+     *
      * @param  Closure(): ?ActionTarget  $resolve
      */
-    private function attempt(string $noun, int|string $identifier, ?string $fallbackName, bool $fallbackVerified, Closure $resolve): ActionTarget
+    private function attempt(string $noun, int|string $identifier, ?string $fallbackName, bool $fallbackVerified, Closure $resolve, ?ServiceType $lookupService = null): ActionTarget
     {
+        $failure = 'not found';
+
         try {
             $target = $resolve();
         } catch (Throwable $throwable) {
@@ -366,6 +375,10 @@ final readonly class ActionTargets
                 'message' => $throwable->getMessage(),
             ]);
             $target = null;
+
+            if ($lookupService === ServiceType::Seerr) {
+                $failure = $this->seerrLookupFailure($throwable);
+            }
         }
 
         if ($target instanceof ActionTarget) {
@@ -377,7 +390,22 @@ final readonly class ActionTargets
 
         return $fallbackName !== ''
             ? new ActionTarget($noun, mb_substr($fallbackName, 0, 200), $identity, $fallbackVerified)
-            : new ActionTarget($noun, sprintf('#%s (not found)', $identifier), $identity, verified: false);
+            : new ActionTarget($noun, sprintf('#%s (%s)', $identifier, $failure), $identity, verified: false);
+    }
+
+    /**
+     * Why a Seerr lookup failed: a 404 means the item is gone; a refusal (a
+     * login page in front of Seerr, a rejected API key) or an outage means
+     * it may well exist, so neither is worded as "not found".
+     */
+    private function seerrLookupFailure(Throwable $throwable): string
+    {
+        return match (true) {
+            $throwable instanceof RequestException && $throwable->response->status() === 404 => 'not found',
+            SeerrReadFailure::isRefusal($throwable) => 'Seerr refused the lookup',
+            $throwable instanceof RequestException, $throwable instanceof ConnectionException => 'Seerr unreachable',
+            default => 'not found',
+        };
     }
 
     /**

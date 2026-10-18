@@ -61,6 +61,8 @@ import { dashboard } from '@/routes';
 interface SeerrRequest {
     id: number;
     status: number | null;
+    /** A completed request whose title Seerr has since deleted. */
+    title_deleted: boolean;
     media_type: string | null;
     media_title: string | null;
     poster_path: string | null;
@@ -168,8 +170,16 @@ function syncSeerr(): void {
     });
 }
 
-function statusKey(status: number | null): FilterId | 'failed' | 'unknown' {
-    switch (status) {
+function statusKey(
+    req: Pick<SeerrRequest, 'status' | 'title_deleted'>,
+): FilterId | 'failed' | 'deleted' | 'unknown' {
+    // The copy this request delivered is gone; Discover offers the title
+    // again, so the request no longer reads "available".
+    if (req.title_deleted) {
+        return 'deleted';
+    }
+
+    switch (req.status) {
         case 1:
             return 'pending';
         case 2:
@@ -675,7 +685,7 @@ const rangeText = computed(() => {
                             class="font-mono-tabular text-[11px] text-fg-subtle"
                             >req_{{ req.id }}</span
                         >
-                        <StatusPill :status="statusKey(req.status)" />
+                        <StatusPill :status="statusKey(req)" />
                     </div>
                     <div
                         class="text-[15px] leading-tight font-semibold text-pretty"

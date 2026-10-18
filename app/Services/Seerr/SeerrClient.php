@@ -113,11 +113,11 @@ class SeerrClient implements Warmable
     }
 
     /**
-     * @throws RequestException|ConnectionException
+     * @throws SeerrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function deleteRequest(int $id): void
     {
-        $this->buildClient(withRetry: false)->delete(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw();
+        $this->confirmedWrite($this->buildClient(withRetry: false)->delete(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw());
     }
 
     /**
@@ -130,7 +130,7 @@ class SeerrClient implements Warmable
      * @param  array<int, int>|string  $seasons
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SeerrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function createRequest(int $tmdbId, string $mediaType, array|string $seasons = 'all', ?int $userId = null): array
     {
@@ -151,10 +151,9 @@ class SeerrClient implements Warmable
             $payload['userId'] = $userId;
         }
 
-        $response = $this->buildClient(withRetry: false)
+        $response = $this->confirmedWrite($this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request', $this->apiVersion), $payload)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
 
         $this->cache()->bustAll();
 
@@ -169,14 +168,13 @@ class SeerrClient implements Warmable
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SeerrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateRequest(int $id, array $payload): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->put(sprintf('/api/%s/request/%d', $this->apiVersion, $id), $payload)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -184,7 +182,7 @@ class SeerrClient implements Warmable
      *
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SeerrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function updateRequestStatus(int $id, string $status): array
     {
@@ -192,10 +190,9 @@ class SeerrClient implements Warmable
             throw new InvalidArgumentException(sprintf('Invalid request status "%s". Expected "approve" or "decline".', $status));
         }
 
-        return $this->buildClient(withRetry: false)
+        return $this->confirmedWrite($this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request/%d/%s', $this->apiVersion, $id, $status))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -203,14 +200,13 @@ class SeerrClient implements Warmable
      *
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SeerrWriteUnconfirmed|RequestException|ConnectionException
      */
     public function retryRequest(int $id): array
     {
-        return $this->buildClient(withRetry: false)
+        return $this->confirmedWrite($this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request/%d/retry', $this->apiVersion, $id))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -578,6 +574,30 @@ class SeerrClient implements Warmable
         $body = $response->json();
 
         throw_unless(is_array($body), SeerrUnexpectedResponse::class, $response);
+
+        /** @var array<string, mixed> $body */
+        return $body;
+    }
+
+    /**
+     * The decoded body of a write. An empty body is a success (Seerr's
+     * DELETE answers 204); a body that is not a JSON object or list — a
+     * login page in front of Seerr, a bare JSON value — leaves the outcome
+     * unknown, never an empty success or a TypeError.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws SeerrWriteUnconfirmed
+     */
+    private function confirmedWrite(Response $response): array
+    {
+        if (trim($response->body()) === '') {
+            return [];
+        }
+
+        $body = $response->json();
+
+        throw_unless(is_array($body), SeerrWriteUnconfirmed::class, $response);
 
         /** @var array<string, mixed> $body */
         return $body;
