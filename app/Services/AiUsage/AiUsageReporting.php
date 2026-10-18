@@ -56,7 +56,7 @@ class AiUsageReporting
         // (the user is asking "what if rates were X?", not "what would I
         // bill?"), so only net out the included tokens for the live view.
         if (! $scenario instanceof Scenario) {
-            $totalCost = max(0.0, $totalCost - $this->freePoolAccounting->discount($since, $kind));
+            $totalCost = max(0.0, $totalCost - $this->freePoolAccounting->discount($since, $kind, $benchmark));
         }
 
         return [

@@ -14,6 +14,10 @@ use Illuminate\Database\Eloquent\Builder;
 
 #[Description('Fail benchmark results stuck running past the stale window and settle their runs. A lost queue payload leaves a result running forever; no job is left to settle its run.')]
 #[Signature('benchmark:settle-stalled')]
+/**
+ * Safe only while RunBenchmarkCase's #[Timeout(280)] stays below
+ * BenchmarkResult::CLAIM_STALE_AFTER_SECONDS: a live job never looks stalled.
+ */
 class SettleStalledBenchmarkRuns extends Command
 {
     public function handle(BenchmarkRunSettler $benchmarkRunSettler): int

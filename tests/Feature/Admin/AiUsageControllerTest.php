@@ -761,6 +761,24 @@ test('the totals and per-model and per-provider breakdowns respect the benchmark
         ->assertInertia(fn ($page) => $page->where('totals.total_invocations', 3)->has('by_model', 2));
 });
 
+test('total cost nets free-pool forgiveness for live rows only under the benchmark filter', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    $pool = AiFreeUsagePool::factory()->unified(10_000_000)->create();
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-pooled', 'input_per_mtok' => 10, 'output_per_mtok' => 10, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'free_usage_pool_id' => $pool->id]);
+    $tokens = ['provider' => 'openai', 'model' => 'gpt-pooled', 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0];
+    AiUsageRecord::factory()->create([...$tokens, 'prompt_tokens' => 100_000]);
+    AiUsageRecord::factory()->benchmarked($run->id)->create([...$tokens, 'prompt_tokens' => 300_000]);
+
+    // Live: 1.00 gross, forgiven in full. Benchmark: 3.00 gross, never forgiven.
+    $cases = ['only' => 3.00, 'exclude' => 0.00, null => 3.00];
+
+    foreach ($cases as $filter => $expected) {
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('admin.ai-usage.index', $filter === null ? [] : ['benchmark' => $filter]))
+            ->assertInertia(fn ($page) => $page->where('totals.total_cost', fn (string $cost): bool => abs((float) $cost - $expected) < 0.0001));
+    }
+});
+
 test('the csv export honours the benchmark filter', function (): void {
     $run = BenchmarkRun::factory()->create();
     AiUsageRecord::factory()->create(['model' => 'gpt-live']);

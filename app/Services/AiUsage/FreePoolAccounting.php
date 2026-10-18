@@ -94,9 +94,17 @@ class FreePoolAccounting
      *
      * A $kind narrows only which rows' forgiveness is counted: quota
      * consumption is still measured against every kind sharing the pool.
+     *
+     * Benchmark rows consume quota but never earn forgiveness (their cost is
+     * billed gross, see AiUsageReporting::benchmarkRunCost), so a $benchmark of
+     * true yields no discount and any other value counts live rows only.
      */
-    public function discount(?CarbonImmutable $since, ?AiUsageKind $kind = null): float
+    public function discount(?CarbonImmutable $since, ?AiUsageKind $kind = null, ?bool $benchmark = null): float
     {
+        if ($benchmark === true) {
+            return 0.0;
+        }
+
         $pools = AiFreeUsagePool::query()->with('prices')->get();
 
         $discount = 0.0;
@@ -238,9 +246,9 @@ class FreePoolAccounting
                 $windowBindings[] = $kind->value;
             }
 
-            $windowFilter = $windowConditions === []
-                ? ''
-                : sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
+            $windowConditions[] = 'ai_usage_records.is_benchmark = false';
+
+            $windowFilter = sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
 
             $selects[] = sprintf('
                 COALESCE(SUM(ai_usage_records.prompt_tokens)%1$s, 0) AS window_input,
@@ -287,6 +295,10 @@ class FreePoolAccounting
             }
 
             if ($kind instanceof AiUsageKind && $row->kind !== $kind->value) {
+                continue;
+            }
+
+            if ($row->is_benchmark) {
                 continue;
             }
 
@@ -360,7 +372,7 @@ class FreePoolAccounting
      * together; split pools require every capped dimension to fit its own.
      * Input includes cached read/write tokens.
      *
-     * @return Collection<int, object{provider: string, base_model: string, kind: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}>
+     * @return Collection<int, object{provider: string, base_model: string, kind: string, is_benchmark: bool, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}>
      */
     private function replayFitOrPaid(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -409,7 +421,7 @@ class FreePoolAccounting
      * order, fetched from the start of the period containing $since (null =
      * all history) so replays always see the bucket's full usage.
      *
-     * @return Collection<int, object{provider: string, base_model: string, kind: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}>
+     * @return Collection<int, object{provider: string, base_model: string, kind: string, is_benchmark: bool, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}>
      */
     private function poolUsageRecords(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -438,6 +450,7 @@ class FreePoolAccounting
                 ai_usage_records.provider,
                 regexp_replace(ai_usage_records.model, '".BaseModelName::SQL_REGEX."', '') AS base_model,
                 ai_usage_records.kind,
+                ai_usage_records.is_benchmark,
                 ai_usage_records.prompt_tokens,
                 ai_usage_records.completion_tokens,
                 ai_usage_records.cache_read_input_tokens,
