@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ServiceType;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClearInFlight;
 use App\Services\Seerr\SeerrRequestLock;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -324,6 +327,34 @@ test('available media status is bubbled to the row status field', function (): v
         ->assertInertia(fn ($page) => $page
             ->loadDeferredProps('default', function ($page): void {
                 $page->where('requests.data.0.status', 5);
+            })
+        );
+});
+
+test('a completed request whose title Seerr has since deleted is flagged, unlike an available one', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 2]),
+        'seerr.local:5055/api/v1/movie/701' => Http::response(['id' => 701, 'title' => 'Example First Movie']),
+        'seerr.local:5055/api/v1/movie/702' => Http::response(['id' => 702, 'title' => 'Example Second Movie']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 2],
+            'results' => [
+                ['id' => 51, 'status' => 5, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 701, 'status' => 7]],
+                ['id' => 52, 'status' => 5, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 702, 'status' => 5]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.requests.index', ['status' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page->where('requests.data.0.id', 51)
+                    ->where('requests.data.0.title_deleted', true)
+                    ->where('requests.data.1.id', 52)
+                    ->where('requests.data.1.title_deleted', false)
+                    ->where('requests.data.1.status', 5);
             })
         );
 });
@@ -1063,3 +1094,24 @@ test('approving or declining is refused while a member cancel holds the request'
 
     Http::assertNothingSent();
 })->with(['media.requests.approve', 'media.requests.decline']);
+
+test('a request update behind a login page says the outcome is unknown', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(ServiceConnection::findActive(ServiceType::Seerr));
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42' => Http::sequence()
+            ->push(['id' => 42, 'media' => ['id' => 100, 'mediaType' => 'movie', 'tmdbId' => 603], 'serverId' => 0])
+            ->push('<html><body>Sign in</body></html>'),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->put(route('media.requests.update', 42), ['profile_id' => 9, 'root_folder' => '/movies'])
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
+});

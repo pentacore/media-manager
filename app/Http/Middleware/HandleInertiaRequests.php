@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
-use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Http\Resources\SharedUserResource;
-use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
+use App\Services\Actions\PendingActionCount;
 use App\Services\Library\InterventionCounter;
 use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
@@ -78,7 +77,7 @@ class HandleInertiaRequests extends Middleware
             // user: never move them into a static, a singleton or a
             // cross-request cache (Octane).
             'integrations' => fn (): array => $this->integrations($user),
-            'nav' => fn (): array => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
+            'nav' => fn (): array => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'pendingActionsVersion' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
             'version' => fn (): ?array => $user ? [
                 'current' => AppVersion::current(),
                 'latest' => AppVersion::latest(),
@@ -122,7 +121,7 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int}
+     * @return array{pendingActions: int, pendingActionsVersion: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int}
      */
     private function navCounts(User $user): array
     {
@@ -131,8 +130,14 @@ class HandleInertiaRequests extends Middleware
         // a recompute or an upstream call.
         $canManageLibrary = $user->can(Abilities::MANAGE_LIBRARY);
 
+        // The count and the newest status version it reflects, in one
+        // statement: the badge ignores an older count arriving later (a
+        // history back/forward restores this very snapshot).
+        $pendingActions = resolve(PendingActionCount::class)->snapshot();
+
         return [
-            'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
+            'pendingActions' => $pendingActions['count'],
+            'pendingActionsVersion' => $pendingActions['version'],
             'activeSessions' => EmbyActivity::where('action', 'played')
                 ->where('updated_at', '>=', now()->subMinutes(10))
                 ->count(),

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Seerr;
 
+use App\Ai\Concerns\AnswersSeerrRefusals;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
@@ -16,6 +17,8 @@ use Stringable;
 
 class DiscoverMoviesTool extends BaseTool
 {
+    use AnswersSeerrRefusals;
+
     public function description(): Stringable|string
     {
         return 'Discover movies in the Seerr catalog. Optionally filter by TMDB genre id, sort key (e.g. "popularity.desc", "vote_average.desc"), and page.';
@@ -40,7 +43,7 @@ class DiscoverMoviesTool extends BaseTool
             'page' => $args['page'] ?? null,
         ], fn ($value): bool => $value !== null);
 
-        return new SeerrClient($serviceConnection)->discoverMovies($options);
+        return $this->readSeerr(fn (): array => new SeerrClient($serviceConnection)->discoverMovies($options));
     }
 
     /**

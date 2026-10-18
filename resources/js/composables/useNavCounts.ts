@@ -24,6 +24,8 @@ type ActionRequestCountPayload = {
     id: number;
     /** Every pending request when the broadcast was sent. */
     pending_count?: number;
+    /** The newest status version that count reflects (absent from an older broadcast). */
+    pending_version?: number;
 };
 
 type ReplacementAttemptPayload = {
@@ -64,6 +66,20 @@ export function useNavCounts(): NavCounts {
     const initialNav = page.props.nav;
 
     const pendingActions = ref(initialNav?.pendingActions ?? 0);
+    // The status version the pending badge reflects (the newest
+    // status_version behind its count). null while unknown — a broadcast or
+    // a history entry from before versions existed — so applyNav() falls
+    // back to the client-clock rule for this counter.
+    let pendingVersion: number | null =
+        typeof initialNav?.pendingActionsVersion === 'number'
+            ? initialNav.pendingActionsVersion
+            : null;
+    // When the badge's version arrived and when each full visit started, on
+    // one counter: a visit sent after the version arrived read the database
+    // later, so its `nav` wins even with a lower version (the versions went
+    // backwards: a restored database, a bogus payload).
+    let navClock = 0;
+    let pendingVersionArrivedAt = navClock;
     const activeSessions = ref(initialNav?.activeSessions ?? 0);
     const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
@@ -120,6 +136,7 @@ export function useNavCounts(): NavCounts {
     function applyNav(
         nav: typeof page.props.nav | undefined,
         snapshotAt = Number.POSITIVE_INFINITY,
+        requestStartedAt: number | null = null,
     ): void {
         if (!nav) {
             return;
@@ -129,8 +146,27 @@ export function useNavCounts(): NavCounts {
             (liveChangedAt.get(counter) ?? Number.NEGATIVE_INFINITY) <=
             snapshotAt;
 
-        if (isCurrent('pendingActions')) {
+        // With versions on both sides the newer count wins, whatever the
+        // clock says: a history back/forward restores an old `nav` without
+        // any request, and a visit that started before a newer broadcast
+        // brings an older count. A response to a request sent after the
+        // badge's version arrived ($requestStartedAt) wins anyway. Without a
+        // version on either side, the client-clock rule.
+        const snapshotVersion =
+            typeof nav.pendingActionsVersion === 'number'
+                ? nav.pendingActionsVersion
+                : null;
+        const pendingIsCurrent =
+            snapshotVersion !== null && pendingVersion !== null
+                ? snapshotVersion >= pendingVersion ||
+                  (requestStartedAt !== null &&
+                      requestStartedAt > pendingVersionArrivedAt)
+                : isCurrent('pendingActions');
+
+        if (pendingIsCurrent) {
             pendingActions.value = nav.pendingActions ?? 0;
+            pendingVersion = snapshotVersion;
+            pendingVersionArrivedAt = ++navClock;
         }
 
         if (isCurrent('activeSessions')) {
@@ -213,7 +249,8 @@ export function useNavCounts(): NavCounts {
     // `nav` by an older prefetch of the same URL; this re-apply makes it
     // current. A click that reuses a prefetch sends no request, so it fires
     // no 'start' and keeps the prefetch's date.
-    const pendingFullVisitIds = new Set<string>();
+    // Each in-flight visit that brings `nav`, with when it started (navClock).
+    const pendingFullVisitIds = new Map<string, number>();
     let stopStartListener: VoidFunction | null = null;
     let stopSuccessListener: VoidFunction | null = null;
     let stopFinishListener: VoidFunction | null = null;
@@ -228,16 +265,17 @@ export function useNavCounts(): NavCounts {
             }
 
             // A request that is really sent never forgets its URL's prefetch
-            // date: Inertia keeps the cached prefetch reusable for its whole
-            // `cacheFor` window (a partial reload carries other params, so it
-            // never replaces it), and a later click can still bring that
-            // hover-time `nav`. The `nav` this request brings back is
-            // re-applied as current on 'success' instead.
+            // date: until a non-prefetch response for the URL completes
+            // (Inertia then flushes the cached prefetch), the prefetch stays
+            // reusable, and a request cancelled by navigating away (a
+            // deferred reload in flight) never completes, so a later click
+            // can still bring that hover-time `nav`. The `nav` this request
+            // brings back is re-applied as current on 'success' instead.
             if (
                 (visit.only.length === 0 && visit.except.length === 0) ||
                 visit.only.includes('nav')
             ) {
-                pendingFullVisitIds.add(visit.id);
+                pendingFullVisitIds.set(visit.id, ++navClock);
             }
         });
 
@@ -253,9 +291,14 @@ export function useNavCounts(): NavCounts {
 
         stopSuccessListener = router.on('success', (event) => {
             const visitId = event.detail.visitId;
+            const startedAt =
+                visitId === undefined
+                    ? undefined
+                    : pendingFullVisitIds.get(visitId);
 
-            if (visitId !== undefined && pendingFullVisitIds.delete(visitId)) {
-                applyNav(page.props.nav);
+            if (visitId !== undefined && startedAt !== undefined) {
+                pendingFullVisitIds.delete(visitId);
+                applyNav(page.props.nav, Number.POSITIVE_INFINITY, startedAt);
             }
         });
 
@@ -295,7 +338,8 @@ export function useNavCounts(): NavCounts {
         if (can('manage-library')) {
             // Both events carry the server's pending count, taken as is: a
             // per-id delta could not lower the badge for a request that was
-            // pending before this tab opened.
+            // pending before this tab opened; `pending_version` orders counts
+            // that land out of order.
             const applyPendingCount = (
                 event: ActionRequestCountPayload,
             ): void => {
@@ -303,7 +347,26 @@ export function useNavCounts(): NavCounts {
                     return;
                 }
 
+                const version =
+                    typeof event.pending_version === 'number'
+                        ? event.pending_version
+                        : null;
+
+                // Counted by parallel queue workers, broadcasts can land out
+                // of order: a count older than the one shown changes nothing.
+                // A count without a version makes the version unknown again,
+                // so the clock rule judges the next `nav` snapshot.
+                if (
+                    version !== null &&
+                    pendingVersion !== null &&
+                    version < pendingVersion
+                ) {
+                    return;
+                }
+
                 pendingActions.value = event.pending_count;
+                pendingVersion = version;
+                pendingVersionArrivedAt = ++navClock;
                 markLive('pendingActions');
             };
 

@@ -485,3 +485,14 @@ test('both action broadcasts carry the number of pending requests when they are 
     expect(new ActionRequestCreated($approved)->broadcastWith()['pending_count'])->toBe(2)
         ->and(new ActionRequestStatusChanged($approved)->broadcastWith()['pending_count'])->toBe(2);
 });
+
+test('both action broadcasts carry the row status version and the version their pending count reflects', function (): void {
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $approved = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved]);
+    $newest = (int) ActionRequest::query()->max('status_version');
+
+    expect(new ActionRequestCreated($approved)->broadcastWith())
+        ->toMatchArray(['status_version' => $approved->status_version, 'pending_count' => 1, 'pending_version' => $newest])
+        ->and(new ActionRequestStatusChanged($approved)->broadcastWith())
+        ->toMatchArray(['status_version' => $approved->status_version, 'pending_count' => 1, 'pending_version' => $newest]);
+});

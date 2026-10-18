@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Media;
 
 use App\Cache\Services\AnimeCache;
+use App\Cache\Services\SeerrCache;
 use App\Enums\AnimeSeason;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
@@ -23,7 +24,10 @@ use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
 use App\Services\Anime\SeasonLibraryStatus;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrReadFailure;
+use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -45,7 +49,7 @@ class AnimeController extends Controller
      * Entries load in their own deferred group, so the Seerr user picker is
      * not held back by the live Sonarr/Radarr lookups.
      */
-    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeasonLibraryStatus $seasonLibraryStatus): Response|RedirectResponse
+    public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeasonLibraryStatus $seasonLibraryStatus, SeerrTitlePresenter $seerrTitlePresenter): Response|RedirectResponse
     {
         $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
@@ -72,7 +76,7 @@ class AnimeController extends Controller
             ],
             'navigation' => $this->navigation($year, $season),
             'requestingUsers' => Inertia::defer(fn (): array => $seerrUserResolver->pickerOptions($connection, $request->user())),
-            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonLibraryStatus, $seasonalAnimeSource, $year, $season), 'entries'),
+            'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonLibraryStatus, $seerrTitlePresenter, $seasonalAnimeSource, $year, $season), 'entries'),
         ]);
     }
 
@@ -99,8 +103,8 @@ class AnimeController extends Controller
 
         try {
             $results = new SeerrClient($connection)->search($validated['title']);
-        } catch (RequestException|ConnectionException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Search failed.')]);
+        } catch (RequestException|ConnectionException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => SeerrReadFailure::message($exception, $findAnimeMatchRequest->user())]);
 
             return back();
         }
@@ -174,6 +178,11 @@ class AnimeController extends Controller
                 : 'all';
 
             $seerrClient->createRequest($tmdbId, $mediaType, $seasons, $resolved['userId']);
+        } catch (SeerrWriteUnconfirmed) {
+            // Seerr may have filed it: drop the cached lists, and say so.
+            new SeerrCache($connection)->bustAll();
+
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __(SeerrWriteUnconfirmed::MESSAGE));
         } catch (RequestException|ConnectionException) {
             // A failure still redirects (a successful Inertia visit), so signal
             // the outcome explicitly rather than letting the client assume the
@@ -190,7 +199,7 @@ class AnimeController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
-    private function loadSeason(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, SeasonalAnimeSource $seasonalAnimeSource, int $year, AnimeSeason $animeSeason): array
+    private function loadSeason(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, SeerrTitlePresenter $seerrTitlePresenter, SeasonalAnimeSource $seasonalAnimeSource, int $year, AnimeSeason $animeSeason): array
     {
         $animeCache = new AnimeCache;
         $suffix = sprintf('%s:%d:%s', $seasonalAnimeSource->slug(), $year, $animeSeason->value);
@@ -200,7 +209,7 @@ class AnimeController extends Controller
             ? $animeCache->rememberMetadata($suffix, fn (): array => $this->fetchAndMap($seasonalAnimeSource, $year, $animeSeason))
             : $animeCache->rememberList($suffix, fn (): array => $this->fetchAndMap($seasonalAnimeSource, $year, $animeSeason));
 
-        return $this->overlayStatus($serviceConnection, $seasonLibraryStatus, $mapped);
+        return $this->overlayStatus($serviceConnection, $seasonLibraryStatus, $seerrTitlePresenter, $mapped);
     }
 
     /**
@@ -226,24 +235,47 @@ class AnimeController extends Controller
     /**
      * Overlay volatile owned/monitored/requested flags. Owned rows carry their
      * Sonarr/Radarr target in `library` and, when unmonitored, the scope in
-     * `unmonitoredScope`; both are null on every other row.
+     * `unmonitoredScope`; both are null on every other row. A title Seerr has
+     * blocklisted is `blocklisted` (never requestable), whether or not it was
+     * ever requested; a completed request for a title Seerr has since deleted
+     * no longer counts, so that title is requestable again.
      *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
-    private function overlayStatus(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, array $rows): array
+    private function overlayStatus(ServiceConnection $serviceConnection, SeasonLibraryStatus $seasonLibraryStatus, SeerrTitlePresenter $seerrTitlePresenter, array $rows): array
     {
         $owned = $seasonLibraryStatus->resolve($rows);
-        $requestedKeys = $this->requestedMediaKeys($serviceConnection);
+        $seerrClient = new SeerrClient($serviceConnection);
+        ['states' => $requestStates, 'complete' => $requestListComplete] = $this->seerrRequestStates($seerrClient, $seerrTitlePresenter);
+        $unrequested = [];
 
-        return collect($rows)->map(function (array $row) use ($owned, $requestedKeys): array {
+        foreach ($rows as $row) {
+            $mapping = $row['mapping'];
+            $key = $this->seerrTitleKey($mapping);
+
+            if ($mapping['mapped'] && ! isset($owned[$row['key']]) && ! $requestStates->has($key)) {
+                $unrequested[$key] = [(string) $mapping['mediaType'], (int) $mapping['tmdbId']];
+            }
+        }
+
+        // A failed request walk says nothing about which titles are
+        // unrequested, and the title details would fail the same way on every
+        // load: skip them, so those titles stay requestable.
+        $blocklisted = $requestListComplete
+            ? $this->blocklistedWithoutRequest($seerrClient, $seerrTitlePresenter, array_values($unrequested))
+            : [];
+
+        return collect($rows)->map(function (array $row) use ($owned, $requestStates, $blocklisted): array {
             $mapping = $row['mapping'];
             $library = $owned[$row['key']] ?? null;
+            $key = $this->seerrTitleKey($mapping);
 
             $row['status'] = match (true) {
                 ! $mapping['mapped'] => 'unmapped',
                 $library !== null => $library['status'],
-                $requestedKeys->has($mapping['mediaType'].':'.$mapping['tmdbId']) => 'requested',
+                $requestStates->get($key) === SeerrTitlePresenter::BLOCKLISTED, isset($blocklisted[$key]) => 'blocklisted',
+                $requestStates->has($key) => 'requested',
                 default => 'requestable',
             };
             $row['unmonitoredScope'] = $library['unmonitoredScope'] ?? null;
@@ -254,33 +286,87 @@ class AnimeController extends Controller
     }
 
     /**
-     * Media already present in Seerr as requests, keyed by "mediaType:tmdbId".
-     * TMDB tv/movie ids overlap numerically, so the media type is part of the
-     * key. Every page reported by `pageInfo` is walked so older requests are
-     * never missed.
+     * TMDB tv/movie ids overlap numerically, so a Seerr title is keyed by
+     * "mediaType:tmdbId".
      *
-     * @return Collection<string, int>
+     * @param  array<string, mixed>  $mapping
      */
-    private function requestedMediaKeys(ServiceConnection $serviceConnection): Collection
+    private function seerrTitleKey(array $mapping): string
     {
-        $seerrClient = new SeerrClient($serviceConnection);
-        $keys = collect();
+        return sprintf('%s:%d', (string) ($mapping['mediaType'] ?? ''), (int) ($mapping['tmdbId'] ?? 0));
+    }
+
+    /**
+     * What Seerr's request list says about each title, keyed by
+     * "mediaType:tmdbId": `blocklisted` when the request's media is
+     * blocklisted in Seerr, else `requested`. A completed request for a title
+     * Seerr has since deleted is skipped: it belonged to the deleted copy.
+     * Every page reported by `pageInfo` is walked so older requests are never
+     * missed. A failed walk keeps what it read and reports `complete: false`:
+     * the page stays usable, and Seerr itself refuses a request it cannot take.
+     *
+     * @return array{states: Collection<string, string>, complete: bool}
+     */
+    private function seerrRequestStates(SeerrClient $seerrClient, SeerrTitlePresenter $seerrTitlePresenter): array
+    {
+        /** @var Collection<string, string> $states */
+        $states = collect();
 
         try {
             foreach ($this->walkSeerrPages(fn (int $take, int $skip): array => $seerrClient->getRequests(['take' => $take, 'skip' => $skip, 'filter' => 'all'])) as $result) {
-                $media = $result['media'] ?? [];
+                $media = is_array($result['media'] ?? null) ? $result['media'] : [];
                 $tmdbId = $media['tmdbId'] ?? null;
                 $mediaType = $media['mediaType'] ?? null;
 
-                if ($tmdbId !== null && $mediaType !== null) {
-                    $keys->put($mediaType.':'.(int) $tmdbId, (int) $tmdbId);
+                if ($tmdbId === null || $mediaType === null || $seerrTitlePresenter->completedForDeletedTitle($result)) {
+                    continue;
+                }
+
+                $key = sprintf('%s:%d', (string) $mediaType, (int) $tmdbId);
+                $state = $seerrTitlePresenter->status($media) === SeerrTitlePresenter::BLOCKLISTED
+                    ? SeerrTitlePresenter::BLOCKLISTED
+                    : SeerrTitlePresenter::REQUESTED;
+
+                // One blocklisted request marks the title, whatever the others say.
+                if ($state === SeerrTitlePresenter::BLOCKLISTED || ! $states->has($key)) {
+                    $states->put($key, $state);
                 }
             }
         } catch (RequestException|ConnectionException) {
-            return $keys;
+            return ['states' => $states, 'complete' => false];
         }
 
-        return $keys;
+        return ['states' => $states, 'complete' => true];
+    }
+
+    /**
+     * Seerr can blocklist a title nobody ever requested, so a mapped title
+     * that is neither owned nor in the request list is looked up in Seerr's
+     * title detail, whose `mediaInfo.status` says so. SeerrClient's entity
+     * cache keeps each detail, and the misses load in one pooled batch. A
+     * detail that does not load leaves the title requestable: Seerr itself
+     * still refuses a blocklisted request.
+     *
+     * @param  list<array{0: string, 1: int}>  $titles  [mediaType, tmdbId] pairs
+     * @return array<string, true> keyed by "mediaType:tmdbId"
+     */
+    private function blocklistedWithoutRequest(SeerrClient $seerrClient, SeerrTitlePresenter $seerrTitlePresenter, array $titles): array
+    {
+        if ($titles === []) {
+            return [];
+        }
+
+        $blocklisted = [];
+
+        foreach ($seerrClient->getMediaDetailsBatch($titles) as $key => $detail) {
+            $mediaInfo = is_array($detail['mediaInfo'] ?? null) ? $detail['mediaInfo'] : null;
+
+            if ($seerrTitlePresenter->status($mediaInfo) === SeerrTitlePresenter::BLOCKLISTED) {
+                $blocklisted[$key] = true;
+            }
+        }
+
+        return $blocklisted;
     }
 
     /**

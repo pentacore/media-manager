@@ -408,3 +408,24 @@ test('resolveUserId refuses a chooser with no own match and no posted id, never 
     expect(resolve(SeerrUserResolver::class)->resolveUserId($context, null))
         ->toBe(['userId' => null, 'error' => 'Choose which Seerr user to request as.']);
 });
+
+test('a login page in front of Seerr reads as a refusal for who can fix it, in the picker and for a viewer', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/user*' => Http::response('<html><body>Sign in</body></html>')]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+    $admin = User::factory()->admin()->create();
+    $viewer = User::factory()->create();
+
+    expect($seerrUserResolver->pickerOptions($this->connection, $admin)['error'])
+        ->toBe('Seerr refused the request — check the connection settings.')
+        ->and($seerrUserResolver->requestingContext($this->connection, $admin)['error'])
+        ->toBe('Seerr refused the request — check the connection settings.')
+        ->and($seerrUserResolver->requestingContext($this->connection, $viewer)['error'])
+        ->toBe('Seerr is unavailable — ask an admin to check the connection.');
+});
+
+test('resolveUserId passes the context refusal through instead of calling it an outage', function (): void {
+    $context = seerrContext(true, null, error: 'Seerr refused the request — check the connection settings.');
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, 5))
+        ->toBe(['userId' => null, 'error' => 'Seerr refused the request — check the connection settings.']);
+});

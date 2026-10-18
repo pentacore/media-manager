@@ -6,8 +6,10 @@ namespace App\Models;
 
 use App\Enums\ActionRequestStatus;
 use App\Observers\ActionRequestObserver;
+use App\Observers\ActionRequestStatusVersionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\ActionRequestFactory;
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 use Override;
 
 /**
@@ -31,6 +34,7 @@ use Override;
  * @property string $source_service
  * @property string $target_service
  * @property ActionRequestStatus $status
+ * @property int $status_version
  * @property bool $requires_approval
  * @property int|null $approved_by
  * @property array<array-key, mixed> $payload
@@ -59,6 +63,7 @@ use Override;
  * @method static Builder<static>|ActionRequest whereSecondOpinion($value)
  * @method static Builder<static>|ActionRequest whereSourceService($value)
  * @method static Builder<static>|ActionRequest whereStatus($value)
+ * @method static Builder<static>|ActionRequest whereStatusVersion($value)
  * @method static Builder<static>|ActionRequest whereTargetService($value)
  * @method static Builder<static>|ActionRequest whereTitle($value)
  * @method static Builder<static>|ActionRequest whereType($value)
@@ -67,7 +72,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[ObservedBy(ActionRequestObserver::class)]
+#[ObservedBy([ActionRequestObserver::class, ActionRequestStatusVersionObserver::class])]
 #[Fillable(['webhook_event_id', 'type', 'origin', 'title', 'description', 'details', 'description_verified', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result', 'second_opinion'])]
 class ActionRequest extends Model
 {
@@ -75,6 +80,9 @@ class ActionRequest extends Model
     use HasFactory;
 
     use MassPrunable;
+
+    /** The sequence status_version is taken from. */
+    public const string STATUS_VERSION_SEQUENCE = 'action_request_status_versions';
 
     /**
      * @return array<string, string>
@@ -84,6 +92,7 @@ class ActionRequest extends Model
     {
         return [
             'status' => ActionRequestStatus::class,
+            'status_version' => 'integer',
             'requires_approval' => 'boolean',
             'payload' => 'array',
             'result' => 'array',
@@ -115,6 +124,35 @@ class ActionRequest extends Model
     public function mediaReplacementAttempt(): HasOne
     {
         return $this->hasOne(MediaReplacementAttempt::class);
+    }
+
+    /**
+     * The next status version, for a model save. ActionRequestStatusVersionObserver
+     * takes one for every create and every saved status change; those savers
+     * hold the row lock (the reviewer, the retry) or are the row's only writer
+     * at that point, so the number is never lower than the row's.
+     */
+    public static function nextStatusVersion(): int
+    {
+        $row = DB::selectOne(sprintf("select nextval('%s') as version", self::STATUS_VERSION_SEQUENCE));
+
+        return (int) $row->version;
+    }
+
+    /**
+     * The next status version, for a query-builder update that changes
+     * `status`: it skips the observer, so it sets
+     * `'status_version' => ActionRequest::statusVersionExpression()` in the same
+     * array (ActionRequestStatusVersionArchTest). The number is taken by the
+     * UPDATE itself, after it holds the row: a writer that waited on another's
+     * row lock re-evaluates its SET list against the committed row (Postgres
+     * EvalPlanQual, READ COMMITTED), so it can never write a number lower than
+     * the one the other writer just committed. A number taken in PHP before
+     * the UPDATE could.
+     */
+    public static function statusVersionExpression(): Expression
+    {
+        return DB::raw(sprintf("nextval('%s')", self::STATUS_VERSION_SEQUENCE));
     }
 
     public function isPending(): bool

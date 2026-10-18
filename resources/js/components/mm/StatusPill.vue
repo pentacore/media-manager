@@ -18,6 +18,7 @@ type Status =
     | 'ok'
     | 'warn'
     | 'queued'
+    | 'deleted'
     | string;
 
 const props = defineProps<{
@@ -59,6 +60,8 @@ const meta = computed(() => {
         case 'degraded':
         case 'warn':
             return { variant: 'warn' as const, label: 'Degraded' };
+        case 'deleted':
+            return { variant: 'default' as const, label: 'Deleted' };
         default:
             return { variant: 'default' as const, label: props.status };
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Cache\Services\SeerrCache;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -112,3 +113,24 @@ test('retry busts the Seerr cache for its connection', function (): void {
 
     expect($hits)->toBe(1);
 });
+
+test('a Seerr write behind a login page still busts the cache and says the outcome is unknown', function (string $method, string $routeName, string $path, string $role): void {
+    Http::fake([sprintf('seerr.local:5055/api/v1/%s', $path) => Http::response('<html><body>Sign in</body></html>')]);
+    $cache = new SeerrCache($this->connection);
+    $cache->putEntity('probe', ['warm' => true]);
+
+    $user = $role === 'admin' ? User::factory()->admin()->create() : User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->from(route('media.requests.index'))
+        ->{$method}(route($routeName, 42))
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE]);
+
+    expect($cache->getEntity('probe'))->toBeNull();
+})->with([
+    'delete' => ['delete', 'media.requests.destroy', 'request/42', 'admin'],
+    'approve' => ['post', 'media.requests.approve', 'request/42/approve', 'member'],
+    'decline' => ['post', 'media.requests.decline', 'request/42/decline', 'member'],
+    'retry' => ['post', 'media.requests.retry', 'request/42/retry', 'admin'],
+]);

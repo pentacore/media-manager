@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ServiceType;
 use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\FlashesRequestOutcome;
@@ -10,9 +12,12 @@ use App\Models\AnimeIdMap;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -134,6 +139,131 @@ test('index defers entries mapped against the id map with an overlaid status', f
             })
         );
 });
+
+/**
+ * One mapped TV entry: AniList 154587 → TMDB tv 1396, with a TVDB season so
+ * the bootstrap sync job is not dispatched.
+ */
+function animeControllerMappedTvFixture(): void
+{
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function animeControllerAniListFake(): array
+{
+    return ['graphql.anilist.co' => Http::response(anilistSeasonResponse([[
+        'id' => 154587, 'idMal' => 52991, 'format' => 'TV', 'status' => 'RELEASING', 'episodes' => 12,
+        'popularity' => 5000, 'averageScore' => 88, 'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+        'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1], 'coverImage' => ['large' => 'https://img/test.jpg'],
+    ]]))];
+}
+
+test('a title Seerr blocklisted is not requestable, whether or not it was ever requested', function (array $requests, array $detail): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => $requests]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response($detail),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->where('entries.0.status', 'blocklisted');
+            })
+        );
+})->with([
+    'never requested' => [[], ['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 6]]],
+    'with an old request' => [[['status' => 5, 'media' => ['tmdbId' => 1396, 'mediaType' => 'tv', 'status' => 6]]], ['id' => 1396, 'name' => 'Test Show']],
+]);
+
+test('a completed request for a title Seerr deleted frees it, while an open request still holds it', function (int $requestStatus, string $expected): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => [
+            ['status' => $requestStatus, 'media' => ['tmdbId' => 1396, 'mediaType' => 'tv', 'status' => 7]],
+        ]]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 7]]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page) use ($expected): void {
+                $page->where('entries.0.status', $expected);
+            })
+        );
+})->with([
+    'completed' => [5, 'requestable'],
+    'approved' => [2, 'requested'],
+    'pending' => [1, 'requested'],
+]);
+
+test('a Seerr title detail that does not load leaves the title requestable', function (int $status, string $body): void {
+    Queue::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response($body, $status),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->where('entries.0.status', 'requestable');
+            })
+        );
+})->with([
+    'a server error' => [503, '{}'],
+    'a login page' => [200, '<html><body>Sign in</body></html>'],
+]);
+
+test('a failed Seerr request list sends no title detail lookups and leaves the titles requestable', function (int $status, string $body): void {
+    Queue::fake();
+    Sleep::fake();
+    animeControllerMappedTvFixture();
+    Http::fake([
+        ...animeControllerAniListFake(),
+        'seerr.local:5055/api/v1/request*' => Http::response($body, $status),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 6]]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('entries', function ($page): void {
+                $page->where('entries.0.status', 'requestable');
+            })
+        );
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/tv/') || str_contains($request->url(), '/api/v1/movie/'));
+})->with([
+    'an outage' => [503, '{}'],
+    'a login page' => [200, '<html><body>Sign in</body></html>'],
+]);
 
 test('index defers requesting users with an email-matched default', function (): void {
     Queue::fake();
@@ -871,4 +1001,32 @@ test('a failed anime request flashes the error toast and the whole failed outcom
 test('the anime and discover pages flash request outcomes through one shared trait', function (): void {
     expect(class_uses(AnimeController::class))->toContain(FlashesRequestOutcome::class)
         ->and(class_uses(DiscoverController::class))->toContain(FlashesRequestOutcome::class);
+});
+
+test('a match search behind a Seerr login page says Seerr refused it', function (): void {
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/search*' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.find-match'), ['title' => 'Example Show'])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'Seerr refused the request — check the connection settings.']);
+});
+
+test('an anime request behind a Seerr login page says the outcome is unknown', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $seerrCache = new SeerrCache(ServiceConnection::findActive(ServiceType::Seerr));
+    $seerrCache->putEntity('probe', ['warm' => true]);
+
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response('<html><body>Sign in</body></html>')]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), ['tmdbId' => 1396, 'mediaType' => 'tv', 'tmdbSeason' => 1, 'userId' => 42])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => SeerrWriteUnconfirmed::MESSAGE])
+        ->assertSessionHas('inertia.flash_data.requestOutcome', ['ok' => false, 'tmdbId' => 1396, 'mediaType' => 'tv']);
+
+    // The write may have landed, so the cached Seerr reads are dropped.
+    expect($seerrCache->getEntity('probe'))->toBeNull();
 });

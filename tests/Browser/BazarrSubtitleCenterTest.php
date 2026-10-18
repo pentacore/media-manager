@@ -15,12 +15,14 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Models\SubtitleUpload;
 use App\Models\User;
+use App\Services\Actions\ActionOrchestrator;
 use App\Settings\BazarrAutomationSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Mockery\MockInterface;
 use Tests\Support\ParseMultipartBrowserRequests;
 
 test('member can browse the subtitle center', function (): void {
@@ -991,4 +993,139 @@ test('member uploads a subtitle from the item drawer', function (): void {
 
     expect(ActionRequest::query()->where('type', 'bazarr_upload_subtitle')->count())->toBe(1)
         ->and(SubtitleUpload::query()->count())->toBe(1);
+});
+
+test('a subtitle operation the server fails to queue says so in the drawer', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $movie = [
+        'radarrId' => 801,
+        'title' => 'Example Movie',
+        'sceneName' => 'Example.Movie.2024.1080p',
+        'path' => '/media/movies/Example Movie (2024)',
+        'monitored' => true,
+        'missing_subtitles' => [['name' => 'Swedish', 'code2' => 'sv', 'code3' => 'swe', 'forced' => false, 'hi' => false]],
+        'subtitles' => [],
+    ];
+
+    fakeServiceHttp(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+        '/api/movies/wanted', '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+        '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+        '/api/swagger.json' => Http::response([
+            'swagger' => '2.0',
+            'basePath' => '/api',
+            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            'paths' => [
+                // best_download needs the PATCH on both media types.
+                '/episodes/subtitles' => ['patch' => ['responses' => ['204' => ['description' => 'OK']]]],
+                '/movies/subtitles' => ['patch' => ['responses' => ['204' => ['description' => 'OK']]]],
+            ],
+        ]),
+        default => Http::response(['data' => []]),
+    });
+    // The queue itself fails, so Laravel answers the drawer's request with a 500.
+    $this->mock(ActionOrchestrator::class, function (MockInterface $mock): void {
+        $mock->shouldReceive('dispatch')->once()->andThrow(new RuntimeException('The action queue is unavailable.'));
+    });
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('bazarr.missing', ['connection' => $bazarr->id], false))
+        ->assertSee('Example Movie')
+        ->click('@subtitle-item-movie-801');
+    // Enabled once capability discovery confirms best downloads.
+    $webpage->assertScript('document.querySelector(\'[data-test="subtitle-request-best"]\').disabled === false');
+    $webpage->click('@subtitle-request-best')
+        ->assertSee('The subtitle operation could not be requested.')
+        ->assertNoSmoke();
+});
+
+test('a subtitle upload the server fails to queue says so in the drawer', function (): void {
+    resolve(Kernel::class)->pushMiddleware(ParseMultipartBrowserRequests::class);
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    // A routable host: the upload case is keyed by the live Radarr file identity.
+    $radarr = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.test',
+        'api_key' => 'radarr-secret',
+    ]);
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $movie = [
+        'radarrId' => 802,
+        'title' => 'Upload Example Movie',
+        'sceneName' => 'Upload.Example.Movie.2024.1080p',
+        'path' => '/media/movies/Upload Example Movie (2024)',
+        'monitored' => true,
+        'missing_subtitles' => [['name' => 'English', 'code2' => 'en', 'code3' => 'eng', 'forced' => false, 'hi' => false]],
+        'subtitles' => [],
+    ];
+
+    fakeServiceHttp(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+        '/api/movies/wanted', '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+        '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+        '/api/v3/movie/802' => Http::response(['id' => 802, 'title' => 'Upload Example Movie', 'movieFileId' => 92]),
+        '/api/v3/moviefile/92' => Http::response([
+            'id' => 92,
+            'size' => 7_516_192_768,
+            'dateAdded' => '2026-07-21T09:00:00Z',
+            'sceneName' => 'Upload.Example.Movie.2024.1080p',
+            'path' => '/media/movies/Upload Example Movie (2024)/movie.mkv',
+        ]),
+        '/api/swagger.json' => Http::response([
+            'swagger' => '2.0',
+            'basePath' => '/api',
+            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            'paths' => [
+                '/movies/subtitles' => ['post' => ['responses' => ['204' => ['description' => 'OK']]]],
+                '/episodes/subtitles' => ['post' => ['responses' => ['204' => ['description' => 'OK']]]],
+            ],
+        ]),
+        default => Http::response(['data' => []]),
+    });
+    $this->mock(ActionOrchestrator::class, function (MockInterface $mock): void {
+        $mock->shouldReceive('dispatch')->once()->andThrow(new RuntimeException('The action queue is unavailable.'));
+    });
+    $this->actingAs(User::factory()->member()->create());
+    $subtitleContents = base64_encode((string) file_get_contents(base_path('tests/Fixtures/Subtitles/valid-en.srt')));
+
+    $webpage = visit(route('bazarr.missing', ['connection' => $bazarr->id], false))
+        ->assertSee('Upload Example Movie')
+        ->click('@subtitle-item-movie-802');
+    $webpage->assertScript('document.querySelector(\'[data-test="subtitle-upload-open"]\').disabled === false');
+    $webpage->script("document.querySelector('[data-test=\"subtitle-upload-open\"]').click()");
+    $webpage->assertSee('Upload subtitle file');
+    $webpage->script(<<<JS
+        const bytes = Uint8Array.from(atob('{$subtitleContents}'), character => character.charCodeAt(0));
+        const file = new File([bytes], 'valid-en.srt', { type: 'application/x-subrip' });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        const input = document.querySelector('[name="subtitle_file"]');
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        JS);
+
+    $webpage->click('@confirm-subtitle-operation')
+        ->assertSee('The subtitle upload could not be requested.')
+        ->assertNoSmoke();
+
+    // The row staged before the queue was asked is rolled back to cancelled,
+    // never left behind as an orphan with no linked action.
+    expect(SubtitleUpload::query()->sole()->cancelled_at)->not->toBeNull();
 });
