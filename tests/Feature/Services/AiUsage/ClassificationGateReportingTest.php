@@ -7,6 +7,7 @@ use App\Enums\ClassificationVerdict;
 use App\Models\ClassificationOutcome;
 use App\Services\AiUsage\ClassificationGateReporting;
 use App\Settings\AiSettings;
+use App\Settings\DecisionAgentSettings;
 
 test('the summary has one entry per gate with ten probability bands', function (): void {
     $summary = resolve(ClassificationGateReporting::class)->summary(null);
@@ -55,4 +56,12 @@ test('rows before the window are left out', function (): void {
     $gate = collect(resolve(ClassificationGateReporting::class)->summary(now()->subDays(7)->toImmutable()))->firstWhere('gate', 'decision_gate');
 
     expect($gate['total'])->toBe(0);
+});
+
+test('the second opinion gate reports the saved jev threshold', function (): void {
+    resolve(DecisionAgentSettings::class)->setSecondOpinionJevThreshold(0.65);
+
+    $gate = collect(resolve(ClassificationGateReporting::class)->summary(null))->firstWhere('gate', 'second_opinion');
+
+    expect($gate['threshold'])->toBe(0.65);
 });

@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import InputError from '@/components/InputError.vue';
 import { Field, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
 
@@ -16,11 +24,18 @@ interface DecisionAgentState {
     notify_on_suggest: boolean;
     notify_on_act: boolean;
     max_actions_per_run: number;
+    second_opinion_engine: 'llm' | 'jev_then_llm' | 'jev';
+    second_opinion_jev_threshold: number;
 }
 
 const props = defineProps<{
     settings: DecisionAgentState;
     eventCatalog: Record<string, string[]>;
+    secondOpinionEngines: Array<{
+        value: DecisionAgentState['second_opinion_engine'];
+        label: string;
+    }>;
+    classifierConfigured: boolean;
 }>();
 
 defineOptions({
@@ -42,7 +57,11 @@ const form = useForm<DecisionAgentState>({
     notify_on_suggest: props.settings.notify_on_suggest,
     notify_on_act: props.settings.notify_on_act,
     max_actions_per_run: props.settings.max_actions_per_run,
+    second_opinion_engine: props.settings.second_opinion_engine,
+    second_opinion_jev_threshold: props.settings.second_opinion_jev_threshold,
 });
+
+const usesClassifier = computed(() => form.second_opinion_engine !== 'llm');
 
 function eventKey(service: string, event: string): string {
     return `${service}:${event}`;
@@ -276,6 +295,80 @@ function submit(): void {
                         <InputError
                             :message="form.errors.max_actions_per_run"
                             class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Second opinion -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Second opinion"
+                        hint="How automated proposals are double-checked on the action types you choose under Approval Rules. A failed check always holds the action for approval."
+                    >
+                        <span />
+                    </Field>
+                    <div class="flex flex-col gap-2.5">
+                        <Select v-model="form.second_opinion_engine">
+                            <SelectTrigger
+                                class="h-8 max-w-[260px] text-sm"
+                                data-second-opinion-engine
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="engine in secondOpinionEngines"
+                                    :key="engine.value"
+                                    :value="engine.value"
+                                    :disabled="
+                                        engine.value !== 'llm' &&
+                                        !classifierConfigured
+                                    "
+                                    :data-second-opinion-engine-option="
+                                        engine.value
+                                    "
+                                >
+                                    {{ engine.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p
+                            v-if="!classifierConfigured"
+                            class="text-[12px] text-fg-subtle"
+                            data-second-opinion-classifier-hint
+                        >
+                            Configure a classification provider on AI Settings
+                            to use Jev.
+                        </p>
+                        <div
+                            v-if="usesClassifier"
+                            class="flex items-center gap-2"
+                        >
+                            <Input
+                                v-model.number="
+                                    form.second_opinion_jev_threshold
+                                "
+                                type="number"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                class="h-8 max-w-[120px] text-sm"
+                                data-second-opinion-threshold
+                            />
+                            <span class="text-[12px] text-muted-foreground">
+                                Jev agrees at or above this probability.
+                            </span>
+                        </div>
+                        <InputError
+                            :message="form.errors.second_opinion_engine"
+                        />
+                        <InputError
+                            :message="form.errors.second_opinion_jev_threshold"
                         />
                     </div>
                 </div>

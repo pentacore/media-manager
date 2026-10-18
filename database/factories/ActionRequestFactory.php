@@ -34,6 +34,25 @@ class ActionRequestFactory extends Factory
         ];
     }
 
+    /**
+     * A request carrying a stored second-opinion verdict.
+     */
+    public function secondOpinion(bool $agrees, bool $failed = false, ?string $reason = 'Looks right.', string $engine = 'llm', string $mode = 'hold', ?float $confidence = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'second_opinion' => [
+                'engine' => $engine,
+                'mode' => $mode,
+                'agrees' => $agrees,
+                'failed' => $failed,
+                'confidence' => $confidence,
+                'reason' => $reason,
+                'provider' => $engine === 'llm' ? 'openai' : null,
+                'model' => $engine === 'llm' ? 'gpt-5-mini' : null,
+            ],
+        ]);
+    }
+
     public function autoExecute(): static
     {
         return $this->state(fn (array $attributes): array => [

@@ -48,7 +48,7 @@ final readonly class ActionRequestBrowserPayload
      * ActionRequestCreated broadcast. Legacy rows (created before descriptions
      * existed) return nulls and let the page fall back to payload keys.
      *
-     * @return array{title: string|null, description: string|null, details: list<array{label: string, value: string}>, description_verified: bool, agent_rationale: string|null}
+     * @return array{title: string|null, description: string|null, details: list<array{label: string, value: string}>, description_verified: bool, agent_rationale: string|null, second_opinion: array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null}|null}
      */
     public function description(ActionRequest $actionRequest): array
     {
@@ -63,6 +63,34 @@ final readonly class ActionRequestBrowserPayload
             )),
             'description_verified' => $actionRequest->description_verified,
             'agent_rationale' => is_string($rationale) && $rationale !== '' ? mb_substr($rationale, 0, 1_000) : null,
+            'second_opinion' => $this->secondOpinion($actionRequest),
+        ];
+    }
+
+    /**
+     * The stored verdict without the provider and model, with the reason
+     * bounded like the rationale. Null when no second opinion ran.
+     *
+     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null}|null
+     */
+    private function secondOpinion(ActionRequest $actionRequest): ?array
+    {
+        $secondOpinion = $actionRequest->second_opinion;
+
+        if (! is_array($secondOpinion) || ! is_bool($secondOpinion['agrees'] ?? null)) {
+            return null;
+        }
+
+        $confidence = $secondOpinion['confidence'] ?? null;
+        $reason = $secondOpinion['reason'] ?? null;
+
+        return [
+            'engine' => ($secondOpinion['engine'] ?? null) === 'jev' ? 'jev' : 'llm',
+            'mode' => ($secondOpinion['mode'] ?? null) === 'reject' ? 'reject' : 'hold',
+            'agrees' => $secondOpinion['agrees'],
+            'failed' => ($secondOpinion['failed'] ?? false) === true,
+            'confidence' => is_int($confidence) || is_float($confidence) ? $confidence : null,
+            'reason' => is_string($reason) && $reason !== '' ? mb_substr($reason, 0, 500) : null,
         ];
     }
 

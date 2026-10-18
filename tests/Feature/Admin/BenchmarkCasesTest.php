@@ -93,7 +93,7 @@ test('the index lists cases and filters by task and tag', function (): void {
             ->component('Admin/Benchmarks/Cases/Index')
             ->has('cases.data', 2)
             ->has('cases.meta')
-            ->has('tasks', count(AiTask::cases()) - 2)
+            ->has('tasks', count(AiTask::cases()) - 3)
             ->where('filters.task', null));
 
     $this->get(route('admin.benchmarks.cases.index', ['task' => 'decision']))
