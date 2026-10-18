@@ -349,6 +349,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The develop ruleset requires a "Pest tests" check; the matrix legs carry
+  # their own names, so this job reports their combined result under it.
+  tests-result:
+    name: Pest tests
+    runs-on: ubuntu-latest
+    if: always()
+    needs: tests
+    steps:
+      - name: Check all Pest legs passed
+        run: test "${{ needs.tests.result }}" = success
+
   octane-smoke:
     name: Octane smoke test
     runs-on: ubuntu-latest
