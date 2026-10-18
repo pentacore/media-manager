@@ -35,7 +35,7 @@ use Override;
  * @property int|null $approved_by
  * @property array<array-key, mixed> $payload
  * @property array<array-key, mixed>|null $result
- * @property array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null}|null $second_opinion
+ * @property array<string, mixed>|null $second_opinion
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read User|null $approvedByUser

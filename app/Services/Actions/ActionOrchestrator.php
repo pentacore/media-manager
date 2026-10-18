@@ -210,7 +210,7 @@ class ActionOrchestrator
                 rationale: $rationale,
                 sourceService: $sourceService,
                 eventType: $decisionRunContext?->eventType,
-                eventPayload: $decisionRunContext?->eventPayload ?? [],
+                eventPayload: $decisionRunContext->eventPayload ?? [],
             ), $decisionRunContext?->deadline);
 
         // A second opinion can only tighten the gate: hold or reject, never release.
@@ -234,7 +234,7 @@ class ActionOrchestrator
             'result' => $rejectedBySecondOpinion ? [
                 'success' => false,
                 'reason' => 'second_opinion_rejected',
-                'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict?->reason ?? 'no reason given.'),
+                'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict->reason ?? 'no reason given.'),
             ] : null,
             'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode),
         ]);
