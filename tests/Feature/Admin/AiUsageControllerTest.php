@@ -732,6 +732,35 @@ test('recent invocations carry their benchmark run and can be filtered by it', f
         ->assertInertia(fn ($page) => $page->where('benchmark', null)->has('recent', 2));
 });
 
+test('the totals and per-model and per-provider breakdowns respect the benchmark filter', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-live']);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['provider' => 'anthropic', 'model' => 'claude-benchmarked']);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['provider' => 'anthropic', 'model' => 'claude-benchmarked']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.total_invocations', 2)
+            ->has('by_model', 1)
+            ->where('by_model.0.key', 'claude-benchmarked')
+            ->has('by_provider', 1)
+            ->where('by_provider.0.key', 'anthropic'));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.total_invocations', 1)
+            ->has('by_model', 1)
+            ->where('by_model.0.key', 'gpt-live')
+            ->has('by_provider', 1)
+            ->where('by_provider.0.key', 'openai'));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page->where('totals.total_invocations', 3)->has('by_model', 2));
+});
+
 test('the csv export honours the benchmark filter', function (): void {
     $run = BenchmarkRun::factory()->create();
     AiUsageRecord::factory()->create(['model' => 'gpt-live']);

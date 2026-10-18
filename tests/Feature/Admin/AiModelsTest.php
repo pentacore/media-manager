@@ -817,6 +817,28 @@ test('a stale benchmark link redirects to the plain page with a toast', function
     'unknown task' => [['task' => 'nope']],
 ]);
 
+test('a prefill whose provider is no longer configured redirects with its own toast', function (): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+    config()->set('ai.providers.openai.key', null);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
+        ->assertRedirect(route('admin.ai-models.index'));
+
+    expect(session('inertia.flash_data.toast.type'))->toBe('error')
+        ->and((string) session('inertia.flash_data.toast.message'))->toBe("That benchmark candidate's provider is no longer configured.");
+});
+
+test('a prefill drops the reasoning level of a model the catalog says takes none', function (): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+    AiModelPrice::query()->where(['provider' => 'openai', 'model' => 'gpt-5.6-luna'])->update(['supports_reasoning' => false]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('prefill.model', 'gpt-5.6-luna')->where('prefill.reasoning', null));
+});
+
 test('the decision verifier row warns when it resolves to the decision agent model', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))

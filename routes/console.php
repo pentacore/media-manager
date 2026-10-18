@@ -20,6 +20,7 @@ use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\RefreshWantedCount;
+use App\Console\Commands\SettleStalledBenchmarkRuns;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\ReconcileSearchIndex;
@@ -95,6 +96,10 @@ Schedule::command(RefreshAiPrices::class, ['--scheduled'])
 Schedule::command(RefreshAiPrices::class, ['--verify', '--scheduled'])
     ->monthly()
     ->withoutOverlapping(120);
+
+Schedule::command(SettleStalledBenchmarkRuns::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10);
 
 Schedule::command(PollSabnzbdHistory::class)
     ->everyFiveMinutes()

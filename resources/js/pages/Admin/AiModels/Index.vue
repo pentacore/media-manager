@@ -127,16 +127,6 @@ function applyPrefill(): void {
 
     const selection = form.tasks[prefill.task];
 
-    if (selection.tiers.length === 0) {
-        selection.tiers.push({
-            provider: null,
-            model: null,
-            reasoning: null,
-            min_pool_percent: null,
-            min_pool_tokens: null,
-        });
-    }
-
     const tier = selection.tiers[0];
     tier.provider = prefill.provider;
     tier.model = prefill.model;

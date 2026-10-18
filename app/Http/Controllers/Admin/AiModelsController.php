@@ -43,10 +43,16 @@ class AiModelsController extends Controller
         $prefill = null;
 
         if ($request->has('benchmark_run')) {
-            $prefill = $this->benchmarkPrefill($request);
+            $prefill = $this->benchmarkPrefill($request, $modelCatalog);
 
             if ($prefill === null) {
                 Inertia::flash('toast', ['type' => 'error', 'message' => __('That benchmark candidate is no longer available.')]);
+
+                return to_route('admin.ai-models.index');
+            }
+
+            if (! in_array($prefill['provider'], $modelCatalog->textProviders(), true)) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __("That benchmark candidate's provider is no longer configured.")]);
 
                 return to_route('admin.ai-models.index');
             }
@@ -128,11 +134,12 @@ class AiModelsController extends Controller
 
     /**
      * The benchmark candidate a "Use this" link points at, or null when the
-     * run, candidate or task no longer exists.
+     * run, candidate or task no longer exists. The reasoning level is dropped
+     * when the catalog says the model takes none.
      *
      * @return array{task: string, provider: string, model: string, reasoning: string|null, run_id: int, run_name: string}|null
      */
-    private function benchmarkPrefill(Request $request): ?array
+    private function benchmarkPrefill(Request $request, ModelCatalog $modelCatalog): ?array
     {
         $runId = $request->query('benchmark_run');
         $candidateIndex = $request->query('candidate');
@@ -161,11 +168,13 @@ class AiModelsController extends Controller
 
         $reasoning = is_string($candidate['reasoning'] ?? null) ? AiReasoningLevel::tryFrom($candidate['reasoning']) : null;
 
+        $supportsReasoning = $modelCatalog->reasoningCapabilities()[sprintf('%s|%s', $candidate['provider'], $candidate['model'])]['supports_reasoning'] ?? null;
+
         return [
             'task' => $aiTask->value,
             'provider' => $candidate['provider'],
             'model' => $candidate['model'],
-            'reasoning' => $aiTask->hasReasoning() ? $reasoning?->value : null,
+            'reasoning' => $aiTask->hasReasoning() && $supportsReasoning !== false ? $reasoning?->value : null,
             'run_id' => $benchmarkRun->id,
             'run_name' => $benchmarkRun->name,
         ];

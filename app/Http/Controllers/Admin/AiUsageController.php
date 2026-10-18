@@ -57,9 +57,9 @@ class AiUsageController extends Controller
                 null => null,
             },
             'kinds' => AiUsageKind::mapForSelect(labelKey: 'label'),
-            'totals' => $aiUsageReporting->totals($since, kind: $kind),
-            'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind),
-            'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind),
+            'totals' => $aiUsageReporting->totals($since, kind: $kind, benchmark: $benchmark),
+            'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind, benchmark: $benchmark),
+            'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind, benchmark: $benchmark),
             'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind, fellThrough: $fellThrough, benchmark: $benchmark),
             'tool_stats' => $aiUsageReporting->toolStats($since),
             'priced_models' => AiModelPrice::query()
@@ -84,9 +84,9 @@ class AiUsageController extends Controller
         ];
 
         if ($scenario instanceof Scenario) {
-            $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind);
-            $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario, $kind);
-            $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario, $kind);
+            $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind, $benchmark);
+            $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario, $kind, $benchmark);
+            $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario, $kind, $benchmark);
             $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind, fellThrough: $fellThrough, benchmark: $benchmark);
         }
 
