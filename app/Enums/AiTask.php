@@ -18,6 +18,7 @@ enum AiTask: string
     case Chat = 'chat';
     case Title = 'title';
     case Decision = 'decision';
+    case DecisionVerifier = 'decision_verifier';
     case FileInspector = 'file_inspector';
     case StuckDownloadInvestigator = 'stuck_download_investigator';
     case PriceUpdater = 'price_updater';
@@ -30,6 +31,7 @@ enum AiTask: string
             self::Chat => 'Chat',
             self::Title => 'Conversation titles',
             self::Decision => 'Decision agent',
+            self::DecisionVerifier => 'Decision verifier',
             self::FileInspector => 'File inspector',
             self::StuckDownloadInvestigator => 'Stuck download investigator',
             self::PriceUpdater => 'Price updater',
@@ -51,7 +53,7 @@ enum AiTask: string
      */
     public function inheritsChatModel(): bool
     {
-        return in_array($this, [self::Decision, self::FileInspector, self::StuckDownloadInvestigator, self::PriceUpdater, self::BenchmarkJudge], true);
+        return in_array($this, [self::Decision, self::DecisionVerifier, self::FileInspector, self::StuckDownloadInvestigator, self::PriceUpdater, self::BenchmarkJudge], true);
     }
 
     /**
@@ -77,7 +79,7 @@ enum AiTask: string
      */
     public function isBenchmarkable(): bool
     {
-        return ! in_array($this, [self::Failover, self::BenchmarkJudge], true);
+        return ! in_array($this, [self::Failover, self::BenchmarkJudge, self::DecisionVerifier], true);
     }
 
     /**

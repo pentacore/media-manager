@@ -81,3 +81,15 @@ test('a caller can pass its own classification timeout', function (): void {
 
     Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === 3);
 });
+
+test('the classifier is configured when its provider has a key or classification is faked', function (): void {
+    config(['mediamanager.ai.classification.provider' => 'openrouter', 'ai.providers.openrouter.key' => '']);
+    expect(resolve(Classifier::class)->isConfigured())->toBeFalse();
+
+    config(['ai.providers.openrouter.key' => 'sk-test']);
+    expect(resolve(Classifier::class)->isConfigured())->toBeTrue();
+
+    config(['ai.providers.openrouter.key' => '']);
+    Classification::fake([['decision' => new BooleanAnswer(0.9)]]);
+    expect(resolve(Classifier::class)->isConfigured())->toBeTrue();
+});

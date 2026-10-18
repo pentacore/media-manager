@@ -71,6 +71,7 @@ class AiModelsController extends Controller
                 'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
                 'resolved' => $this->summary($taskModelResolver->resolve($aiTask)),
                 'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask)),
+                'warning' => $this->taskWarning($aiTask, $taskModelResolver),
             ];
         }
 
@@ -105,6 +106,23 @@ class AiModelsController extends Controller
             'unpricedModels' => $unpricedModelDetector->forHardCap(),
             'prefill' => $prefill,
         ]);
+    }
+
+    /**
+     * A caution shown under a task's live selection, or null.
+     */
+    private function taskWarning(AiTask $aiTask, TaskModelResolver $taskModelResolver): ?string
+    {
+        if ($aiTask !== AiTask::DecisionVerifier) {
+            return null;
+        }
+
+        $resolvedSelection = $taskModelResolver->resolve(AiTask::DecisionVerifier);
+        $decision = $taskModelResolver->resolve(AiTask::Decision);
+
+        return $resolvedSelection->provider === $decision->provider && $resolvedSelection->model === $decision->model
+            ? __('Runs on the same model as the Decision agent, so its second opinion is less independent.')
+            : null;
     }
 
     /**

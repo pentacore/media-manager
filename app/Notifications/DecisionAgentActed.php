@@ -27,6 +27,8 @@ class DecisionAgentActed extends Notification
         public readonly int $actionCount,
         public readonly string $summary,
         public readonly ?string $eventLabel = null,
+        public readonly int $heldBySecondOpinion = 0,
+        public readonly int $rejectedBySecondOpinion = 0,
     ) {}
 
     /**
@@ -46,7 +48,7 @@ class DecisionAgentActed extends Notification
         return [
             'service' => 'system',
             'title' => $this->title(),
-            'message' => $this->summary,
+            'message' => $this->message(),
             'link' => '/actions/requests',
             'disposition' => $this->disposition,
             'action_count' => $this->actionCount,
@@ -61,7 +63,16 @@ class DecisionAgentActed extends Notification
 
     public function toPush(object $notifiable): PushMessage
     {
-        return new PushMessage(severity: 'info', title: $this->title(), body: $this->summary, url: route('actions.requests.index'));
+        return new PushMessage(severity: 'info', title: $this->title(), body: $this->message(), url: route('actions.requests.index'));
+    }
+
+    private function message(): string
+    {
+        if ($this->heldBySecondOpinion === 0 && $this->rejectedBySecondOpinion === 0) {
+            return $this->summary;
+        }
+
+        return sprintf("%s\nSecond opinion: %d held, %d rejected.", $this->summary, $this->heldBySecondOpinion, $this->rejectedBySecondOpinion);
     }
 
     private function title(): string

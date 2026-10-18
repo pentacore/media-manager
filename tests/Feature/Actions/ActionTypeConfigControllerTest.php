@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\SecondOpinionMode;
 use App\Models\ActionTypeConfig;
 use App\Models\User;
 
@@ -44,6 +45,7 @@ test('admins can update a rule', function (): void {
         ->patch(route('actions.rules.update', $config), [
             'requires_approval' => false,
             'is_enabled' => false,
+            'second_opinion' => 'off',
         ])
         ->assertRedirect(route('actions.rules.index'));
 
@@ -58,7 +60,7 @@ test('update validates required fields', function (): void {
 
     $this->actingAs($admin)
         ->patch(route('actions.rules.update', $config), [])
-        ->assertSessionHasErrors(['requires_approval', 'is_enabled']);
+        ->assertSessionHasErrors(['requires_approval', 'is_enabled', 'second_opinion']);
 });
 
 test('members cannot update rules', function (): void {
@@ -69,6 +71,36 @@ test('members cannot update rules', function (): void {
         ->patch(route('actions.rules.update', $config), [
             'requires_approval' => false,
             'is_enabled' => true,
+            'second_opinion' => 'off',
         ])
         ->assertForbidden();
+});
+
+test('an admin sets the second opinion of a supported rule', function (): void {
+    $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'monitor_series']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true, 'second_opinion' => 'reject'])
+        ->assertRedirect();
+
+    expect($actionTypeConfig->fresh()->second_opinion)->toBe(SecondOpinionMode::Reject);
+});
+
+test('a rule no automated proposer produces only takes off', function (): void {
+    $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'grab_release']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true, 'second_opinion' => 'hold'])
+        ->assertSessionHasErrors('second_opinion');
+});
+
+test('the rules page says which rules support a second opinion', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series']);
+    ActionTypeConfig::factory()->create(['type' => 'grab_release']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('actions.rules.index'))
+        ->assertInertia(fn ($page) => $page->component('Actions/Rules')
+            ->where('rules.0.type', 'grab_release')->where('rules.0.second_opinion_supported', false)
+            ->where('rules.1.type', 'monitor_series')->where('rules.1.second_opinion_supported', true)->where('rules.1.second_opinion', 'off'));
 });

@@ -142,3 +142,11 @@ test('the old settings pages link to AI Models', function (string $routeName): v
         ->click('[data-ai-models-link]')
         ->assertPathIs(route('admin.ai-models.index', absolute: false));
 })->with(['admin.ai-settings.index', 'admin.decision-agent.index']);
+
+test('the decision verifier row shows the same-model warning', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-task="decision_verifier"] [data-task-warning]', 'less independent');
+});

@@ -46,6 +46,7 @@ type TaskRow = {
     tiers: TierForm[];
     inherited: ResolvedSummary;
     resolved: ResolvedSummary;
+    warning: string | null;
 };
 
 type EventOverride = {
@@ -350,6 +351,13 @@ function submit(): void {
                                 {{ row.resolved.tier.count }}
                             </Pill>
                         </div>
+                        <p
+                            v-if="row.warning"
+                            class="text-[12px] text-warning"
+                            data-task-warning
+                        >
+                            {{ row.warning }}
+                        </p>
 
                         <!-- Decision event overrides -->
                         <div

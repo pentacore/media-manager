@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Ai\Classification\Classifier;
+use App\Enums\SecondOpinionEngine;
 use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateDecisionAgentSettingsRequest;
@@ -17,7 +19,7 @@ use Inertia\Response;
 
 class DecisionAgentSettingsController extends Controller
 {
-    public function index(DecisionAgentSettings $decisionAgentSettings): Response
+    public function index(DecisionAgentSettings $decisionAgentSettings, Classifier $classifier): Response
     {
         return Inertia::render('Admin/DecisionAgent/Index', [
             'settings' => [
@@ -27,8 +29,15 @@ class DecisionAgentSettingsController extends Controller
                 'notify_on_suggest' => $decisionAgentSettings->notifyOnSuggest(),
                 'notify_on_act' => $decisionAgentSettings->notifyOnAct(),
                 'max_actions_per_run' => $decisionAgentSettings->maxActionsPerRun(),
+                'second_opinion_engine' => $decisionAgentSettings->secondOpinionEngine()->value,
+                'second_opinion_jev_threshold' => $decisionAgentSettings->secondOpinionJevThreshold(),
             ],
             'eventCatalog' => DecisionAgentSettings::eventCatalog(),
+            'secondOpinionEngines' => array_map(
+                static fn (SecondOpinionEngine $secondOpinionEngine): array => ['value' => $secondOpinionEngine->value, 'label' => $secondOpinionEngine->label()],
+                SecondOpinionEngine::cases(),
+            ),
+            'classifierConfigured' => $classifier->isConfigured(),
         ]);
     }
 
@@ -48,6 +57,8 @@ class DecisionAgentSettingsController extends Controller
             $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
             $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
             $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+            $decisionAgentSettings->setSecondOpinionEngine(SecondOpinionEngine::from((string) $validated['second_opinion_engine']));
+            $decisionAgentSettings->setSecondOpinionJevThreshold((float) $validated['second_opinion_jev_threshold']);
 
             $auditLogger->settingsUpdated(SettingsGroup::DecisionAgent, $before, $settingsSnapshot->capture(SettingsGroup::DecisionAgent));
         });

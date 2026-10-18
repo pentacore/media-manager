@@ -271,6 +271,7 @@ final class TaskModelResolver
             AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
             AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
             AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::DecisionVerifier => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
