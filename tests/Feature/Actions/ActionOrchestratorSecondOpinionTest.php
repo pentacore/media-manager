@@ -160,3 +160,29 @@ test('a dispatch with time to spare is verified as usual', function (): void {
     DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === SecondOpinionVerifier::LLM_TIMEOUT_SECONDS);
     Queue::assertPushed(ExecuteActionRequest::class);
 });
+
+test("a hold counts as the second opinion's only when approval was not otherwise required", function (bool $ruleRequiresApproval, bool $verified, bool $heldBySecondOpinion): void {
+    secondOpinionRule('monitor_series', SecondOpinionMode::Hold, requiresApproval: $ruleRequiresApproval);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'Wrong series.']]);
+    $decisionRunContext = new DecisionRunContext(webhookEventId: null, maxActions: 3);
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'monitor_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: ['series_id' => 7],
+        rationale: 'The series was added unmonitored.',
+        description: new ActionDescription('Monitor Severance', 'Turns monitoring on.', verified: $verified),
+        decisionRunContext: $decisionRunContext,
+    );
+    $decisionRunContext->recordDispatched($actionRequest, heldBySecondOpinion: $actionRequest->heldBySecondOpinion);
+
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->heldBySecondOpinion)->toBe($heldBySecondOpinion)
+        ->and($decisionRunContext->heldBySecondOpinionCount())->toBe($heldBySecondOpinion ? 1 : 0)
+        ->and($actionRequest->fresh()->heldBySecondOpinion)->toBeFalse();
+})->with([
+    'auto rule' => [false, true, true],
+    'rule already requires approval' => [true, true, false],
+    'unverified target already requires approval' => [false, false, false],
+]);

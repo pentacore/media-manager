@@ -13,6 +13,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\AgentDecision;
 use App\Models\AiUsageRecord;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
@@ -157,6 +158,7 @@ test('the run notification counts only queued actions and names the held and rej
         'Queued a monitor; the deletion was rejected.',
     ]);
     $webhookEvent = secondOpinionSeriesEvent();
+    IndexedSeries::factory()->create(['service_connection_id' => $webhookEvent->service_connection_id, 'sonarr_id' => 7, 'title' => 'Severance', 'year' => 2022]);
 
     app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
 
@@ -203,4 +205,16 @@ test('a proposal made late in a run is held without asking the verifier', functi
         ->and($actionRequest->second_opinion)->toMatchArray(['failed' => true, 'reason' => 'Skipped: the decision run is out of time.'])
         ->and(AgentDecision::query()->sole()->summary)->toBe('Queued a deletion for approval.');
     DecisionVerifierAgent::assertNeverPrompted();
+});
+
+test('a disagreement on a proposal its rule already holds is not counted as held by the second opinion', function (): void {
+    secondOpinionDeleteRule(SecondOpinionMode::Hold);
+    $decisionRunContext = secondOpinionToolContext(secondOpinionSeriesEvent());
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'Destructive without cause.']]);
+
+    (new ProposeActionTool)->handle(new Request(secondOpinionDeleteProposal()));
+
+    expect(ActionRequest::query()->sole()->status)->toBe(ActionRequestStatus::Pending)
+        ->and($decisionRunContext->suggestedCount())->toBe(1)
+        ->and($decisionRunContext->heldBySecondOpinionCount())->toBe(0);
 });

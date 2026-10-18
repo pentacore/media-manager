@@ -190,9 +190,12 @@ class DecisionRunContext
     /**
      * Tally a request dispatchFromAgent() created. A request the second
      * opinion rejected still uses up the run's cap and is linked to the
-     * decision, but is neither suggested nor acted.
+     * decision, but is neither suggested nor acted. $heldBySecondOpinion
+     * (the request's transient flag of the same name) counts the request as
+     * held by the second opinion; a disagreement on a request that already
+     * needed approval is not.
      */
-    public function recordDispatched(ActionRequest $actionRequest): void
+    public function recordDispatched(ActionRequest $actionRequest, bool $heldBySecondOpinion = false): void
     {
         if ($actionRequest->status === ActionRequestStatus::Rejected) {
             $this->actionRequestIds[] = $actionRequest->id;
@@ -203,7 +206,7 @@ class DecisionRunContext
 
         $this->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
-        if ($actionRequest->requires_approval && ($actionRequest->second_opinion['agrees'] ?? true) === false) {
+        if ($heldBySecondOpinion && $actionRequest->requires_approval) {
             $this->heldBySecondOpinion++;
         }
     }
