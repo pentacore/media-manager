@@ -146,6 +146,28 @@ class DecisionRunContext
         );
     }
 
+    /**
+     * Whole seconds left before the run's deadline (negative once past it),
+     * or null when nothing bounds the run.
+     */
+    public function secondsLeft(): ?int
+    {
+        return $this->deadline instanceof CarbonImmutable
+            ? $this->deadline->getTimestamp() - now()->getTimestamp()
+            : null;
+    }
+
+    /**
+     * The per-provider timeout that lets a whole failover chain of
+     * $providers finish $reservedSeconds before the deadline, capped at
+     * $maxSeconds. Callers decide what a too-short result means: the second
+     * opinion skips its check, the DecisionAgent applies a floor.
+     */
+    public static function failoverTimeout(int $secondsLeft, int $reservedSeconds, int $providers, int $maxSeconds): int
+    {
+        return min($maxSeconds, intdiv($secondsLeft - $reservedSeconds, max(1, $providers)));
+    }
+
     public function remainingBudget(): int
     {
         return max(0, $this->maxActions - count($this->actionRequestIds));
