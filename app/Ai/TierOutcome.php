@@ -15,6 +15,12 @@ use Throwable;
 final readonly class TierOutcome
 {
     /**
+     * What every skip reason starts with before the tier number ("Tier 1: ...");
+     * via() swaps it for the followed list's label.
+     */
+    public const string REASON_PREFIX = 'Tier ';
+
+    /**
      * @param  list<string>  $reasons  one entry per skipped tier, "Tier N: why" or "{List} tier N: why"
      */
     public function __construct(
@@ -38,7 +44,7 @@ final readonly class TierOutcome
         return new self(
             $this->position,
             $this->count,
-            array_map(static fn (string $reason): string => preg_replace('/^Tier /', $label.' tier ', $reason) ?? $reason, $this->reasons),
+            array_map(static fn (string $reason): string => preg_replace('/^'.preg_quote(self::REASON_PREFIX, '/').'/', $label.' tier ', $reason) ?? $reason, $this->reasons),
             $label,
         );
     }

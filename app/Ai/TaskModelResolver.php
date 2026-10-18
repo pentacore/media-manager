@@ -229,6 +229,7 @@ final class TaskModelResolver
     {
         $this->rows = null;
         $this->picks = [];
+        $this->tierEligibility->forgetReported();
     }
 
     /**
@@ -268,7 +269,7 @@ final class TaskModelResolver
                 $reason = $this->tierEligibility->skipReason($provider, $model, $tier->min_pool_percent, $tier->min_pool_tokens);
 
                 if ($reason !== null) {
-                    $skipped[] = sprintf('Tier %d: %s', $index + 1, $reason);
+                    $skipped[] = sprintf('%s%d: %s', TierOutcome::REASON_PREFIX, $index + 1, $reason);
 
                     continue;
                 }
