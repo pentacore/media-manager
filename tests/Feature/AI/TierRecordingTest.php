@@ -12,8 +12,11 @@ use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Laravel\Ai\Exceptions\ProviderOverloadedException;
+use Laravel\Ai\Providers\Provider;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -104,3 +107,26 @@ test('a run on its own list records no via', function (): void {
 
     expect(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->latest('id')->value('tier_via'))->toBeNull();
 });
+
+test('a failover answer names the failover reasoning and no tier', function (string $failoverProvider, ?array $acceptedLevels, string $label): void {
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => $failoverProvider, 'model' => 'failover-model'])->create();
+    AiModelPrice::factory()->create(['provider' => $failoverProvider, 'model' => 'failover-model', 'supports_reasoning' => true, 'reasoning_levels' => $acceptedLevels]);
+    MediaAgent::fake(fn (string $prompt, Collection $attachments, Provider $provider): string => $provider->name() === 'openai'
+        ? throw ProviderOverloadedException::forProvider('openai')
+        : 'Served by the failover provider.');
+
+    $response = $this->actingAs(User::factory()->admin()->create())->postJson(route('ai.chat.send'), ['message' => 'Hi']);
+
+    $response->assertOk();
+
+    expect($response->json('answered_by'))->toBe([
+        'provider' => $failoverProvider,
+        'model' => 'failover-model',
+        'reasoning_label' => $label,
+        'tier' => null,
+    ]);
+})->with([
+    'clamped to the failover model' => ['anthropic', ['medium', 'high'], 'Medium'],
+    'unknown levels keep the turn level' => ['anthropic', null, 'Low'],
+    'a provider without reasoning options' => ['mistral', null, 'Provider default'],
+]);

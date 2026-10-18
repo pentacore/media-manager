@@ -6,6 +6,7 @@ namespace App\Ai\Concerns;
 
 use App\Ai\ModelSelection;
 use App\Ai\OpenRouterRequestOptions;
+use App\Ai\ProviderDriver;
 use App\Ai\ReasoningOptions;
 use App\Ai\ResolvedSelection;
 use App\Ai\TaskModelResolver;
@@ -66,15 +67,8 @@ trait RunsAsAiTask
      */
     public function providerOptions(Lab|string $provider): array
     {
-        $providerName = $provider instanceof Lab ? $provider->value : $provider;
         $resolvedSelection = $this->resolvedSelection();
-        $failover = resolve(TaskModelResolver::class)->failover();
-
-        $model = match (true) {
-            $providerName === $resolvedSelection->provider => $resolvedSelection->model,
-            $failover !== null && $failover['provider'] === $providerName => $failover['model'] ?? $this->providerDefaultModel($providerName),
-            default => null,
-        };
+        [$providerName, $model] = $this->chainEntryFor($provider instanceof Lab ? $provider->value : $provider, $resolvedSelection);
 
         $options = resolve(ReasoningOptions::class)->for(
             $providerName,
@@ -96,11 +90,38 @@ trait RunsAsAiTask
             ];
         }
 
-        if ($providerName === Lab::OpenRouter->value) {
+        if (ProviderDriver::of($providerName) === Lab::OpenRouter->value) {
             return [...$options, ...resolve(OpenRouterRequestOptions::class)->routing()];
         }
 
         return $options;
+    }
+
+    /**
+     * The configured provider name and model in the failover chain that a
+     * providerOptions() call is for. Most gateways pass their driver rather
+     * than the configured name, so a name match wins, then a driver match in
+     * chain order; a provider outside the chain keeps what it was given and
+     * no model.
+     *
+     * @return array{0: string, 1: string|null}
+     */
+    private function chainEntryFor(string $provider, ResolvedSelection $resolvedSelection): array
+    {
+        $failover = resolve(TaskModelResolver::class)->failover();
+        $chain = array_values(array_filter([$resolvedSelection->provider, $failover['provider'] ?? null]));
+
+        $providerName = in_array($provider, $chain, true)
+            ? $provider
+            : array_find($chain, static fn (string $name): bool => ProviderDriver::of($name) === $provider) ?? $provider;
+
+        $model = match (true) {
+            $providerName === $resolvedSelection->provider => $resolvedSelection->model,
+            $failover !== null && $failover['provider'] === $providerName => $failover['model'] ?? $this->providerDefaultModel($providerName),
+            default => null,
+        };
+
+        return [$providerName, $model];
     }
 
     /**
