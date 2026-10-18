@@ -25,6 +25,7 @@ use App\Services\Radarr\RadarrActions;
 use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Seerr\SeerrUnexpectedResponse;
+use App\Services\Seerr\SeerrWriteUnconfirmed;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
 use App\Support\UpstreamErrorText;
@@ -158,15 +159,15 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             ]);
 
             return;
-        } catch (ArrWriteUnconfirmed $arrWriteUnconfirmed) {
-            // The arr answered the write with something other than its API
-            // data (usually a proxy login page). Whether the change landed is
-            // unknown, so it is never retried: a second send could repeat it.
+        } catch (ArrWriteUnconfirmed|SeerrWriteUnconfirmed $writeUnconfirmed) {
+            // The service answered the write with something other than its
+            // API data (usually a proxy login page). Whether the change landed
+            // is unknown, so it is never retried: a second send could repeat it.
             $this->markFailed([
                 'reason' => 'needs_reconciliation',
-                'message' => $arrWriteUnconfirmed->getMessage(),
+                'message' => $writeUnconfirmed->getMessage(),
                 'indeterminate' => true,
-                'exception' => ArrWriteUnconfirmed::class,
+                'exception' => $writeUnconfirmed::class,
             ]);
 
             return;
@@ -177,8 +178,8 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             // mislabeled it retries_exhausted. Everything else retries:
             // connection loss, upstream 5xx, and a 200 that isn't usable
             // data (ArrUnexpectedResponse/SabnzbdRefused) — an unconfirmed
-            // write (ArrWriteUnconfirmed) is caught above and never reaches
-            // here — the same policy as
+            // write (ArrWriteUnconfirmed, SeerrWriteUnconfirmed) is caught
+            // above and never reaches here — the same policy as
             // BaseArrController::upstreamFailureMessage(), which treats
             // anything short of a clientError() as an outage, not a refusal.
             $transient = ! $exception instanceof RequestException || ! $exception->response->clientError();
@@ -343,7 +344,12 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         $claimed = ActionRequest::query()
             ->whereKey($this->actionRequest->id)
             ->where('status', ActionRequestStatus::Approved->value)
-            ->update(['status' => ActionRequestStatus::Executing]);
+            ->update([
+                'status' => ActionRequestStatus::Executing,
+                // A builder update skips the observer that numbers status changes;
+                // the UPDATE takes the number once it holds the row.
+                'status_version' => ActionRequest::statusVersionExpression(),
+            ]);
 
         $this->actionRequest->refresh();
 

@@ -173,3 +173,15 @@ test('a deleted season on a live show is requestable again even with an old requ
         ['season_number' => 2, 'name' => 'Season 2', 'episode_count' => 10, 'status' => 'requested', 'requestable' => false],
     ]);
 });
+
+test('a completed request for a title Seerr deleted no longer holds the title', function (int $requestStatus, ?int $mediaStatus, bool $expected): void {
+    $request = ['status' => $requestStatus, 'media' => $mediaStatus === null ? null : ['status' => $mediaStatus]];
+
+    expect(new SeerrTitlePresenter()->completedForDeletedTitle($request))->toBe($expected);
+})->with([
+    'completed, title deleted' => [5, 7, true],
+    'pending, title deleted' => [1, 7, false],
+    'approved, title deleted' => [2, 7, false],
+    'completed, title available' => [5, 5, false],
+    'completed, no media' => [5, null, false],
+]);

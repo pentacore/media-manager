@@ -10,7 +10,7 @@ import {
     Replace,
     Trash2,
 } from '@lucide/vue';
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import {
     InteractiveSearchDialog,
@@ -45,6 +45,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useCan } from '@/composables/useCan';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 import type { UpstreamList } from '@/types';
@@ -110,6 +111,23 @@ const props = defineProps<{
 }>();
 
 const { can } = useCan();
+
+// WebhookEventProcessed fires after the queued handler cleared this
+// connection's Sonarr cache, so the reload reads the fresh series and
+// episodes; a webhook for another connection leaves this title alone.
+const { subscribe: subscribeReload } = useRealtimeReload<{
+    service_connection_id: number | null;
+    service_type: string | null;
+}>({
+    channel: 'dashboard',
+    event: 'WebhookEventProcessed',
+    only: ['series', 'episodes'],
+    filter: (event) =>
+        event.service_type === 'sonarr' &&
+        event.service_connection_id === props.service_connection_id,
+});
+
+onMounted(subscribeReload);
 
 defineOptions({
     layout: {

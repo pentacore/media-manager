@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -431,11 +432,10 @@ test('search does not leak provider exception details to members', function (): 
     );
 });
 
-test('a genuine upstream failure still degrades to "temporarily unavailable" for Sonarr, Seerr and Prowlarr', function (string $service, string $path, string $prop, string $group): void {
+test('a genuine upstream failure still degrades to "temporarily unavailable" for Sonarr and Prowlarr', function (string $service, string $path, string $prop, string $group): void {
     $factory = ServiceConnection::factory();
     match ($service) {
         'sonarr' => $factory->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']),
-        'seerr' => $factory->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']),
         'prowlarr' => $factory->prowlarr()->create(['url' => 'http://prowlarr.local:9696', 'api_key' => 'k']),
     };
 
@@ -452,8 +452,28 @@ test('a genuine upstream failure still degrades to "temporarily unavailable" for
                 ->where("{$prop}.error", sprintf('%s search is temporarily unavailable.', ucfirst($service)))));
 })->with([
     'sonarr' => ['sonarr', 'sonarr.local:8989/api/v3/series', 'seriesResults', 'sonarr'],
-    'seerr' => ['seerr', 'seerr.local:5055/api/v1/search*', 'requestResults', 'seerr'],
     'prowlarr' => ['prowlarr', 'prowlarr.local:9696/api/v1/search*', 'indexerResults', 'indexers'],
+]);
+
+test('a failed Seerr search is worded as a refusal for who can fix it, or as an outage', function (string $role, int $status, string $body, string $expected): void {
+    Sleep::fake();
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+
+    Http::fake(['seerr.local:5055/api/v1/search*' => Http::response($body, $status, ['Content-Type' => 'text/html'])]);
+    $user = $role === 'viewer' ? User::factory()->create() : User::factory()->{$role}()->create();
+
+    $this->actingAs($user)
+        ->get(route('media.search.index', ['q' => 'test']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('seerr', fn ($page) => $page
+                ->where('requestResults.results', [])
+                ->where('requestResults.error', $expected)));
+})->with([
+    'a login page, admin' => ['admin', 200, '<html><body>Sign in</body></html>', 'Seerr refused the request — check the connection settings.'],
+    'a login page, member' => ['member', 200, '<html><body>Sign in</body></html>', 'Seerr is unavailable — ask an admin to check the connection.'],
+    'a 401, viewer' => ['viewer', 401, 'Unauthorized', 'Seerr is unavailable — ask an admin to check the connection.'],
+    'an outage' => ['member', 503, 'LEAKED-PROVIDER-SECRET', 'Seerr is unreachable right now.'],
 ]);
 
 test('a malformed Prowlarr publishDate still degrades to a null age, not an error', function (): void {

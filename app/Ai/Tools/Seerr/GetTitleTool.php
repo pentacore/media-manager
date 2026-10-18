@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Seerr;
 
+use App\Ai\Concerns\AnswersSeerrRefusals;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
@@ -17,6 +18,8 @@ use Stringable;
 
 class GetTitleTool extends BaseTool
 {
+    use AnswersSeerrRefusals;
+
     public function description(): Stringable|string
     {
         return 'Fetch full details for a single Seerr title by TMDB id. Specify media_type as "movie" or "tv".';
@@ -39,11 +42,11 @@ class GetTitleTool extends BaseTool
         $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
         $seerrClient = new SeerrClient($serviceConnection);
 
-        return match ($mediaType) {
+        return $this->readSeerr(fn (): array => match ($mediaType) {
             'movie' => $seerrClient->getMovieDetails($tmdbId),
             'tv' => $seerrClient->getTvDetails($tmdbId),
             default => throw new InvalidArgumentException(sprintf('Unknown media_type "%s". Expected "movie" or "tv".', $mediaType)),
-        };
+        });
     }
 
     /**

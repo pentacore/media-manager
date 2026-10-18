@@ -106,6 +106,23 @@ final readonly class SeerrTitlePresenter
     }
 
     /**
+     * Whether a row of Seerr's request list is a completed request for a
+     * title Seerr has since deleted (MediaStatus 7). The request belonged to
+     * the deleted copy: the title can be requested again, and the request no
+     * longer means it is available. Pending and approved requests on a
+     * deleted title still hold it, as Seerr's own eligibility check does.
+     *
+     * @param  array<string, mixed>  $request
+     */
+    public function completedForDeletedTitle(array $request): bool
+    {
+        $media = is_array($request['media'] ?? null) ? $request['media'] : [];
+
+        return (int) ($media['status'] ?? 0) === self::DELETED_MEDIA
+            && (int) ($request['status'] ?? 0) === self::COMPLETED_REQUEST;
+    }
+
+    /**
      * @param  array<string, mixed>  $detail
      * @return array<string, mixed>|null
      */

@@ -59,6 +59,7 @@ test('the request button stays disabled until a Seerr user is picked, then submi
             ['id' => 4, 'displayName' => 'Alice', 'email' => 'alice@example.com'],
             ['id' => 5, 'displayName' => 'Bob', 'email' => 'bob@example.com'],
         ]]),
+        'seerr.local:5055/api/v1/tv/*' => Http::response(['id' => 1396, 'name' => 'Test Show']),
     ]);
 
     // No email match against either faked Seerr user, so pickerOptions()
@@ -124,6 +125,7 @@ test('a picker outage shows an unreachable message instead of an empty user sele
         ]),
         'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
         'seerr.local:5055/api/v1/user*' => Http::response([], 503),
+        'seerr.local:5055/api/v1/tv/*' => Http::response(['id' => 1396, 'name' => 'Test Show']),
     ]);
 
     $member = User::factory()->member()->create(['email' => 'nobody@example.com']);
@@ -340,4 +342,64 @@ test('an owned entry on an inactive connection shows its library status instead 
         ->assertMissing('[data-anime-monitor]')
         ->assertMissing('[data-anime-open]')
         ->assertSeeIn('[data-anime-library-status]', 'Unmonitored');
+});
+
+test('a title Seerr blocklisted shows Blocklisted and offers no Request button', function (): void {
+    animeSeasonFixtureBasics();
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+    Http::fake([
+        ...animeSeasonAniListFakes('TV'),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 6]]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-anime-status]', 'Blocklisted')
+        ->assertSeeIn('[data-anime-blocklisted]', 'Blocklisted')
+        ->assertMissing('[data-anime-request]')
+        ->assertNoSmoke();
+});
+
+test('a title nobody requested reads Not requested, never Available, and offers Request', function (): void {
+    animeSeasonFixtureBasics();
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+        'tvdb_season' => 2,
+    ]);
+    Http::fake([
+        ...animeSeasonAniListFakes('TV'),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Test Show', 'mediaInfo' => ['status' => 7]]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-anime-status]', 'Not requested')
+        ->assertPresent('[data-anime-request]');
+
+    expect($webpage->text('[data-anime-status]'))->not->toContain('Available');
+});
+
+test('an admin reads a refusal when Seerr answers the user picker with a login page', function (): void {
+    animeSeasonFixtureBasics();
+    Http::fake([
+        ...animeSeasonAniListFakes('TV'),
+        'seerr.local:5055/api/v1/user*' => Http::response('<html><body>Sign in</body></html>'),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-seerr-picker-unreachable]', 'Seerr refused the request — check the connection settings.')
+        ->assertNoSmoke();
 });
