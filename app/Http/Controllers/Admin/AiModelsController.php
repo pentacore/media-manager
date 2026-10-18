@@ -61,13 +61,16 @@ class AiModelsController extends Controller
         $allowlist = $decisionAgentSettings->eventAllowlist();
 
         $modelCapabilities = $modelCatalog->reasoningCapabilities();
+        $aiTasks = array_filter(AiTask::cases(), static fn (AiTask $aiTask): bool => $aiTask !== AiTask::Failover);
+        $resolvedByTask = [];
+
+        foreach ($aiTasks as $aiTask) {
+            $resolvedByTask[$aiTask->value] = $taskModelResolver->resolve($aiTask);
+        }
+
         $tasks = [];
 
-        foreach (AiTask::cases() as $aiTask) {
-            if ($aiTask === AiTask::Failover) {
-                continue;
-            }
-
+        foreach ($aiTasks as $aiTask) {
             $tasks[] = [
                 'task' => $aiTask->value,
                 'label' => $aiTask->label(),
@@ -76,9 +79,9 @@ class AiModelsController extends Controller
                 'allow_auto' => $aiTask === AiTask::Title,
                 'allow_tiers' => $aiTask->allowsTiers(),
                 'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
-                'resolved' => $this->summary($taskModelResolver->resolve($aiTask), $modelCapabilities),
+                'resolved' => $this->summary($resolvedByTask[$aiTask->value], $modelCapabilities),
                 'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask), $modelCapabilities),
-                'warning' => $this->taskWarning($aiTask, $taskModelResolver),
+                'warning' => $this->taskWarning($aiTask, $resolvedByTask),
             ];
         }
 
@@ -117,15 +120,17 @@ class AiModelsController extends Controller
 
     /**
      * A caution shown under a task's live selection, or null.
+     *
+     * @param  array<string, ResolvedSelection>  $resolvedByTask  each task's live selection, keyed by task value
      */
-    private function taskWarning(AiTask $aiTask, TaskModelResolver $taskModelResolver): ?string
+    private function taskWarning(AiTask $aiTask, array $resolvedByTask): ?string
     {
         if ($aiTask !== AiTask::DecisionVerifier) {
             return null;
         }
 
-        $resolvedSelection = $taskModelResolver->resolve(AiTask::DecisionVerifier);
-        $decision = $taskModelResolver->resolve(AiTask::Decision);
+        $resolvedSelection = $resolvedByTask[AiTask::DecisionVerifier->value];
+        $decision = $resolvedByTask[AiTask::Decision->value];
 
         return $resolvedSelection->provider === $decision->provider && $resolvedSelection->model === $decision->model
             ? __('Runs on the same model as the Decision agent, so its second opinion is less independent.')
