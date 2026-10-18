@@ -312,6 +312,7 @@ function submit(): void {
                     <div class="flex min-w-0 flex-col gap-2">
                         <TierListEditor
                             v-model="form.tasks[row.task].tiers"
+                            :label="row.label"
                             :models="models"
                             :reasoning-levels="reasoningLevels"
                             :model-capabilities="modelCapabilities"
@@ -407,6 +408,7 @@ function submit(): void {
                                 </div>
                                 <TierListEditor
                                     v-model="override.tiers"
+                                    :label="override.event_key"
                                     :models="models"
                                     :reasoning-levels="reasoningLevels"
                                     :model-capabilities="modelCapabilities"

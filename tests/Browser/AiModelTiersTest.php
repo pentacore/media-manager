@@ -261,10 +261,10 @@ test('the model pickers are named by tier', function (): void {
 
     visit(route('admin.ai-models.index', absolute: false))
         ->assertNoSmoke()
-        ->assertPresent('[data-task="chat"] [aria-label="Model"]')
-        ->assertMissing('[data-task="chat"] [aria-label="Tier 1 model"]')
+        ->assertPresent('[data-task="chat"] [aria-label="Chat model"]')
+        ->assertMissing('[data-task="chat"] [aria-label="Chat tier 1 model"]')
         ->click('[data-task="chat"] [data-tier-add]')
-        ->assertPresent('[data-task="chat"] [aria-label="Tier 1 model"]')
-        ->assertPresent('[data-task="chat"] [aria-label="Tier 2 model"]')
-        ->assertMissing('[data-task="chat"] [aria-label="Model"]');
+        ->assertPresent('[data-task="chat"] [aria-label="Chat tier 1 model"]')
+        ->assertPresent('[data-task="chat"] [aria-label="Chat tier 2 model"]')
+        ->assertMissing('[data-task="chat"] [aria-label="Chat model"]');
 });

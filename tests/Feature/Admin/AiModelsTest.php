@@ -19,6 +19,7 @@ use App\Services\AiUsage\FreePoolAccounting;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
@@ -135,6 +136,21 @@ test('the index hints when the resolved model does not reason', function (): voi
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
         ->assertInertia(fn ($page) => $page->where('tasks.1.resolved.reasoning_hint', "Model doesn't reason"));
+});
+
+test('the index reads reasoning support once instead of once per summary', function (): void {
+    AiModelPrice::query()->where('model', 'gpt-5-nano')->update(['supports_reasoning' => false]);
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5-nano')->create();
+    $admin = User::factory()->admin()->create();
+
+    DB::enableQueryLog();
+    $this->actingAs($admin)->get(route('admin.ai-models.index'))->assertOk();
+    $perSelectionLookups = collect(DB::getQueryLog())
+        ->filter(fn (array $query): bool => str_contains($query['query'], 'from "ai_model_prices"') && str_contains($query['query'], '"model" = ?'))
+        ->count();
+    DB::disableQueryLog();
+
+    expect($perSelectionLookups)->toBe(0);
 });
 
 test('saving writes task rows and drops all-inherit rows', function (): void {
