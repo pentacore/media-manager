@@ -13,6 +13,9 @@ use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\LiteLlmPricingAdapter;
 use App\Services\AiUsage\Pricing\ModelsDevPricingAdapter;
 use App\Services\AiUsage\Pricing\OpenRouterPricingAdapter;
+use App\Services\AiUsage\Pricing\PriceRefreshLedger;
+use App\Services\AiUsage\Pricing\PriceVerificationRun;
+use App\Services\AiUsage\Pricing\PriceVerifierPhase;
 use App\Services\AiUsage\Pricing\RefreshScope;
 
 function capabilityCandidate(string $model, ?ReasoningCapability $reasoningCapability): ModelPriceCandidate
@@ -112,7 +115,7 @@ test('the writer refreshes capabilities on an unlocked row even when prices are 
         PricingSource::ModelsDev,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::Updated)
+    expect($writeOutcome)->toBe(WriteOutcome::CapabilitiesUpdated)
         ->and(AiModelPrice::query()->where('model', 'gpt-cap-update')->value('supports_reasoning'))->toBeTrue();
 });
 
@@ -219,4 +222,38 @@ test('a feed flipping a model to unsupported clears stale levels and style', fun
     expect($aiModelPrice->supports_reasoning)->toBeFalse()
         ->and($aiModelPrice->reasoning_levels)->toBeNull()
         ->and($aiModelPrice->reasoning_style)->toBeNull();
+});
+
+test('a capability-only dry run reports the would-be capability update', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai', 'model' => 'gpt-cap-dry',
+        'input_per_mtok' => '1.25', 'output_per_mtok' => '10',
+        'supports_reasoning' => null,
+    ]);
+
+    $writeOutcome = resolve(AiModelPriceWriter::class)->write(
+        capabilityCandidate('gpt-cap-dry', new ReasoningCapability(true, ['medium'], null)),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+        dryRun: true,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdateCapabilities)
+        ->and(AiModelPrice::query()->where('model', 'gpt-cap-dry')->value('supports_reasoning'))->toBeNull();
+});
+
+test('verify mode counts a capability-only update as updated but not as a discrepancy', function (): void {
+    $priceVerificationRun = new PriceVerificationRun;
+    $priceVerificationRun->recordOutcome('openai', WriteOutcome::CapabilitiesUpdated, 'gpt-a');
+    $priceVerificationRun->recordOutcome('openai', WriteOutcome::WouldUpdateCapabilities, 'gpt-b');
+    $priceVerificationRun->recordOutcome('openai', WriteOutcome::Updated, 'gpt-c');
+
+    $priceRefreshLedger = new PriceRefreshLedger(verifyMode: true);
+    $priceRefreshLedger->providerState('openai', PriceRefreshLedger::PROVIDER_OK);
+
+    $method = new ReflectionMethod(PriceVerifierPhase::class, 'applyAgentTally');
+    $method->invoke(resolve(PriceVerifierPhase::class), $priceRefreshLedger, 'openai', $priceVerificationRun);
+
+    expect($priceRefreshLedger->providerStates['openai']['updated'])->toBe(3)
+        ->and($priceRefreshLedger->providerStates['openai']['discrepancies'])->toBe(1);
 });

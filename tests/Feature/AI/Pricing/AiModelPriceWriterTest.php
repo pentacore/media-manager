@@ -144,6 +144,8 @@ describe('WriteOutcome', function (): void {
             ->and(WriteOutcome::RejectedAnomalous->value)->toBe('rejected_anomalous')
             ->and(WriteOutcome::WouldCreate->value)->toBe('would_create')
             ->and(WriteOutcome::WouldUpdate->value)->toBe('would_update')
+            ->and(WriteOutcome::CapabilitiesUpdated->value)->toBe('capabilities_updated')
+            ->and(WriteOutcome::WouldUpdateCapabilities->value)->toBe('would_update_capabilities')
             ->and(WriteOutcome::CreateDisabled->value)->toBe('create_disabled');
     });
 });
@@ -1031,7 +1033,7 @@ test('capability-only changes on an unlocked row return updated and save capabil
         PricingSource::ModelsDev,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::Updated);
+    expect($writeOutcome)->toBe(WriteOutcome::CapabilitiesUpdated);
 
     $row->refresh();
 
@@ -1063,7 +1065,7 @@ test('capability-only changes on dry-run return would-update without saving', fu
         dryRun: true,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdate);
+    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdateCapabilities);
 
     $row->refresh();
 
