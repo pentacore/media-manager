@@ -19,6 +19,7 @@ import {
     mergeLiveResult,
     reconcileWithLive,
     retryConfirmation,
+    SecondOpinionVerdict,
 } from '@/components/actions';
 import type { LiveStatusChange } from '@/components/actions';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
@@ -1042,6 +1043,11 @@ function pipelineState(
                                 >
                             </div>
                         </div>
+
+                        <SecondOpinionVerdict
+                            v-if="selected.second_opinion"
+                            :verdict="selected.second_opinion"
+                        />
 
                         <template v-if="selected.type === 'replace_media_file'">
                             <template v-if="!selected.details?.length">

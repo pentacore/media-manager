@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Actions;
 
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
@@ -18,12 +19,14 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class ActionRequestReviewer
 {
+    public function __construct(private SecondOpinionVerifier $secondOpinionVerifier) {}
+
     /**
      * @return bool false when the request is no longer pending
      */
     public function approve(ActionRequest $actionRequest, User $user): bool
     {
-        return DB::transaction(function () use ($actionRequest, $user): bool {
+        $approved = DB::transaction(function () use ($actionRequest, $user): bool {
             $lockedActionRequest = ActionRequest::query()
                 ->whereKey($actionRequest->id)
                 ->lockForUpdate()
@@ -45,6 +48,12 @@ final readonly class ActionRequestReviewer
 
             return true;
         });
+
+        if ($approved) {
+            $this->secondOpinionVerifier->resolveFromReview($actionRequest, approved: true);
+        }
+
+        return $approved;
     }
 
     /**
@@ -52,7 +61,7 @@ final readonly class ActionRequestReviewer
      */
     public function reject(ActionRequest $actionRequest, User $user, ?string $reason = null): bool
     {
-        return DB::transaction(function () use ($actionRequest, $user, $reason): bool {
+        $rejected = DB::transaction(function () use ($actionRequest, $user, $reason): bool {
             $lockedActionRequest = ActionRequest::query()
                 ->whereKey($actionRequest->id)
                 ->lockForUpdate()
@@ -71,5 +80,11 @@ final readonly class ActionRequestReviewer
 
             return true;
         });
+
+        if ($rejected) {
+            $this->secondOpinionVerifier->resolveFromReview($actionRequest, approved: false);
+        }
+
+        return $rejected;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\SecondOpinionMode;
 use Carbon\CarbonImmutable;
 use Database\Factories\ActionTypeConfigFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,6 +20,7 @@ use Override;
  * @property string|null $description
  * @property bool $requires_approval
  * @property bool $is_enabled
+ * @property SecondOpinionMode $second_opinion
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -32,12 +34,13 @@ use Override;
  * @method static Builder<static>|ActionTypeConfig whereIsEnabled($value)
  * @method static Builder<static>|ActionTypeConfig whereLabel($value)
  * @method static Builder<static>|ActionTypeConfig whereRequiresApproval($value)
+ * @method static Builder<static>|ActionTypeConfig whereSecondOpinion($value)
  * @method static Builder<static>|ActionTypeConfig whereType($value)
  * @method static Builder<static>|ActionTypeConfig whereUpdatedAt($value)
  *
  * @mixin \Eloquent
  */
-#[Fillable(['type', 'label', 'description', 'requires_approval', 'is_enabled'])]
+#[Fillable(['type', 'label', 'description', 'requires_approval', 'is_enabled', 'second_opinion'])]
 class ActionTypeConfig extends Model
 {
     /** @use HasFactory<ActionTypeConfigFactory> */
@@ -52,6 +55,7 @@ class ActionTypeConfig extends Model
         return [
             'requires_approval' => 'boolean',
             'is_enabled' => 'boolean',
+            'second_opinion' => SecondOpinionMode::class,
         ];
     }
 }

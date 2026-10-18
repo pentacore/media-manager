@@ -58,7 +58,7 @@ test('a model shared by several roles is reported for each role', function (): v
     priceModels('title-model');
 
     expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
-        ->toBe(['Chat', 'Decision agent', 'File inspector', 'Stuck download investigator', 'Price updater', 'Benchmark judge']);
+        ->toBe(['Chat', 'Decision agent', 'Decision verifier', 'File inspector', 'Stuck download investigator', 'Price updater', 'Benchmark judge']);
 });
 
 test('each selected model is looked up under its own provider', function (): void {

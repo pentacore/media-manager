@@ -1,3 +1,26 @@
+# [1.45.0](https://github.com/pentacore/media-manager/compare/v1.44.0...v1.45.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **actions:** count only queued actions in decision notifications and label only second-opinion rejections ([43b7cea](https://github.com/pentacore/media-manager/commit/43b7cea041a6139ba813819ee950060ea5595643))
+* **actions:** satisfy phpstan on the second-opinion payload and dispatch ([9f7147a](https://github.com/pentacore/media-manager/commit/9f7147a8658bcf3d7fa8ede78e2f009df76237e9))
+* **ai:** fence the proposed payload and unverified title in the verifier prompt ([864af88](https://github.com/pentacore/media-manager/commit/864af889bbbdd8985cf8f7f4fe8c80bd41f2af5b))
+* **ai:** give the decision verifier room for reasoning tokens ([94ee547](https://github.com/pentacore/media-manager/commit/94ee547a71b717b15e286e2115c67611b4620ef6))
+* **ai:** keep the second opinion inside the decision run's deadline ([e772d4a](https://github.com/pentacore/media-manager/commit/e772d4a7a4cd496de8680d28dbb3b0532eaaf0fe))
+
+
+### Features
+
+* **actions:** choose a second opinion per approval rule ([3af9ad6](https://github.com/pentacore/media-manager/commit/3af9ad6b0155a08f5f6f32cd212094402f9a350e))
+* **actions:** show the second opinion on the action queue card ([b9a681e](https://github.com/pentacore/media-manager/commit/b9a681e847a267decd78b80a3b13683504a97f3e))
+* **actions:** store second-opinion settings, rule modes and verdicts ([4e24416](https://github.com/pentacore/media-manager/commit/4e24416c666cc4562e0b9c2f8a34a2b748184c67))
+* **actions:** verify automated proposals before they are queued ([4e83d83](https://github.com/pentacore/media-manager/commit/4e83d83d78ba9127117dc57d96fdf54bbf874cf7))
+* **ai-models:** warn when the decision verifier shares the decision model ([616121f](https://github.com/pentacore/media-manager/commit/616121f3343c81fe595d510841e6f4e576806670))
+* **ai:** add the decision verifier task, agent and second-opinion enums ([b047325](https://github.com/pentacore/media-manager/commit/b0473250b6230019ed6525da7acf2d706f2b8bfa))
+* **ai:** add the second-opinion verifier with llm, jev and cascade engines ([b8d0f61](https://github.com/pentacore/media-manager/commit/b8d0f6101769478f37079e41bdbb061db8db8fa1))
+* **decision-agent:** choose the second-opinion engine and jev threshold ([a395271](https://github.com/pentacore/media-manager/commit/a39527106cbb106840cefad90cd62d8067cfada4))
+
 # [1.44.0](https://github.com/pentacore/media-manager/compare/v1.43.0...v1.44.0) (2026-10-16)
 
 

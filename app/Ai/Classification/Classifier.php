@@ -36,6 +36,16 @@ final readonly class Classifier
     ) {}
 
     /**
+     * Whether the classification provider has an API key (or classification
+     * is faked in tests). Without one every call fails open to null.
+     */
+    public function isConfigured(): bool
+    {
+        return Classification::isFaked()
+            || filled(config(sprintf('ai.providers.%s.key', $this->aiSettings->classificationProvider())));
+    }
+
+    /**
      * @param  string|array<string, mixed>  $state
      * @param  array<string, Question>  $questions
      * @param  int  $timeoutSeconds  Seconds before the call is abandoned and the gate fails open.
@@ -45,7 +55,7 @@ final readonly class Classifier
     {
         $provider = $this->aiSettings->classificationProvider();
 
-        if (! Classification::isFaked() && blank(config(sprintf('ai.providers.%s.key', $provider)))) {
+        if (! $this->isConfigured()) {
             return null;
         }
 

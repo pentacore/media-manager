@@ -311,8 +311,8 @@ test('an action rule change records what changed and a repeat save records nothi
     $admin = User::factory()->admin()->create();
     $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'delete_series', 'label' => 'Delete series', 'requires_approval' => true, 'is_enabled' => true]);
 
-    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true])->assertRedirect();
-    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true])->assertRedirect();
+    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true, 'second_opinion' => 'off'])->assertRedirect();
+    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true, 'second_opinion' => 'off'])->assertRedirect();
 
     $activityLog = adminAuditRow('action_rule.updated');
 
@@ -352,7 +352,7 @@ test('a rule change or price assignment whose audit row cannot be written is not
     });
     $this->withoutExceptionHandling()->actingAs($admin);
 
-    expect(fn () => $this->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true]))
+    expect(fn () => $this->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true, 'second_opinion' => 'off']))
         ->toThrow(RuntimeException::class, 'audit store unavailable')
         ->and(fn () => $this->post(route('admin.ai-usage.assign-price', $aiUsageRecord), ['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']))
         ->toThrow(RuntimeException::class, 'audit store unavailable');

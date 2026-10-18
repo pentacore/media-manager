@@ -2,11 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Ai\Classification\ClassificationOutcomeRecorder;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
+use App\Enums\ClassificationGate;
+use App\Enums\ClassificationVerdict;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\ClassificationOutcome;
 use App\Models\MediaReplacementAttempt;
 use App\Models\User;
+use App\Services\Actions\ActionRequestBrowserPayload;
+use App\Services\Actions\ActionRequestReviewer;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -392,4 +399,36 @@ test('a legacy action request exposes null description fields', function (): voi
             ->where('requests.data.0.title', null)
             ->where('requests.data.0.details', [])
             ->where('requests.data.0.agent_rationale', null));
+});
+
+test('approving a held action resolves the jev second opinion as positive', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, engine: 'jev', confidence: 0.3)->create(['status' => ActionRequestStatus::Pending]);
+    resolve(ClassificationOutcomeRecorder::class)->record(ClassificationGate::SecondOpinion, SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id), 'second_opinion', 0.3, ClassificationVerdict::Skipped, 0.8);
+
+    resolve(ActionRequestReviewer::class)->approve($actionRequest, User::factory()->admin()->create());
+
+    expect(ClassificationOutcome::query()->sole()->outcome_positive)->toBeTrue();
+});
+
+test('rejecting a held action resolves the jev second opinion as negative', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, engine: 'jev', confidence: 0.3)->create(['status' => ActionRequestStatus::Pending]);
+    resolve(ClassificationOutcomeRecorder::class)->record(ClassificationGate::SecondOpinion, SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id), 'second_opinion', 0.3, ClassificationVerdict::Skipped, 0.8);
+
+    resolve(ActionRequestReviewer::class)->reject($actionRequest, User::factory()->admin()->create());
+
+    expect(ClassificationOutcome::query()->sole()->outcome_positive)->toBeFalse();
+});
+
+test('the browser payload carries a bounded second opinion', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, reason: str_repeat('x', 900))->create();
+
+    $secondOpinion = resolve(ActionRequestBrowserPayload::class)->description($actionRequest)['second_opinion'];
+
+    expect($secondOpinion)->toMatchArray(['engine' => 'llm', 'mode' => 'hold', 'agrees' => false, 'failed' => false])
+        ->and(mb_strlen((string) $secondOpinion['reason']))->toBe(500)
+        ->and($secondOpinion)->not->toHaveKeys(['provider', 'model']);
+});
+
+test('a request without a second opinion carries none', function (): void {
+    expect(resolve(ActionRequestBrowserPayload::class)->description(ActionRequest::factory()->create())['second_opinion'])->toBeNull();
 });

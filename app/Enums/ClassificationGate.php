@@ -18,6 +18,7 @@ enum ClassificationGate: string
     case StuckImport = 'stuck_import';
     case SubtitleTriage = 'subtitle_triage';
     case ChatRouting = 'chat_routing';
+    case SecondOpinion = 'second_opinion';
 
     public function label(): string
     {
@@ -27,6 +28,7 @@ enum ClassificationGate: string
             self::StuckImport => 'Stuck-import fast path',
             self::SubtitleTriage => 'Subtitle escalation triage',
             self::ChatRouting => 'Chat tool routing',
+            self::SecondOpinion => 'Decision second opinion',
         };
     }
 }
