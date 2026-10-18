@@ -12,13 +12,11 @@ use App\Ai\ResolvedSelection;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiTask;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
-use Laravel\Ai\Ai;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Gateway\Anthropic\AnthropicSchemaSanitizer;
 use Laravel\Ai\ObjectSchema;
-use LogicException;
 use ReflectionClass;
 
 /**
@@ -104,6 +102,12 @@ trait RunsAsAiTask
      * chain order; a provider outside the chain keeps what it was given and
      * no model.
      *
+     * Limitation of the SDK: providerOptions() receives only the driver, so
+     * chain entries that share one cannot be told apart. With a primary
+     * `my-or` and a failover `openrouter` (both on the openrouter driver) both
+     * calls arrive as `openrouter`, which names the failover exactly, so the
+     * primary's request gets the failover's entry (model and clamping).
+     *
      * @return array{0: string, 1: string|null}
      */
     private function chainEntryFor(string $provider, ResolvedSelection $resolvedSelection): array
@@ -117,25 +121,11 @@ trait RunsAsAiTask
 
         $model = match (true) {
             $providerName === $resolvedSelection->provider => $resolvedSelection->model,
-            $failover !== null && $failover['provider'] === $providerName => $failover['model'] ?? $this->providerDefaultModel($providerName),
+            $failover !== null && $failover['provider'] === $providerName => resolve(TaskModelResolver::class)->failoverModel(),
             default => null,
         };
 
         return [$providerName, $model];
-    }
-
-    /**
-     * The model the SDK falls back to when a provider in the chain has no
-     * model (Promptable::getDefaultModelFor()), or null when the provider
-     * cannot be resolved.
-     */
-    private function providerDefaultModel(string $provider): ?string
-    {
-        try {
-            return Ai::textProvider($provider)->defaultTextModel();
-        } catch (LogicException) {
-            return null;
-        }
     }
 
     private function declaredMaxTokens(): ?int

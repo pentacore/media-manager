@@ -136,6 +136,28 @@ final class TaskModelResolver
     }
 
     /**
+     * The model the failover provider runs on: its configured model, or the
+     * provider's default text model the SDK falls back to
+     * (Promptable::getDefaultModelFor()); null when failover is off or the
+     * provider cannot be resolved. providerOptions() clamps the failover
+     * request's reasoning against it and AnsweredBy labels with it.
+     */
+    public function failoverModel(): ?string
+    {
+        $failover = $this->failover();
+
+        if ($failover === null) {
+            return null;
+        }
+
+        try {
+            return $failover['model'] ?? Ai::textProvider($failover['provider'])->defaultTextModel();
+        } catch (InvalidArgumentException|LogicException) {
+            return null;
+        }
+    }
+
+    /**
      * Every tier in the scope that names a model, with the pair it would run
      * on (positions are one-based, like TierOutcome) — for checks (pricing,
      * hard-cap warnings) that must cover tiers that are not live right now.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
+use App\Ai\AnsweredBy;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\FreePoolOverflowBehavior;
@@ -15,6 +16,7 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Providers\Provider;
 
@@ -129,4 +131,20 @@ test('a failover answer names the failover reasoning and no tier', function (str
     'clamped to the failover model' => ['anthropic', ['medium', 'high'], 'Medium'],
     'unknown levels keep the turn level' => ['anthropic', null, 'Low'],
     'a provider without reasoning options' => ['mistral', null, 'Provider default'],
+]);
+
+test('a failover label clamps against the configured failover model, not the reported one', function (string $reportedModel, string $shownModel): void {
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'xai', 'model' => 'failover-model'])->create();
+    AiModelPrice::factory()->create(['provider' => 'xai', 'model' => 'failover-model', 'supports_reasoning' => true, 'reasoning_levels' => ['medium', 'high']]);
+
+    expect(AnsweredBy::forChat('xai', $reportedModel))->toBe([
+        'provider' => 'xai',
+        'model' => $shownModel,
+        'reasoning_label' => 'Medium',
+        'tier' => null,
+    ])->and((new MediaAgent)->providerOptions(Lab::xAI))->toBe(['reasoning' => ['effort' => 'medium']]);
+})->with([
+    'the configured model' => ['failover-model', 'failover-model'],
+    'a dated snapshot' => ['failover-model-2025-08-07', 'failover-model-2025-08-07'],
+    'no reported model' => ['', 'failover-model'],
 ]);
