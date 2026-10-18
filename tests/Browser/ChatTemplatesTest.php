@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiProposedWorkflowStatus;
+use App\Models\AiProposedWorkflow;
 use App\Models\ChatTemplate;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -437,4 +440,39 @@ test('the editor offers a model preset and saves the chosen reasoning level', fu
         ->assertSee('Template saved.');
 
     expect($admin->chatTemplates()->sole()->reasoning?->value)->toBe('high');
+});
+
+test('while a workflow proposal is pending a template only fills the composer and the model picker is locked', function (): void {
+    $admin = User::factory()->admin()->create();
+    MediaAgent::fake(function () use ($admin): string {
+        AiProposedWorkflow::create([
+            'id' => (string) Str::uuid7(),
+            'user_id' => $admin->id,
+            'conversation_id' => null,
+            'rationale' => 'Cleaning up unwatched series',
+            'steps' => [['action' => 'delete_series', 'target' => 'Demo Show', 'reason' => 'Unwatched 8mo']],
+            'status' => AiProposedWorkflowStatus::Proposed,
+        ]);
+
+        return 'I have proposed a workflow.';
+    });
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertSeeIn('[data-template-preset]', 'Uses gpt-5-nano')
+        ->assertScript("document.querySelector('[data-template-send]').disabled", true)
+        ->click('[data-template-insert]')
+        ->assertValue('[data-chat-input]', 'Find Swedish subtitles')
+        ->assertDontSeeIn('[data-chat-thread]', 'Find Swedish subtitles')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true);
 });
