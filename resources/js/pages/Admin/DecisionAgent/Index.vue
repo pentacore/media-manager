@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
+import type { SecondOpinionEngine } from '@/typefinder/enums/SecondOpinionEngine';
 
 interface DecisionAgentState {
     enabled: boolean;
@@ -24,7 +25,7 @@ interface DecisionAgentState {
     notify_on_suggest: boolean;
     notify_on_act: boolean;
     max_actions_per_run: number;
-    second_opinion_engine: 'llm' | 'jev_then_llm' | 'jev';
+    second_opinion_engine: SecondOpinionEngine;
     second_opinion_jev_threshold: number;
 }
 
@@ -32,7 +33,7 @@ const props = defineProps<{
     settings: DecisionAgentState;
     eventCatalog: Record<string, string[]>;
     secondOpinionEngines: Array<{
-        value: DecisionAgentState['second_opinion_engine'];
+        value: SecondOpinionEngine;
         label: string;
     }>;
     classifierConfigured: boolean;
