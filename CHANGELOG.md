@@ -1,3 +1,25 @@
+# [1.46.0](https://github.com/pentacore/media-manager/compare/v1.45.0...v1.46.0) (2026-10-18)
+
+
+### Bug Fixes
+
+* **actions:** let a reload sent after a live status win over it, on the queue and the badge ([cae0ed5](https://github.com/pentacore/media-manager/commit/cae0ed5f88165d16ce27d6f0d30337c17c750cc6))
+* **actions:** number builder status writes inside the UPDATE so a version never goes backwards ([89a5efd](https://github.com/pentacore/media-manager/commit/89a5efd9e5e3a4904443b126866627dd262e2553))
+* **actions:** order live Action Queue statuses by status version ([d6bb210](https://github.com/pentacore/media-manager/commit/d6bb210da63ac22075709a41af5e06c315041f86))
+* **actions:** skip the status_version sequence on non-Postgres drivers ([cda20e4](https://github.com/pentacore/media-manager/commit/cda20e4cc5181867ffecb182f776befa1ac35a8b))
+* **ai-usage:** abort the run detail request on close and on reopen ([d1c4c07](https://github.com/pentacore/media-manager/commit/d1c4c0756315a9ad27cc1403da19a89ba51b85d3))
+* **nav:** keep the newest pending-actions count by its status version ([f92e0fa](https://github.com/pentacore/media-manager/commit/f92e0fadd958374972f2895cfaf4b6afc7de65f1))
+* **seerr:** honour blocklisted and deleted titles on Seasonal Anime and the Requests pages ([fdb600e](https://github.com/pentacore/media-manager/commit/fdb600e8120224f89a954abfee585f869036d53a))
+* **seerr:** treat a non-JSON answer to a Seerr write as unconfirmed ([9fba663](https://github.com/pentacore/media-manager/commit/9fba663dbdf892934a478b11ba0247be51933975))
+* **seerr:** word a login page in front of Seerr as a refusal on every read ([3b97c74](https://github.com/pentacore/media-manager/commit/3b97c74c78c4fcb77f1129d0d6b7b2f6bff8fc83))
+* **seerr:** word every Seerr failure by who can fix it, and skip doomed anime lookups ([1efc5d2](https://github.com/pentacore/media-manager/commit/1efc5d2c1326e28d05a6b90846a88383c1c05d2f))
+
+
+### Features
+
+* **actions:** number every action request status change from a database sequence ([a047307](https://github.com/pentacore/media-manager/commit/a047307c9fb5abb16691ebc1e979ff15cff1f595))
+* **library:** reload the Sonarr and Radarr title pages after a processed webhook ([24d66a2](https://github.com/pentacore/media-manager/commit/24d66a2ac5bbb11269c1903b136e30ba8e81825b))
+
 # [1.45.0](https://github.com/pentacore/media-manager/compare/v1.44.0...v1.45.0) (2026-10-18)
 
 
