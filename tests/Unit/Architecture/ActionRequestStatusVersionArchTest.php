@@ -17,7 +17,9 @@ use Symfony\Component\Finder\Finder;
  * has a 'status' key but no 'status_version' key. A chain that loads a model
  * first (`first()`, `firstOrFail()`, `firstWhere()`, `firstOr()`, `find()`,
  * `findOrFail()`, `sole()`, called with `->` or statically with `::`) ends in
- * a model save, which the observer numbers.
+ * a model save, which the observer numbers. Only a link of the chain itself
+ * counts: the arguments are blanked first, so a loader inside one
+ * (`whereKey($ids->first())`) leaves the update a builder update.
  *
  * It cannot see:
  * - a builder kept in a variable and updated in a later statement;
@@ -47,7 +49,13 @@ function actionRequestStatusVersionOffenders(string $path, string $code): array
     );
 
     foreach ($matches as [$statement, $array]) {
-        if (preg_match('/(?:->|::)(?:first|firstOrFail|firstWhere|firstOr|find|findOrFail|sole)\(/', $statement) === 1) {
+        $chain = substr($statement, 0, (int) strrpos($statement, '->update('));
+
+        do {
+            $chain = (string) preg_replace('/\([^()]*\)/', '<>', $chain, -1, $blanked);
+        } while ($blanked > 0);
+
+        if (preg_match('/(?:->|::)(?:first|firstOrFail|firstWhere|firstOr|find|findOrFail|sole)<>/', $chain) === 1) {
             continue;
         }
 
@@ -75,6 +83,9 @@ test('the status-version scanner flags a builder status update without a version
         ActionRequest::find($id)->update(['status' => ActionRequestStatus::Rejected]);
         ActionRequest::findOrFail($id)->update(['status' => ActionRequestStatus::Rejected]);
         ActionRequest::query()->firstWhere('id', $id)->update(['status' => ActionRequestStatus::Rejected]);
+        ActionRequest::find($ids->first())->update(['status' => ActionRequestStatus::Rejected]);
+        ActionRequest::query()->whereKey($ids->first())->update(['status' => ActionRequestStatus::Approved]);
+        ActionRequest::query()->whereIn('id', $rows->map(fn ($row) => $row->find($id))->all())->update(['status' => 'failed']);
         $actionRequest->update(['status' => ActionRequestStatus::Approved]);
         ExecuteActionRequest::dispatch($x);
         StagedActionRequest::query()->whereKey($id)->update(['status' => 'failed']);
@@ -84,6 +95,8 @@ test('the status-version scanner flags a builder status update without a version
     expect(actionRequestStatusVersionOffenders('app/Example.php', $code))->toBe([
         "app/Example.php: ActionRequest::query()->whereKey(\$id)->update(['status' => ActionRequestStatus::Executing]);",
         "app/Example.php: table('action_requests')->where('id', \$id)->update(['status' => 'failed']);",
+        "app/Example.php: ActionRequest::query()->whereKey(\$ids->first())->update(['status' => ActionRequestStatus::Approved]);",
+        "app/Example.php: ActionRequest::query()->whereIn('id', \$rows->map(fn (\$row) => \$row->find(\$id))->all())->update(['status' => 'failed']);",
         "app/Example.php: ActionRequest::query()->whereKey(\$id)->update(['status' => 'rejected']);",
     ]);
 });
