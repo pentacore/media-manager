@@ -16,11 +16,24 @@ use Illuminate\Support\Facades\Schema;
  * bypasses Eloquent, including from code still running right after this
  * migration. Existing rows are numbered by when they last changed
  * (updated_at, then id); the sequence continues above the highest.
+ *
+ * The app runs on PostgreSQL only. CI's JS job migrates SQLite just to read
+ * the schema for generated types, so there the column is a plain integer
+ * with no sequence.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() !== 'pgsql') {
+            Schema::table('action_requests', function (Blueprint $blueprint): void {
+                $blueprint->unsignedBigInteger('status_version')->default(0)->after('status');
+                $blueprint->index('status_version');
+            });
+
+            return;
+        }
+
         DB::statement('CREATE SEQUENCE action_request_status_versions');
 
         Schema::table('action_requests', function (Blueprint $blueprint): void {
@@ -62,6 +75,8 @@ return new class extends Migration
             $blueprint->dropColumn('status_version');
         });
 
-        DB::statement('DROP SEQUENCE IF EXISTS action_request_status_versions');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('DROP SEQUENCE IF EXISTS action_request_status_versions');
+        }
     }
 };
