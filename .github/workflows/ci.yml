@@ -200,10 +200,33 @@ jobs:
         run: npm run types:check
 
   tests:
-    name: Pest tests
+    name: Pest (${{ matrix.name }})
     runs-on: ubuntu-latest
     # A hung Playwright browser otherwise burns the 6h default.
     timeout-minutes: 40
+
+    # The browser suite runs serially (see below) and dominated the wall
+    # clock, so it is split across runners with Pest's --shard. Unit & feature
+    # run on their own leg alongside. To rebalance shards by duration instead
+    # of test count, commit tests/.pest/shards.json from --update-shards.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: unit & feature
+            suite: unit-feature
+          - name: browser 1/4
+            suite: browser
+            shard: 1/4
+          - name: browser 2/4
+            suite: browser
+            shard: 2/4
+          - name: browser 3/4
+            suite: browser
+            shard: 3/4
+          - name: browser 4/4
+            suite: browser
+            shard: 4/4
 
     services:
       pgsql:
@@ -290,6 +313,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
+        if: matrix.suite == 'browser'
         run: npx playwright install --with-deps chromium
 
       - name: Prepare environment
@@ -301,6 +325,7 @@ jobs:
         run: npm run build
 
       - name: Run Pest (unit & feature)
+        if: matrix.suite == 'unit-feature'
         run: vendor/bin/pest --compact --parallel --exclude-testsuite=Browser
 
       # Browser tests drive a real Chromium via Playwright. Running them under
@@ -310,15 +335,16 @@ jobs:
       # between the two: it starts the SSR server, waits for it to report healthy
       # and runs the browser suite with SSR errors fatal.
       - name: Run Pest (browser with SSR)
-        run: composer test:browser
+        if: matrix.suite == 'browser'
+        run: composer test:browser -- --shard=${{ matrix.shard }}
 
       # A browser failure saves a screenshot of the page; keep it so a flake
       # shows what was on screen instead of only "Timeout 30000ms exceeded".
       - name: Upload browser failure screenshots
-        if: failure()
+        if: failure() && matrix.suite == 'browser'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-screenshots
+          name: browser-screenshots-${{ strategy.job-index }}
           path: tests/Browser/Screenshots
           if-no-files-found: ignore
           retention-days: 14
