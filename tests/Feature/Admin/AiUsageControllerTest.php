@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Enums\ClassificationGate;
+use App\Enums\FreePoolOverflowBehavior;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
@@ -761,23 +762,27 @@ test('the totals and per-model and per-provider breakdowns respect the benchmark
         ->assertInertia(fn ($page) => $page->where('totals.total_invocations', 3)->has('by_model', 2));
 });
 
-test('total cost nets free-pool forgiveness for live rows only under the benchmark filter', function (): void {
+test('total cost nets only the forgiveness earned by the rows the benchmark filter keeps', function (FreePoolOverflowBehavior $overflow, int $liveTokens, int $benchmarkTokens, bool $benchmarkFirst, array $expected): void {
     $run = BenchmarkRun::factory()->create();
-    $pool = AiFreeUsagePool::factory()->unified(10_000_000)->create();
+    $pool = AiFreeUsagePool::factory()->unified(200_000)->overflow($overflow)->create();
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-pooled', 'input_per_mtok' => 10, 'output_per_mtok' => 10, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'free_usage_pool_id' => $pool->id]);
     $tokens = ['provider' => 'openai', 'model' => 'gpt-pooled', 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0];
-    AiUsageRecord::factory()->create([...$tokens, 'prompt_tokens' => 100_000]);
-    AiUsageRecord::factory()->benchmarked($run->id)->create([...$tokens, 'prompt_tokens' => 300_000]);
+    $earlier = now()->subMinutes(10);
+    $later = now()->subMinutes(5);
+    AiUsageRecord::factory()->create([...$tokens, 'prompt_tokens' => $liveTokens, 'created_at' => $benchmarkFirst ? $later : $earlier]);
+    AiUsageRecord::factory()->benchmarked($run->id)->create([...$tokens, 'prompt_tokens' => $benchmarkTokens, 'created_at' => $benchmarkFirst ? $earlier : $later]);
 
-    // Live: 1.00 gross, forgiven in full. Benchmark: 3.00 gross, never forgiven.
-    $cases = ['only' => 3.00, 'exclude' => 0.00, null => 3.00];
-
-    foreach ($cases as $filter => $expected) {
+    foreach (['only' => 'only', 'exclude' => 'exclude', 'all' => null] as $label => $filter) {
         $this->actingAs(User::factory()->admin()->create())
             ->get(route('admin.ai-usage.index', $filter === null ? [] : ['benchmark' => $filter]))
-            ->assertInertia(fn ($page) => $page->where('totals.total_cost', fn (string $cost): bool => abs((float) $cost - $expected) < 0.0001));
+            ->assertInertia(fn ($page) => $page->where('totals.total_cost', fn (string $cost): bool => abs((float) $cost - $expected[$label]) < 0.0001));
     }
-});
+})->with([
+    // 400k used against 200k free: half of every row is forgiven.
+    'split pool' => [FreePoolOverflowBehavior::Split, 100_000, 300_000, false, ['only' => 1.50, 'exclude' => 0.50, 'all' => 2.00]],
+    // The benchmark row fits the quota first; the later live row no longer does.
+    'fit-or-paid pool' => [FreePoolOverflowBehavior::FitOrPaid, 100_000, 150_000, true, ['only' => 0.00, 'exclude' => 1.00, 'all' => 1.00]],
+]);
 
 test('the csv export honours the benchmark filter', function (): void {
     $run = BenchmarkRun::factory()->create();

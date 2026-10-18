@@ -95,16 +95,12 @@ class FreePoolAccounting
      * A $kind narrows only which rows' forgiveness is counted: quota
      * consumption is still measured against every kind sharing the pool.
      *
-     * Benchmark rows consume quota but never earn forgiveness (their cost is
-     * billed gross, see AiUsageReporting::benchmarkRunCost), so a $benchmark of
-     * true yields no discount and any other value counts live rows only.
+     * A $benchmark narrows only which rows' forgiveness is counted (true:
+     * benchmark rows, false: live rows); quota consumption is still measured
+     * against every row.
      */
     public function discount(?CarbonImmutable $since, ?AiUsageKind $kind = null, ?bool $benchmark = null): float
     {
-        if ($benchmark === true) {
-            return 0.0;
-        }
-
         $pools = AiFreeUsagePool::query()->with('prices')->get();
 
         $discount = 0.0;
@@ -126,12 +122,12 @@ class FreePoolAccounting
             }
 
             if ($pool->overflow_behavior === FreePoolOverflowBehavior::FitOrPaid) {
-                $discount += $this->fitOrPaidDiscount($pool, $rates, $since, $kind);
+                $discount += $this->fitOrPaidDiscount($pool, $rates, $since, $kind, $benchmark);
 
                 continue;
             }
 
-            $buckets = $this->poolUsageRows($pool, $since, bucketed: true, kind: $kind)
+            $buckets = $this->poolUsageRows($pool, $since, bucketed: true, kind: $kind, benchmark: $benchmark)
                 ->groupBy('bucket');
 
             foreach ($buckets as $bucket) {
@@ -204,7 +200,7 @@ class FreePoolAccounting
      *
      * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_cache_read?: int|string, window_cache_write?: int|string, window_output?: int|string}>
      */
-    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false, ?AiUsageKind $kind = null): Collection
+    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false, ?AiUsageKind $kind = null, ?bool $benchmark = null): Collection
     {
         $memberProviders = $aiFreeUsagePool->prices
             ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider)
@@ -246,9 +242,14 @@ class FreePoolAccounting
                 $windowBindings[] = $kind->value;
             }
 
-            $windowConditions[] = 'ai_usage_records.is_benchmark = false';
+            if ($benchmark !== null) {
+                $windowConditions[] = 'ai_usage_records.is_benchmark = ?';
+                $windowBindings[] = $benchmark;
+            }
 
-            $windowFilter = sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
+            $windowFilter = $windowConditions === []
+                ? ''
+                : sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
 
             $selects[] = sprintf('
                 COALESCE(SUM(ai_usage_records.prompt_tokens)%1$s, 0) AS window_input,
@@ -285,7 +286,7 @@ class FreePoolAccounting
      *
      * @param  array<string, array{input: float, output: float}>  $rates
      */
-    private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since, ?AiUsageKind $kind = null): float
+    private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since, ?AiUsageKind $kind = null, ?bool $benchmark = null): float
     {
         $discount = 0.0;
 
@@ -298,7 +299,7 @@ class FreePoolAccounting
                 continue;
             }
 
-            if ($row->is_benchmark) {
+            if ($benchmark !== null && (bool) $row->is_benchmark !== $benchmark) {
                 continue;
             }
 
