@@ -30,20 +30,35 @@ export type UseChatTurnsOptions = {
 };
 
 export type UseChatTurnsReturn = {
+    /** The thread; the panel replaces it when it loads a conversation. */
     messages: Ref<ChatMessage[]>;
+    /** A turn is in flight; a second send is ignored until it settles. */
     sending: Ref<boolean>;
+    /** The last turn's (or the panel's load's) failure, shown in the composer. */
     error: Ref<string | null>;
+    /** Index of the assistant message being streamed into, or null. */
     streamingIndex: Ref<number | null>;
+    /** A streamed reply (not a blocking workflow continuation) is in flight. */
     canStop: ComputedRef<boolean>;
+    /** The thread's last message when it is the assistant's, else null. */
     latestAssistant: ComputedRef<ChatMessage | null>;
+    /** Ids of the action cards whose inline review is in flight. */
     reviewingActionIds: Ref<number[]>;
+    /** Next `uid` (the thread's v-for key) for a message the panel loads. */
     messageUid: () => number;
+    /** Re-marks a loaded choices card's pick from the reply that answered it. */
     inferChoices: () => void;
+    /** Sends the composer's text and files as a streamed turn. */
     sendUserMessage: (submission: ComposerSubmission) => Promise<void>;
+    /** Aborts the streamed turn in flight. */
     stopStreaming: () => void;
+    /** Approves a proposed workflow as a blocking continuation turn. */
     approveWorkflow: (message: ChatMessage) => void;
+    /** Declines a proposed workflow as a blocking continuation turn. */
     declineWorkflow: (message: ChatMessage) => void;
+    /** Sends a choices card's picked labels as the user's answer. */
     choose: (message: ChatMessage, labels: string[]) => void;
+    /** Approves or rejects a queued action card through the bulk review. */
     reviewAction: (
         card: ActionRequestCard,
         action: 'approve' | 'reject',

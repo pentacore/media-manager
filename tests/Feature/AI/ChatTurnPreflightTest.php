@@ -123,6 +123,15 @@ test('a mode requested by one turn does not carry into the next request', functi
         ->postJson(route('ai.chat.send'), ['message' => 'second'])
         ->assertOk()
         ->assertJsonPath('text', 'executive');
+
+    // A mode asked for after the flush must reach this request's settings: a
+    // ChatTurnGuard kept across requests would still hold the first one's.
+    $this->app->forgetScopedInstances();
+
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'third', 'mode' => 'advisory'])
+        ->assertOk()
+        ->assertJsonPath('text', 'advisory');
 });
 
 test('the pending workflow endpoint answers an archived conversation with 404', function (): void {

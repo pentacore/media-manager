@@ -46,6 +46,12 @@ const { can } = useCan();
  * in its own setup — after the trigger rendered — and not reactively. Inline
  * in the page, the trigger sat in the seasons v-for, so the next page render
  * refreshed it; here the trigger re-keys once on mount to pick the id up.
+ * The remount runs in the mount flush, before the browser paints, so no
+ * frame shows the old trigger and no click can reach it. The trigger is
+ * built and torn down twice, so keep mount side effects (listeners, fetches,
+ * focus) out of it. Remove the re-key once
+ * `components/ui/collapsible/CollapsibleTrigger.vue` seeds `contentId`
+ * itself (on the roadmap).
  */
 const mounted = ref(false);
 
