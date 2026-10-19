@@ -17,6 +17,13 @@ export interface UseRealtimeListOptions<T, TPayload = T> {
      * every reader cannot: derive it here, from what the payload does say.
      */
     map?: (payload: TPayload) => T;
+    /**
+     * Whether an event for a row already listed replaces it (default:
+     * always). A list whose rows carry an order passes its rule here, so a
+     * broadcast delivered late cannot roll a newer row back. A row not yet
+     * listed is always added.
+     */
+    replaces?: (current: T, incoming: T) => boolean;
 }
 
 export interface UseRealtimeList<T> {
@@ -47,6 +54,7 @@ export function useRealtimeList<T, TPayload = T>({
     cap,
     prepend = true,
     map,
+    replaces,
 }: UseRealtimeListOptions<T, TPayload>): UseRealtimeList<T> {
     const { acquirePrivateChannel } = useWebSocket();
     const channels: string[] =
@@ -63,6 +71,10 @@ export function useRealtimeList<T, TPayload = T>({
         );
 
         if (existingIndex >= 0) {
+            if (replaces && !replaces(items.value[existingIndex], row)) {
+                return;
+            }
+
             items.value[existingIndex] = row;
 
             return;

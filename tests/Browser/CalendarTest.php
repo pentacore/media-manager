@@ -9,6 +9,28 @@ use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
+/**
+ * A poster that fails to load at once (an invalid data URI), so Poster always
+ * shows its text fallback — the item's full title — beside the title link.
+ * The https://img.test URLs these fixtures used failed at an unpredictable
+ * moment, which made unscoped title assertions flaky.
+ *
+ * @return list<array<string, string>>
+ */
+function calendarBrokenPoster(): array
+{
+    return [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,AA==']];
+}
+
+/**
+ * The title element of one full calendar row; the poster fallback beside it
+ * repeats the title, so title assertions scope to this.
+ */
+function calendarItemTitle(string $service, int $connectionId, int $itemId): string
+{
+    return sprintf('[data-calendar-item="%s:%d:%d"] [data-calendar-item-title]', $service, $connectionId, $itemId);
+}
+
 beforeEach(function (): void {
     $this->travelTo(CarbonImmutable::parse('2026-09-15T12:00:00Z'));
     $this->seed(ActionTypeConfigSeeder::class);
@@ -20,11 +42,7 @@ beforeEach(function (): void {
             'airDateUtc' => '2026-09-10T02:00:00Z', 'hasFile' => false, 'monitored' => true,
             'series' => [
                 'title' => 'Severance', 'monitored' => true,
-                // A poster is required so CalendarItem renders an <img> in the
-                // agenda's full (non-compact) view — without one, Poster's
-                // text fallback duplicates the title text ("Severance"),
-                // tripping Playwright's strict-mode getByText() match.
-                'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/severance.jpg']],
+                'images' => calendarBrokenPoster(),
             ],
         ]]),
         'sonarr.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
@@ -32,7 +50,7 @@ beforeEach(function (): void {
         'sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1]]),
         'radarr.local:7878/api/v3/calendar*' => Http::response([[
             'id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-24T00:00:00Z',
-            'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/dune.jpg']],
+            'images' => calendarBrokenPoster(),
         ]]),
     ]);
 });
@@ -47,7 +65,7 @@ test('the month grid places items on their day and the agenda lists them', funct
         ->assertSeeIn('[data-calendar-day="2026-09-24"]', 'Dune')
         ->click('[data-calendar-view="agenda"]')
         ->assertSeeIn('[data-calendar-agenda]', 'S01E02')
-        ->assertSeeIn('[data-calendar-agenda]', 'Dune')
+        ->assertSeeIn(calendarItemTitle('radarr', $this->radarr->id, 10), 'Dune')
         ->click('[data-calendar-filter="movies"]')
         ->assertDontSeeIn('[data-calendar-agenda]', 'Dune')
         ->assertCount('[data-search-now]', 0);
@@ -60,7 +78,7 @@ test('prev/next navigation changes the month and its items', function (): void {
         ->assertNoSmoke()
         ->assertSeeIn('[data-calendar-month-label]', 'September 2026')
         ->click('[data-calendar-view="agenda"]')
-        ->assertSeeIn('[data-calendar-agenda]', 'Severance')
+        ->assertSeeIn(calendarItemTitle('sonarr', $this->sonarr->id, 70), 'Severance')
         ->click('[data-calendar-prev]')
         ->assertSeeIn('[data-calendar-month-label]', 'August 2026')
         ->assertDontSeeIn('[data-calendar-agenda]', 'Severance')
@@ -86,7 +104,7 @@ test('the monitored-only filter hides unmonitored items', function (): void {
                 'airDateUtc' => '2026-09-10T02:00:00Z', 'hasFile' => false, 'monitored' => true,
                 'series' => [
                     'title' => 'Severance', 'monitored' => true,
-                    'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/severance.jpg']],
+                    'images' => calendarBrokenPoster(),
                 ],
             ],
             [
@@ -94,26 +112,23 @@ test('the monitored-only filter hides unmonitored items', function (): void {
                 'airDateUtc' => '2026-09-11T02:00:00Z', 'hasFile' => false, 'monitored' => false,
                 'series' => [
                     'title' => 'Unmonitored Show', 'monitored' => false,
-                    'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/unmonitored.jpg']],
+                    'images' => calendarBrokenPoster(),
                 ],
             ],
         ]),
     ]);
     $this->actingAs(User::factory()->create());
-    // Scoped to the title link, not the whole agenda row: the fake poster
-    // URL fails to load in a real browser, and once it does the Poster
-    // component falls back to a second "Severance" text node (its hint
-    // span) — an unscoped text match then trips Playwright's strict mode.
-    $severanceTitle = sprintf('[data-calendar-item="sonarr:%d:70"] a', $this->sonarr->id);
+    $severanceTitle = calendarItemTitle('sonarr', $this->sonarr->id, 70);
 
     visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
         ->assertNoSmoke()
         ->click('[data-calendar-view="agenda"]')
         ->assertSeeIn($severanceTitle, 'Severance')
-        ->assertSeeIn('[data-calendar-agenda]', 'Unmonitored Show')
+        ->assertSeeIn(calendarItemTitle('sonarr', $this->sonarr->id, 90), 'Unmonitored Show')
         ->click('[data-calendar-filter="monitored"]')
         ->assertSeeIn($severanceTitle, 'Severance')
-        ->assertDontSeeIn('[data-calendar-agenda]', 'Unmonitored Show');
+        ->assertDontSeeIn('[data-calendar-agenda]', 'Unmonitored Show')
+        ->assertMissing(sprintf('[data-calendar-item="sonarr:%d:90"]', $this->sonarr->id));
 });
 
 test("a movie item's Search and Monitor controls post the movie path", function (): void {
@@ -131,7 +146,7 @@ test("a movie item's Search and Monitor controls post the movie path", function 
     $webpage = visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
         ->assertNoSmoke()
         ->click('[data-calendar-view="agenda"]')
-        ->assertSeeIn(sprintf('[data-calendar-item="radarr:%d:10"]', $this->radarr->id), 'Dune')
+        ->assertSeeIn(calendarItemTitle('radarr', $this->radarr->id, 10), 'Dune')
         ->click(sprintf('[data-calendar-item="radarr:%d:10"] [data-search-now]', $this->radarr->id))
         ->assertSee('Search started.');
 
@@ -214,7 +229,7 @@ test('an unreachable service is named in a banner while the rest still shows', f
         ->assertNoSmoke()
         ->assertSeeIn('[data-calendar-failures]', 'Radarr')
         ->click('[data-calendar-view="agenda"]')
-        ->assertSeeIn('[data-calendar-agenda]', 'Severance');
+        ->assertSeeIn(calendarItemTitle('sonarr', $this->sonarr->id, 70), 'Severance');
 });
 
 test('clicking a day opens its popover with the full rows and their actions', function (): void {

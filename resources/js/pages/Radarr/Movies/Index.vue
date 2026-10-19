@@ -300,18 +300,17 @@ function is4k(movie: Movie): boolean {
                         label="Open Radarr"
                     />
                 </template>
-                <Link
+                <Button
                     v-if="can('manage-library')"
-                    :href="MovieController.create.url()"
+                    as-child
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    data-add-movie
                 >
-                    <Button
-                        size="sm"
-                        class="h-7 gap-1.5 text-xs"
-                        data-add-movie
-                    >
+                    <Link :href="MovieController.create.url()">
                         <Plus class="size-3.5" />Add movie
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
         </div>
 

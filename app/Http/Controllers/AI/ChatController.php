@@ -4,13 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
-use App\Ai\Agents\MediaAgent;
 use App\Ai\AnsweredBy;
-use App\Ai\ChatFailure;
 use App\Ai\Routing\ChatToolRouter;
-use App\Ai\Routing\ToolGroup;
-use App\Ai\Routing\ToolPayload;
-use App\Enums\AiMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
@@ -18,29 +13,21 @@ use App\Http\Streaming\ChatStreamProtocol;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\ClassificationOutcome;
 use App\Models\User;
-use App\Services\AiBudget\AiBudgetExceededException;
-use App\Services\AiBudget\AiBudgetGuard;
-use App\Services\AiUsage\AiModelRateLimitExceededException;
-use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatCardExtractor;
+use App\Services\Chat\ChatFailureResponder;
+use App\Services\Chat\ChatTurnGuard;
 use App\Services\Chat\ChatWorkflowContinuation;
 use App\Services\Chat\ConversationModelOverride;
 use App\Services\Chat\WorkflowContinuationRefused;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Laravel\Ai\Contracts\ConversationStore;
-use Laravel\Ai\Contracts\VerifiesConversationOwnership;
-use Laravel\Ai\Exceptions\ProviderConnectionException;
-use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
@@ -55,7 +42,7 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
@@ -64,7 +51,7 @@ class ChatController extends Controller
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $sendChatRequest->user();
 
-        if (($refusal = $this->refuseTurn($validated, $user)) instanceof JsonResponse) {
+        if (($refusal = $chatTurnGuard->refuse($validated, $user)) instanceof JsonResponse) {
             return $refusal;
         }
 
@@ -87,10 +74,10 @@ class ChatController extends Controller
 
         try {
             $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
-            $response = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
+            $response = $chatTurnGuard->agentFor($conversationId, $user, $groups)
                 ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
-            return $this->handleAgentFailure($throwable, $user);
+            return $chatFailureResponder->respond($throwable, $user);
         }
 
         if ($turnKey !== null) {
@@ -126,13 +113,13 @@ class ChatController extends Controller
     /**
      * Stream a chat turn back to the client as AG-UI events (ChatStreamProtocol).
      *
-     * Shares send()'s pre-flight (refuseTurn()). The conversation id
+     * Shares send()'s pre-flight (ChatTurnGuard::refuse()). The conversation id
      * travels as the run's `threadId` on RUN_STARTED/RUN_FINISHED, so the client's
      * active conversation is deterministic for brand-new conversations too.
      * Workflow continuations are intentionally NOT supported here — they stay on
      * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
 
@@ -140,7 +127,7 @@ class ChatController extends Controller
 
         $user = $streamChatRequest->user();
 
-        if (($refusal = $this->refuseTurn($validated, $user)) instanceof JsonResponse) {
+        if (($refusal = $chatTurnGuard->refuse($validated, $user)) instanceof JsonResponse) {
             return $refusal;
         }
 
@@ -155,10 +142,10 @@ class ChatController extends Controller
 
         try {
             $groups = $chatToolRouter->route($message, $conversationId, $turnKey);
-            $stream = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
+            $stream = $chatTurnGuard->agentFor($conversationId, $user, $groups)
                 ->stream($message, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
-            return $this->handleAgentFailure($throwable, $user);
+            return $chatFailureResponder->respond($throwable, $user);
         }
 
         $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
@@ -201,7 +188,7 @@ class ChatController extends Controller
      * frontend polls this once after the stream finishes. Reuses the same query
      * as send()'s attach step, claiming the proposal for the given conversation.
      */
-    public function pendingWorkflow(Request $request, ChatWorkflowContinuation $chatWorkflowContinuation): JsonResponse
+    public function pendingWorkflow(Request $request, ChatWorkflowContinuation $chatWorkflowContinuation, ChatTurnGuard $chatTurnGuard): JsonResponse
     {
         $validated = $request->validate([
             'conversation_id' => ['required', 'string', 'uuid'],
@@ -209,7 +196,7 @@ class ChatController extends Controller
 
         // The claim below stamps this id onto the proposal — never stamp a
         // conversation the caller doesn't own (send() applies the same check).
-        if (! $this->conversationIsAvailable($validated['conversation_id'], $request->user())) {
+        if (! $chatTurnGuard->conversationIsAvailable($validated['conversation_id'], $request->user())) {
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
@@ -223,47 +210,6 @@ class ChatController extends Controller
     }
 
     /**
-     * The checks every chat turn passes before the agent runs, in this
-     * order: apply the requested mode, the monthly hard cap (402), the chat
-     * model's rate limit (429), then conversation ownership (404). Returns
-     * the refusal, or null when the turn may proceed. Shared by send() and
-     * stream(), which apply the conversation's model override first so the
-     * rate limit checks the model the turn will actually run on.
-     *
-     * @param  array<string, mixed>  $validated
-     */
-    private function refuseTurn(array $validated, ?User $user): ?JsonResponse
-    {
-        $this->applyRequestedMode($validated['mode'] ?? null);
-
-        $refusal = $this->enforceBudget() ?? $this->enforceRateLimit();
-
-        if ($refusal instanceof JsonResponse) {
-            return $refusal;
-        }
-
-        $conversationId = $validated['conversation_id'] ?? null;
-
-        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
-            return response()->json(['message' => 'Conversation not found.'], 404);
-        }
-
-        return null;
-    }
-
-    /**
-     * The chat agent for one turn: the user's conversation (or a new one)
-     * with the turn's routed tool groups. Null groups keep every declared tool.
-     *
-     * @param  list<ToolGroup>|null  $groups
-     */
-    private function agentFor(?string $conversationId, User $user, ?array $groups, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload): MediaAgent
-    {
-        return (new MediaAgent)->continueOrStart($conversationId, as: $user)
-            ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
-    }
-
-    /**
      * The names of the tools a finished turn called.
      *
      * @return list<string>
@@ -274,121 +220,6 @@ class ChatController extends Controller
             ->map(fn (ToolCall $toolCall): string => $toolCall->name)
             ->values()
             ->all();
-    }
-
-    /**
-     * Apply the requested advisory/executive mode to the shared AiSettings, if any.
-     */
-    private function applyRequestedMode(?string $mode): void
-    {
-        if ($mode !== null) {
-            resolve(AiSettings::class)->withMode(AiMode::from($mode));
-        }
-    }
-
-    /**
-     * Enforce the monthly AI budget. Returns a 402 JsonResponse when the hard
-     * cap has been exceeded, or null when the request may proceed.
-     */
-    private function enforceBudget(): ?JsonResponse
-    {
-        try {
-            resolve(AiBudgetGuard::class)->enforce();
-        } catch (AiBudgetExceededException $aiBudgetExceededException) {
-            return response()->json([
-                'error' => 'budget_exceeded',
-                'message' => $aiBudgetExceededException->getMessage(),
-            ], 402);
-        }
-
-        return null;
-    }
-
-    /**
-     * Refuse the turn up front when the chat model has exhausted a configured
-     * rate limit and there is no failover provider to take it. With a
-     * failover configured the turn proceeds: EnforceAiRateLimit vetoes the
-     * primary inside the SDK and the failover provider serves the turn
-     * (streams in particular cannot 429 once the response has started).
-     */
-    private function enforceRateLimit(): ?JsonResponse
-    {
-        $aiSettings = resolve(AiSettings::class);
-        $modelSelection = $aiSettings->chatSelection();
-
-        if (count($aiSettings->providerChainFor($modelSelection)) > 1) {
-            return null;
-        }
-
-        try {
-            resolve(AiRateLimitGuard::class)->enforce($modelSelection->provider, $modelSelection->model);
-        } catch (AiModelRateLimitExceededException $aiModelRateLimitExceededException) {
-            return $this->rateLimitedResponse($aiModelRateLimitExceededException);
-        }
-
-        return null;
-    }
-
-    private function rateLimitedResponse(RateLimitedException $rateLimitedException): JsonResponse
-    {
-        return response()->json([
-            'error' => 'rate_limited',
-            'message' => $rateLimitedException->getMessage(),
-        ], 429);
-    }
-
-    /**
-     * Log an agent invocation failure and build the client-facing 500 response.
-     * The full message is only surfaced in local for debugging. A rate limit
-     * (ours or the provider's, after every failover was exhausted) is the one
-     * expected failure and becomes a 429 the chat UI can explain; a hard
-     * cap reached mid-run becomes the same 402 as the pre-flight check.
-     */
-    private function handleAgentFailure(Throwable $throwable, ?User $user): JsonResponse
-    {
-        if ($throwable instanceof RateLimitedException) {
-            return $this->rateLimitedResponse($throwable);
-        }
-
-        // EnforceBudgetEachStep stops a run that crosses the hard cap mid-way;
-        // answer it exactly like the pre-flight budget check does.
-        if ($throwable instanceof AiBudgetExceededException) {
-            return response()->json([
-                'error' => ChatFailure::code($throwable),
-                'message' => ChatFailure::message($throwable),
-            ], 402);
-        }
-
-        if ($throwable instanceof ProviderConnectionException) {
-            return response()->json([
-                'error' => ChatFailure::code($throwable),
-                'message' => ChatFailure::message($throwable),
-            ], 503);
-        }
-
-        // Laravel's HTTP-client RequestException truncates response bodies
-        // in getMessage(); pull the full body separately so OpenAI's
-        // verbose error JSON is visible for debugging.
-        $context = [
-            'user_id' => $user?->id,
-            'exception' => $throwable::class,
-            'message' => $throwable->getMessage(),
-        ];
-
-        if ($throwable instanceof RequestException) {
-            $context['response_body'] = $throwable->response->body();
-            $context['response_status'] = $throwable->response->status();
-        }
-
-        Log::error('AI request failed.', $context);
-
-        $payload = ['error' => 'AI request failed.'];
-
-        if (app()->isLocal()) {
-            $payload['message'] = $throwable->getMessage();
-        }
-
-        return response()->json($payload, 500);
     }
 
     /**
@@ -426,15 +257,5 @@ class ChatController extends Controller
         } catch (WorkflowContinuationRefused $workflowContinuationRefused) {
             return response()->json(['message' => $workflowContinuationRefused->getMessage()], $workflowContinuationRefused->status);
         }
-    }
-
-    private function conversationIsAvailable(string $conversationId, ?User $user): bool
-    {
-        $conversationStore = resolve(ConversationStore::class);
-
-        return $user instanceof User
-            && $conversationStore instanceof VerifiesConversationOwnership
-            && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id)
-            && DB::table('agent_conversations')->where('id', $conversationId)->whereNull('archived_at')->exists();
     }
 }

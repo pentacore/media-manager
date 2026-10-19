@@ -198,14 +198,16 @@ function checkVersion(connection: Connection) {
                     auto-generated; rotate by clearing the field on edit.
                 </p>
             </div>
-            <Link
-                :href="ServiceConnectionController.create.url()"
+            <Button
+                as-child
+                size="sm"
+                class="h-7 gap-1.5 text-xs"
                 data-connection-add
             >
-                <Button size="sm" class="h-7 gap-1.5 text-xs">
+                <Link :href="ServiceConnectionController.create.url()">
                     <Plus class="size-3.5" />Add connection
-                </Button>
-            </Link>
+                </Link>
+            </Button>
         </div>
 
         <!-- Connections table -->
@@ -288,21 +290,23 @@ function checkVersion(connection: Connection) {
                             </td>
                             <td class="px-3 py-2.5 text-right">
                                 <div class="inline-flex items-center gap-1">
-                                    <Link
-                                        :href="
-                                            ServiceConnectionController.edit.url(
-                                                connection.id,
-                                            )
-                                        "
+                                    <Button
+                                        as-child
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        :data-connection-edit="connection.id"
                                     >
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            class="h-7 px-2 text-xs"
+                                        <Link
+                                            :href="
+                                                ServiceConnectionController.edit.url(
+                                                    connection.id,
+                                                )
+                                            "
                                         >
                                             <Pencil class="size-3.5" />Edit
-                                        </Button>
-                                    </Link>
+                                        </Link>
+                                    </Button>
                                     <Button
                                         variant="ghost"
                                         size="sm"

@@ -167,12 +167,18 @@ const profileName = computed(() => {
 
     <div class="flex flex-col gap-6 p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
-            <Link :href="WhisparrController.index.url()">
-                <Button variant="ghost" size="sm" class="h-8 text-xs">
+            <Button
+                as-child
+                variant="ghost"
+                size="sm"
+                class="h-8 text-xs"
+                data-whisparr-back
+            >
+                <Link :href="WhisparrController.index.url()">
                     <ArrowLeft class="size-3.5" />
                     Back to Whisparr
-                </Button>
-            </Link>
+                </Link>
+            </Button>
             <div
                 class="flex flex-wrap items-center gap-2"
                 data-whisparr-actions
@@ -282,16 +288,22 @@ const profileName = computed(() => {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-                <a
-                    :href="connection.url"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <Button
+                    as-child
+                    variant="outline"
+                    size="sm"
+                    class="h-7 text-xs"
+                    data-whisparr-open
                 >
-                    <Button variant="outline" size="sm" class="h-7 text-xs">
+                    <a
+                        :href="connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         <ExternalLink class="size-3.5" />
                         Open Whisparr
-                    </Button>
-                </a>
+                    </a>
+                </Button>
             </div>
         </div>
 

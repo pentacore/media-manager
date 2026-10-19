@@ -45,6 +45,7 @@ const state = computed(() => STATES[props.item.state]);
                 :is="item.library_url ? Link : 'span'"
                 :href="item.library_url ?? undefined"
                 class="block truncate text-[13px] font-medium"
+                data-calendar-item-title
             >
                 {{ item.title }}
             </component>

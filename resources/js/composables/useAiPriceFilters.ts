@@ -2,13 +2,14 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { ALL_PROVIDERS } from '@/components/ai-prices/priceTable';
 import type { PriceRow } from '@/components/ai-prices/types';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 
 export type UseAiPriceFiltersReturn = {
     providerFilter: Ref<string>;
     modelSearch: Ref<string>;
     providerOptions: ComputedRef<string[]>;
     visiblePrices: ComputedRef<PriceRow[]>;
-    selectedIds: Ref<number[]>;
+    selectedIds: ComputedRef<number[]>;
     selectedPrices: ComputedRef<PriceRow[]>;
     selectAllState: ComputedRef<boolean | 'indeterminate'>;
     toggleAllVisible: () => void;
@@ -18,9 +19,11 @@ export type UseAiPriceFiltersReturn = {
 
 /**
  * Provider and model-name filters for the AI prices table, plus the bulk
- * selection, which never holds a row the filters hide. Imports the table
- * helpers by file path, not through the `ai-prices` barrel, because the
- * barrel's PricesTable imports this composable.
+ * selection (useBulkSelection), which never holds a row the filters hide:
+ * narrowing the filters, or a reload dropping rows, prunes it with retain()
+ * rather than clearing it. Imports the table helpers by file path, not
+ * through the `ai-prices` barrel, because the barrel's PricesTable imports
+ * this composable.
  */
 export function useAiPriceFilters(
     prices: () => PriceRow[],
@@ -43,21 +46,17 @@ export function useAiPriceFilters(
         );
     });
 
-    const selectedIds = ref<number[]>([]);
+    // No resetOn: a filter change prunes the selection instead of clearing it.
+    const selection = useBulkSelection<number>();
 
     // A bulk action must never reach a row the admin can't see, so narrowing the
     // filter (or a reload dropping rows) prunes the selection to visible rows.
     watch(visiblePrices, (visible) => {
-        const visibleIds = new Set(visible.map((price) => price.id));
-        selectedIds.value = selectedIds.value.filter((id) =>
-            visibleIds.has(id),
-        );
+        selection.retain(visible.map((price) => price.id));
     });
 
     const selectedPrices = computed(() =>
-        visiblePrices.value.filter((price) =>
-            selectedIds.value.includes(price.id),
-        ),
+        visiblePrices.value.filter((price) => selection.isSelected(price.id)),
     );
 
     const selectAllState = computed<boolean | 'indeterminate'>(() => {
@@ -71,21 +70,14 @@ export function useAiPriceFilters(
     });
 
     function toggleAllVisible(): void {
-        selectedIds.value =
-            selectAllState.value === true
-                ? []
-                : visiblePrices.value.map((price) => price.id);
+        selection.setAll(
+            visiblePrices.value.map((price) => price.id),
+            selectAllState.value !== true,
+        );
     }
 
     function toggleRow(id: number, selected: boolean | 'indeterminate'): void {
-        selectedIds.value =
-            selected === true
-                ? [...selectedIds.value, id]
-                : selectedIds.value.filter((selectedId) => selectedId !== id);
-    }
-
-    function clearSelection(): void {
-        selectedIds.value = [];
+        selection.toggle(id, selected === true);
     }
 
     return {
@@ -93,11 +85,11 @@ export function useAiPriceFilters(
         modelSearch,
         providerOptions,
         visiblePrices,
-        selectedIds,
+        selectedIds: selection.ids,
         selectedPrices,
         selectAllState,
         toggleAllVisible,
         toggleRow,
-        clearSelection,
+        clearSelection: selection.clear,
     };
 }

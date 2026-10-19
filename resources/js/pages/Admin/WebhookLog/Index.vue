@@ -457,19 +457,23 @@ function decisionVariant(status: string): PillVariant {
                                 }}</span>
                             </td>
                             <td class="px-3 py-2.5 text-right">
-                                <Link
-                                    :href="
-                                        WebhookLogController.show.url(event.id)
-                                    "
+                                <Button
+                                    as-child
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs"
+                                    :data-webhook-view="event.id"
                                 >
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        class="h-7 px-2 text-xs"
+                                    <Link
+                                        :href="
+                                            WebhookLogController.show.url(
+                                                event.id,
+                                            )
+                                        "
                                     >
                                         <Webhook class="size-3.5" />View
-                                    </Button>
-                                </Link>
+                                    </Link>
+                                </Button>
                             </td>
                         </tr>
                         <tr v-if="events.data.length === 0">

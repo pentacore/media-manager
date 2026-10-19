@@ -162,12 +162,18 @@ function confirmDelete() {
 
     <div class="flex flex-col gap-6 p-5">
         <div class="flex items-center justify-between">
-            <Link :href="MovieController.index.url()">
-                <Button variant="ghost" size="sm" class="h-8 text-xs">
+            <Button
+                as-child
+                variant="ghost"
+                size="sm"
+                class="h-8 text-xs"
+                data-movie-back
+            >
+                <Link :href="MovieController.index.url()">
                     <ArrowLeft class="size-3.5" />
                     Back to movies
-                </Button>
-            </Link>
+                </Link>
+            </Button>
             <div class="flex items-center gap-2">
                 <div
                     v-if="can('manage-library')"
@@ -205,21 +211,27 @@ function confirmDelete() {
                         :current-id="movie.quality_profile_id"
                     />
                 </div>
-                <a
+                <Button
                     v-if="
                         movie.title_slug &&
                         can('manage-library') &&
                         connection.url
                     "
-                    :href="`${connection.url}/movie/${movie.title_slug}`"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    as-child
+                    variant="outline"
+                    size="sm"
+                    class="h-8 text-xs"
+                    data-movie-open-radarr
                 >
-                    <Button variant="outline" size="sm" class="h-8 text-xs">
+                    <a
+                        :href="`${connection.url}/movie/${movie.title_slug}`"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         <ExternalLink class="size-3.5" />
                         Open in Radarr
-                    </Button>
-                </a>
+                    </a>
+                </Button>
                 <Button
                     v-if="movie.has_file && can('manage-library')"
                     variant="outline"
