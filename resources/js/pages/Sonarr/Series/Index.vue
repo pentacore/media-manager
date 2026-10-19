@@ -293,18 +293,17 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         label="Open Sonarr"
                     />
                 </template>
-                <Link
+                <Button
                     v-if="can('manage-library')"
-                    :href="SeriesController.create.url()"
+                    as-child
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    data-add-series
                 >
-                    <Button
-                        size="sm"
-                        class="h-7 gap-1.5 text-xs"
-                        data-add-series
-                    >
+                    <Link :href="SeriesController.create.url()">
                         <Plus class="size-3.5" />Add series
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
         </div>
 

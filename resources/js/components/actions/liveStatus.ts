@@ -109,3 +109,27 @@ export function reconcileWithLive(
         status_version: live.status_version ?? row.status_version,
     };
 }
+
+/**
+ * Whether a pushed row (an ActionRequestCreated payload) may replace the row
+ * listed under its id. The queued broadcast reads the row when it runs, so a
+ * worker that ran before a status change can deliver after it; ordering the
+ * pushed row like a live status change (compareLiveStatus()) keeps the newer
+ * one. A tie replaces, as an unordered live change applies.
+ */
+export function pushedRowIsCurrent(
+    listed: ActionRequestResource,
+    pushed: ActionRequestResource,
+): boolean {
+    return (
+        compareLiveStatus(
+            {
+                id: pushed.id,
+                status: pushed.status,
+                updated_at: pushed.updated_at ?? '',
+                status_version: pushed.status_version,
+            },
+            listed,
+        ) >= 0
+    );
+}

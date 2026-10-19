@@ -93,12 +93,18 @@ function decisionVariant(status: string): PillVariant {
 
     <div class="flex flex-col gap-4 p-5">
         <div>
-            <Link :href="WebhookLogController.index.url()">
-                <Button variant="ghost" size="sm" class="h-8 text-xs">
+            <Button
+                as-child
+                variant="ghost"
+                size="sm"
+                class="h-8 text-xs"
+                data-webhook-back
+            >
+                <Link :href="WebhookLogController.index.url()">
                     <ArrowLeft class="size-3.5" />
                     Back to webhook log
-                </Button>
-            </Link>
+                </Link>
+            </Button>
         </div>
 
         <div class="rounded-xl border border-border bg-card p-6">

@@ -235,12 +235,6 @@ parameters:
 			path: app/Events/MediaReplacementAttemptChanged.php
 
 		-
-			message: '#^Instanceof between App\\Ai\\Conversations\\ConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 1
-			path: app/Http/Controllers/AI/ChatController.php
-
-		-
 			message: '#^Call to function abort_unless\(\) with true and 500 will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 1

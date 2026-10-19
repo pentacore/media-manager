@@ -584,22 +584,23 @@ onUnmounted(() => {
                                 >
                                     <RefreshCcw class="size-3.5" />Retry
                                 </Button>
-                                <Link
-                                    :href="
-                                        MediaReplacementAttemptController.show.url(
-                                            row.id,
-                                        )
-                                    "
+                                <Button
+                                    as-child
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs"
                                     :data-attempt-view="row.id"
                                 >
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        class="h-7 px-2 text-xs"
+                                    <Link
+                                        :href="
+                                            MediaReplacementAttemptController.show.url(
+                                                row.id,
+                                            )
+                                        "
                                     >
                                         <Eye class="size-3.5" />View
-                                    </Button>
-                                </Link>
+                                    </Link>
+                                </Button>
                             </td>
                         </tr>
                         <tr v-if="attempts.data.length === 0">

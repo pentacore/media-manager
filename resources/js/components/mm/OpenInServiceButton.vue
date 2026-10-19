@@ -14,15 +14,16 @@ withDefaults(
 </script>
 
 <template>
-    <a
+    <Button
         v-if="href"
-        :href="href"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-flex"
+        as-child
+        variant="outline"
+        size="sm"
+        class="h-7 gap-1.5 text-xs"
+        data-open-in-service
     >
-        <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+        <a :href="href" target="_blank" rel="noopener noreferrer">
             <ExternalLink class="size-3.5" />{{ label }}
-        </Button>
-    </a>
+        </a>
+    </Button>
 </template>

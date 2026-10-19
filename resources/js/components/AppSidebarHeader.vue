@@ -61,36 +61,43 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
                     <Command class="size-2.5" />K
                 </kbd>
             </button>
-            <Link :href="NotificationController.index.url()" class="relative">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-8"
-                    title="Notifications"
-                >
-                    <Bell class="size-4" />
-                </Button>
-                <span
-                    v-if="unreadNotifications > 0"
-                    class="font-mono-tabular absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-foreground"
-                    data-unread-notifications
-                >
-                    {{ unreadNotifications > 99 ? '99+' : unreadNotifications }}
-                </span>
-            </Link>
-            <Link
-                v-if="aiEnabled && isAdmin"
-                :href="AIChatController.index.url()"
+            <Button
+                as-child
+                variant="ghost"
+                size="icon"
+                class="relative size-8"
+                title="Notifications"
+                data-header-notifications
             >
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-8"
-                    title="AI assistant"
-                >
+                <Link :href="NotificationController.index.url()">
+                    <span class="sr-only">Notifications</span>
+                    <Bell class="size-4" />
+                    <span
+                        v-if="unreadNotifications > 0"
+                        class="font-mono-tabular absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-foreground"
+                        data-unread-notifications
+                    >
+                        {{
+                            unreadNotifications > 99
+                                ? '99+'
+                                : unreadNotifications
+                        }}
+                    </span>
+                </Link>
+            </Button>
+            <Button
+                v-if="aiEnabled && isAdmin"
+                as-child
+                variant="ghost"
+                size="icon"
+                class="size-8"
+                title="AI assistant"
+                data-header-ai-chat
+            >
+                <Link :href="AIChatController.index.url()">
                     <Sparkles class="size-4" />
-                </Button>
-            </Link>
+                </Link>
+            </Button>
             <ConnectionStatusIndicator />
         </div>
     </header>
