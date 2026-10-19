@@ -1,3 +1,15 @@
+## [1.47.1](https://github.com/pentacore/media-manager/compare/v1.47.0...v1.47.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **a11y:** name the header notifications link with its unread count ([65b44dd](https://github.com/pentacore/media-manager/commit/65b44dda007d25751023b583a68f637ed8c30a66))
+* **a11y:** render every link styled as a button as one anchor ([41eeeb8](https://github.com/pentacore/media-manager/commit/41eeeb80e848366bbc2d97f69c29b13f79d0cd65))
+* **actions:** a late ActionRequestCreated no longer rolls a newer row back ([3c3b00a](https://github.com/pentacore/media-manager/commit/3c3b00a6107e9f0e6ea47f09999ac3889d41dfff))
+* **actions:** bind the Action Queue's live listeners once per subscribe ([3ac9451](https://github.com/pentacore/media-manager/commit/3ac9451313dd6415b7b81f2292a6912e1505b7e9))
+* **ai-usage:** a price assignment no longer reopens a drill-down that was closed ([b3aad1f](https://github.com/pentacore/media-manager/commit/b3aad1fac889e68b5ef75e865721be8e3997af35))
+* **series:** stop double-fetching episodes on the show page ([4b4db1f](https://github.com/pentacore/media-manager/commit/4b4db1fdba4d8defd701748c736cf8555ec3342f))
+
 # [1.47.0](https://github.com/pentacore/media-manager/compare/v1.46.0...v1.47.0) (2026-10-19)
 
 
