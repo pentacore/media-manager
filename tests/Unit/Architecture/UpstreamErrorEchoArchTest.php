@@ -5,9 +5,11 @@ declare(strict_types=1);
 use Symfony\Component\Finder\Finder;
 
 /**
- * Lines in app/Http/Controllers that may read an exception message without
- * UpstreamErrorText::sanitize(), keyed by file. Each one is app-authored
- * text written for the user, never reaches a response, or is local-only.
+ * Lines in app/Http/Controllers and app/Services/Chat (which answers the chat
+ * controller's refusals and failures) that may read an exception message
+ * without UpstreamErrorText::sanitize(), keyed by file. Each one is
+ * app-authored text written for the user, never reaches a response, or is
+ * local-only.
  *
  * @return array<string, list<string>>
  */
@@ -15,10 +17,13 @@ function upstreamEchoReviewedLines(): array
 {
     return [
         'app/Http/Controllers/AI/ChatController.php' => [
-            // App-authored budget / rate-limit / workflow refusals.
+            // App-authored workflow refusal.
+            "return response()->json(['message' => \$workflowContinuationRefused->getMessage()], \$workflowContinuationRefused->status);",
+        ],
+        'app/Services/Chat/ChatFailureResponder.php' => [
+            // App-authored budget / rate-limit refusals.
             "'message' => \$aiBudgetExceededException->getMessage(),",
             "'message' => \$rateLimitedException->getMessage(),",
-            "return response()->json(['message' => \$workflowContinuationRefused->getMessage()], \$workflowContinuationRefused->status);",
             // Context array handed to Log::error(), never to the response.
             "'message' => \$throwable->getMessage(),",
             // Only when app()->isLocal().
@@ -100,7 +105,7 @@ test('controllers never hand a raw exception message to the browser', function (
     $offenders = [];
     $scanned = 0;
 
-    foreach (Finder::create()->files()->in($root.'/app/Http/Controllers')->name('*.php') as $finder) {
+    foreach (Finder::create()->files()->in([$root.'/app/Http/Controllers', $root.'/app/Services/Chat'])->name('*.php') as $finder) {
         $path = str_replace($root.'/', '', $finder->getPathname());
         $scanned++;
 
