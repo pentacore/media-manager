@@ -520,6 +520,7 @@ function sonarrSeriesUrl(): string | null {
                         v-for="season in series.seasons"
                         :key="`skeleton-${season.season_number}`"
                         class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
+                        :data-season-skeleton="season.season_number"
                     >
                         <div class="flex items-center gap-3">
                             <ChevronRight
@@ -556,6 +557,7 @@ function sonarrSeriesUrl(): string | null {
                         v-for="season in series.seasons"
                         :key="season.season_number"
                         class="overflow-hidden rounded-xl border border-border bg-card"
+                        :data-season-card="season.season_number"
                     >
                         <Collapsible
                             :open="openSeasons[season.season_number] ?? false"

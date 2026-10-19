@@ -822,6 +822,7 @@ function pipelineState(
                 <div
                     v-if="staleCount > 0"
                     class="flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-sm text-accent"
+                    data-action-stale
                 >
                     <Sparkles class="size-4" />
                     <span>{{ staleCount }} new</span>
@@ -1502,6 +1503,7 @@ function pipelineState(
         <div
             v-if="requests.links.length > 3"
             class="flex flex-wrap items-center gap-2"
+            data-action-pagination
         >
             <Button
                 v-for="(link, index) in requests.links"
