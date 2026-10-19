@@ -52,15 +52,18 @@ const showLocalForm = ref(false);
 
     <div class="flex flex-col gap-4">
         <!-- Authentik SSO -->
-        <a
+        <Button
             v-if="authentikEnabled"
-            :href="AuthentikController.redirect.url()"
+            as-child
+            variant="default"
             class="w-full"
+            size="lg"
+            data-login-authentik
         >
-            <Button variant="default" class="w-full" size="lg">
+            <a :href="AuthentikController.redirect.url()">
                 Sign in with Authentik
-            </Button>
-        </a>
+            </a>
+        </Button>
 
         <!-- Emby Login -->
         <div v-if="embyEnabled">

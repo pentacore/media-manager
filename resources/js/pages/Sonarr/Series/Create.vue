@@ -121,12 +121,12 @@ function freeSpaceLabel(bytes: number | null): string {
                     Search for a series on TVDB and add it to Sonarr.
                 </p>
             </div>
-            <Link :href="SeriesController.index.url()">
-                <Button variant="ghost" size="sm">
+            <Button as-child variant="ghost" size="sm" data-series-create-back>
+                <Link :href="SeriesController.index.url()">
                     <ArrowLeft class="mr-2 size-4" />
                     Back
-                </Button>
-            </Link>
+                </Link>
+            </Button>
         </div>
 
         <form class="flex gap-2" @submit.prevent="search">

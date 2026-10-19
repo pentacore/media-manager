@@ -207,26 +207,35 @@ jobs:
 
     # The browser suite runs serially (see below) and dominated the wall
     # clock, so it is split across runners with Pest's --shard. Unit & feature
-    # run on their own leg alongside. To rebalance shards by duration instead
-    # of test count, commit tests/.pest/shards.json from --update-shards.
+    # run on their own leg alongside. Shards are balanced by duration from
+    # tests/.pest/shards.json; new browser test classes not in it are spread
+    # round-robin and the shard log warns that the file is out of date.
+    # Refresh it with `composer test:browser -- --update-shards` (see
+    # .ai/rules/browser.md). To change the shard count, edit the matrix only.
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: unit & feature
             suite: unit-feature
-          - name: browser 1/4
+          - name: browser 1/6
             suite: browser
-            shard: 1/4
-          - name: browser 2/4
+            shard: 1/6
+          - name: browser 2/6
             suite: browser
-            shard: 2/4
-          - name: browser 3/4
+            shard: 2/6
+          - name: browser 3/6
             suite: browser
-            shard: 3/4
-          - name: browser 4/4
+            shard: 3/6
+          - name: browser 4/6
             suite: browser
-            shard: 4/4
+            shard: 4/6
+          - name: browser 5/6
+            suite: browser
+            shard: 5/6
+          - name: browser 6/6
+            suite: browser
+            shard: 6/6
 
     services:
       pgsql:
