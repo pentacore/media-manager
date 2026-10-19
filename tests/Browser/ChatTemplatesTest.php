@@ -469,7 +469,8 @@ test('while a workflow proposal is pending a template only fills the composer an
         ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
         ->click('[data-template-picker]')
         ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
-        ->assertSeeIn('[data-template-preset]', 'Uses gpt-5-nano')
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertMissing('[data-template-preset]')
         ->assertScript("document.querySelector('[data-template-send]').disabled", true)
         ->click('[data-template-insert]')
         ->assertValue('[data-chat-input]', 'Find Swedish subtitles')
@@ -556,4 +557,38 @@ test('once the proposal is declined the model picker is enabled and templates se
         ->assertSee('Nothing is stuck.');
 
     expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toHaveCount(1);
+});
+
+test('the fill dialog names the preset model in a new chat', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertSeeIn('[data-template-preset]', 'Uses gpt-5-nano');
+});
+
+test('the fill dialog leaves out the preset model in an existing conversation', function (): void {
+    MediaAgent::fake(['Sure.']);
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Check the anime queue')
+        ->click('Send')
+        ->assertSee('Sure.')
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertMissing('[data-template-preset]');
 });

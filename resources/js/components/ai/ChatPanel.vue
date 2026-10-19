@@ -281,6 +281,18 @@ function onTemplateRendered(text: string, action: TemplateAction): void {
 }
 
 /**
+ * Whether a template's model preset would fill the picker: only when it
+ * starts a new, empty chat and no workflow proposal is pending. The fill
+ * dialog shows its "Uses <model>" chip on the same condition.
+ */
+const templatePresetApplies = computed(
+    () =>
+        !hasPendingWorkflow.value &&
+        activeConversationId.value === null &&
+        messages.value.length === 0,
+);
+
+/**
  * Send rendered text, or put it in the composer while a turn is in flight or
  * a workflow proposal is pending. A template's model preset fills the picker
  * when it starts a new chat.
@@ -292,12 +304,7 @@ function deliverTemplate(
 ): void {
     fillTemplate.value = null;
 
-    if (
-        !hasPendingWorkflow.value &&
-        template.preset !== null &&
-        activeConversationId.value === null &&
-        messages.value.length === 0
-    ) {
+    if (templatePresetApplies.value && template.preset !== null) {
         override.value = { ...template.preset };
     }
 
@@ -1048,6 +1055,7 @@ function newConversation(): void {
         <ChatTemplateFillDialog
             :template="fillTemplate"
             :sending="sending || hasPendingWorkflow"
+            :preset-applies="templatePresetApplies"
             @close="fillTemplate = null"
             @rendered="onTemplateRendered"
         />
