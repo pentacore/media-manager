@@ -68,6 +68,7 @@ export function useActionQueueLive(
         resume,
         reseed,
         subscribe: subscribeCreated,
+        unsubscribe: unsubscribeCreated,
     } = useRealtimeList<ActionRequestRow>({
         channel: ACTIONS_CHANNEL,
         event: 'ActionRequestCreated',
@@ -286,9 +287,14 @@ export function useActionQueueLive(
 
     /**
      * Binds the live list, the status and attempt channels and the Inertia
-     * visit listeners. The page calls it from `onMounted`, once per mount.
+     * visit listeners. The page calls it from `onMounted`, once per mount; a
+     * second call while bound does nothing.
      */
     function subscribe(): void {
+        if (statusLease) {
+            return;
+        }
+
         subscribeCreated();
 
         stopVisitStartListener = router.on('start', (event) => {
@@ -364,6 +370,8 @@ export function useActionQueueLive(
 
     /** Releases everything subscribe() bound; also runs on unmount. */
     function unsubscribe(): void {
+        unsubscribeCreated();
+
         statusLease?.release();
         statusLease = null;
 

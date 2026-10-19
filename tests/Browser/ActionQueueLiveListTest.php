@@ -154,6 +154,73 @@ test('leaving the Action Queue and coming back binds its live listeners once', f
 });
 
 /**
+ * Runs the Action Queue page's mounted hooks a second time, which calls
+ * useActionQueueLive's subscribe() again. The page is the first component,
+ * walking down from #app, that takes `requests` and `filters` props, and it
+ * registers exactly one onMounted hook (`onMounted(subscribeLive)`).
+ */
+function actionQueueLiveSubscribeAgainScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const find = (vnode) => {
+                if (!vnode || typeof vnode !== 'object') {
+                    return null;
+                }
+                const instance = vnode.component;
+                if (instance) {
+                    if (instance.props && 'requests' in instance.props && 'filters' in instance.props) {
+                        return instance;
+                    }
+                    return find(instance.subTree);
+                }
+                if (vnode.suspense) {
+                    return find(vnode.suspense.activeBranch);
+                }
+                for (const child of Array.isArray(vnode.children) ? vnode.children : []) {
+                    const found = find(child);
+                    if (found) {
+                        return found;
+                    }
+                }
+                return null;
+            };
+            const page = find(document.querySelector('#app')._vnode);
+            if (!page || page.m?.length !== 1) {
+                throw new Error('Expected the Action Queue page with one mounted hook, found ' + (page ? page.m?.length : 'no page'));
+            }
+            page.m[0]();
+            return true;
+        })()
+    JS;
+}
+
+test('a second subscribe() binds no live listeners twice', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example listed request']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueLiveWaitScript(actionQueueLiveListenerCountScript('ActionRequestCreated').' >= 4'));
+
+    expect($webpage->script(actionQueueLiveSubscribeAgainScript()))->toBeTrue()
+        ->and($webpage->script(actionQueueLiveListenerCountScript('ActionRequestCreated')))->toBe(4)
+        ->and($webpage->script(actionQueueLiveListenerCountScript('ActionRequestStatusChanged')))->toBe(3);
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $actionRequest->id,
+        'status' => 'completed',
+        'result' => null,
+        'updated_at' => $actionRequest->updated_at->addSeconds(60)->toISOString(),
+        'status_version' => $actionRequest->status_version + 1,
+    ], 3));
+    $webpage->script(actionQueueLiveWaitScript(sprintf("document.body.innerText.includes('Request #%d is now completed')", $actionRequest->id)));
+
+    $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'completed')
+        ->assertNoSmoke();
+});
+
+/**
  * Waits for the layout's "New Action Request" toast, which the same
  * ActionRequestCreated broadcast raises after the page's list handled it.
  */
