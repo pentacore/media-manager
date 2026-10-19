@@ -737,6 +737,44 @@ test('narrowing the model search drops hidden rows from the selection', function
         ->assertMissing('[data-bulk-bar]');
 });
 
+test('select all selects every shown model from a partial selection, and clears a full one', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-nano']);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-6']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-row="gpt-5-mini"] [data-select-row]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertAttribute('[data-select-all]', 'aria-checked', 'mixed')
+        ->click('[data-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '3 selected')
+        ->click('[data-price-row="gpt-5-nano"] [data-select-row]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->assertAttribute('[data-price-row="gpt-5-nano"] [data-select-row]', 'aria-checked', 'false')
+        ->click('[data-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '3 selected')
+        ->click('[data-select-all]')
+        ->assertMissing('[data-bulk-bar]');
+});
+
+test('widening the search again does not reselect a model the narrower search dropped', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-6']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->fill('[data-price-filter-search]', 'claude')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->fill('[data-price-filter-search]', '')
+        ->assertPresent('[data-price-row="gpt-5-mini"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertAttribute('[data-price-row="gpt-5-mini"] [data-select-row]', 'aria-checked', 'false')
+        ->assertAttribute('[data-price-row="claude-haiku-6"] [data-select-row]', 'aria-checked', 'true');
+});
+
 test('admin bulk deletes the selected models after confirming', function (): void {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-nano']);
