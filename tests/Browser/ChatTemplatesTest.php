@@ -476,3 +476,84 @@ test('while a workflow proposal is pending a template only fills the composer an
         ->assertDontSeeIn('[data-chat-thread]', 'Find Swedish subtitles')
         ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true);
 });
+
+/**
+ * Fake an agent that proposes a workflow for the first message, acknowledges
+ * a decline and answers the stuck-downloads template. Every prompt the agent
+ * sees is collected, whatever asked for it.
+ *
+ * @param  array<int, string>  $prompts
+ */
+function fakeChatWithWorkflowProposal(User $user, array &$prompts): void
+{
+    MediaAgent::fake(function (string $prompt) use ($user, &$prompts): string {
+        $prompts[] = $prompt;
+
+        return match (true) {
+            str_contains($prompt, 'DECLINED') => 'Understood, what next?',
+            str_contains($prompt, 'stuck downloads') => 'Nothing is stuck.',
+            default => (function () use ($user): string {
+                AiProposedWorkflow::query()->firstOrCreate(['user_id' => $user->id], [
+                    'id' => (string) Str::uuid7(),
+                    'conversation_id' => null,
+                    'rationale' => 'Cleaning up unwatched series',
+                    'steps' => [['action' => 'delete_series', 'target' => 'Demo Show', 'reason' => 'Unwatched 8mo']],
+                    'status' => AiProposedWorkflowStatus::Proposed,
+                ]);
+
+                return 'I have proposed a workflow.';
+            })(),
+        };
+    });
+}
+
+test('while a workflow proposal is pending an auto-send template without variables fills the composer and sends nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prompts = [];
+    fakeChatWithWorkflowProposal($admin, $prompts);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->create([
+        'name' => 'Stuck downloads',
+        'body' => 'Check Sonarr and Radarr for stuck downloads',
+    ]);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertValue('[data-chat-input]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertDontSeeIn('[data-chat-thread]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true);
+
+    expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toBeEmpty();
+});
+
+test('once the proposal is declined the model picker is enabled and templates send normally', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prompts = [];
+    fakeChatWithWorkflowProposal($admin, $prompts);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->create([
+        'name' => 'Stuck downloads',
+        'body' => 'Check Sonarr and Radarr for stuck downloads',
+    ]);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
+        ->click('Decline')
+        ->assertSee('Understood, what next?')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", false)
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertSeeIn('[data-chat-thread]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertSee('Nothing is stuck.');
+
+    expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toHaveCount(1);
+});

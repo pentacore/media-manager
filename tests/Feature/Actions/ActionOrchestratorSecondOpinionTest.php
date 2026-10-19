@@ -93,7 +93,7 @@ test('a failed check under reject holds instead of rejecting', function (): void
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
-test('a forced-approval type stays pending under hold and is rejected under reject', function (SecondOpinionMode $secondOpinionMode, ActionRequestStatus $actionRequestStatus): void {
+test('a rule that requires approval stays pending under hold and is rejected under reject', function (SecondOpinionMode $secondOpinionMode, ActionRequestStatus $actionRequestStatus): void {
     secondOpinionRule('delete_series', $secondOpinionMode, requiresApproval: true);
     DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'Destructive without cause.']]);
 

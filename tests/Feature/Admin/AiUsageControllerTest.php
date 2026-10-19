@@ -885,3 +885,24 @@ test('a run that followed another list stays out of fell through and counts as f
             ->where('recent.0.model', 'gpt-via-chat')
             ->where('recent.0.tier_via', 'Chat'));
 });
+
+test('the scenario recent list honours the tier filter', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1, 'created_at' => now()->subSeconds(3)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null, 'created_at' => now()->subSeconds(1)]);
+    $admin = User::factory()->admin()->create();
+    $scenario = ['input' => 1.00, 'output' => 5.00, 'cache_read' => 0, 'cache_write' => 0, 'reasoning' => 0];
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['scenario' => $scenario, 'tier' => 'fell_through']))
+        ->assertInertia(fn ($page) => $page
+            ->has('scenario_recent', 1)
+            ->where('scenario_recent.0.model', 'gpt-tier-two'));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['scenario' => $scenario, 'tier' => 'first']))
+        ->assertInertia(fn ($page) => $page
+            ->has('scenario_recent', 2)
+            ->where('scenario_recent.0.model', 'gpt-no-tier')
+            ->where('scenario_recent.1.model', 'gpt-tier-one'));
+});

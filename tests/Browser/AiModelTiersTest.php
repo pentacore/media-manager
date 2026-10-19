@@ -268,3 +268,19 @@ test('the model pickers are named by tier', function (): void {
         ->assertPresent('[data-task="chat"] [aria-label="Chat tier 2 model"]')
         ->assertMissing('[data-task="chat"] [aria-label="Chat model"]');
 });
+
+test('an event override that inherits shows which list its tier came from', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    AiTaskModel::query()->delete();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+    AiTaskModel::factory()->event('sonarr:Download')->state(['provider' => null, 'model' => null])->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'prompt_tokens' => 900_000, 'completion_tokens' => 0]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-event-override="sonarr:Download"] [data-tier-live]', 'via Chat')
+        ->assertSeeIn('[data-event-override="sonarr:Download"] [data-tier-live]', 'tier 2 of 2')
+        ->assertSeeIn('[data-event-override="sonarr:Download"] [data-override-resolved]', 'openai · gpt-5-nano');
+});
