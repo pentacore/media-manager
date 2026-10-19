@@ -23,6 +23,9 @@ export type UseInvocationDetailReturn = {
  * another row or closing the dialog aborts the one in flight, so the dialog
  * can be closed while it loads and a late answer never reopens or
  * overwrites it.
+ *
+ * A price assignment that lands after the dialog was closed or moved on to
+ * another run leaves it as it is.
  */
 export function useInvocationDetail(
     scenario: () => ScenarioRates | null,
@@ -33,6 +36,8 @@ export function useInvocationDetail(
     const assignKey = ref<string>('');
     const assigning = ref(false);
     let detailRequest: AbortController | null = null;
+    /** The run the dialog shows or is loading; null while it is closed. */
+    let shownRecordId: number | null = null;
 
     function abortDetailRequest(): void {
         detailRequest?.abort();
@@ -41,6 +46,7 @@ export function useInvocationDetail(
 
     async function openDetail(row: { id: number }) {
         abortDetailRequest();
+        shownRecordId = row.id;
         const controller = new AbortController();
         detailRequest = controller;
 
@@ -92,6 +98,7 @@ export function useInvocationDetail(
 
     function closeDetail() {
         abortDetailRequest();
+        shownRecordId = null;
         detailLoading.value = false;
         detail.value = null;
         detailError.value = null;
@@ -116,7 +123,13 @@ export function useInvocationDetail(
                 preserveState: true,
                 onSuccess: () => {
                     assigning.value = false;
-                    openDetail({ id: recordId });
+
+                    // Re-read the run only while the dialog still shows it:
+                    // the admin may have closed it, or opened another run,
+                    // while the assignment saved.
+                    if (shownRecordId === recordId) {
+                        openDetail({ id: recordId });
+                    }
                 },
                 onError: () => {
                     assigning.value = false;
