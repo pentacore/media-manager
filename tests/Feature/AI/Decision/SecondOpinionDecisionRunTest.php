@@ -6,6 +6,8 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Tools\Decision\ProposeActionTool;
+use App\Ai\Tools\Decision\RemoveStuckDownloadTool;
+use App\Ai\Tools\Decision\ResolveManualImportTool;
 use App\Enums\ActionRequestStatus;
 use App\Enums\SecondOpinionMode;
 use App\Jobs\RunDecisionAgent;
@@ -13,6 +15,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\AgentDecision;
 use App\Models\AiUsageRecord;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
@@ -157,6 +160,7 @@ test('the run notification counts only queued actions and names the held and rej
         'Queued a monitor; the deletion was rejected.',
     ]);
     $webhookEvent = secondOpinionSeriesEvent();
+    IndexedSeries::factory()->create(['service_connection_id' => $webhookEvent->service_connection_id, 'sonarr_id' => 7, 'title' => 'Severance', 'year' => 2022]);
 
     app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
 
@@ -203,4 +207,68 @@ test('a proposal made late in a run is held without asking the verifier', functi
         ->and($actionRequest->second_opinion)->toMatchArray(['failed' => true, 'reason' => 'Skipped: the decision run is out of time.'])
         ->and(AgentDecision::query()->sole()->summary)->toBe('Queued a deletion for approval.');
     DecisionVerifierAgent::assertNeverPrompted();
+});
+
+test('a disagreement on a proposal its rule already holds is not counted as held by the second opinion', function (): void {
+    secondOpinionDeleteRule(SecondOpinionMode::Hold);
+    $decisionRunContext = secondOpinionToolContext(secondOpinionSeriesEvent());
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'Destructive without cause.']]);
+
+    (new ProposeActionTool)->handle(new Request(secondOpinionDeleteProposal()));
+
+    expect(ActionRequest::query()->sole()->status)->toBe(ActionRequestStatus::Pending)
+        ->and($decisionRunContext->suggestedCount())->toBe(1)
+        ->and($decisionRunContext->heldBySecondOpinionCount())->toBe(0);
+});
+
+function secondOpinionStuckImportContext(): DecisionRunContext
+{
+    resolve(DecisionAgentSettings::class)->setAllowManualImport(true);
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $decisionRunContext = new DecisionRunContext(
+        webhookEventId: null,
+        maxActions: 3,
+        sourceService: 'sonarr',
+        eventPayload: ['eventType' => 'ManualInteractionRequired', 'downloadId' => 'dl-1'],
+        originConnectionId: $serviceConnection->id,
+        eventType: 'ManualInteractionRequired',
+    );
+    app()->instance(DecisionRunContext::class, $decisionRunContext);
+
+    return $decisionRunContext;
+}
+
+test('a stuck download removal the verifier disagrees with is rejected under reject', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true, 'second_opinion' => SecondOpinionMode::Reject]);
+    $decisionRunContext = secondOpinionStuckImportContext();
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'SECRET-REASON']]);
+
+    $result = (new RemoveStuckDownloadTool)->handle(new Request(['service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade.']));
+
+    expect(json_decode($result, true))->toMatchArray(['queued' => false, 'reason' => 'second_opinion_rejected'])
+        ->and($result)->not->toContain('SECRET-REASON')
+        ->and(ActionRequest::query()->sole()->status)->toBe(ActionRequestStatus::Rejected)
+        ->and($decisionRunContext->rejectedCount())->toBe(1);
+});
+
+test('a manual import the verifier disagrees with is rejected under reject', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true, 'second_opinion' => SecondOpinionMode::Reject]);
+    $decisionRunContext = secondOpinionStuckImportContext();
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
+            'path' => '/dl/show.s01e01.mkv',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'series' => ['id' => 5],
+            'episodes' => [['id' => 11]],
+            'rejections' => [],
+        ]]),
+    ]);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'SECRET-REASON']]);
+
+    $result = (new ResolveManualImportTool)->handle(new Request(['service' => 'sonarr', 'download_id' => 'dl-1']));
+
+    expect(json_decode($result, true))->toMatchArray(['queued' => false, 'reason' => 'second_opinion_rejected'])
+        ->and($result)->not->toContain('SECRET-REASON')
+        ->and(ActionRequest::query()->sole()->status)->toBe(ActionRequestStatus::Rejected)
+        ->and($decisionRunContext->rejectedCount())->toBe(1);
 });

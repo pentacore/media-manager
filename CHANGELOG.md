@@ -1,3 +1,30 @@
+# [1.47.0](https://github.com/pentacore/media-manager/compare/v1.46.0...v1.47.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **actions:** show a second-opinion rejection once and no approver on rejected requests ([8a7d697](https://github.com/pentacore/media-manager/commit/8a7d6975cc38da5a24b3d23b04b8dd2631ab57f1))
+* **actions:** show who rejected a request ([ec06ece](https://github.com/pentacore/media-manager/commit/ec06ecee9708dfcf12d0630be229a04c54555c44))
+* **ai-models:** name tier selects by list, lock popover selects, drop per-summary price queries ([9ea84d8](https://github.com/pentacore/media-manager/commit/9ea84d8776a7f142779df33b0ca8ca1495ac455e))
+* **ai:** count a hold as the second opinion's only when it caused it ([939187e](https://github.com/pentacore/media-manager/commit/939187eeb3e0ec3d927575a01d09f694a4149266))
+* **ai:** count an event-scoped decision run on its own list as a fall-through ([92401d8](https://github.com/pentacore/media-manager/commit/92401d892530f0e507e86c1912ff0dace059c6d6))
+* **ai:** fence verifier details, bound the decision agent's calls by the run deadline ([098116b](https://github.com/pentacore/media-manager/commit/098116bf2f78ea6bfa51b74ba0a2e8ab43740255))
+* **ai:** keep a stored jev engine saveable, share the jev threshold default ([67b1b5a](https://github.com/pentacore/media-manager/commit/67b1b5a394d224fb5515db6170cf9c8e32accd42))
+* **ai:** label failover reasoning against the configured failover model ([d6635c4](https://github.com/pentacore/media-manager/commit/d6635c46209c125e22c46326c0ae73f22cd410dd))
+* **ai:** resolve provider drivers by config, adapt history for the failover provider, label failover answers ([fafe0fb](https://github.com/pentacore/media-manager/commit/fafe0fb8b2a5f3bfbc756f3e46c36b94a44085bb))
+* **benchmark:** count free-pool forgiveness per benchmark filter, additively ([c586ce5](https://github.com/pentacore/media-manager/commit/c586ce5684b2dd36b17cfabd50980b42440b38b2))
+* **benchmark:** filter usage totals, settle stalled runs, check prefills, hide case link on proposals ([0c8184f](https://github.com/pentacore/media-manager/commit/0c8184f3fe321e089804e489af0867a4d1377f1c))
+* **benchmark:** keep free-pool forgiveness for live rows under the benchmark filter ([9795d80](https://github.com/pentacore/media-manager/commit/9795d809042a71c52f523c402fd4ce8b76f3c3f0))
+* **benchmark:** settle stale results in runs that already ended ([c584d4d](https://github.com/pentacore/media-manager/commit/c584d4dc8958d55d357ee2787b9307eceed3655f))
+* **chat:** show a template's model chip only when its preset applies ([6e4435a](https://github.com/pentacore/media-manager/commit/6e4435aacb97e2442baefbba33875084bf65ed0e))
+* **chat:** templates only fill the composer while a workflow proposal is pending ([ba98220](https://github.com/pentacore/media-manager/commit/ba98220e73aab3a617accdb68d6ad71dc8bbc44f))
+* **pricing:** count a capability-only update as updated, not as a price discrepancy ([a998c39](https://github.com/pentacore/media-manager/commit/a998c39d89120debd7958f82bb1f7a9b66b0a381))
+
+
+### Features
+
+* **ai-usage:** record which list a run followed and keep it out of fell-through ([1c61602](https://github.com/pentacore/media-manager/commit/1c61602a5794cd0d1c616244cb7c09897fc9faea))
+
 # [1.46.0](https://github.com/pentacore/media-manager/compare/v1.45.0...v1.46.0) (2026-10-18)
 
 

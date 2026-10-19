@@ -69,9 +69,11 @@ final readonly class ConversationModelOverride
         $saved = [$this->chatTurnContext->provider, $this->chatTurnContext->model, $this->chatTurnContext->reasoning];
         $this->chatTurnContext->clear();
 
-        $resolvedSelection = $this->taskModelResolver->resolve(AiTask::Chat);
-
-        $this->chatTurnContext->apply(...$saved);
+        try {
+            $resolvedSelection = $this->taskModelResolver->resolve(AiTask::Chat);
+        } finally {
+            $this->chatTurnContext->apply(...$saved);
+        }
 
         return [
             'provider' => $resolvedSelection->provider,

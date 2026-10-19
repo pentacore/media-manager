@@ -82,5 +82,53 @@ test('a request the second opinion rejected says so', function (): void {
     visit(route('actions.requests.index', absolute: false))
         ->assertNoSmoke()
         ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
-        ->assertSeeIn('[data-action-rejection-reason]', 'Rejected by second opinion: Wrong series.');
+        ->assertAttribute('[data-action-second-opinion]', 'data-second-opinion-state', 'disagrees')
+        ->assertSeeIn('[data-action-second-opinion]', 'Wrong series.')
+        ->assertMissing('[data-action-rejection-reason]')
+        ->assertMissing('[data-action-approved-by]')
+        ->assertMissing('[data-action-rejected-by]');
+});
+
+test('a request a reviewer rejected keeps its rejection reason and drops approved by', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'origin' => 'agent',
+        'status' => ActionRequestStatus::Rejected,
+        'result' => ['success' => false, 'rejection_reason' => 'Not this season.'],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertSeeIn('[data-action-rejection-reason]', 'Not this season.')
+        ->assertMissing('[data-action-approved-by]')
+        ->assertMissing('[data-action-rejected-by]');
+});
+
+test('a request a reviewer rejected shows who rejected it', function (): void {
+    $reviewer = User::factory()->admin()->create(['name' => 'Rhea Reviewer']);
+    $actionRequest = ActionRequest::factory()->create([
+        'origin' => 'agent',
+        'status' => ActionRequestStatus::Rejected,
+        'approved_by' => $reviewer->id,
+        'result' => ['success' => false, 'rejection_reason' => 'Not this season.'],
+    ]);
+    $this->actingAs($reviewer);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertSeeIn('[data-action-rejected-by]', 'Rejected by')
+        ->assertSeeIn('[data-action-rejected-by]', 'Rhea Reviewer')
+        ->assertMissing('[data-action-approved-by]');
+});
+
+test('a request that is not rejected shows who approved it', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['origin' => 'agent', 'status' => ActionRequestStatus::Completed, 'requires_approval' => false]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertSeeIn('[data-action-approved-by]', 'system');
 });

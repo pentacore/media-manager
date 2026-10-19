@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Ai\TaskModelResolver;
 use App\Enums\AiTask;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
@@ -124,4 +125,17 @@ test('a lower tier model that is never the live pick counts as in use', function
 
     expect($inUsePricingModels->contains('anthropic', 'claude-tier-two'))->toBeTrue()
         ->and($inUsePricingModels->contains('anthropic', 'claude-event-two'))->toBeTrue();
+});
+
+test('an event override counts its lower-tier models, not only the live pick', function (): void {
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-event-first')->position(0)->create();
+    AiTaskModel::factory()->event('sonarr:Download')->selecting('anthropic', 'claude-event-fallback')->position(1)->create();
+
+    $taskModelResolver = resolve(TaskModelResolver::class);
+    $livePick = $taskModelResolver->resolve(AiTask::Decision, 'sonarr:Download')->modelSelection()->model;
+
+    expect($livePick)->toBe('claude-event-first')
+        ->and($livePick)->not->toBe('claude-event-fallback')
+        ->and(resolve(InUsePricingModels::class)->contains('anthropic', 'claude-event-fallback'))->toBeTrue()
+        ->and(resolve(InUsePricingModels::class)->contains('anthropic', 'claude-event-first'))->toBeTrue();
 });

@@ -19,6 +19,7 @@ const props = withDefaults(
         allowAuto?: boolean;
         placeholder?: string;
         ariaLabel?: string;
+        disabled?: boolean;
     }>(),
     {
         name: undefined,
@@ -27,6 +28,7 @@ const props = withDefaults(
         allowAuto: false,
         placeholder: 'Select a model',
         ariaLabel: undefined,
+        disabled: false,
     },
 );
 
@@ -99,7 +101,7 @@ const groups = computed<Record<string, string[]>>(() => {
 
 <template>
     <div>
-        <Select v-model="selected">
+        <Select v-model="selected" :disabled="disabled">
             <SelectTrigger
                 :id="id ?? name"
                 :aria-label="ariaLabel"

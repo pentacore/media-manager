@@ -104,7 +104,7 @@ test('a rejected proposal counts toward the cap but is neither suggested nor act
     $decisionRunContext = new DecisionRunContext(webhookEventId: null, maxActions: 2);
 
     $decisionRunContext->recordDispatched(ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected, 'requires_approval' => false]));
-    $decisionRunContext->recordDispatched(ActionRequest::factory()->secondOpinion(agrees: false)->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]));
+    $decisionRunContext->recordDispatched(ActionRequest::factory()->secondOpinion(agrees: false)->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]), heldBySecondOpinion: true);
 
     expect($decisionRunContext->count())->toBe(2)
         ->and($decisionRunContext->capReached())->toBeTrue()
@@ -112,4 +112,13 @@ test('a rejected proposal counts toward the cap but is neither suggested nor act
         ->and($decisionRunContext->heldBySecondOpinionCount())->toBe(1)
         ->and($decisionRunContext->suggestedCount())->toBe(1)
         ->and($decisionRunContext->actedCount())->toBe(0);
+});
+
+test('a disagreement on a request that already needed approval is not counted as held by the second opinion', function (): void {
+    $decisionRunContext = new DecisionRunContext(webhookEventId: null, maxActions: 3);
+
+    $decisionRunContext->recordDispatched(ActionRequest::factory()->secondOpinion(agrees: false)->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]));
+
+    expect($decisionRunContext->heldBySecondOpinionCount())->toBe(0)
+        ->and($decisionRunContext->suggestedCount())->toBe(1);
 });

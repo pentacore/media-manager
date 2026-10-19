@@ -38,6 +38,8 @@ const props = withDefaults(
         /** What an inherit tier runs on (the server's resolved pair). */
         inheritedProvider: string;
         inheritedModel: string;
+        /** Names the list in each model select's accessible name, e.g. `Chat`. */
+        label?: string;
         inheritLabel?: string;
         reasoningInheritLabel?: string;
         hasReasoning?: boolean;
@@ -49,6 +51,7 @@ const props = withDefaults(
         errors: Record<string, string | undefined>;
     }>(),
     {
+        label: undefined,
         inheritLabel: undefined,
         reasoningInheritLabel: 'Default',
         hasReasoning: true,
@@ -86,6 +89,18 @@ function blankTier(): TierForm {
         min_pool_percent: null,
         min_pool_tokens: null,
     };
+}
+
+/** Accessible name of a tier's model select, prefixed with the list's label. */
+function modelAriaLabel(index: number): string {
+    const multiple = tiers.value.length > 1;
+    const name = multiple ? `tier ${index + 1} model` : 'model';
+
+    if (props.label) {
+        return `${props.label} ${name}`;
+    }
+
+    return multiple ? `Tier ${index + 1} model` : 'Model';
 }
 
 function isLast(index: number): boolean {
@@ -281,9 +296,7 @@ function errorFor(index: number): string | undefined {
                     :inherit-label="isLast(index) ? inheritLabel : undefined"
                     :provider="tier.provider ?? ''"
                     :model="tier.model ?? ''"
-                    :aria-label="
-                        tiers.length > 1 ? `Tier ${index + 1} model` : 'Model'
-                    "
+                    :aria-label="modelAriaLabel(index)"
                     @update:provider="
                         (value: string) => setPair(tier, 'provider', value)
                     "

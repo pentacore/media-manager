@@ -113,7 +113,7 @@ final readonly class StuckImportResolver
             ];
         }
 
-        $decisionRunContext->recordDispatched($actionRequest);
+        $decisionRunContext->recordDispatched($actionRequest, heldBySecondOpinion: $actionRequest->heldBySecondOpinion);
 
         if ($actionRequest->status === ActionRequestStatus::Rejected) {
             return $decisionRunContext->secondOpinionRejection($actionRequest->id);
@@ -181,7 +181,7 @@ final readonly class StuckImportResolver
             ];
         }
 
-        $decisionRunContext->recordDispatched($actionRequest);
+        $decisionRunContext->recordDispatched($actionRequest, heldBySecondOpinion: $actionRequest->heldBySecondOpinion);
 
         if ($actionRequest->status === ActionRequestStatus::Rejected) {
             return $decisionRunContext->secondOpinionRejection($actionRequest->id);

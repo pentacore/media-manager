@@ -97,6 +97,16 @@ final readonly class ModelCatalog
     }
 
     /**
+     * Text providers whose models can take a reasoning level.
+     *
+     * @return list<string>
+     */
+    public function reasoningProviders(): array
+    {
+        return array_values(array_filter($this->textProviders(), ReasoningOptions::supportsProvider(...)));
+    }
+
+    /**
      * @return list<string>
      */
     private function configuredProviders(): array

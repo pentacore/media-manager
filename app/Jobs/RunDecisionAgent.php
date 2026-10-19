@@ -70,6 +70,24 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      */
     public const int RUN_DEADLINE_RESERVE_SECONDS = 30;
 
+    /**
+     * The longest one DecisionAgent provider call may take (the SDK's
+     * default when no timeout is passed).
+     */
+    public const int AGENT_CALL_TIMEOUT_SECONDS = 60;
+
+    /**
+     * The shortest DecisionAgent provider call allowed, even at or past the
+     * run's deadline: RUN_DEADLINE_RESERVE_SECONDS still lies between the
+     * deadline and the job timeout.
+     */
+    public const int MIN_AGENT_CALL_TIMEOUT_SECONDS = 10;
+
+    /**
+     * Run time kept back after a DecisionAgent provider call.
+     */
+    public const int AGENT_CALL_MARGIN_SECONDS = 10;
+
     /** Cap on the event payload size handed to the model, in characters. */
     private const int MAX_PAYLOAD_CHARS = 8000;
 
@@ -193,7 +211,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $fastPathOutcome = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
 
             if ($fastPathOutcome === null) {
-                $response = (new DecisionAgent)->prompt($this->buildPrompt());
+                $decisionAgent = new DecisionAgent;
+                $response = $decisionAgent->prompt($this->buildPrompt(), timeout: $this->agentCallTimeout($decisionAgent, $decisionRunContext));
                 $invocationId = $response->invocationId;
                 $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
             }
@@ -233,6 +252,32 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $this->resolveActionKindOutcome($decisionRunContext, $classificationOutcomeRecorder);
         $this->resolveFallbackAgreement($decisionRunContext, $classificationOutcomeRecorder);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+    }
+
+    /**
+     * The per-provider timeout for the DecisionAgent's calls: the time left
+     * before the run's deadline, less a margin, split across the failover
+     * chain, between MIN_AGENT_CALL_TIMEOUT_SECONDS and
+     * AGENT_CALL_TIMEOUT_SECONDS. A call that times out throws into
+     * handle()'s catch, which records a Failed decision with the reason.
+     * The timeout bounds each provider call (each step), not the whole
+     * multi-step run; a run that still outlives the job timeout is recorded
+     * by failed().
+     */
+    private function agentCallTimeout(DecisionAgent $decisionAgent, DecisionRunContext $decisionRunContext): int
+    {
+        $secondsLeft = $decisionRunContext->secondsLeft();
+
+        if ($secondsLeft === null) {
+            return self::AGENT_CALL_TIMEOUT_SECONDS;
+        }
+
+        return max(self::MIN_AGENT_CALL_TIMEOUT_SECONDS, DecisionRunContext::failoverTimeout(
+            $secondsLeft,
+            self::AGENT_CALL_MARGIN_SECONDS,
+            count($decisionAgent->provider()),
+            self::AGENT_CALL_TIMEOUT_SECONDS,
+        ));
     }
 
     /**
@@ -460,6 +505,11 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      * try/finally around this call has completed: null when not resolved
      * (run the agent), '' when resolved with nothing to notify about, or the
      * summary to notify with.
+     *
+     * A ResolvedByClassifier outcome recorded for a proposal the second
+     * opinion rejected stays open on purpose: the request is born Rejected,
+     * so no review or status change ever resolves the row, and the rejection
+     * is not counted as the classifier being wrong.
      */
     private function resolvedByFastPath(
         ?int $webhookEventId,

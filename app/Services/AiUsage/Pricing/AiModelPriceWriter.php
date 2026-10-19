@@ -272,7 +272,7 @@ final readonly class AiModelPriceWriter
         if ($changes === []) {
             if ($capabilityChanges !== []) {
                 if ($dryRun) {
-                    return WriteOutcome::WouldUpdate;
+                    return WriteOutcome::WouldUpdateCapabilities;
                 }
 
                 $aiModelPrice->fill($capabilityChanges);
@@ -286,7 +286,7 @@ final readonly class AiModelPriceWriter
                 $aiModelPrice->save();
             }
 
-            return $capabilityChanges === [] ? WriteOutcome::Unchanged : WriteOutcome::Updated;
+            return $capabilityChanges === [] ? WriteOutcome::Unchanged : WriteOutcome::CapabilitiesUpdated;
         }
 
         if ($dryRun) {

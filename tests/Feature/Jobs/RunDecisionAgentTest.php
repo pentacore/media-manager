@@ -13,6 +13,7 @@ use App\Models\WebhookEvent;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\DecisionAgentSettings;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
 
@@ -342,4 +343,54 @@ test('a failed agent run and a worker-stopped run store no invocation id', funct
 
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->invocation_id)->toBeNull()
         ->and(AgentDecision::query()->where('webhook_event_id', $stopped->id)->sole()->invocation_id)->toBeNull();
+});
+
+test('an agent run with time to spare prompts with the full per-call timeout', function (): void {
+    DecisionAgent::fake(['Nothing to do.']);
+
+    runJob(WebhookEvent::factory()->create()->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === RunDecisionAgent::AGENT_CALL_TIMEOUT_SECONDS);
+});
+
+test('an agent run near its deadline prompts with a timeout cut to the time left', function (): void {
+    $this->freezeTime();
+    DecisionAgent::fake(['Nothing to do.']);
+    $this->mock(AiBudgetGuard::class)
+        ->shouldReceive('enforce')
+        ->andReturnUsing(function (): void {
+            $this->travel(RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS - 40)->seconds();
+        });
+    $providers = count((new DecisionAgent)->provider());
+
+    runJob(WebhookEvent::factory()->create()->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    $expected = max(RunDecisionAgent::MIN_AGENT_CALL_TIMEOUT_SECONDS, intdiv(40 - RunDecisionAgent::AGENT_CALL_MARGIN_SECONDS, $providers));
+
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === $expected && $expected < RunDecisionAgent::AGENT_CALL_TIMEOUT_SECONDS);
+});
+
+test('an agent run past its deadline still prompts with the minimum timeout', function (): void {
+    $this->freezeTime();
+    DecisionAgent::fake(['Nothing to do.']);
+    $this->mock(AiBudgetGuard::class)
+        ->shouldReceive('enforce')
+        ->andReturnUsing(function (): void {
+            $this->travel(RunDecisionAgent::TIMEOUT_SECONDS)->seconds();
+        });
+
+    runJob(WebhookEvent::factory()->create()->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === RunDecisionAgent::MIN_AGENT_CALL_TIMEOUT_SECONDS);
+});
+
+test('an agent call that times out records a Failed decision with the reason', function (): void {
+    DecisionAgent::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out after 20001 milliseconds with 0 bytes received'));
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
+        ->status->toBe(AgentDecisionStatus::Failed)
+        ->summary->toBe('Agent run failed: cURL error 28: Operation timed out after 20001 milliseconds with 0 bytes received');
 });

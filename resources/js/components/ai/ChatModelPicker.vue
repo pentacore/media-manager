@@ -170,6 +170,7 @@ function reset(): void {
                         :inherit-label="`Default (${options.defaults.provider} · ${options.defaults.model})`"
                         :provider="override.provider ?? ''"
                         :model="override.model ?? ''"
+                        :disabled="disabled"
                         data-chat-model-select
                         @update:provider="onProvider"
                         @update:model="onModel"
@@ -185,6 +186,7 @@ function reset(): void {
                         :inherit-label="`Default (${options.defaults.reasoning_label})`"
                         :accepted="capability?.levels ?? null"
                         :disabled-hint="reasoningHint"
+                        :disabled="disabled"
                         @update:model-value="onReasoning"
                     />
                 </div>

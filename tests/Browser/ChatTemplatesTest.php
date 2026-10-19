@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiProposedWorkflowStatus;
+use App\Models\AiProposedWorkflow;
 use App\Models\ChatTemplate;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -437,4 +440,155 @@ test('the editor offers a model preset and saves the chosen reasoning level', fu
         ->assertSee('Template saved.');
 
     expect($admin->chatTemplates()->sole()->reasoning?->value)->toBe('high');
+});
+
+test('while a workflow proposal is pending a template only fills the composer and the model picker is locked', function (): void {
+    $admin = User::factory()->admin()->create();
+    MediaAgent::fake(function () use ($admin): string {
+        AiProposedWorkflow::create([
+            'id' => (string) Str::uuid7(),
+            'user_id' => $admin->id,
+            'conversation_id' => null,
+            'rationale' => 'Cleaning up unwatched series',
+            'steps' => [['action' => 'delete_series', 'target' => 'Demo Show', 'reason' => 'Unwatched 8mo']],
+            'status' => AiProposedWorkflowStatus::Proposed,
+        ]);
+
+        return 'I have proposed a workflow.';
+    });
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertMissing('[data-template-preset]')
+        ->assertScript("document.querySelector('[data-template-send]').disabled", true)
+        ->click('[data-template-insert]')
+        ->assertValue('[data-chat-input]', 'Find Swedish subtitles')
+        ->assertDontSeeIn('[data-chat-thread]', 'Find Swedish subtitles')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true);
+});
+
+/**
+ * Fake an agent that proposes a workflow for the first message, acknowledges
+ * a decline and answers the stuck-downloads template. Every prompt the agent
+ * sees is collected, whatever asked for it.
+ *
+ * @param  array<int, string>  $prompts
+ */
+function fakeChatWithWorkflowProposal(User $user, array &$prompts): void
+{
+    MediaAgent::fake(function (string $prompt) use ($user, &$prompts): string {
+        $prompts[] = $prompt;
+
+        return match (true) {
+            str_contains($prompt, 'DECLINED') => 'Understood, what next?',
+            str_contains($prompt, 'stuck downloads') => 'Nothing is stuck.',
+            default => (function () use ($user): string {
+                AiProposedWorkflow::query()->firstOrCreate(['user_id' => $user->id], [
+                    'id' => (string) Str::uuid7(),
+                    'conversation_id' => null,
+                    'rationale' => 'Cleaning up unwatched series',
+                    'steps' => [['action' => 'delete_series', 'target' => 'Demo Show', 'reason' => 'Unwatched 8mo']],
+                    'status' => AiProposedWorkflowStatus::Proposed,
+                ]);
+
+                return 'I have proposed a workflow.';
+            })(),
+        };
+    });
+}
+
+test('while a workflow proposal is pending an auto-send template without variables fills the composer and sends nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prompts = [];
+    fakeChatWithWorkflowProposal($admin, $prompts);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->create([
+        'name' => 'Stuck downloads',
+        'body' => 'Check Sonarr and Radarr for stuck downloads',
+    ]);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertValue('[data-chat-input]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertDontSeeIn('[data-chat-thread]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true);
+
+    expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toBeEmpty();
+});
+
+test('once the proposal is declined the model picker is enabled and templates send normally', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prompts = [];
+    fakeChatWithWorkflowProposal($admin, $prompts);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->create([
+        'name' => 'Stuck downloads',
+        'body' => 'Check Sonarr and Radarr for stuck downloads',
+    ]);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
+        ->click('Decline')
+        ->assertSee('Understood, what next?')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", false)
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertSeeIn('[data-chat-thread]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertSee('Nothing is stuck.');
+
+    expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toHaveCount(1);
+});
+
+test('the fill dialog names the preset model in a new chat', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertSeeIn('[data-template-preset]', 'Uses gpt-5-nano');
+});
+
+test('the fill dialog leaves out the preset model in an existing conversation', function (): void {
+    MediaAgent::fake(['Sure.']);
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find {{lang}} subtitles', [
+        ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => 'Swedish', 'options' => null],
+    ])->create(['model' => 'gpt-5-nano', 'model_provider' => 'openai']);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Check the anime queue')
+        ->click('Send')
+        ->assertSee('Sure.')
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]')
+        ->assertMissing('[data-template-preset]');
 });

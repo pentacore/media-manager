@@ -143,7 +143,9 @@ class ActionOrchestrator
      * independent verifier checks the proposal before it is stored. A
      * disagreement under Hold forces approval; under Reject the request is
      * created already Rejected and never runs. A failed check always holds,
-     * never rejects. The verdict is stored on the request.
+     * never rejects. The verdict is stored on the request, and the returned
+     * request's transient heldBySecondOpinion says whether the second opinion
+     * is what held it (for DecisionRunContext::recordDispatched()).
      *
      * @param  array<string, mixed>  $payload
      */
@@ -213,9 +215,11 @@ class ActionOrchestrator
                 eventPayload: $decisionRunContext->eventPayload ?? [],
             ), $decisionRunContext?->deadline);
 
-        // A second opinion can only tighten the gate: hold or reject, never release.
+        // A second opinion can only tighten the gate: hold or reject, never
+        // release. It caused a hold only when nothing else required approval.
         $rejectedBySecondOpinion = $secondOpinionVerdict?->rejects($secondOpinionMode) ?? false;
-        $requiresApproval = $requiresApproval || ($secondOpinionVerdict?->holds($secondOpinionMode) ?? false);
+        $heldBySecondOpinion = ! $requiresApproval && ($secondOpinionVerdict?->holds($secondOpinionMode) ?? false);
+        $requiresApproval = $requiresApproval || $heldBySecondOpinion;
 
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEventId,
@@ -238,6 +242,8 @@ class ActionOrchestrator
             ] : null,
             'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode),
         ]);
+
+        $actionRequest->heldBySecondOpinion = $heldBySecondOpinion;
 
         if ($secondOpinionVerdict instanceof SecondOpinionVerdict) {
             $this->secondOpinionVerifier->recordOutcome($secondOpinionVerdict, $actionRequest->id);

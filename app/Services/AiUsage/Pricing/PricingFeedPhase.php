@@ -139,7 +139,7 @@ class PricingFeedPhase
 
                     match ($outcome) {
                         WriteOutcome::Created, WriteOutcome::WouldCreate => $state['created']++,
-                        WriteOutcome::Updated, WriteOutcome::WouldUpdate => $state['updated']++,
+                        WriteOutcome::Updated, WriteOutcome::WouldUpdate, WriteOutcome::CapabilitiesUpdated, WriteOutcome::WouldUpdateCapabilities => $state['updated']++,
                         WriteOutcome::Unchanged => $state['unchanged']++,
                         WriteOutcome::Locked => $state['locked']++,
                         WriteOutcome::Rejected => $state['rejected']++,

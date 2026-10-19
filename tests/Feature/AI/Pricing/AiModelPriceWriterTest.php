@@ -144,6 +144,8 @@ describe('WriteOutcome', function (): void {
             ->and(WriteOutcome::RejectedAnomalous->value)->toBe('rejected_anomalous')
             ->and(WriteOutcome::WouldCreate->value)->toBe('would_create')
             ->and(WriteOutcome::WouldUpdate->value)->toBe('would_update')
+            ->and(WriteOutcome::CapabilitiesUpdated->value)->toBe('capabilities_updated')
+            ->and(WriteOutcome::WouldUpdateCapabilities->value)->toBe('would_update_capabilities')
             ->and(WriteOutcome::CreateDisabled->value)->toBe('create_disabled');
     });
 });
@@ -1031,7 +1033,7 @@ test('capability-only changes on an unlocked row return updated and save capabil
         PricingSource::ModelsDev,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::Updated);
+    expect($writeOutcome)->toBe(WriteOutcome::CapabilitiesUpdated);
 
     $row->refresh();
 
@@ -1063,7 +1065,7 @@ test('capability-only changes on dry-run return would-update without saving', fu
         dryRun: true,
     );
 
-    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdate);
+    expect($writeOutcome)->toBe(WriteOutcome::WouldUpdateCapabilities);
 
     $row->refresh();
 
@@ -1130,4 +1132,40 @@ test('locked rows stay locked even with capability changes', function (): void {
     $row->refresh();
 
     expect($row->supports_reasoning)->toBeFalse();
+});
+
+describe('first-party capability-only updates', function (): void {
+    test('a capability-only update stamps verification and leaves the provenance columns alone', function (): void {
+        $row = AiModelPrice::factory()->create([
+            'provider' => 'openai',
+            'model' => 'gpt-cap',
+            'input_per_mtok' => '1.0000',
+            'output_per_mtok' => '2.0000',
+            'supports_reasoning' => false,
+            'pricing_source' => PricingSource::ModelsDev,
+            'pricing_source_url' => 'https://example.test/original',
+            'pricing_verified_at' => null,
+        ]);
+        $originalSyncedAt = $row->pricing_synced_at;
+
+        $writeOutcome = priceWriter()->write(
+            priceCandidate('openai', 'gpt-cap', ['input_per_mtok' => '1.0000', 'output_per_mtok' => '2.0000'], [
+                'source' => PricingSource::FirstParty,
+                'sourceUrl' => 'https://example.test/first-party',
+                'reasoning' => new ReasoningCapability(true, null, null),
+            ]),
+            RefreshScope::all(),
+            PricingSource::FirstParty,
+            firstPartyVerified: true,
+        );
+
+        $row->refresh();
+
+        expect($writeOutcome)->toBe(WriteOutcome::CapabilitiesUpdated)
+            ->and($row->supports_reasoning)->toBeTrue()
+            ->and($row->pricing_verified_at)->not->toBeNull()
+            ->and($row->pricing_source)->toBe(PricingSource::ModelsDev)
+            ->and($row->pricing_source_url)->toBe('https://example.test/original')
+            ->and($row->pricing_synced_at?->toIso8601String())->toBe($originalSyncedAt?->toIso8601String());
+    });
 });

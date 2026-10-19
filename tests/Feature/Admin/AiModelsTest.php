@@ -19,6 +19,7 @@ use App\Services\AiUsage\FreePoolAccounting;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
@@ -135,6 +136,21 @@ test('the index hints when the resolved model does not reason', function (): voi
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
         ->assertInertia(fn ($page) => $page->where('tasks.1.resolved.reasoning_hint', "Model doesn't reason"));
+});
+
+test('the index reads reasoning support once instead of once per summary', function (): void {
+    AiModelPrice::query()->where('model', 'gpt-5-nano')->update(['supports_reasoning' => false]);
+    AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-5-nano')->create();
+    $admin = User::factory()->admin()->create();
+
+    DB::enableQueryLog();
+    $this->actingAs($admin)->get(route('admin.ai-models.index'))->assertOk();
+    $perSelectionLookups = collect(DB::getQueryLog())
+        ->filter(fn (array $query): bool => str_contains($query['query'], 'from "ai_model_prices"') && str_contains($query['query'], '"model" = ?'))
+        ->count();
+    DB::disableQueryLog();
+
+    expect($perSelectionLookups)->toBe(0);
 });
 
 test('saving writes task rows and drops all-inherit rows', function (): void {
@@ -800,6 +816,28 @@ test('a stale benchmark link redirects to the plain page with a toast', function
     'failover task' => [['task' => 'failover']],
     'unknown task' => [['task' => 'nope']],
 ]);
+
+test('a prefill whose provider is no longer configured redirects with its own toast', function (): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+    config()->set('ai.providers.openai.key');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
+        ->assertRedirect(route('admin.ai-models.index'));
+
+    expect(session('inertia.flash_data.toast.type'))->toBe('error')
+        ->and((string) session('inertia.flash_data.toast.message'))->toBe("That benchmark candidate's provider is no longer configured.");
+});
+
+test('a prefill drops the reasoning level of a model the catalog says takes none', function (): void {
+    [$benchmarkRun] = aiModelsPrefillRun();
+    AiModelPrice::query()->where(['provider' => 'openai', 'model' => 'gpt-5.6-luna'])->update(['supports_reasoning' => false]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('prefill.model', 'gpt-5.6-luna')->where('prefill.reasoning', null));
+});
 
 test('the decision verifier row warns when it resolves to the decision agent model', function (): void {
     $this->actingAs(User::factory()->admin()->create())

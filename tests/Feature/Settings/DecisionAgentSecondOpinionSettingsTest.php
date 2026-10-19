@@ -35,3 +35,13 @@ test('the jev threshold defaults to 0.8 and is clamped to 0..1', function (float
     'above' => [1.4, 1.0],
     'below' => [-0.2, 0.0],
 ]);
+
+test('a non-numeric jev threshold falls back to the default', function (string $source): void {
+    if ($source === 'store') {
+        resolve(AppSettings::class)->set(DecisionAgentSettings::SECOND_OPINION_JEV_THRESHOLD_KEY, 'high');
+    } else {
+        config(['mediamanager.decision_agent.second_opinion_jev_threshold' => 'high']);
+    }
+
+    expect(resolve(DecisionAgentSettings::class)->secondOpinionJevThreshold())->toBe(DecisionAgentSettings::DEFAULT_SECOND_OPINION_JEV_THRESHOLD);
+})->with(['store', 'config']);

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\ModelCatalog;
-use App\Ai\ReasoningOptions;
 use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
 use App\Services\Chat\ConversationModelOverride;
@@ -24,7 +23,7 @@ class ChatModelOptionsController extends Controller
             'models' => $modelCatalog->modelsByConfiguredProvider(),
             'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
             'modelCapabilities' => $modelCatalog->reasoningCapabilities(),
-            'reasoningProviders' => array_values(array_filter($modelCatalog->textProviders(), ReasoningOptions::supportsProvider(...))),
+            'reasoningProviders' => $modelCatalog->reasoningProviders(),
         ]);
     }
 }

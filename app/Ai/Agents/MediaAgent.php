@@ -12,7 +12,6 @@ use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
-use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
@@ -91,10 +90,10 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     }
 
     /**
-     * Stored history adapted for the provider this turn runs on (see
-     * HistoryForProvider). Uses the turn's primary provider; a mid-turn
-     * failover replays the primary's adaptation. Inside a benchmark run it is
-     * the case's recorded history instead.
+     * Stored history adapted for every provider in the turn's failover chain
+     * (see HistoryForProvider), so it stays valid when the failover provider
+     * answers; each adaptation is harmless for the others. Inside a
+     * benchmark run it is the case's recorded history instead.
      *
      * @return iterable<int, mixed>
      */
@@ -106,9 +105,10 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
             return $benchmarkRunContext->history();
         }
 
-        return HistoryForProvider::adapt(
+        return array_reduce(
+            array_keys($this->provider()),
+            HistoryForProvider::adapt(...),
             $this->rememberedMessages(),
-            resolve(TaskModelResolver::class)->resolve($this->aiTask())->provider,
         );
     }
 

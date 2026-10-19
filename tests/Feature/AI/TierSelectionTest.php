@@ -243,6 +243,23 @@ test('a pool accounting failure is reported once across conditional tiers', func
     Exceptions::assertReportedCount(1);
 });
 
+test('a rate-limit lookup failure is reported once across conditional tiers', function (): void {
+    Exceptions::fake();
+    tierPrice('gpt-5.6-luna');
+    tierPrice('gpt-5.6-terra');
+    tierPrice('gpt-5-nano');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(1)->selecting('openai', 'gpt-5.6-terra')->reasoning(AiReasoningLevel::High)->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Chat)->position(2)->selecting('openai', 'gpt-5-nano')->reasoning(AiReasoningLevel::Low)->create();
+    $this->mock(AiRateLimitGuard::class, fn ($mock) => $mock->shouldReceive('exhaustedReason')->andThrow(new RuntimeException('limits down')));
+    app()->forgetScopedInstances();
+
+    $resolvedSelection = tierResolver()->resolve(AiTask::Chat);
+
+    expect($resolvedSelection->tier?->reason())->toBe('Tier 1: rate limit status unavailable; Tier 2: rate limit status unavailable');
+    Exceptions::assertReportedCount(1);
+});
+
 test('the list walk is memoised until flushed', function (): void {
     tierPrice('gpt-5.6-luna');
     tierPrice('gpt-5-nano');

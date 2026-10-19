@@ -25,6 +25,13 @@ enum WriteOutcome: string
     case Updated = 'updated';
 
     /**
+     * An existing row's prices matched the candidate and only its reasoning
+     * capabilities were refreshed. Counts as updated, never as a price
+     * discrepancy.
+     */
+    case CapabilitiesUpdated = 'capabilities_updated';
+
+    /**
      * An existing row matched the candidate; nothing was written.
      */
     case Unchanged = 'unchanged';
@@ -62,4 +69,9 @@ enum WriteOutcome: string
      * Dry run: an update would have occurred.
      */
     case WouldUpdate = 'would_update';
+
+    /**
+     * Dry run: a capability-only update would have occurred.
+     */
+    case WouldUpdateCapabilities = 'would_update_capabilities';
 }

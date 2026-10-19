@@ -32,15 +32,16 @@ class AiUsageReporting
 
     /**
      * A null $since means no lower bound (the "All" window); a null $kind
-     * spans every usage kind (the budget guard relies on that default).
+     * spans every usage kind (the budget guard relies on that default); a null
+     * $benchmark counts benchmark runs too, false leaves them out, true keeps only them.
      *
      * @return array{total_invocations: int, total_tool_calls: int, total_tokens: int, total_cost: string}
      */
-    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): array
+    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null, ?bool $benchmark = null): array
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        $row = $this->query($since, $scenario, $kind)
+        $row = $this->query($since, $scenario, $kind, $benchmark)
             ->selectRaw('
                 COUNT(*) AS total_invocations,
                 COALESCE(SUM(ai_usage_records.tool_calls_count), 0) AS total_tool_calls,
@@ -55,7 +56,7 @@ class AiUsageReporting
         // (the user is asking "what if rates were X?", not "what would I
         // bill?"), so only net out the included tokens for the live view.
         if (! $scenario instanceof Scenario) {
-            $totalCost = max(0.0, $totalCost - $this->freePoolAccounting->discount($since, $kind));
+            $totalCost = max(0.0, $totalCost - $this->freePoolAccounting->discount($since, $kind, $benchmark));
         }
 
         return [
@@ -139,13 +140,13 @@ class AiUsageReporting
     /**
      * @return Collection<int, object{key: string|null, invocations: int, total_tokens: int, total_cost: string}>
      */
-    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): Collection
+    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null, ?bool $benchmark = null): Collection
     {
         throw_unless(in_array($column, self::AGGREGATABLE_COLUMNS, true), InvalidArgumentException::class, sprintf("Cannot aggregate by '%s'.", $column));
 
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario, $kind)
+        return $this->query($since, $scenario, $kind, $benchmark)
             ->selectRaw("
                 ai_usage_records.{$column} AS key,
                 COUNT(*) AS invocations,
@@ -166,7 +167,7 @@ class AiUsageReporting
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario, $kind)
+        return $this->query($since, $scenario, $kind, $benchmark)
             ->leftJoin('users', 'ai_usage_records.user_id', '=', 'users.id')
             ->selectRaw('
                 ai_usage_records.id,
@@ -181,16 +182,15 @@ class AiUsageReporting
                 ai_usage_records.kind,
                 ai_usage_records.error_message,
                 ai_usage_records.tier_position,
+                ai_usage_records.tier_via,
                 ai_usage_records.benchmark_run_id,
                 ai_usage_records.is_benchmark,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
             ', $costBindings)
-            ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2))
-            ->when($fellThrough === false, fn (Builder $builder) => $builder->where(fn (Builder $query) => $query->whereNull('ai_usage_records.tier_position')->orWhere('ai_usage_records.tier_position', 1)))
-            ->when($benchmark === true, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', true))
-            ->when($benchmark === false, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', false))
+            ->when($fellThrough === true, fn (Builder $builder) => $builder->where('ai_usage_records.tier_position', '>=', 2)->whereNull('ai_usage_records.tier_via'))
+            ->when($fellThrough === false, fn (Builder $builder) => $builder->where(fn (Builder $query) => $query->whereNull('ai_usage_records.tier_position')->orWhere('ai_usage_records.tier_position', 1)->orWhereNotNull('ai_usage_records.tier_via')))
             ->latest('ai_usage_records.created_at')
             ->limit($limit)
             ->get()
@@ -300,7 +300,7 @@ class AiUsageReporting
         ];
     }
 
-    private function query(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): Builder
+    private function query(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null, ?bool $benchmark = null): Builder
     {
         $builder = DB::table('ai_usage_records');
 
@@ -325,6 +325,8 @@ class AiUsageReporting
 
         return $builder
             ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $since))
-            ->when($kind instanceof AiUsageKind, fn (Builder $builder) => $builder->where('ai_usage_records.kind', $kind->value));
+            ->when($kind instanceof AiUsageKind, fn (Builder $builder) => $builder->where('ai_usage_records.kind', $kind->value))
+            ->when($benchmark === true, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', true))
+            ->when($benchmark === false, fn (Builder $builder) => $builder->where('ai_usage_records.is_benchmark', false));
     }
 }
