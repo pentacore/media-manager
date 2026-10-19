@@ -70,6 +70,7 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
                 data-header-notifications
             >
                 <Link :href="NotificationController.index.url()">
+                    <span class="sr-only">Notifications</span>
                     <Bell class="size-4" />
                     <span
                         v-if="unreadNotifications > 0"

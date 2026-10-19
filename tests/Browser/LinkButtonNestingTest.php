@@ -7,7 +7,9 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\ServiceWarning;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /*
  * Every link styled as a button is one <a>: a button inside a link is
@@ -89,6 +91,42 @@ test('the header notification and assistant links are single anchors', function 
         ->click('[data-header-ai-chat]')
         ->assertPathIs(route('ai.chat', absolute: false))
         ->assertNoSmoke();
+});
+
+/**
+ * Playwright's role selector for a link whose accessible name is exactly
+ * `$name`: the `s` flag makes the match whole and case-sensitive (Pest's
+ * Selector::getByRoleSelector() omits it, which matches a substring).
+ */
+function linkButtonNestingLinkNamedSelector(string $name): string
+{
+    return sprintf('internal:role=link[name=%ss]', json_encode($name, JSON_THROW_ON_ERROR));
+}
+
+test('the header notifications link is named Notifications, with its unread count when there is one', function (): void {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertMissing('[data-unread-notifications]')
+        ->assertPresent(linkButtonNestingLinkNamedSelector('Notifications'));
+
+    // There is no DatabaseNotification factory; these rows mirror what
+    // ServiceWarning::toArray() stores.
+    foreach (range(1, 3) as $number) {
+        $admin->notifications()->create([
+            'id' => (string) Str::uuid(),
+            'type' => ServiceWarning::class,
+            'data' => ['service' => 'sabnzbd', 'title' => sprintf('Disk warning %d', $number), 'message' => 'Less than 1 GB free', 'level' => 'disk_full'],
+        ]);
+    }
+
+    visit(route('dashboard', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-unread-notifications]', '3')
+        ->assertPresent(linkButtonNestingLinkNamedSelector('Notifications 3'))
+        ->assertMissing(linkButtonNestingLinkNamedSelector('3'));
 });
 
 test('the connection pages link to the form and back as single anchors', function (): void {
