@@ -248,12 +248,18 @@ function sonarrSeriesUrl(): string | null {
 
     <div class="flex flex-col gap-6 p-5">
         <div class="flex items-center justify-between">
-            <Link :href="SeriesController.index.url()">
-                <Button variant="ghost" size="sm" class="h-8 text-xs">
+            <Button
+                as-child
+                variant="ghost"
+                size="sm"
+                class="h-8 text-xs"
+                data-series-back
+            >
+                <Link :href="SeriesController.index.url()">
                     <ArrowLeft class="size-3.5" />
                     Back to series
-                </Button>
-            </Link>
+                </Link>
+            </Button>
             <div class="flex items-center gap-2">
                 <div
                     v-if="can('manage-library')"
@@ -274,21 +280,27 @@ function sonarrSeriesUrl(): string | null {
                         label="Search series"
                     />
                 </div>
-                <a
+                <Button
                     v-if="
                         series.title_slug &&
                         can('manage-library') &&
                         connection.url
                     "
-                    :href="sonarrSeriesUrl() ?? undefined"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    as-child
+                    variant="outline"
+                    size="sm"
+                    class="h-8 text-xs"
+                    data-series-open-sonarr
                 >
-                    <Button variant="outline" size="sm" class="h-8 text-xs">
+                    <a
+                        :href="sonarrSeriesUrl() ?? undefined"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         <ExternalLink class="size-3.5" />
                         Open in Sonarr
-                    </Button>
-                </a>
+                    </a>
+                </Button>
                 <template v-if="can('manage-library')">
                     <Dialog v-model:open="deleteDialogOpen">
                         <DialogTrigger as-child>

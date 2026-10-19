@@ -270,11 +270,16 @@ const supportsSubtitleCheckTags = computed(
                         <Button type="submit" :disabled="processing"
                             >Update Connection</Button
                         >
-                        <Link :href="ServiceConnectionController.index.url()">
-                            <Button type="button" variant="outline"
-                                >Cancel</Button
+                        <Button
+                            as-child
+                            variant="outline"
+                            data-connection-cancel
+                        >
+                            <Link
+                                :href="ServiceConnectionController.index.url()"
+                                >Cancel</Link
                             >
-                        </Link>
+                        </Button>
                     </div>
                 </Form>
             </CardContent>
