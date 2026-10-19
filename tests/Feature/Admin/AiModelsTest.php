@@ -819,7 +819,7 @@ test('a stale benchmark link redirects to the plain page with a toast', function
 
 test('a prefill whose provider is no longer configured redirects with its own toast', function (): void {
     [$benchmarkRun] = aiModelsPrefillRun();
-    config()->set('ai.providers.openai.key', null);
+    config()->set('ai.providers.openai.key');
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index', ['benchmark_run' => $benchmarkRun->id, 'candidate' => 1, 'task' => 'title']))
