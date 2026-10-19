@@ -503,7 +503,7 @@ vendor/bin/sail artisan test --compact
 vendor/bin/sail artisan test --compact --filter='Media\\Series'
 ```
 
-The suite covers auth flows, media controllers, webhook ingest and handlers, the action orchestrator + executor, media replacement, the Bazarr subtitle pipeline, real-time events, AI tools and agents, scheduled commands, and model behaviour. Browser tests run with `composer test:browser` (boots Inertia SSR first).
+The suite covers auth flows, media controllers, webhook ingest and handlers, the action orchestrator + executor, media replacement, the Bazarr subtitle pipeline, real-time events, AI tools and agents, scheduled commands, and model behaviour. Browser tests run with `composer test:browser` (boots Inertia SSR first); pass Pest flags after `--`, e.g. `composer test:browser -- --shard=1/4` or `--filter=Calendar`.
 
 ## Code quality
 
