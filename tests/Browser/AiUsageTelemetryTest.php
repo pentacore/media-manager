@@ -198,3 +198,14 @@ test('the header keeps a readable title next to the three filters on a wide scre
         ->assertScript('document.querySelector("h1").getBoundingClientRect().width > 200')
         ->assertScript('document.documentElement.scrollWidth <= window.innerWidth');
 });
+
+test('admin sees which list a run followed and the first tier filter label', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-via-chat', 'tier_position' => 2, 'tier_via' => 'Chat']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-usage-tier]', 'via Chat · tier 2')
+        ->click('[data-usage-tier-filter] button')
+        ->assertPresent('[role="option"][aria-label="First tier"]');
+});

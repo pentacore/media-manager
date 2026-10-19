@@ -15,6 +15,12 @@ use Throwable;
 final readonly class TierOutcome
 {
     /**
+     * What every skip reason starts with before the tier number ("Tier 1: ...");
+     * via() swaps it for the followed list's label.
+     */
+    public const string REASON_PREFIX = 'Tier ';
+
+    /**
      * @param  list<string>  $reasons  one entry per skipped tier, "Tier N: why" or "{List} tier N: why"
      */
     public function __construct(
@@ -38,7 +44,7 @@ final readonly class TierOutcome
         return new self(
             $this->position,
             $this->count,
-            array_map(static fn (string $reason): string => preg_replace('/^Tier /', $label.' tier ', $reason) ?? $reason, $this->reasons),
+            array_map(static fn (string $reason): string => preg_replace('/^'.preg_quote(self::REASON_PREFIX, '/').'/', $label.' tier ', $reason) ?? $reason, $this->reasons),
             $label,
         );
     }
@@ -56,6 +62,31 @@ final readonly class TierOutcome
 
         try {
             return $agent->resolvedSelection()->tier?->position;
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            return null;
+        }
+    }
+
+    /**
+     * The label of the list an agent run followed (e.g. "Chat") when its tier
+     * came from another task's list; null for its own list or no tiers. An
+     * event-scoped Decision run without override rows follows Decision's own
+     * default list, labelled "Decision" for the AI Models page; that is still
+     * the task's own list, so its fall-throughs count. Never throws, like
+     * positionFor().
+     */
+    public static function viaFor(object $agent): ?string
+    {
+        if (! method_exists($agent, 'resolvedSelection')) {
+            return null;
+        }
+
+        try {
+            $via = $agent->resolvedSelection()->tier?->via;
+
+            return method_exists($agent, 'aiTask') && $via === $agent->aiTask()->label() ? null : $via;
         } catch (Throwable $throwable) {
             report($throwable);
 

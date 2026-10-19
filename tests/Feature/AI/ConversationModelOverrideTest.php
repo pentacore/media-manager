@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\ChatTurnContext;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\User;
+use App\Services\Chat\ConversationModelOverride;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -287,4 +289,25 @@ test('non-admins cannot read the picker options or change the override', functio
     $this->actingAs($member)
         ->patchJson(route('ai.conversations.model', $id), ['provider' => null, 'model' => null, 'reasoning' => 'low'])
         ->assertForbidden();
+});
+
+test('chat defaults leaves the turn override in place when resolving fails', function (): void {
+    AiTaskModel::query()->where('task', AiTask::Chat)->delete();
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5-nano')->create();
+    $chatTurnContext = resolve(ChatTurnContext::class);
+    $chatTurnContext->apply('anthropic', 'claude-sonnet-5-5', AiReasoningLevel::High);
+
+    try {
+        AiTaskModel::retrieved(static function (): void {
+            throw new RuntimeException('resolver down');
+        });
+
+        expect(fn () => resolve(ConversationModelOverride::class)->chatDefaults())
+            ->toThrow(RuntimeException::class, 'resolver down');
+    } finally {
+        AiTaskModel::getEventDispatcher()->forget('eloquent.retrieved: '.AiTaskModel::class);
+    }
+
+    expect([$chatTurnContext->provider, $chatTurnContext->model, $chatTurnContext->reasoning])
+        ->toBe(['anthropic', 'claude-sonnet-5-5', AiReasoningLevel::High]);
 });

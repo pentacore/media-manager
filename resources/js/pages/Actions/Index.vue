@@ -620,11 +620,34 @@ function goToPage(url: string | null): void {
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
 
-/** The reviewer's shared reason, stored in full on a rejected request. */
+/**
+ * The reviewer's shared reason, stored in full on a rejected request. A
+ * request the second opinion rejected has none here: its verdict block
+ * already shows the reason.
+ */
 function rejectionReason(row: ActionRequestRow): string | null {
+    if (row.result?.reason === 'second_opinion_rejected') {
+        return null;
+    }
+
     const reason = row.result?.rejection_reason;
 
     return typeof reason === 'string' && reason !== '' ? reason : null;
+}
+
+/**
+ * The reviewer who rejected a request (the reviewer stores themselves in
+ * `approved_by`). A second-opinion rejection has no human reviewer.
+ */
+function rejectedBy(row: ActionRequestRow): string | null {
+    if (
+        row.status !== 'rejected' ||
+        row.result?.reason === 'second_opinion_rejected'
+    ) {
+        return null;
+    }
+
+    return row.approved_by ?? null;
 }
 
 function payloadTitle(row: ActionRequestRow): string {
@@ -1084,7 +1107,11 @@ function pipelineState(
                                 {{ selected.target_service }}
                             </span>
                         </Field>
-                        <Field label="Approved by">
+                        <Field
+                            v-if="selected.status !== 'rejected'"
+                            label="Approved by"
+                            data-action-approved-by
+                        >
                             <div class="flex items-center gap-2">
                                 <InitialsAvatar
                                     :name="selected.approved_by ?? 'system'"
@@ -1092,6 +1119,21 @@ function pipelineState(
                                 />
                                 <span class="text-[13px]">{{
                                     selected.approved_by ?? 'system'
+                                }}</span>
+                            </div>
+                        </Field>
+                        <Field
+                            v-if="rejectedBy(selected)"
+                            label="Rejected by"
+                            data-action-rejected-by
+                        >
+                            <div class="flex items-center gap-2">
+                                <InitialsAvatar
+                                    :name="rejectedBy(selected) ?? ''"
+                                    :size="20"
+                                />
+                                <span class="text-[13px]">{{
+                                    rejectedBy(selected)
                                 }}</span>
                             </div>
                         </Field>

@@ -237,7 +237,8 @@ class PriceVerifierPhase
         $priceRefreshLedger->providerState($provider, PriceRefreshLedger::PROVIDER_OK);
 
         $priceRefreshLedger->providerStates[$provider]['created'] += ($counts[WriteOutcome::Created->value] ?? 0) + ($counts[WriteOutcome::WouldCreate->value] ?? 0);
-        $priceRefreshLedger->providerStates[$provider]['updated'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0);
+        $priceRefreshLedger->providerStates[$provider]['updated'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0)
+            + ($counts[WriteOutcome::CapabilitiesUpdated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdateCapabilities->value] ?? 0);
         $priceRefreshLedger->providerStates[$provider]['unchanged'] += $counts[WriteOutcome::Unchanged->value] ?? 0;
         $priceRefreshLedger->providerStates[$provider]['locked'] += $counts[WriteOutcome::Locked->value] ?? 0;
         $priceRefreshLedger->providerStates[$provider]['rejected'] += ($counts[WriteOutcome::Rejected->value] ?? 0) + ($counts[WriteOutcome::RejectedAnomalous->value] ?? 0);
@@ -245,7 +246,7 @@ class PriceVerifierPhase
 
         // In verify mode an agent Update means the first-party page disagreed
         // with the value the feed just synced: that is a discrepancy the run
-        // records per provider.
+        // records per provider. A capability-only update is not one.
         if ($priceRefreshLedger->verifyMode) {
             $priceRefreshLedger->providerStates[$provider]['discrepancies'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0);
         }

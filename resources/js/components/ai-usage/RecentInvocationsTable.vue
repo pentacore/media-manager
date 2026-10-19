@@ -116,7 +116,11 @@ function kindLabel(value: string): string {
                                     v-if="(row.tier_position ?? 1) > 1"
                                     data-usage-tier
                                 >
-                                    Tier {{ row.tier_position }}
+                                    {{
+                                        row.tier_via
+                                            ? `via ${row.tier_via} · tier ${row.tier_position}`
+                                            : `Tier ${row.tier_position}`
+                                    }}
                                 </Pill>
                                 <Link
                                     v-if="row.benchmark_run_id !== null"

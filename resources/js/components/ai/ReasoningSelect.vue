@@ -16,12 +16,14 @@ const props = withDefaults(
         accepted?: AiReasoningLevel[] | null;
         disabledHint?: string | null;
         id?: string;
+        disabled?: boolean;
     }>(),
     {
         inheritLabel: undefined,
         accepted: null,
         disabledHint: null,
         id: undefined,
+        disabled: false,
     },
 );
 
@@ -53,7 +55,10 @@ function clamped(value: AiReasoningLevel): boolean {
 
 <template>
     <div data-reasoning-select>
-        <Select v-model="selected" :disabled="disabledHint !== null">
+        <Select
+            v-model="selected"
+            :disabled="disabled || disabledHint !== null"
+        >
             <SelectTrigger :id="id" class="h-8 max-w-[220px] text-sm">
                 <SelectValue placeholder="Reasoning" />
             </SelectTrigger>

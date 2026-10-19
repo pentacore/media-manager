@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
+import { computed } from 'vue';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import { InitialsAvatar } from '@/components/mm';
 import { useAiChat } from '@/composables/useAiChat';
@@ -15,7 +16,7 @@ import ToolCallChip from './ToolCallChip.vue';
 import type { ActionRequestCard, ChatMessage } from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
 
-defineProps<{
+const props = defineProps<{
     message: ChatMessage;
     isSheet: boolean;
     /** This bubble is the reply currently streaming in. */
@@ -52,6 +53,11 @@ function benchmarkCaseQuery(
 
     return message.id ? { from_chat_message: message.id } : null;
 }
+
+/** Null when the reply cannot become a case: a workflow proposal is not a plain answer. */
+const caseQuery = computed(() =>
+    props.message.workflow ? null : benchmarkCaseQuery(props.message),
+);
 </script>
 
 <template>
@@ -162,11 +168,9 @@ function benchmarkCaseQuery(
                     !message.failed &&
                     !streaming &&
                     message.text.trim() !== '' &&
-                    benchmarkCaseQuery(message)
+                    caseQuery
                 "
-                :href="
-                    createBenchmarkCase({ query: benchmarkCaseQuery(message)! })
-                "
+                :href="createBenchmarkCase({ query: caseQuery! })"
                 class="mt-1 inline-block text-[11.5px] text-muted-foreground hover:text-foreground"
                 data-chat-save-benchmark-case
                 @click="closeChat()"

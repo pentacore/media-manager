@@ -101,6 +101,11 @@ test('the rules page says which rules support a second opinion', function (): vo
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('actions.rules.index'))
         ->assertInertia(fn ($page) => $page->component('Actions/Rules')
-            ->where('rules.0.type', 'grab_release')->where('rules.0.second_opinion_supported', false)
-            ->where('rules.1.type', 'monitor_series')->where('rules.1.second_opinion_supported', true)->where('rules.1.second_opinion', 'off'));
+            ->where('rules', function ($rules): bool {
+                $byType = collect($rules)->keyBy('type');
+
+                return $byType['grab_release']['second_opinion_supported'] === false
+                    && $byType['monitor_series']['second_opinion_supported'] === true
+                    && $byType['monitor_series']['second_opinion'] === 'off';
+            }));
 });

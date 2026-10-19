@@ -110,8 +110,8 @@ const emit = defineEmits<{
                         <SelectItem value="all" aria-label="All tiers"
                             >All tiers</SelectItem
                         >
-                        <SelectItem value="first" aria-label="Tier 1"
-                            >Tier 1</SelectItem
+                        <SelectItem value="first" aria-label="First tier"
+                            >First tier</SelectItem
                         >
                         <SelectItem
                             value="fell_through"

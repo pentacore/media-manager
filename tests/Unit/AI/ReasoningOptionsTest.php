@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Ai\ReasoningOptions;
 use App\Enums\AiReasoningLevel;
+use Tests\TestCase;
+
+uses(TestCase::class);
 
 test('clamping picks the nearest accepted level and prefers the lower one on a tie', function (AiReasoningLevel $level, ?array $levels, ?AiReasoningLevel $expected): void {
     $accepted = $levels === null ? null : array_map(AiReasoningLevel::from(...), $levels);
@@ -58,4 +61,12 @@ test('anthropic budgets stay below the request max tokens', function (): void {
 test('chat asks openai for a reasoning summary', function (): void {
     expect(ReasoningOptions::fragment('openai', 'gpt-5', AiReasoningLevel::Low, null, null, null, summarize: true))
         ->toBe(['reasoning' => ['effort' => 'low', 'summary' => 'auto']]);
+});
+
+test("a custom-named provider gets its driver's reasoning fragment", function (): void {
+    config()->set('ai.providers.my-or', ['driver' => 'openrouter', 'key' => 'test']);
+
+    expect(ReasoningOptions::supportsProvider('my-or'))->toBeTrue()
+        ->and(ReasoningOptions::fragment('my-or', 'openai/gpt-5', AiReasoningLevel::High, null, null, null))
+        ->toBe(['reasoning' => ['effort' => 'high']]);
 });

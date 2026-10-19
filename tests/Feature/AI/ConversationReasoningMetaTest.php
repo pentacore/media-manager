@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\ToolResultMessage;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -157,3 +158,32 @@ test('the chat agent replays stored history adapted for the provider it runs on'
         ->and($toolCalls->first()->id)->toBe('fc_1')
         ->and($toolCalls->first()->thoughtSignature)->toBeNull();
 });
+
+test('the chat agent replays stored history valid for the failover provider too', function (string $primary, string $failover, bool $shortIds): void {
+    AiTaskModel::query()->where('task', AiTask::Chat)->update(['provider' => $primary, 'model' => 'primary-model']);
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => $failover])->create();
+    $admin = User::factory()->admin()->create();
+    $conversationId = reasoningMetaConversation($admin, [
+        ['user', 'Find it', [], []],
+        ['assistant', 'Found it.', ['provider' => 'gemini', 'model' => 'gemini-3-pro'], [
+            ['content' => '', 'tool_calls' => [['id' => 'fc_1', 'name' => 'get_media', 'arguments' => ['id' => 1], 'result_id' => 'call_1', 'thought_signature' => 'sig-abc', 'result' => 'ok']], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []],
+            ['content' => 'Found it.', 'tool_calls' => [], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []],
+        ]],
+    ]);
+
+    $messages = collect((new MediaAgent)->continue($conversationId, as: $admin)->messages());
+    $toolCall = $messages->first(fn (mixed $message): bool => $message instanceof AssistantMessage && $message->toolCalls->isNotEmpty())->toolCalls->first();
+    $toolResult = $messages->first(fn (mixed $message): bool => $message instanceof ToolResultMessage)->toolResults->first();
+
+    expect($toolCall->thoughtSignature)->toBeNull()
+        ->and($toolResult->id)->toBe($toolCall->id)
+        ->and($toolResult->resultId)->toBe($toolCall->resultId)
+        ->and($toolCall->id)->toBe($shortIds ? substr(hash('sha256', 'fc_1'), 0, 9) : 'fc_1')
+        ->and($toolCall->resultId)->toBe($shortIds ? substr(hash('sha256', 'call_1'), 0, 9) : 'call_1');
+})->with([
+    'gemini primary, openai failover' => ['gemini', 'openai', false],
+    'openai primary, gemini failover' => ['openai', 'gemini', false],
+    'openai primary, mistral failover' => ['openai', 'mistral', true],
+    'gemini primary, mistral failover' => ['gemini', 'mistral', true],
+    'mistral primary, gemini failover' => ['mistral', 'gemini', true],
+]);

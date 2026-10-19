@@ -43,6 +43,7 @@ use Override;
  * @property string|null $error_message
  * @property string|null $parent_invocation_id
  * @property int|null $tier_position
+ * @property string|null $tier_via
  * @property int|null $benchmark_run_id
  * @property bool $is_benchmark
  * @property string $search_units
@@ -70,6 +71,7 @@ use Override;
     'response_text',
     'tool_calls_count',
     'tier_position',
+    'tier_via',
     'benchmark_run_id',
     'is_benchmark',
     'input_per_mtok',

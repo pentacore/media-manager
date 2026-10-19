@@ -136,6 +136,28 @@ final class TaskModelResolver
     }
 
     /**
+     * The model the failover provider runs on: its configured model, or the
+     * provider's default text model the SDK falls back to
+     * (Promptable::getDefaultModelFor()); null when failover is off or the
+     * provider cannot be resolved. providerOptions() clamps the failover
+     * request's reasoning against it and AnsweredBy labels with it.
+     */
+    public function failoverModel(): ?string
+    {
+        $failover = $this->failover();
+
+        if ($failover === null) {
+            return null;
+        }
+
+        try {
+            return $failover['model'] ?? Ai::textProvider($failover['provider'])->defaultTextModel();
+        } catch (InvalidArgumentException|LogicException) {
+            return null;
+        }
+    }
+
+    /**
      * Every tier in the scope that names a model, with the pair it would run
      * on (positions are one-based, like TierOutcome) — for checks (pricing,
      * hard-cap warnings) that must cover tiers that are not live right now.
@@ -207,6 +229,7 @@ final class TaskModelResolver
     {
         $this->rows = null;
         $this->picks = [];
+        $this->tierEligibility->forgetReported();
     }
 
     /**
@@ -246,7 +269,7 @@ final class TaskModelResolver
                 $reason = $this->tierEligibility->skipReason($provider, $model, $tier->min_pool_percent, $tier->min_pool_tokens);
 
                 if ($reason !== null) {
-                    $skipped[] = sprintf('Tier %d: %s', $index + 1, $reason);
+                    $skipped[] = sprintf('%s%d: %s', TierOutcome::REASON_PREFIX, $index + 1, $reason);
 
                     continue;
                 }
@@ -271,8 +294,7 @@ final class TaskModelResolver
             AiTask::Chat => new TierPick(...($this->configPair('mediamanager.ai.model') ?? [$this->defaultProvider(), 'gpt-5-mini'])),
             AiTask::Title => new TierPick(...$this->withAutoTitle(...($this->configPair('mediamanager.ai.title_model') ?? [$this->defaultProvider(), 'gpt-5.4-nano']))),
             AiTask::Decision => $this->configPick('mediamanager.decision_agent.model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
-            AiTask::DecisionVerifier => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
-            AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
+            AiTask::DecisionVerifier, AiTask::BenchmarkJudge => $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::PriceUpdater => $this->configPick('mediamanager.ai.pricing.updater_model') ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),
             AiTask::FileInspector, AiTask::StuckDownloadInvestigator => $this->configPick('mediamanager.ai.sub_agent_model')
                 ?? $this->pick(AiTask::Chat, AiTaskModel::DEFAULT_SCOPE)->pairOnly(AiTask::Chat->label()),

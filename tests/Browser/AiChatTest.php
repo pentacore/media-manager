@@ -425,6 +425,33 @@ test('a streamed reply links to the benchmark case form by its invocation id', f
         ->assertNoJavaScriptErrors();
 });
 
+test('a workflow proposal reply offers no benchmark case link', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    MediaAgent::fake(function () use ($admin): string {
+        AiProposedWorkflow::create([
+            'id' => (string) Str::uuid7(),
+            'user_id' => $admin->id,
+            'conversation_id' => null,
+            'rationale' => 'Cleaning up unwatched series',
+            'steps' => [['action' => 'delete_series', 'target' => 'Demo Show', 'reason' => 'Unwatched 8mo']],
+            'status' => AiProposedWorkflowStatus::Proposed,
+        ]);
+
+        return 'I have proposed a workflow.';
+    });
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('I have proposed a workflow.')
+        ->assertSee('Proposed workflow')
+        ->assertMissing('[data-chat-save-benchmark-case]')
+        ->assertNoJavaScriptErrors();
+});
+
 test('long conversations load earlier messages on demand', function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = (string) Str::uuid7();

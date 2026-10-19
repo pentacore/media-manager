@@ -319,9 +319,11 @@ class UpsertModelPriceTool extends BaseTool
         return match ($outcome) {
             WriteOutcome::Created,
             WriteOutcome::Updated,
+            WriteOutcome::CapabilitiesUpdated,
             WriteOutcome::Unchanged => $this->success($outcome, $provider, $model),
             WriteOutcome::WouldCreate,
-            WriteOutcome::WouldUpdate => [
+            WriteOutcome::WouldUpdate,
+            WriteOutcome::WouldUpdateCapabilities => [
                 'upserted' => false,
                 'dry_run' => true,
                 'outcome' => $outcome->value,

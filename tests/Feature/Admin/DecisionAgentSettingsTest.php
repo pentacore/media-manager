@@ -174,3 +174,31 @@ test('jev engines need a configured classifier and the threshold stays within 0.
     'jev without classifier' => [['second_opinion_engine' => 'jev'], 'second_opinion_engine'],
     'threshold above one' => [['second_opinion_jev_threshold' => 1.5], 'second_opinion_jev_threshold'],
 ]);
+
+test('a stored jev engine does not block saving other settings once the classifier is gone', function (): void {
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEngine(SecondOpinionEngine::Jev);
+    config(['mediamanager.ai.classification.provider' => 'openrouter', 'ai.providers.openrouter.key' => '']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['second_opinion_engine' => 'jev', 'max_actions_per_run' => 5]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect(resolve(DecisionAgentSettings::class)->maxActionsPerRun())->toBe(5)
+        ->and(resolve(DecisionAgentSettings::class)->secondOpinionEngine())->toBe(SecondOpinionEngine::Jev);
+});
+
+test('without a classifier only the llm or the stored engine can be saved', function (string $stored, string $submitted, bool $allowed): void {
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEngine(SecondOpinionEngine::from($stored));
+    config(['mediamanager.ai.classification.provider' => 'openrouter', 'ai.providers.openrouter.key' => '']);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['second_opinion_engine' => $submitted]));
+
+    $allowed ? $response->assertSessionHasNoErrors() : $response->assertSessionHasErrors('second_opinion_engine');
+})->with([
+    'llm to jev' => ['llm', 'jev', false],
+    'jev to the cascade' => ['jev', 'jev_then_llm', false],
+    'jev back to llm' => ['jev', 'llm', true],
+    'cascade kept' => ['jev_then_llm', 'jev_then_llm', true],
+]);

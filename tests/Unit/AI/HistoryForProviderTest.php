@@ -8,6 +8,9 @@ use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
+use Tests\TestCase;
+
+uses(TestCase::class);
 
 /**
  * A user turn, an assistant tool call, its result and the final answer.
@@ -51,4 +54,13 @@ test('mistral gets nine character ids that still pair calls with results', funct
         ->and($call->resultId)->toMatch('/^[a-zA-Z0-9]{9}$/')
         ->and($result->id)->toBe($call->id)
         ->and($result->resultId)->toBe($call->resultId);
+});
+
+test('a custom-named provider is adapted for its driver', function (): void {
+    config()->set('ai.providers.my-gemini', ['driver' => 'gemini', 'key' => 'test']);
+
+    $adapted = HistoryForProvider::adapt(historyForProviderToolCallHistory(), 'my-gemini');
+
+    expect($adapted[1]->toolCalls->first()->thoughtSignature)->toBeNull()
+        ->and($adapted[1]->toolCalls->first()->id)->toBe('fc_123');
 });

@@ -496,3 +496,11 @@ test('both action broadcasts carry the row status version and the version their 
         ->and(new ActionRequestStatusChanged($approved)->broadcastWith())
         ->toMatchArray(['status_version' => $approved->status_version, 'pending_count' => 1, 'pending_version' => $newest]);
 });
+
+test('ActionRequestCreated broadcasts the second opinion verdict of a request that has one', function (): void {
+    $actionRequest = ActionRequest::factory()->described()->secondOpinion(agrees: false, reason: 'Destructive without cause.')->create();
+
+    $payload = new ActionRequestCreated($actionRequest)->broadcastWith();
+
+    expect($payload['second_opinion'])->toMatchArray(['agrees' => false, 'reason' => 'Destructive without cause.']);
+});
