@@ -13,6 +13,7 @@ export type { ActionResult } from './failure';
 export {
     compareLiveStatus,
     liveChangeKey,
+    pushedRowIsCurrent,
     reconcileWithLive,
 } from './liveStatus';
 export type { LiveStatusChange } from './liveStatus';

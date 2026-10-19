@@ -152,3 +152,76 @@ test('leaving the Action Queue and coming back binds its live listeners once', f
     $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'completed')
         ->assertNoSmoke();
 });
+
+/**
+ * Waits for the layout's "New Action Request" toast, which the same
+ * ActionRequestCreated broadcast raises after the page's list handled it.
+ */
+function actionQueueLiveCreatedToastScript(): string
+{
+    return actionQueueLiveWaitScript("document.body.innerText.includes('New Action Request')");
+}
+
+test('a created broadcast older than the listed row does not roll it back', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example settled request']);
+    $stalePayload = new ActionRequestCreated($actionRequest)->broadcastWith();
+    $actionRequest->update(['status' => ActionRequestStatus::Completed]);
+    $row = sprintf('[data-action-row="%d"]', $actionRequest->id);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn($row, 'completed');
+    $webpage->script(appHydratedScript());
+
+    expect($stalePayload['status_version'])->toBeLessThan($actionRequest->fresh()->status_version);
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', $stalePayload, 4));
+    $webpage->script(actionQueueLiveCreatedToastScript());
+
+    $webpage->assertSeeIn($row, 'completed')
+        ->assertDontSeeIn($row, 'pending')
+        ->assertNoSmoke();
+});
+
+test('an unversioned created broadcast older than the listed row yields to it by its timestamp', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Completed, 'title' => 'Example timed request']);
+    $stalePayload = [
+        ...new ActionRequestCreated($actionRequest)->broadcastWith(),
+        'status' => 'pending',
+        'updated_at' => $actionRequest->updated_at->subSeconds(60)->toISOString(),
+    ];
+    unset($stalePayload['status_version']);
+    $row = sprintf('[data-action-row="%d"]', $actionRequest->id);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn($row, 'completed');
+    $webpage->script(appHydratedScript());
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', $stalePayload, 4));
+    $webpage->script(actionQueueLiveCreatedToastScript());
+
+    $webpage->assertSeeIn($row, 'completed')
+        ->assertDontSeeIn($row, 'pending')
+        ->assertNoSmoke();
+});
+
+test('a created broadcast as new as the listed row still replaces it', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example first title']);
+    $row = sprintf('[data-action-row="%d"]', $actionRequest->id);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn($row, 'Example first title');
+    $webpage->script(appHydratedScript());
+
+    // A title change is no status change, so the version stays and the pair ties.
+    $actionRequest->update(['title' => 'Example renamed title']);
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($actionRequest->fresh())->broadcastWith(), 4));
+    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('%s')?.innerText.includes('Example renamed title') === true", $row)));
+
+    $webpage->assertSeeIn($row, 'Example renamed title')
+        ->assertNoSmoke();
+});

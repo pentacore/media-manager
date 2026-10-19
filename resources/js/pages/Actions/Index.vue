@@ -18,6 +18,7 @@ import {
     isUncertainOutcome,
     liveChangeKey,
     mergeLiveResult,
+    pushedRowIsCurrent,
     reconcileWithLive,
     retryConfirmation,
     SecondOpinionVerdict,
@@ -112,6 +113,9 @@ const {
     keyField: 'id',
     initial: props.requests.data,
     cap: props.requests.meta.per_page,
+    // A late Created broadcast must not roll back a row a newer status
+    // change already moved on.
+    replaces: pushedRowIsCurrent,
 });
 
 watch(
