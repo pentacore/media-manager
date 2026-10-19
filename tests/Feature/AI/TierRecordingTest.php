@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\AnsweredBy;
+use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\FreePoolOverflowBehavior;
@@ -13,6 +14,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use App\Services\AiUsage\AiUsageReporting;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +102,21 @@ test('a run that follows the chat list records the list it followed', function (
 
     expect($usage?->tier_position)->toBe(2)
         ->and($usage?->tier_via)->toBe('Chat');
+});
+
+test('an event-scoped decision run on its own default list records no via and counts as fell through', function (): void {
+    AiTaskModel::factory()->task(AiTask::Decision)->selecting('openai', 'gpt-5.6-luna')->conditions(20)->create();
+    AiTaskModel::factory()->task(AiTask::Decision)->position(1)->selecting('openai', 'gpt-5-nano')->create();
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', eventType: 'Download'));
+    DecisionAgent::fake(['No action needed.']);
+
+    (new DecisionAgent)->prompt('Anything to do?');
+
+    $usage = AiUsageRecord::query()->where('agent_class', DecisionAgent::class)->latest('id')->first();
+
+    expect($usage?->tier_position)->toBe(2)
+        ->and($usage?->tier_via)->toBeNull()
+        ->and(resolve(AiUsageReporting::class)->recentInvocations(null, fellThrough: true)->pluck('id')->all())->toContain($usage?->id);
 });
 
 test('a run on its own list records no via', function (): void {

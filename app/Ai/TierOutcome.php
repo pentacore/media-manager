@@ -71,8 +71,11 @@ final readonly class TierOutcome
 
     /**
      * The label of the list an agent run followed (e.g. "Chat") when its tier
-     * came from another task's list; null for its own list or no tiers. Never
-     * throws, like positionFor().
+     * came from another task's list; null for its own list or no tiers. An
+     * event-scoped Decision run without override rows follows Decision's own
+     * default list, labelled "Decision" for the AI Models page; that is still
+     * the task's own list, so its fall-throughs count. Never throws, like
+     * positionFor().
      */
     public static function viaFor(object $agent): ?string
     {
@@ -81,7 +84,9 @@ final readonly class TierOutcome
         }
 
         try {
-            return $agent->resolvedSelection()->tier?->via;
+            $via = $agent->resolvedSelection()->tier?->via;
+
+            return method_exists($agent, 'aiTask') && $via === $agent->aiTask()->label() ? null : $via;
         } catch (Throwable $throwable) {
             report($throwable);
 
