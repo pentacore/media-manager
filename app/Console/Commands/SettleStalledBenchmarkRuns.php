@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Enums\BenchmarkRunStatus;
 use App\Models\BenchmarkRun;
 use App\Services\Benchmark\BenchmarkRunSettler;
 use Illuminate\Console\Attributes\Description;
@@ -13,6 +12,9 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
+ * Sweeps every run with a stale result, ended or not: settle() fails a
+ * stale result in an ended run as stopped and in a live one as stalled.
+ *
  * Safe only while RunBenchmarkCase's #[Timeout(280)] stays below
  * BenchmarkResult::CLAIM_STALE_AFTER_SECONDS: a live job never looks stalled.
  */
@@ -23,7 +25,6 @@ class SettleStalledBenchmarkRuns extends Command
     public function handle(BenchmarkRunSettler $benchmarkRunSettler): int
     {
         $runIds = BenchmarkRun::query()
-            ->whereIn('status', [BenchmarkRunStatus::Pending, BenchmarkRunStatus::Running])
             ->whereHas('results', fn (Builder $builder): Builder => $builder->runStale())
             ->pluck('id');
 
