@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, WhenVisible } from '@inertiajs/vue3';
+import { Deferred, Head, Link, router } from '@inertiajs/vue3';
 import {
     Activity,
     ArrowLeft,
@@ -514,7 +514,7 @@ function sonarrSeriesUrl(): string | null {
                 Seasons
             </h2>
 
-            <WhenVisible data="episodes">
+            <Deferred data="episodes">
                 <template #fallback>
                     <div
                         v-for="season in series.seasons"
@@ -881,7 +881,7 @@ function sonarrSeriesUrl(): string | null {
                         No seasons available.
                     </p>
                 </template>
-            </WhenVisible>
+            </Deferred>
         </div>
     </div>
 

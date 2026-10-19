@@ -46,14 +46,11 @@ function seriesSectionsFakeSonarrIndexList(): void
 }
 
 /**
- * Holds back the answer to every one of the show page's deferred `episodes`
- * reloads, as a slow Sonarr read would: each request is sent and answered at
- * once, but the page only sees the answers once window.__mmReleaseHeld()
- * runs. Inertia's automatic deferred-group loader and the section's own
- * WhenVisible both reload `episodes` independently on mount, moments apart,
- * so every matching request is queued rather than just the first. Installed
+ * Holds back the answer to the show page's deferred `episodes` reload, as a
+ * slow Sonarr read would: the request is sent and answered at once, but the
+ * page only sees the answer once window.__mmReleaseHeld() runs. Installed
  * while still on the index page (before the SPA visit that mounts the show
- * page), because the show page's own reloads fire during that visit's mount,
+ * page), because the show page's own reload fires during that visit's mount,
  * too early for a script run after it to catch.
  */
 function seriesSectionsHoldEpisodesScript(): string
@@ -88,9 +85,18 @@ function seriesSectionsHoldEpisodesScript(): string
         JS;
 }
 
+/**
+ * Waits until the held queue holds the `episodes` request. `<Deferred>`
+ * sends exactly one reload for it (unlike the `<WhenVisible>` it replaced,
+ * which fired a second one independently), so polling the queue itself —
+ * rather than a fixed sleep for "the second one to join it" — is both
+ * faster and self-checking: a regression that reintroduced a second request
+ * would leave the count at 2 and the wait would time out instead of
+ * silently releasing both together.
+ */
 function seriesSectionsWaitForHeldEpisodesScript(): string
 {
-    return confirmDialogWaitUntilScript('window.__mmHeldAnswered === true');
+    return confirmDialogWaitUntilScript('window.__mmHeldQueue.length === 1');
 }
 
 /**
@@ -158,10 +164,6 @@ test('the seasons show skeleton rows until the episodes arrive', function (): vo
     $webpage->assertPresent('[data-season-skeleton="1"]')
         ->assertMissing('[data-season-card="1"]');
 
-    // Inertia's automatic deferred-group loader and the section's WhenVisible
-    // each reload `episodes` independently, moments apart: give the second
-    // one time to join the held queue before releasing both together.
-    $webpage->script('(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); })()');
     $webpage->script('window.__mmReleaseHeld()');
     $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-season-card=\"1\"]') !== null"));
 
@@ -170,6 +172,30 @@ test('the seasons show skeleton rows until the episodes arrive', function (): vo
         ->click('[data-season-card="1"] button')
         ->assertSeeIn('[data-season-card="1"]', 'Example Pilot Episode')
         ->assertNoSmoke();
+});
+
+test('the show page requests episodes only once per view', function (): void {
+    // Pins the fix for the pre-existing bug where Inertia's automatic
+    // deferred-group loader and the section's own <WhenVisible> each
+    // reloaded `episodes` independently, so a view fired two requests for
+    // it; the section now uses <Deferred>, which has no reload of its own.
+    seriesSectionsFakeSonarr();
+    seriesSectionsFakeSonarrIndexList();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="7"]', 'Example Series Title');
+    $webpage->script(appHydratedScript());
+    $webpage->script(seriesSectionsReloadRecorderScript());
+
+    $webpage->click('[data-series-card="7"]');
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-season-card=\"1\"]') !== null"));
+
+    $webpage->assertPresent('[data-season-card="1"]')
+        ->assertNoSmoke();
+
+    expect($webpage->script("window.__seriesSectionsReloads.filter((only) => only === 'episodes').length"))->toBe(1);
 });
 
 test("an episode's interactive search names the episode in its heading", function (): void {
