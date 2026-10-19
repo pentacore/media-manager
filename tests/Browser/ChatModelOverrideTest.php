@@ -177,3 +177,52 @@ test('the label names the tier that answered even when it changed after the page
         ->assertSeeIn('[data-answered-by]', 'gpt-5-nano')
         ->assertSeeIn('[data-answered-by-tier]', 'tier 2');
 });
+
+test('the selects in an open picker are disabled while the picker is locked', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'Nano chat',
+        'model_provider' => 'openai',
+        'model' => 'gpt-5-nano',
+        'reasoning' => 'high',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · High')
+        // The closing menu hands focus back to its trigger, which would dismiss a popover opened before it unmounts.
+        ->assertMissing('[data-slot="dropdown-menu-content"]')
+        ->click('[data-chat-model-chip]')
+        ->assertEnabled('[data-chat-model-picker] [data-chat-model-select] button')
+        ->assertEnabled('[data-chat-model-picker] [data-reasoning-select] button');
+
+    // Hold the override save in flight, as a slow network would: the picker
+    // stays locked until the PATCH is answered.
+    $webpage->script(<<<'JS'
+        (() => {
+            const original = window.fetch.bind(window);
+            window.fetch = (input, init) => (init?.method === 'PATCH' && String(input).endsWith('/model'))
+                ? new Promise(() => {})
+                : original(input, init);
+        })()
+        JS);
+
+    $webpage->click('[data-chat-model-picker] [data-reasoning-select] button')
+        ->click('[data-reasoning-option="low"]')
+        ->assertSeeIn('[data-chat-model-chip]', 'gpt-5-nano · Low')
+        ->assertMissing('[data-slot="select-content"]')
+        ->assertVisible('[data-chat-model-picker]')
+        ->assertDisabled('[data-chat-model-chip]')
+        ->assertDisabled('[data-chat-model-picker] [data-chat-model-select] button')
+        ->assertDisabled('[data-chat-model-picker] [data-reasoning-select] button')
+        ->assertDisabled('[data-chat-model-reset]');
+});
