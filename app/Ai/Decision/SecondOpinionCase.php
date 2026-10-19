@@ -18,6 +18,14 @@ final readonly class SecondOpinionCase
 
     private const int ACTION_PAYLOAD_CHARS = 2000;
 
+    private const int CLASSIFICATION_PAYLOAD_CHARS = 4000;
+
+    /**
+     * An invalid UTF-8 string becomes null instead of failing the whole
+     * encode, and slashes stay escaped (see json()).
+     */
+    private const int JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR;
+
     /**
      * @param  array<string, mixed>  $payload  the action payload after connection pinning
      * @param  array<string, mixed>  $eventPayload  the triggering event's payload snapshot
@@ -35,9 +43,9 @@ final readonly class SecondOpinionCase
 
     /**
      * Everything a model or a third party could have written sits inside an
-     * <untrusted_...> fence: the action payload, an unverified target title,
-     * the rationale and the webhook payload. Embedded text cannot close a
-     * fence early (see fenced()).
+     * <untrusted_...> fence: the action details, the action payload, an
+     * unverified target title, the rationale and the webhook payload.
+     * Embedded text cannot close a fence early (see fenced()).
      */
     public function toPrompt(): string
     {
@@ -78,7 +86,7 @@ PROMPT,
                 ? sprintf('%s (name verified by the server)', $this->fenced($this->actionDescription->title))
                 : "name NOT verified by the server; the proposer's title is in the proposed payload below",
             $this->fenced($this->actionDescription->description),
-            $details === '' ? '' : "Details:\n".$details,
+            $details === '' ? '' : sprintf("<untrusted_action_details>\nDetails:\n%s\n</untrusted_action_details>", $details),
             $verified ? '' : sprintf("Proposed title: %s\n", $this->fenced($this->actionDescription->title)),
             $this->json($this->payload, self::ACTION_PAYLOAD_CHARS),
             $this->fenced($this->rationale),
@@ -89,17 +97,22 @@ PROMPT,
     }
 
     /**
+     * The event payload is encoded like the prompt's (compact) and fenced
+     * the same way, so a payload with invalid UTF-8 still reaches Jev.
+     *
      * @return array{action: string, target: string, effect: string, rationale: string, event: string, payload: string}
      */
     public function toClassificationState(): array
     {
+        $payload = json_encode($this->eventPayload, self::JSON_FLAGS);
+
         return [
             'action' => sprintf('%s (%s)', $this->actionType, $this->actionLabel),
             'target' => $this->actionDescription->title,
             'effect' => $this->actionDescription->description,
             'rationale' => Str::limit($this->rationale, 1000),
             'event' => sprintf('%s %s', $this->sourceService, $this->eventType ?? 'unknown'),
-            'payload' => Str::limit((string) json_encode($this->eventPayload), 4000),
+            'payload' => $this->fenced(Str::limit($payload === false ? '{}' : $payload, self::CLASSIFICATION_PAYLOAD_CHARS)),
         ];
     }
 
@@ -111,18 +124,18 @@ PROMPT,
      */
     private function json(array $value, int $limit): string
     {
-        $json = json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $json = json_encode($value, JSON_PRETTY_PRINT | self::JSON_FLAGS);
 
         return $json === false ? '{}' : $this->fenced(Str::limit($json, $limit, "\n… (truncated)"));
     }
 
     /**
      * Neutralise any opening or closing <untrusted_...> tag in embedded text
-     * (a JSON-escaped "<\/" included), so it can neither end its own fence
-     * early nor open a fake one.
+     * (a JSON-escaped "<\/" or any run of backslashes included), so it can
+     * neither end its own fence early nor open a fake one.
      */
     private function fenced(string $text): string
     {
-        return (string) preg_replace('~<(\s*\\\\?/?\s*)untrusted_~i', '[$1untrusted_', $text);
+        return (string) preg_replace('~<(\s*\\\\*/?\s*)untrusted_~i', '[$1untrusted_', $text);
     }
 }

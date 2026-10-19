@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Ai\ModelCatalog;
-use App\Ai\ReasoningOptions;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
@@ -90,7 +89,7 @@ class BenchmarkRunController extends Controller
             'providers' => $modelCatalog->textProviders(),
             'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
             'modelCapabilities' => $modelCatalog->reasoningCapabilities(),
-            'reasoningProviders' => array_values(array_filter($modelCatalog->textProviders(), ReasoningOptions::supportsProvider(...))),
+            'reasoningProviders' => $modelCatalog->reasoningProviders(),
             'judgeDefault' => [
                 'provider' => $resolvedSelection->provider,
                 'model' => $resolvedSelection->model,

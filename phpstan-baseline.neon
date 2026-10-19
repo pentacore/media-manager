@@ -811,7 +811,7 @@ parameters:
 			path: app/Services/AiUsage/FreePoolAccounting.php
 
 		-
-			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:poolUsageRecords\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:poolUsageRecords\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, is_benchmark\: bool, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/AiUsage/FreePoolAccounting.php
@@ -823,7 +823,7 @@ parameters:
 			path: app/Services/AiUsage/FreePoolAccounting.php
 
 		-
-			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:replayFitOrPaid\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string, fits\: bool\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\>\.$#'
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:replayFitOrPaid\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, is_benchmark\: bool, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string, fits\: bool\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, is_benchmark\: bool, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/AiUsage/FreePoolAccounting.php

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Conversations;
 
+use App\Ai\ProviderDriver;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -15,6 +16,13 @@ use Laravel\Ai\Responses\Data\ToolResult;
  * foreign replay blocks per turn; what's left is Gemini replaying stored
  * thought signatures (validated only within the current turn, so dropping
  * them from earlier turns is safe) and Mistral's 9-character id rule.
+ *
+ * Each adaptation is harmless for every other provider, so history adapted
+ * for each provider in a failover chain in turn is valid for all of them:
+ * only Gemini reads thought signatures, and the short ids rewrite every call
+ * and its result alike. Stored history holds no reasoning ids or replay
+ * blocks outside a paused approval turn, which the app never creates, so the
+ * Mistral rebuild loses nothing another provider replays.
  */
 final class HistoryForProvider
 {
@@ -26,7 +34,7 @@ final class HistoryForProvider
     {
         $messages = [...$messages];
 
-        return match ($provider) {
+        return match (ProviderDriver::of($provider)) {
             'gemini' => array_map(self::withoutSignatures(...), $messages),
             'mistral' => array_map(self::withShortIds(...), $messages),
             default => $messages,

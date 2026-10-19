@@ -127,16 +127,6 @@ function applyPrefill(): void {
 
     const selection = form.tasks[prefill.task];
 
-    if (selection.tiers.length === 0) {
-        selection.tiers.push({
-            provider: null,
-            model: null,
-            reasoning: null,
-            min_pool_percent: null,
-            min_pool_tokens: null,
-        });
-    }
-
     const tier = selection.tiers[0];
     tier.provider = prefill.provider;
     tier.model = prefill.model;
@@ -312,6 +302,7 @@ function submit(): void {
                     <div class="flex min-w-0 flex-col gap-2">
                         <TierListEditor
                             v-model="form.tasks[row.task].tiers"
+                            :label="row.label"
                             :models="models"
                             :reasoning-levels="reasoningLevels"
                             :model-capabilities="modelCapabilities"
@@ -407,6 +398,7 @@ function submit(): void {
                                 </div>
                                 <TierListEditor
                                     v-model="override.tiers"
+                                    :label="override.event_key"
                                     :models="models"
                                     :reasoning-levels="reasoningLevels"
                                     :model-capabilities="modelCapabilities"

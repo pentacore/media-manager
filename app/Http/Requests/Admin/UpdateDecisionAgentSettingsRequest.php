@@ -42,14 +42,21 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
     }
 
     /**
-     * Jev engines need a classification provider with a key.
+     * Switching to a Jev engine needs a classification provider with a key.
+     * The stored engine stays allowed without one, so a classifier removed
+     * later does not block saving the other settings.
      *
      * @return list<string>
      */
     private function allowedSecondOpinionEngines(): array
     {
-        return resolve(Classifier::class)->isConfigured()
-            ? SecondOpinionEngine::values()
-            : [SecondOpinionEngine::Llm->value];
+        if (resolve(Classifier::class)->isConfigured()) {
+            return SecondOpinionEngine::values();
+        }
+
+        return array_values(array_unique([
+            SecondOpinionEngine::Llm->value,
+            resolve(DecisionAgentSettings::class)->secondOpinionEngine()->value,
+        ]));
     }
 }

@@ -10,7 +10,9 @@ use App\Models\AiModelPrice;
 /**
  * Translates a resolved reasoning level into the request fragment each
  * provider expects, clamped to the levels the model accepts (ai_model_prices
- * capability columns). Unknown capabilities send the level as is.
+ * capability columns). Unknown capabilities send the level as is. The
+ * fragment follows the provider's driver (ProviderDriver); the capabilities
+ * are keyed on its configured name.
  */
 final class ReasoningOptions
 {
@@ -38,9 +40,21 @@ final class ReasoningOptions
         );
     }
 
+    /**
+     * The level a request to this provider and model sends, or
+     * ProviderDefault when it sends no reasoning parameter.
+     */
+    public function effectiveLevel(string $provider, ?string $model, AiReasoningLevel $aiReasoningLevel): AiReasoningLevel
+    {
+        $price = $model === null ? null : $this->price($provider, $model);
+
+        return self::sentLevel($provider, $aiReasoningLevel, $price?->supports_reasoning, $price?->acceptedReasoningLevels())
+            ?? AiReasoningLevel::ProviderDefault;
+    }
+
     public static function supportsProvider(string $provider): bool
     {
-        return in_array($provider, self::PROVIDERS, true);
+        return in_array(ProviderDriver::of($provider), self::PROVIDERS, true);
     }
 
     /**
@@ -57,17 +71,13 @@ final class ReasoningOptions
         bool $summarize = false,
         ?int $maxTokens = null,
     ): array {
-        if (! $aiReasoningLevel->isSendable() || $supported === false || ! self::supportsProvider($provider)) {
-            return [];
-        }
-
-        $level = self::clamp($aiReasoningLevel, $levels);
+        $level = self::sentLevel($provider, $aiReasoningLevel, $supported, $levels);
 
         if (! $level instanceof AiReasoningLevel) {
             return [];
         }
 
-        return match ($provider) {
+        return match (ProviderDriver::of($provider)) {
             'openai', 'azure' => ['reasoning' => array_filter([
                 'effort' => $level->value,
                 'summary' => $summarize && $level !== AiReasoningLevel::None ? 'auto' : null,
@@ -81,6 +91,21 @@ final class ReasoningOptions
             'anthropic' => AnthropicReasoningFamily::for($model, $style)->fragment($level, $maxTokens),
             default => [],
         };
+    }
+
+    /**
+     * The level the fragment carries after clamping, or null when the
+     * provider gets no reasoning parameter.
+     *
+     * @param  list<AiReasoningLevel>|null  $levels
+     */
+    public static function sentLevel(string $provider, AiReasoningLevel $aiReasoningLevel, ?bool $supported, ?array $levels): ?AiReasoningLevel
+    {
+        if (! $aiReasoningLevel->isSendable() || $supported === false || ! self::supportsProvider($provider)) {
+            return null;
+        }
+
+        return self::clamp($aiReasoningLevel, $levels);
     }
 
     /**

@@ -146,6 +146,28 @@ class DecisionRunContext
         );
     }
 
+    /**
+     * Whole seconds left before the run's deadline (negative once past it),
+     * or null when nothing bounds the run.
+     */
+    public function secondsLeft(): ?int
+    {
+        return $this->deadline instanceof CarbonImmutable
+            ? $this->deadline->getTimestamp() - now()->getTimestamp()
+            : null;
+    }
+
+    /**
+     * The per-provider timeout that lets a whole failover chain of
+     * $providers finish $reservedSeconds before the deadline, capped at
+     * $maxSeconds. Callers decide what a too-short result means: the second
+     * opinion skips its check, the DecisionAgent applies a floor.
+     */
+    public static function failoverTimeout(int $secondsLeft, int $reservedSeconds, int $providers, int $maxSeconds): int
+    {
+        return min($maxSeconds, intdiv($secondsLeft - $reservedSeconds, max(1, $providers)));
+    }
+
     public function remainingBudget(): int
     {
         return max(0, $this->maxActions - count($this->actionRequestIds));
@@ -168,9 +190,12 @@ class DecisionRunContext
     /**
      * Tally a request dispatchFromAgent() created. A request the second
      * opinion rejected still uses up the run's cap and is linked to the
-     * decision, but is neither suggested nor acted.
+     * decision, but is neither suggested nor acted. $heldBySecondOpinion
+     * (the request's transient flag of the same name) counts the request as
+     * held by the second opinion; a disagreement on a request that already
+     * needed approval is not.
      */
-    public function recordDispatched(ActionRequest $actionRequest): void
+    public function recordDispatched(ActionRequest $actionRequest, bool $heldBySecondOpinion = false): void
     {
         if ($actionRequest->status === ActionRequestStatus::Rejected) {
             $this->actionRequestIds[] = $actionRequest->id;
@@ -181,7 +206,7 @@ class DecisionRunContext
 
         $this->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
-        if ($actionRequest->requires_approval && ($actionRequest->second_opinion['agrees'] ?? true) === false) {
+        if ($heldBySecondOpinion && $actionRequest->requires_approval) {
             $this->heldBySecondOpinion++;
         }
     }

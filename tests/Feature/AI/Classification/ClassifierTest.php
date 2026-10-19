@@ -82,14 +82,20 @@ test('a caller can pass its own classification timeout', function (): void {
     Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->timeout === 3);
 });
 
-test('the classifier is configured when its provider has a key or classification is faked', function (): void {
-    config(['mediamanager.ai.classification.provider' => 'openrouter', 'ai.providers.openrouter.key' => '']);
+test('the classifier is configured when its provider has a key or classification is faked', function (string $provider): void {
+    config(['mediamanager.ai.classification.provider' => $provider, 'ai.providers.openrouter.key' => '', 'ai.providers.typesafe.key' => '']);
     expect(resolve(Classifier::class)->isConfigured())->toBeFalse();
 
-    config(['ai.providers.openrouter.key' => 'sk-test']);
+    config([sprintf('ai.providers.%s.key', $provider) => 'sk-test']);
     expect(resolve(Classifier::class)->isConfigured())->toBeTrue();
 
-    config(['ai.providers.openrouter.key' => '']);
+    config([sprintf('ai.providers.%s.key', $provider) => '']);
     Classification::fake([['decision' => new BooleanAnswer(0.9)]]);
     expect(resolve(Classifier::class)->isConfigured())->toBeTrue();
+})->with(['openrouter', 'typesafe']);
+
+test("the classifier reads the chosen provider's key, not another provider's", function (): void {
+    config(['mediamanager.ai.classification.provider' => 'typesafe', 'ai.providers.typesafe.key' => '', 'ai.providers.openrouter.key' => 'sk-test']);
+
+    expect(resolve(Classifier::class)->isConfigured())->toBeFalse();
 });

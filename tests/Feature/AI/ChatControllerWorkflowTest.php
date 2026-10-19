@@ -160,3 +160,43 @@ test('workflow continuation rejects unknown workflow id', function (): void {
     $response->assertNotFound();
     MediaAgent::assertNeverPrompted();
 });
+
+test('a resumed workflow turn stores the invocation id of the resumed run in its reply meta', function (): void {
+    $conversationId = '018f7cf5-3b26-72c8-93e5-6dc5b44f2473';
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => User::class,
+        'participant_id' => $this->admin->id,
+        'title' => 'fake',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $workflow = AiProposedWorkflow::factory()->create([
+        'user_id' => $this->admin->id,
+        'conversation_id' => $conversationId,
+        'status' => AiProposedWorkflowStatus::Proposed,
+        'steps' => [['action' => 'delete_movie', 'target' => 'Movie A', 'reason' => 'Old']],
+    ]);
+
+    MediaAgent::fake(['Executing now.']);
+
+    $response = $this->actingAs($this->admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'I approve the proposed workflow.',
+            'conversation_id' => $conversationId,
+            'workflow_id' => $workflow->id,
+            'workflow_action' => 'approved',
+        ])
+        ->assertOk();
+
+    $meta = json_decode((string) DB::table('agent_conversation_messages')
+        ->where('conversation_id', $conversationId)
+        ->where('role', 'assistant')
+        ->latest('id')
+        ->value('meta'), true);
+
+    expect($response->json('invocation_id'))->toBeString()->not->toBeEmpty()
+        ->and($meta['invocation_id'])->toBe($response->json('invocation_id'));
+});

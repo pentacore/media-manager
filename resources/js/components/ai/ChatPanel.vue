@@ -108,16 +108,22 @@ const overrideLoaded = ref(activeConversationId.value === null);
 let overrideRequest = 0;
 const modelOptions = ref<ModelOptions | null>(null);
 
+/** A workflow proposal is awaiting the user's approval or decline. */
+const hasPendingWorkflow = computed(() =>
+    messages.value.some((m) => m.workflow && !m.workflowResolved),
+);
+
 /**
- * The picker is locked while a conversation loads or a turn or an override
- * change is in flight.
+ * The picker is locked while a conversation loads, a turn or an override
+ * change is in flight, or a workflow proposal is pending.
  */
 const modelLocked = computed(
     () =>
         !overrideLoaded.value ||
         loading.value ||
         sending.value ||
-        savingOverride.value,
+        savingOverride.value ||
+        hasPendingWorkflow.value,
 );
 
 function setOverride(value: ChatOverride): void {
@@ -275,8 +281,21 @@ function onTemplateRendered(text: string, action: TemplateAction): void {
 }
 
 /**
- * Send rendered text, or put it in the composer while a turn is in flight.
- * A template's model preset fills the picker when it starts a new chat.
+ * Whether a template's model preset would fill the picker: only when it
+ * starts a new, empty chat and no workflow proposal is pending. The fill
+ * dialog shows its "Uses <model>" chip on the same condition.
+ */
+const templatePresetApplies = computed(
+    () =>
+        !hasPendingWorkflow.value &&
+        activeConversationId.value === null &&
+        messages.value.length === 0,
+);
+
+/**
+ * Send rendered text, or put it in the composer while a turn is in flight or
+ * a workflow proposal is pending. A template's model preset fills the picker
+ * when it starts a new chat.
  */
 function deliverTemplate(
     text: string,
@@ -285,15 +304,11 @@ function deliverTemplate(
 ): void {
     fillTemplate.value = null;
 
-    if (
-        template.preset !== null &&
-        activeConversationId.value === null &&
-        messages.value.length === 0
-    ) {
+    if (templatePresetApplies.value && template.preset !== null) {
         override.value = { ...template.preset };
     }
 
-    if (action === 'send' && !sending.value) {
+    if (action === 'send' && !sending.value && !hasPendingWorkflow.value) {
         void sendUserMessage({ text, pendingFiles: [] });
 
         return;
@@ -1039,7 +1054,8 @@ function newConversation(): void {
 
         <ChatTemplateFillDialog
             :template="fillTemplate"
-            :sending="sending"
+            :sending="sending || hasPendingWorkflow"
+            :preset-applies="templatePresetApplies"
             @close="fillTemplate = null"
             @rendered="onTemplateRendered"
         />

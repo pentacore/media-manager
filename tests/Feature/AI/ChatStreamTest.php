@@ -25,13 +25,16 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StepCompleted;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\StreamErrorException;
+use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Responses\TextResponse;
 use Laravel\Ai\Streaming\Events\Error;
 use Laravel\Ai\Streaming\Events\StreamStart;
 
@@ -131,25 +134,59 @@ test('the streamed answered-by reports the tier that ran when tier 1 is skipped'
 });
 
 test('a resolver failure at the end of a stream leaves answeredBy off without breaking the run', function (): void {
-    MediaAgent::fake(['Hello from the stream.']);
+    Bus::fake([GenerateConversationTitle::class]);
     $taskModelResolver = resolve(TaskModelResolver::class);
-    // Everything resolves normally except the lookup made for the closing frame.
-    Exceptions::fake();
-    app()->bind(function () use ($taskModelResolver): TaskModelResolver {
-        $closingFrame = array_filter(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), fn (array $frame): bool => ($frame['function'] ?? '') === 'completionAttributes');
-
-        return $closingFrame === [] ? $taskModelResolver : throw new RuntimeException('boom');
-    });
     $admin = User::factory()->admin()->create();
+    $resolutions = 0;
+    $failOnResolution = null;
+    // Everything resolves normally except the one lookup the double is told to fail.
+    app()->bind(function () use ($taskModelResolver, &$resolutions, &$failOnResolution): TaskModelResolver {
+        $resolutions++;
+
+        return $resolutions === $failOnResolution ? throw new RuntimeException('boom') : $taskModelResolver;
+    });
+
+    // A first, healthy run counts the lookups a turn makes; the closing
+    // frame's lookup is the last of them.
+    MediaAgent::fake(['Hello from the stream.']);
+    $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect($resolutions)->toBeGreaterThan(0);
+
+    $failOnResolution = $resolutions * 2;
+    Exceptions::fake();
+    MediaAgent::fake(['Hello again.']);
 
     $body = $this->actingAs($admin)
-        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello again'], ['Accept' => 'text/event-stream'])
         ->streamedContent();
 
     expect(chatStreamFrame($body, 'RUN_FINISHED'))->toContain('"threadId"')
         ->and(chatStreamFrame($body, 'RUN_FINISHED'))->not->toContain('answeredBy');
 
     Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'boom');
+});
+
+test('a stream that stops for tool approval finishes with the interrupt outcome and no completion attributes', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake([
+        new TextResponse('', new TextUsage, new Meta('openai', 'gpt-5-nano'))
+            ->withPendingApprovals(collect([new PendingApproval('approval-1', 'GetServiceStatusTool', [], 'Needs a human nod.')])),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Check the services'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+
+    expect($frame['outcome']['type'])->toBe('interrupt')
+        ->and($frame['outcome']['interrupts'])->toHaveCount(1)
+        ->and($frame)->not->toHaveKeys(['answeredBy', 'invocationId'])
+        ->and(substr_count($body, '"type":"RUN_FINISHED"'))->toBe(1);
 });
 
 test('streaming a first turn reports the minted conversation id as the run thread', function (): void {

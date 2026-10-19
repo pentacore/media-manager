@@ -6,18 +6,17 @@ namespace App\Ai\Concerns;
 
 use App\Ai\ModelSelection;
 use App\Ai\OpenRouterRequestOptions;
+use App\Ai\ProviderDriver;
 use App\Ai\ReasoningOptions;
 use App\Ai\ResolvedSelection;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiTask;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
-use Laravel\Ai\Ai;
 use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Gateway\Anthropic\AnthropicSchemaSanitizer;
 use Laravel\Ai\ObjectSchema;
-use LogicException;
 use ReflectionClass;
 
 /**
@@ -66,15 +65,8 @@ trait RunsAsAiTask
      */
     public function providerOptions(Lab|string $provider): array
     {
-        $providerName = $provider instanceof Lab ? $provider->value : $provider;
         $resolvedSelection = $this->resolvedSelection();
-        $failover = resolve(TaskModelResolver::class)->failover();
-
-        $model = match (true) {
-            $providerName === $resolvedSelection->provider => $resolvedSelection->model,
-            $failover !== null && $failover['provider'] === $providerName => $failover['model'] ?? $this->providerDefaultModel($providerName),
-            default => null,
-        };
+        [$providerName, $model] = $this->chainEntryFor($provider instanceof Lab ? $provider->value : $provider, $resolvedSelection);
 
         $options = resolve(ReasoningOptions::class)->for(
             $providerName,
@@ -96,7 +88,7 @@ trait RunsAsAiTask
             ];
         }
 
-        if ($providerName === Lab::OpenRouter->value) {
+        if (ProviderDriver::of($providerName) === Lab::OpenRouter->value) {
             return [...$options, ...resolve(OpenRouterRequestOptions::class)->routing()];
         }
 
@@ -104,17 +96,36 @@ trait RunsAsAiTask
     }
 
     /**
-     * The model the SDK falls back to when a provider in the chain has no
-     * model (Promptable::getDefaultModelFor()), or null when the provider
-     * cannot be resolved.
+     * The configured provider name and model in the failover chain that a
+     * providerOptions() call is for. Most gateways pass their driver rather
+     * than the configured name, so a name match wins, then a driver match in
+     * chain order; a provider outside the chain keeps what it was given and
+     * no model.
+     *
+     * Limitation of the SDK: providerOptions() receives only the driver, so
+     * chain entries that share one cannot be told apart. With a primary
+     * `my-or` and a failover `openrouter` (both on the openrouter driver) both
+     * calls arrive as `openrouter`, which names the failover exactly, so the
+     * primary's request gets the failover's entry (model and clamping).
+     *
+     * @return array{0: string, 1: string|null}
      */
-    private function providerDefaultModel(string $provider): ?string
+    private function chainEntryFor(string $provider, ResolvedSelection $resolvedSelection): array
     {
-        try {
-            return Ai::textProvider($provider)->defaultTextModel();
-        } catch (LogicException) {
-            return null;
-        }
+        $failover = resolve(TaskModelResolver::class)->failover();
+        $chain = array_values(array_filter([$resolvedSelection->provider, $failover['provider'] ?? null]));
+
+        $providerName = in_array($provider, $chain, true)
+            ? $provider
+            : array_find($chain, static fn (string $name): bool => ProviderDriver::of($name) === $provider) ?? $provider;
+
+        $model = match (true) {
+            $providerName === $resolvedSelection->provider => $resolvedSelection->model,
+            $failover !== null && $failover['provider'] === $providerName => resolve(TaskModelResolver::class)->failoverModel(),
+            default => null,
+        };
+
+        return [$providerName, $model];
     }
 
     private function declaredMaxTokens(): ?int

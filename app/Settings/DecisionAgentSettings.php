@@ -33,6 +33,12 @@ class DecisionAgentSettings
 
     public const string SECOND_OPINION_JEV_THRESHOLD_KEY = 'decision_agent.second_opinion_jev_threshold';
 
+    /**
+     * The Jev threshold when neither the store nor the config holds a
+     * usable value.
+     */
+    public const float DEFAULT_SECOND_OPINION_JEV_THRESHOLD = 0.8;
+
     public function __construct(private readonly AppSettings $appSettings) {}
 
     public function enabled(): bool
@@ -230,10 +236,10 @@ class DecisionAgentSettings
     {
         $value = $this->appSettings->get(
             self::SECOND_OPINION_JEV_THRESHOLD_KEY,
-            config('mediamanager.decision_agent.second_opinion_jev_threshold', 0.8),
+            config('mediamanager.decision_agent.second_opinion_jev_threshold', self::DEFAULT_SECOND_OPINION_JEV_THRESHOLD),
         );
 
-        return is_numeric($value) ? max(0.0, min(1.0, (float) $value)) : 0.8;
+        return is_numeric($value) ? max(0.0, min(1.0, (float) $value)) : self::DEFAULT_SECOND_OPINION_JEV_THRESHOLD;
     }
 
     /**

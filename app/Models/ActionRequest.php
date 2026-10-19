@@ -85,6 +85,14 @@ class ActionRequest extends Model
     public const string STATUS_VERSION_SEQUENCE = 'action_request_status_versions';
 
     /**
+     * Set on the request ActionOrchestrator::dispatchFromAgent() just
+     * created: true when the second opinion is what put it on hold, because
+     * approval was not otherwise required. Transient: never persisted, so a
+     * re-read model says false.
+     */
+    public bool $heldBySecondOpinion = false;
+
+    /**
      * @return array<string, string>
      */
     #[Override]

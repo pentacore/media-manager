@@ -17,7 +17,8 @@ final readonly class OpenRouterRequestOptions
 
     /**
      * The OpenRouter routing options for a providerOptions() callback, or an
-     * empty array for any other provider.
+     * empty array for any other provider; takes a driver or a configured
+     * provider name.
      *
      * @return array{provider?: array<string, mixed>}
      */
@@ -25,7 +26,7 @@ final readonly class OpenRouterRequestOptions
     {
         $value = $provider instanceof Lab ? $provider->value : $provider;
 
-        return $value === Lab::OpenRouter->value ? $this->routing() : [];
+        return ProviderDriver::of($value) === Lab::OpenRouter->value ? $this->routing() : [];
     }
 
     /**

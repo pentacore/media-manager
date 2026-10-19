@@ -11,7 +11,6 @@ use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
-use App\Enums\BenchmarkRunStatus;
 use App\Enums\QueueLane;
 use App\Jobs\Middleware\LimitBenchmarkConcurrency;
 use App\Models\BenchmarkCase;
@@ -19,9 +18,9 @@ use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
-use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\Benchmark\BenchmarkCaseRunner;
+use App\Services\Benchmark\BenchmarkRunSettler;
 use App\Services\Benchmark\BenchmarkScorer;
 use App\Services\Benchmark\CaseOutcome;
 use App\Support\UpstreamErrorText;
@@ -77,9 +76,6 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     private const int MAX_WAIT_HOURS = 12;
 
     private const int ERROR_LIMIT = 2000;
-
-    /** The error of a result whose job died after its run had already ended. */
-    private const string STOPPED_ERROR = 'Stopped before finishing';
 
     public function __construct(public readonly int $resultId, public readonly bool $judgeOnly = false) {}
 
@@ -536,52 +532,8 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         return $benchmarkRun->cost_cap_usd !== null && (float) $benchmarkRun->cost_usd >= (float) $benchmarkRun->cost_cap_usd;
     }
 
-    /**
-     * Under a lock on the run: bring its cost up to what its usage rows
-     * (candidates and judges, finished or failed) have spent — never down,
-     * so pruned usage rows can't shrink it — then, unless it already ended,
-     * complete it once no result is pending or running, or stop it at its
-     * cost cap (skipping every pending result; a running one finishes and
-     * keeps its result) once the total reached the cap. In a run that already
-     * ended, a result still running under a stale claim lost its worker and
-     * will never finish: it fails with a fixed reason.
-     */
     private function settle(int $runId): void
     {
-        DB::transaction(function () use ($runId): void {
-            $benchmarkRun = BenchmarkRun::query()->lockForUpdate()->find($runId);
-
-            if (! $benchmarkRun instanceof BenchmarkRun) {
-                return;
-            }
-
-            $spentUsd = resolve(AiUsageReporting::class)->benchmarkRunCost($runId);
-
-            if ($spentUsd > (float) $benchmarkRun->cost_usd) {
-                $benchmarkRun->update(['cost_usd' => $spentUsd]);
-            }
-
-            if ($benchmarkRun->isTerminal()) {
-                $benchmarkRun->results()->runStale()->update([
-                    'status' => BenchmarkResultStatus::Failed,
-                    'error' => self::STOPPED_ERROR,
-                ]);
-
-                return;
-            }
-
-            $unfinished = $benchmarkRun->results()->whereIn('status', [BenchmarkResultStatus::Pending, BenchmarkResultStatus::Running]);
-
-            if (! $unfinished->exists()) {
-                $benchmarkRun->update(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
-
-                return;
-            }
-
-            if ($this->costCapReached($benchmarkRun)) {
-                $benchmarkRun->results()->where('status', BenchmarkResultStatus::Pending)->update(['status' => BenchmarkResultStatus::Skipped]);
-                $benchmarkRun->update(['status' => BenchmarkRunStatus::StoppedCostCap, 'finished_at' => now()]);
-            }
-        });
+        resolve(BenchmarkRunSettler::class)->settle($runId);
     }
 }

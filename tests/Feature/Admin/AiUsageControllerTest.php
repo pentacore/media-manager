@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Enums\ClassificationGate;
+use App\Enums\FreePoolOverflowBehavior;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
@@ -663,7 +664,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
         ->get(route('admin.ai-usage.export', ['tier' => 'fell_through']))
         ->streamedContent();
 
-    expect($csv)->toContain(',tier')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
+    expect($csv)->toContain(',tier,tier_via')->toContain('gpt-tier-two')->not->toContain('gpt-no-tier');
 
     // Verify header and data row column counts match
     $lines = array_filter(explode("\n", trim($csv)));
@@ -677,7 +678,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
     $tierValues = [];
     foreach (array_slice($lines, 1) as $line) {
         $row = str_getcsv($line, escape: '\\');
-        $tierValues[] = end($row);
+        $tierValues[] = $row[array_search('tier', str_getcsv($lines[0], escape: '\\'), true)];
     }
 
     expect($tierValues)->toContain('2')
@@ -698,7 +699,7 @@ test('the csv export has a tier column and honours the tier filter', function ()
     $firstTierValues = [];
     foreach (array_slice($firstTierLines, 1) as $line) {
         $row = str_getcsv($line, escape: '\\');
-        $firstTierValues[] = end($row);
+        $firstTierValues[] = $row[array_search('tier', str_getcsv($firstTierLines[0], escape: '\\'), true)];
     }
 
     expect($firstTierValues)->toContain('')
@@ -731,6 +732,57 @@ test('recent invocations carry their benchmark run and can be filtered by it', f
         ->get(route('admin.ai-usage.index', ['benchmark' => 'bogus']))
         ->assertInertia(fn ($page) => $page->where('benchmark', null)->has('recent', 2));
 });
+
+test('the totals and per-model and per-provider breakdowns respect the benchmark filter', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'gpt-live']);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['provider' => 'anthropic', 'model' => 'claude-benchmarked']);
+    AiUsageRecord::factory()->benchmarked($run->id)->create(['provider' => 'anthropic', 'model' => 'claude-benchmarked']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.total_invocations', 2)
+            ->has('by_model', 1)
+            ->where('by_model.0.key', 'claude-benchmarked')
+            ->has('by_provider', 1)
+            ->where('by_provider.0.key', 'anthropic'));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.total_invocations', 1)
+            ->has('by_model', 1)
+            ->where('by_model.0.key', 'gpt-live')
+            ->has('by_provider', 1)
+            ->where('by_provider.0.key', 'openai'));
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page->where('totals.total_invocations', 3)->has('by_model', 2));
+});
+
+test('total cost nets only the forgiveness earned by the rows the benchmark filter keeps', function (FreePoolOverflowBehavior $overflow, int $liveTokens, int $benchmarkTokens, bool $benchmarkFirst, array $expected): void {
+    $run = BenchmarkRun::factory()->create();
+    $pool = AiFreeUsagePool::factory()->unified(200_000)->overflow($overflow)->create();
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-pooled', 'input_per_mtok' => 10, 'output_per_mtok' => 10, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'free_usage_pool_id' => $pool->id]);
+    $tokens = ['provider' => 'openai', 'model' => 'gpt-pooled', 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0];
+    $earlier = now()->subMinutes(10);
+    $later = now()->subMinutes(5);
+    AiUsageRecord::factory()->create([...$tokens, 'prompt_tokens' => $liveTokens, 'created_at' => $benchmarkFirst ? $later : $earlier]);
+    AiUsageRecord::factory()->benchmarked($run->id)->create([...$tokens, 'prompt_tokens' => $benchmarkTokens, 'created_at' => $benchmarkFirst ? $earlier : $later]);
+
+    foreach (['only' => 'only', 'exclude' => 'exclude', 'all' => null] as $label => $filter) {
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('admin.ai-usage.index', $filter === null ? [] : ['benchmark' => $filter]))
+            ->assertInertia(fn ($page) => $page->where('totals.total_cost', fn (string $cost): bool => abs((float) $cost - $expected[$label]) < 0.0001));
+    }
+})->with([
+    // 400k used against 200k free: half of every row is forgiven.
+    'split pool' => [FreePoolOverflowBehavior::Split, 100_000, 300_000, false, ['only' => 1.50, 'exclude' => 0.50, 'all' => 2.00]],
+    // The benchmark row fits the quota first; the later live row no longer does.
+    'fit-or-paid pool' => [FreePoolOverflowBehavior::FitOrPaid, 100_000, 150_000, true, ['only' => 0.00, 'exclude' => 1.00, 'all' => 1.00]],
+]);
 
 test('the csv export honours the benchmark filter', function (): void {
     $run = BenchmarkRun::factory()->create();
@@ -812,4 +864,45 @@ test('usage rows of a deleted run stay benchmark-tagged', function (): void {
         ->assertOk()
         ->assertJsonPath('capturable', false)
         ->assertJsonPath('capture_blocker', "Benchmark runs can't be captured as cases.");
+});
+
+test('a run that followed another list stays out of fell through and counts as first tier', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-own-tier-two', 'tier_position' => 2, 'tier_via' => null, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-via-chat', 'tier_position' => 2, 'tier_via' => 'Chat', 'created_at' => now()->subSeconds(1)]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'fell_through']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-own-tier-two')
+            ->where('recent.0.tier_via', null));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['tier' => 'first']))
+        ->assertInertia(fn ($page) => $page
+            ->has('recent', 1)
+            ->where('recent.0.model', 'gpt-via-chat')
+            ->where('recent.0.tier_via', 'Chat'));
+});
+
+test('the scenario recent list honours the tier filter', function (): void {
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-one', 'tier_position' => 1, 'created_at' => now()->subSeconds(3)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-tier-two', 'tier_position' => 2, 'created_at' => now()->subSeconds(2)]);
+    AiUsageRecord::factory()->create(['model' => 'gpt-no-tier', 'tier_position' => null, 'created_at' => now()->subSeconds(1)]);
+    $admin = User::factory()->admin()->create();
+    $scenario = ['input' => 1.00, 'output' => 5.00, 'cache_read' => 0, 'cache_write' => 0, 'reasoning' => 0];
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['scenario' => $scenario, 'tier' => 'fell_through']))
+        ->assertInertia(fn ($page) => $page
+            ->has('scenario_recent', 1)
+            ->where('scenario_recent.0.model', 'gpt-tier-two'));
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['scenario' => $scenario, 'tier' => 'first']))
+        ->assertInertia(fn ($page) => $page
+            ->has('scenario_recent', 2)
+            ->where('scenario_recent.0.model', 'gpt-no-tier')
+            ->where('scenario_recent.1.model', 'gpt-tier-one'));
 });

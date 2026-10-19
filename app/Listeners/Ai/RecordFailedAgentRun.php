@@ -35,6 +35,7 @@ class RecordFailedAgentRun
             'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompt->agent::class,
             'tier_position' => TierOutcome::positionFor($agentPrompt->agent),
+            'tier_via' => TierOutcome::viaFor($agentPrompt->agent),
             'provider' => $runUsageAccumulator->provider($invocationId) ?? (isset($agentPrompt->provider) ? $agentPrompt->provider->name() : null),
             'model' => $runUsageAccumulator->model($invocationId) ?? ($agentPrompt->model ?? null),
             ...UsageColumns::fromText($runUsageAccumulator->usage($invocationId) ?? new TextUsage),

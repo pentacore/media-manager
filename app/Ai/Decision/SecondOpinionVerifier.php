@@ -113,6 +113,11 @@ final readonly class SecondOpinionVerifier
     /**
      * Store Jev's answer for this action request and, when the LLM ran after
      * it, resolve it with the LLM's verdict.
+     *
+     * Otherwise the row stays open until a human reviews the request
+     * (resolveFromReview()). Rows for requests born Rejected or auto-run
+     * (never held for review) stay open on purpose: only a human review or
+     * the cascade's LLM resolves them.
      */
     public function recordOutcome(SecondOpinionVerdict $secondOpinionVerdict, int $actionRequestId): void
     {
@@ -272,8 +277,12 @@ final readonly class SecondOpinionVerifier
             return self::LLM_TIMEOUT_SECONDS;
         }
 
-        $providers = max(1, count($decisionVerifierAgent->provider()));
-        $timeout = min(self::LLM_TIMEOUT_SECONDS, intdiv($this->secondsLeft($deadline) - self::RUN_SECONDS_RESERVED, $providers));
+        $timeout = DecisionRunContext::failoverTimeout(
+            $this->secondsLeft($deadline),
+            self::RUN_SECONDS_RESERVED,
+            count($decisionVerifierAgent->provider()),
+            self::LLM_TIMEOUT_SECONDS,
+        );
 
         return $timeout >= self::MIN_LLM_TIMEOUT_SECONDS ? $timeout : null;
     }

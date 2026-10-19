@@ -91,6 +91,9 @@ class BenchmarkResult extends Model
      * claim stale. A job that vanished from the queue still holds its unique
      * lock (UniqueFor) until that expires, so a re-dispatch for the same
      * result and mode is dropped until then.
+     *
+     * The benchmark:settle-stalled sweep fails results past this window, so its
+     * safety relies on RunBenchmarkCase's #[Timeout(280)] staying below it.
      */
     public const int CLAIM_STALE_AFTER_SECONDS = 300;
 

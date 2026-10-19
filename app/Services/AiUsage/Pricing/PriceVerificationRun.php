@@ -214,7 +214,9 @@ final class PriceVerificationRun
             + ($counts[WriteOutcome::Updated->value] ?? 0)
             + ($counts[WriteOutcome::Unchanged->value] ?? 0)
             + ($counts[WriteOutcome::WouldCreate->value] ?? 0)
-            + ($counts[WriteOutcome::WouldUpdate->value] ?? 0) > 0;
+            + ($counts[WriteOutcome::WouldUpdate->value] ?? 0)
+            + ($counts[WriteOutcome::CapabilitiesUpdated->value] ?? 0)
+            + ($counts[WriteOutcome::WouldUpdateCapabilities->value] ?? 0) > 0;
     }
 
     /**

@@ -302,3 +302,34 @@ test('the verifier leaves room for reasoning tokens before its structured answer
 
     expect($reflectionClass->getAttributes(MaxTokens::class)[0]->newInstance()->value)->toBe(4096);
 });
+
+test('a verdict serialises to the shape stored on the action request', function (): void {
+    $secondOpinionVerdict = new SecondOpinionVerdict(engine: 'llm', agrees: false, failed: false, confidence: 0.4, reason: 'No.', provider: 'openai', model: 'gpt-5-mini');
+
+    expect($secondOpinionVerdict->toArray(SecondOpinionMode::Reject))->toBe([
+        'engine' => 'llm',
+        'mode' => 'reject',
+        'agrees' => false,
+        'failed' => false,
+        'confidence' => 0.4,
+        'reason' => 'No.',
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+    ]);
+});
+
+test('resolving the review of a request without a second opinion touches no outcome rows', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['second_opinion' => null]);
+    $classificationOutcome = ClassificationOutcome::factory()->create([
+        'gate' => ClassificationGate::SecondOpinion,
+        'subject_key' => SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id),
+        'verdict' => ClassificationVerdict::Fallback,
+        'outcome_at' => null,
+        'outcome_positive' => null,
+    ]);
+
+    resolve(SecondOpinionVerifier::class)->resolveFromReview($actionRequest, approved: true);
+
+    expect($classificationOutcome->fresh()->outcome_at)->toBeNull()
+        ->and($classificationOutcome->fresh()->outcome_positive)->toBeNull();
+});

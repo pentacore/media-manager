@@ -24,8 +24,10 @@ import type {
 
 const props = defineProps<{
     template: ChatTemplate | null;
-    /** A chat turn is in flight, so Send is unavailable. */
+    /** A chat turn is in flight or a proposal is pending, so Send is unavailable. */
     sending: boolean;
+    /** The template's model preset will be applied (a new, empty chat with no pending proposal). */
+    presetApplies: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -229,6 +231,12 @@ function onEnter(event: KeyboardEvent): void {
             <DialogHeader>
                 <DialogTitle>{{ template.name }}</DialogTitle>
                 <DialogDescription>Fill in the blanks.</DialogDescription>
+                <span
+                    v-if="presetApplies && template.preset?.model"
+                    class="w-fit rounded-md border border-border bg-bg-elev px-1.5 py-0.5 text-[11.5px] text-muted-foreground"
+                    data-template-preset
+                    >Uses {{ template.preset.model }}</span
+                >
             </DialogHeader>
             <form
                 class="grid gap-4"
