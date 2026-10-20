@@ -425,3 +425,26 @@
         display: none;
     }
 }
+
+/*
+ * A 40 px hit area on phones and touch screens, without changing the visual
+ * box: a centred ::after at least 2.5rem square. Desktop (wide, fine pointer)
+ * is untouched. An element that is already positioned keeps its position.
+ */
+@utility touch-target {
+    @media (width < 40rem), (pointer: coarse) {
+        &:where(:not(.absolute, .fixed, .sticky)) {
+            position: relative;
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: max(100%, 2.5rem);
+            height: max(100%, 2.5rem);
+            transform: translate(-50%, -50%);
+        }
+    }
+}

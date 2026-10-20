@@ -151,6 +151,7 @@ const emit = defineEmits<{
                     size="sm"
                     class="size-7 p-0 text-destructive hover:text-destructive"
                     data-price-delete
+                    aria-label="Delete price"
                     @click="emit('delete')"
                 >
                     <Trash2 class="size-3.5" />

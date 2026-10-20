@@ -323,7 +323,7 @@ onMounted(() => {
                 <Link
                     :href="ActionRequestController.index.url()"
                     data-dashboard-review-queue
-                    class="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+                    class="touch-target inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                 >
                     <Inbox class="size-3.5" />Review queue
                 </Link>

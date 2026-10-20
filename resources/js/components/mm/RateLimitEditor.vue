@@ -104,6 +104,7 @@ function rateLimitErrors(errors: Record<string, string>): string {
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label="Remove rate limit"
                 @click="removeRateLimit(i)"
             >
                 <Trash2 class="h-3.5 w-3.5" />

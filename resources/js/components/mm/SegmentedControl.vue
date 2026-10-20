@@ -27,7 +27,7 @@ onMounted(() => {
 <template>
     <div
         ref="stripEl"
-        class="scrollbar-none flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-border bg-bg-elev p-0.5"
+        class="scrollbar-none flex max-w-full items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-md border border-border bg-bg-elev p-0.5"
         role="group"
         data-filter-strip
     >
@@ -43,7 +43,7 @@ onMounted(() => {
             "
             :class="
                 cn(
-                    'inline-flex h-6 shrink-0 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                    'touch-target inline-flex h-6 shrink-0 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
                     modelValue === opt.value
                         ? 'bg-accent text-accent-foreground'
                         : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

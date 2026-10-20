@@ -328,6 +328,7 @@ function checkVersion(connection: Connection) {
                                                 size="sm"
                                                 class="size-7 p-0"
                                                 data-connection-menu
+                                                aria-label="Connection actions"
                                             >
                                                 <MoreHorizontal
                                                     class="size-3.5"

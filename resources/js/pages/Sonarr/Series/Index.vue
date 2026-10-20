@@ -424,9 +424,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
             >
                 <button
                     type="button"
+                    aria-label="Grid view"
+                    :aria-pressed="view === 'grid'"
+                    data-view-toggle="grid"
                     :class="
                         cn(
-                            'inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'touch-target inline-flex size-6 items-center justify-center rounded transition-colors',
                             view === 'grid'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -438,9 +441,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 </button>
                 <button
                     type="button"
+                    aria-label="Table view"
+                    :aria-pressed="view === 'table'"
+                    data-view-toggle="table"
                     :class="
                         cn(
-                            'inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'touch-target inline-flex size-6 items-center justify-center rounded transition-colors',
                             view === 'table'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
