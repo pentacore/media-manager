@@ -29,15 +29,17 @@ final readonly class BenchmarkRunLauncher
      * @param  Collection<int, BenchmarkCase>  $cases
      * @param  list<array<string, mixed>>  $candidates  `{provider, model, reasoning}` selections
      * @param  array<string, mixed>  $judge
+     * @param  ?User  $user  null for a scheduled run, which has no starter
+     * @param  ?int  $scheduleId  the schedule that started the run, if any
      */
-    public function launch(string $name, Collection $cases, array $candidates, array $judge, ?float $costCap, User $user): BenchmarkRun
+    public function launch(string $name, Collection $cases, array $candidates, array $judge, ?float $costCap, ?User $user, ?int $scheduleId = null): BenchmarkRun
     {
         throw_if($cases->isEmpty(), InvalidArgumentException::class, 'A benchmark run needs at least one case.');
         throw_if($candidates === [], InvalidArgumentException::class, 'A benchmark run needs at least one candidate.');
 
         $estimate = $this->benchmarkEstimator->estimate($cases, $candidates, $judge);
 
-        return DB::transaction(function () use ($name, $cases, $candidates, $judge, $costCap, $user, $estimate): BenchmarkRun {
+        return DB::transaction(function () use ($name, $cases, $candidates, $judge, $costCap, $user, $scheduleId, $estimate): BenchmarkRun {
             $benchmarkRun = BenchmarkRun::query()->create([
                 'name' => $name,
                 'status' => BenchmarkRunStatus::Running,
@@ -48,7 +50,8 @@ final readonly class BenchmarkRunLauncher
                 'cost_cap_usd' => $costCap,
                 'cost_usd' => 0,
                 'started_at' => now(),
-                'created_by' => $user->id,
+                'created_by' => $user?->id,
+                'benchmark_schedule_id' => $scheduleId,
             ]);
 
             foreach ($cases as $case) {
