@@ -169,7 +169,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                                 >
                                 <p
                                     v-if="schedule.last_message"
-                                    class="mt-1 text-[11.5px] text-muted-foreground"
+                                    class="mt-1 max-w-[260px] text-[11.5px] text-muted-foreground"
                                 >
                                     {{ schedule.last_message }}
                                 </p>
@@ -199,24 +199,28 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                                 "
                             />
                         </TableCell>
-                        <TableCell class="whitespace-nowrap">
+                        <TableCell class="w-[1%] whitespace-nowrap">
                             <Button
                                 variant="ghost"
-                                size="sm"
-                                class="h-7 gap-1 text-xs"
+                                size="icon"
+                                class="size-7"
+                                aria-label="Run now"
+                                title="Run now"
                                 data-benchmark-schedule-run
                                 @click="runNow(schedule)"
                             >
-                                <Play class="size-3.5" />Run now
+                                <Play class="size-3.5" />
                             </Button>
                             <Button
                                 variant="ghost"
-                                size="sm"
-                                class="h-7 gap-1 text-xs text-destructive"
+                                size="icon"
+                                class="size-7 text-destructive"
+                                aria-label="Delete"
+                                title="Delete"
                                 data-benchmark-schedule-delete
                                 @click="remove(schedule)"
                             >
-                                <Trash2 class="size-3.5" />Delete
+                                <Trash2 class="size-3.5" />
                             </Button>
                         </TableCell>
                     </TableRow>

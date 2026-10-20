@@ -80,7 +80,7 @@ const overCap = computed(
             v-if="estimate"
             :estimate="estimate"
             :candidates="summaryCandidates"
-            :cost-cap="costCap"
+            :cost-cap="null"
         />
         <div
             v-if="overCap"
