@@ -664,7 +664,12 @@ const rangeText = computed(() => {
         <div
             v-else-if="requests"
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 320px), 1fr)
+                );
+            "
         >
             <div
                 v-for="req in visible"
@@ -798,7 +803,12 @@ const rangeText = computed(() => {
         <div
             v-else
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 320px), 1fr)
+                );
+            "
         >
             <Skeleton
                 v-for="n in 6"

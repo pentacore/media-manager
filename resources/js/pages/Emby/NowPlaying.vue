@@ -245,7 +245,12 @@ function remainingTicks(session: Session): number {
         <div
             v-if="!props.sessions"
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 420px), 1fr)
+                );
+            "
         >
             <Skeleton
                 v-for="i in 3"
@@ -264,12 +269,18 @@ function remainingTicks(session: Session): number {
         <div
             v-else
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 420px), 1fr)
+                );
+            "
         >
             <div
                 v-for="(session, i) in props.sessions"
                 :key="session.id ?? i"
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-session-card
             >
                 <div class="flex gap-4 p-4">
                     <Poster

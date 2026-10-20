@@ -249,3 +249,71 @@ function confirmDialogGoneScript(): string
 {
     return confirmDialogWaitUntilScript("!document.querySelector('[data-confirm-dialog]')");
 }
+
+/**
+ * Phone-width containment check (Batch 3h). Returns '' when no visible element
+ * inside the roots matching $rootSelector ends right of the viewport or starts
+ * left of it — except inside a horizontal scroll container below the root that
+ * itself fits, or ellipsis-truncated text inside a fitting clip box — and every
+ * matching `[role="dialog"]` root has no sideways scroll of its own (its
+ * `overflow-y-auto` computes `overflow-x: auto`, so a wide child would scroll
+ * the whole dialog instead of overflowing it). Otherwise returns up to ten
+ * offenders (outermost only) as `tag[data-…] "text" left..right`.
+ * Use with assertScript(phoneOverflowScript(), '').
+ */
+function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): string
+{
+    $selector = json_encode($rootSelector, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const width = window.innerWidth;
+            const overflowX = (el) => getComputedStyle(el).overflowX;
+            const fits = (el) => {
+                const rect = el.getBoundingClientRect();
+                return rect.left >= -1 && rect.right <= width + 1;
+            };
+            const shown = (el) => {
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const excused = (el, root) => {
+                for (let parent = el.parentElement; parent && parent !== root && parent.tagName !== 'MAIN' && parent !== document.body; parent = parent.parentElement) {
+                    const value = overflowX(parent);
+                    if (value === 'auto' || value === 'scroll') {
+                        return fits(parent);
+                    }
+                    if (value === 'hidden' || value === 'clip') {
+                        const ellipsis = getComputedStyle(el).textOverflow === 'ellipsis' || getComputedStyle(el.parentElement).textOverflow === 'ellipsis';
+                        return fits(parent) && ellipsis;
+                    }
+                }
+                return false;
+            };
+            const describe = (el) => {
+                const rect = el.getBoundingClientRect();
+                const hooks = [...el.attributes].filter((attribute) => attribute.name.startsWith('data-') && !attribute.name.startsWith('data-v-')).slice(0, 2).map((attribute) => `[\${attribute.name}\${attribute.value ? '=' + attribute.value : ''}]`).join('');
+                const text = (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+                return `\${el.tagName.toLowerCase()}\${hooks} "\${text}" \${Math.round(rect.left)}..\${Math.round(rect.right)}`;
+            };
+            const offenders = [];
+            for (const root of document.querySelectorAll({$selector})) {
+                if (root.matches('[role="dialog"]') && root.scrollWidth > root.clientWidth + 1) {
+                    offenders.push(`\${describe(root)} scrolls sideways (\${root.scrollWidth} > \${root.clientWidth})`);
+                }
+                for (const el of [root, ...root.querySelectorAll('*')]) {
+                    if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || !shown(el) || fits(el) || excused(el, root)) {
+                        continue;
+                    }
+                    const parent = el.parentElement;
+                    if (parent && el !== root && !fits(parent) && !['auto', 'scroll'].includes(overflowX(parent))) {
+                        continue;
+                    }
+                    offenders.push(describe(el));
+                }
+            }
+            return offenders.slice(0, 10).join(' | ');
+        })()
+    JS;
+}

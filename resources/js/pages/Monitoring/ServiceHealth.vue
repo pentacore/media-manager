@@ -357,10 +357,8 @@ function barHeight(bucket: MetricBucket): number {
                     class="border-b border-border px-4 py-3 last:border-b-0"
                 >
                     <div
-                        class="grid items-center gap-4"
-                        style="
-                            grid-template-columns: 200px 1fr 120px 120px 120px;
-                        "
+                        class="grid grid-cols-1 items-center gap-4 sm:grid-cols-[200px_minmax(0,1fr)_120px_120px_120px]"
+                        data-health-row
                     >
                         <div>
                             <div class="flex items-center gap-2">
