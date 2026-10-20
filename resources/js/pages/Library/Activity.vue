@@ -10,7 +10,7 @@ import {
 import { computed, ref, watch } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
-import { Pill, SvcChip } from '@/components/mm';
+import { PageHeader, Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -682,13 +682,15 @@ async function runQueueBulk(): Promise<void> {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Library activity
                 </h1>
+            </template>
+            <template #description>
                 <p
                     v-if="activeTab === 'queue'"
                     class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
@@ -704,8 +706,8 @@ async function runQueueBulk(): Promise<void> {
                     Grabs, imports, deletions and failures, newest first — one
                     service at a time.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <div
                     class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
                     role="tablist"
@@ -750,6 +752,8 @@ async function runQueueBulk(): Promise<void> {
                         {{ value === 'all' ? 'All' : value }}
                     </button>
                 </div>
+            </template>
+            <template #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -763,8 +767,8 @@ async function runQueueBulk(): Promise<void> {
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh
                 </Button>
-            </div>
-        </div>
+            </template>
+        </PageHeader>
 
         <!-- Queue tab -->
         <template v-if="activeTab === 'queue'">

@@ -3,8 +3,15 @@ import { Head, router } from '@inertiajs/vue3';
 import { Calendar, ChevronDown, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
-import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';
+import {
+    InitialsAvatar,
+    PageHeader,
+    Pill,
+    SvcChip,
+    TimeStamp,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
@@ -445,18 +452,20 @@ function formatAuditValue(value: unknown): string {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1 class="text-[22px] font-semibold tracking-tight">
                     Activity log
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Every webhook, tool call and write — same source as the
                     dashboard. Admins also see the Audit category: who changed
                     users, connections, removals and settings.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <div
                     class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
                     data-filter-strip
@@ -484,6 +493,8 @@ function formatAuditValue(value: unknown): string {
                         {{ rangeButtonLabel(value) }}
                     </button>
                 </div>
+            </template>
+            <template #secondaryActions>
                 <a
                     :href="exportUrl()"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
@@ -491,8 +502,15 @@ function formatAuditValue(value: unknown): string {
                 >
                     <Download class="size-3.5" />Export NDJSON
                 </a>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem as-child data-page-header-item="export">
+                    <a :href="exportUrl()">
+                        <Download class="size-3.5" />Export NDJSON
+                    </a>
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Filters -->
         <div

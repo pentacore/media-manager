@@ -3,7 +3,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { Bell, BellOff, CheckCheck, Trash2 } from '@lucide/vue';
 import { onMounted } from 'vue';
 import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
-import { Pill, SvcChip, TimeStamp } from '@/components/mm';
+import { PageHeader, Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
@@ -91,29 +91,32 @@ function shortType(type: string): string {
     <Head title="Notifications" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Notifications
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     {{ notifications.length }} total ·
                     <span class="font-mono-tabular">{{ unreadCount }}</span>
                     unread
                 </p>
-            </div>
-            <Button
-                v-if="unreadCount > 0"
-                variant="outline"
-                size="sm"
-                class="h-7 gap-1.5 text-xs"
-                @click="markAllRead"
-            >
-                <CheckCheck class="size-3.5" />Mark all read
-            </Button>
-        </div>
+            </template>
+            <template v-if="unreadCount > 0" #primaryAction>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    @click="markAllRead"
+                >
+                    <CheckCheck class="size-3.5" />Mark all read
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div

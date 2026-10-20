@@ -9,6 +9,8 @@ use App\Jobs\ClearSeerrRequests;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Database\Seeders\ActionTypeConfigSeeder;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -284,4 +286,158 @@ test("a member's phone dashboard keeps Review queue on screen and Refresh in the
 
     $webpage->click('[data-page-header-item="refresh"]')
         ->assertSeeIn('[data-dashboard-pending-count]', '2 actions awaiting approval');
+});
+
+/**
+ * One stateful SABnzbd fake: $state counts queue-mode reads, and the queue
+ * flips to paused on the second read, so a Refresh from the menu can be
+ * proven to re-fetch rather than just being present.
+ */
+function pageHeaderFakeSabnzbd(object $state): void
+{
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
+    Http::fake([
+        'sabnzbd.local:8080/api*' => function (Request $request) use ($state) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            if (($query['mode'] ?? null) === 'queue') {
+                $state->queueCalls++;
+
+                return Http::response(['queue' => ['paused' => $state->queueCalls > 1, 'speed' => '10 M', 'kbpersec' => '10240', 'speedlimit' => '', 'speedlimit_abs' => '', 'slots' => [], 'noofslots' => 0, 'sizeleft' => '0 B', 'timeleft' => '0:00:00']]);
+            }
+
+            if (($query['mode'] ?? null) === 'history') {
+                return Http::response(['history' => ['slots' => [], 'noofslots' => 0]]);
+            }
+
+            return Http::response(['status' => true]);
+        },
+    ]);
+}
+
+test("an admin's phone SABnzbd header keeps Pause queue and the speed limit, and puts Open SABnzbd and Refresh in the menu", function (): void {
+    $state = new class
+    {
+        public int $queueCalls = 0;
+    };
+    pageHeaderFakeSabnzbd($state);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(pageHeaderInViewportScript('[data-sab-queue-toggle]'), true)
+        ->assertScript(pageHeaderInViewportScript('[data-speed-limit-trigger]'), true)
+        ->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertSeeIn('[data-sab-queue-toggle]', 'Pause queue')
+        ->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-sabnzbd"]', 'Open SABnzbd')
+        ->assertAttribute('[data-page-header-item="open-sabnzbd"]', 'href', 'http://sabnzbd.local:8080')
+        ->assertAttribute('[data-page-header-item="open-sabnzbd"]', 'target', '_blank')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="refresh"]', 'Refresh')
+        ->click('[data-page-header-item="refresh"]')
+        ->assertSeeIn('[data-sab-queue-toggle]', 'Resume queue');
+
+    expect($state->queueCalls)->toBe(2);
+});
+
+test('an unconfigured SABnzbd header has no actions row', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))->on()->mobile()
+        ->assertNoSmoke()
+        ->assertPresent('[data-page-header]')
+        ->assertNotPresent('[data-page-header-actions]')
+        ->assertNotPresent('[data-page-header-more]');
+});
+
+test('watch history keeps its filters on screen and its export in the menu', function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    Http::fake(['emby.local:8096/*' => Http::response([])]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('monitoring.watch-history', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertVisible('[data-page-header-filters]')
+        ->assertScript('[...document.querySelectorAll("[data-page-header-filters] > *")].every((element) => element.getBoundingClientRect().left >= 0 && element.getBoundingClientRect().right <= window.innerWidth)', true)
+        ->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="export"]', 'Export CSV')
+        ->assertAttribute('[data-page-header-item="export"]', 'href', '/monitoring/watch-history/export')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-emby"]', 'Open Emby')
+        ->assertAttribute('[data-page-header-item="open-emby"]', 'href', 'http://emby.local:8096')
+        ->assertAttribute('[data-page-header-item="open-emby"]', 'target', '_blank');
+});
+
+test('the grab queue, now playing, service health, statistics, activity log, notifications and Action Queue headers fit a phone', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+        'sonarr.local:8989/*' => Http::response([]),
+        'radarr.local:7878/api/v3/queue*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+        'radarr.local:7878/*' => Http::response([]),
+        'emby.local:8096/*' => Http::response([]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertScript(pageHeaderInViewportScript('[data-activity-refresh]'), true)
+        ->assertScript(pageHeaderInViewportScript('[data-service-filter="radarr"]'), true)
+        ->click('[data-service-filter="radarr"]')
+        ->assertScript(pageHeaderInViewportScript('[data-activity-tab="history"]'), true);
+
+    $webpage->navigate(route('monitoring.now-playing', absolute: false));
+    $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertScript(pageHeaderInViewportScript('[data-now-playing-refresh]'), true);
+
+    $webpage->navigate(route('monitoring.service-health', absolute: false));
+    $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertScript(pageHeaderInViewportScript('[data-run-health-checks]'), true);
+
+    foreach (['statistics.index', 'activity-log', 'notifications.index'] as $routeName) {
+        $webpage->navigate(route($routeName, absolute: false));
+        $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '');
+
+        if ($routeName === 'activity-log') {
+            $webpage->click('[data-page-header-more]')
+                ->assertSeeIn('[data-page-header-menu] [data-page-header-item="export"]', 'Export NDJSON')
+                ->assertAttribute('[data-page-header-item="export"]', 'href', '/activity-log/export');
+        }
+    }
+
+    $webpage->navigate(route('actions.requests.index', absolute: false));
+    $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertScript(pageHeaderInViewportScript('[data-action-refresh]'), true)
+        ->assertNotPresent('[data-page-header-more]');
+});
+
+test("an admin's phone headers run the Emby library refresh and link to approval rules from their menus", function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    Http::fake([
+        'emby.local:8096/Sessions' => Http::response([]),
+        'emby.local:8096/Library/Refresh' => Http::response('', 204),
+        'emby.local:8096/*' => Http::response([]),
+    ]);
+    $this->seed(ActionTypeConfigSeeder::class);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('monitoring.now-playing', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-emby"]', 'Open Emby')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="refresh-library"]', 'Refresh library')
+        ->click('[data-page-header-item="refresh-library"]')
+        ->assertSee('Library refresh queued.')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'emby_library_scan')->sole()->origin)->toBe('manual');
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/Library/Refresh'));
+
+    $webpage->navigate(route('actions.requests.index', absolute: false));
+    $webpage->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="approval-rules"]', 'Approval rules')
+        ->assertAttribute('[data-page-header-item="approval-rules"]', 'href', '/actions/rules');
 });

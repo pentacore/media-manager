@@ -1,10 +1,22 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pause, Play, RefreshCw, RotateCcw, Trash2 } from '@lucide/vue';
+import {
+    ExternalLink,
+    Pause,
+    Play,
+    RefreshCw,
+    RotateCcw,
+    Trash2,
+} from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
-import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
+import {
+    OpenInServiceButton,
+    PageHeader,
+    Pill,
+    StatCard,
+} from '@/components/mm';
 import { HistoryDeleteDialog, SpeedLimitControl } from '@/components/sabnzbd';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +27,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -344,16 +357,20 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader actions-class="sm:items-stretch">
+            <template #eyebrow>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Media <span class="text-fg-subtle">/</span> SABnzbd
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Downloads
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Live SABnzbd queue and history.
                     {{
@@ -362,13 +379,14 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                             : ''
                     }}
                 </p>
-            </div>
-            <div class="flex gap-2" v-if="configured">
+            </template>
+            <template v-if="configured && isAdmin && !error" #filters>
                 <SpeedLimitControl
-                    v-if="isAdmin && !error"
                     :percent="queue.speedlimit ?? null"
                     :absolute="queue.speedlimit_abs ?? null"
                 />
+            </template>
+            <template v-if="configured" #secondaryActions>
                 <OpenInServiceButton
                     :href="props.connection?.url"
                     label="Open SABnzbd"
@@ -381,17 +399,41 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                 >
                     <RefreshCw class="size-3.5" /> Refresh
                 </Button>
+            </template>
+            <template v-if="configured" #primaryAction>
                 <Button
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
                     :variant="paused ? 'default' : 'outline'"
+                    data-sab-queue-toggle
                     @click="toggleQueue"
                 >
                     <component :is="paused ? Play : Pause" class="size-3.5" />
                     {{ paused ? 'Resume queue' : 'Pause queue' }}
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template v-if="configured" #menu>
+                <DropdownMenuItem
+                    v-if="props.connection?.url"
+                    as-child
+                    data-page-header-item="open-sabnzbd"
+                >
+                    <a
+                        :href="props.connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open SABnzbd
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    data-page-header-item="refresh"
+                    @select="refresh"
+                >
+                    <RefreshCw class="size-3.5" />Refresh
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Empty state -->
         <div

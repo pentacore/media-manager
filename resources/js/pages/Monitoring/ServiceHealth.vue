@@ -13,6 +13,7 @@ import { computed, onMounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import {
+    PageHeader,
     Pill,
     StatCard,
     StatusPill,
@@ -263,25 +264,28 @@ function barHeight(bucket: MetricBucket): number {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Service health
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     Pings every 5 minutes · history retained 30 days
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <span
                     class="font-mono-tabular inline-flex h-7 items-center rounded-md border border-border bg-bg-elev px-2.5 text-[11.5px] text-muted-foreground"
                 >
                     Strip · last 60 min
                 </span>
+            </template>
+            <template v-if="props.canRunChecks" #primaryAction>
                 <Button
-                    v-if="props.canRunChecks"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
                     data-run-health-checks
@@ -293,8 +297,8 @@ function barHeight(bucket: MetricBucket): number {
                         :class="{ 'animate-spin': checking }"
                     />Run check now
                 </Button>
-            </div>
-        </div>
+            </template>
+        </PageHeader>
 
         <!-- Stat cards -->
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
