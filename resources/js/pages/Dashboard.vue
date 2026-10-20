@@ -14,12 +14,14 @@ import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogCon
 import {
     InitialsAvatar,
     LiveDot,
+    PageHeader,
     Pill,
     Poster,
     StatCard,
     SvcChip,
     TimeStamp,
 } from '@/components/mm';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useDashboardStats } from '@/composables/useDashboardStats';
@@ -270,13 +272,15 @@ onMounted(() => {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     {{ greeting }}, {{ userName }}
                 </h1>
+            </template>
+            <template #description>
                 <div
                     class="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground"
                 >
@@ -300,8 +304,8 @@ onMounted(() => {
                         active</span
                     >
                 </div>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #secondaryActions>
                 <button
                     type="button"
                     :disabled="refreshing"
@@ -314,16 +318,29 @@ onMounted(() => {
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh
                 </button>
+            </template>
+            <template v-if="canManageLibrary" #primaryAction>
                 <Link
-                    v-if="canManageLibrary"
                     :href="ActionRequestController.index.url()"
                     data-dashboard-review-queue
                     class="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                 >
                     <Inbox class="size-3.5" />Review queue
                 </Link>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    :disabled="refreshing"
+                    data-page-header-item="refresh"
+                    @select="refresh"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Stat Cards -->
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

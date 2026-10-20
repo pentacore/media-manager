@@ -20,6 +20,7 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import {
     InitialsAvatar,
     OpenInServiceButton,
+    PageHeader,
     Poster,
     StatusPill,
     SvcChip,
@@ -540,8 +541,8 @@ const rangeText = computed(() => {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="seerr" />
                     <span class="text-fg-subtle">/</span>
@@ -549,11 +550,15 @@ const rangeText = computed(() => {
                         >Requests</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Household requests
                 </h1>
+            </template>
+            <template #description>
                 <p
                     v-if="summary"
                     class="mt-1 text-[13px] text-muted-foreground"
@@ -566,9 +571,9 @@ const rangeText = computed(() => {
                     {{ summary.declined }} declined
                 </p>
                 <Skeleton v-else class="mt-1 h-5 w-64" />
-            </div>
-            <div class="flex items-center gap-2">
-                <Select v-if="userOptions.length > 0" v-model="userFilter">
+            </template>
+            <template v-if="userOptions.length > 0" #filters>
+                <Select v-model="userFilter">
                     <SelectTrigger class="h-7 w-32 text-xs">
                         <SelectValue placeholder="User" />
                     </SelectTrigger>
@@ -583,6 +588,8 @@ const rangeText = computed(() => {
                         </SelectItem>
                     </SelectContent>
                 </Select>
+            </template>
+            <template #secondaryActions>
                 <Button
                     variant="outline"
                     size="sm"
@@ -626,8 +633,47 @@ const rangeText = computed(() => {
                     :href="props.connection.url"
                     label="Open Seerr"
                 />
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    :disabled="syncing"
+                    data-page-header-item="sync"
+                    @select="syncSeerr"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync Seerr
+                </DropdownMenuItem>
+                <template v-if="isAdmin">
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Bulk delete</DropdownMenuLabel>
+                    <DropdownMenuItem
+                        v-for="status in CLEARABLE_STATUSES"
+                        :key="status"
+                        class="text-destructive focus:text-destructive"
+                        :disabled="clearing"
+                        :data-page-header-item="`clear-${status}`"
+                        @select="clearByStatus(status)"
+                    >
+                        {{ CLEAR_LABELS[status] }}
+                    </DropdownMenuItem>
+                </template>
+                <DropdownMenuItem
+                    v-if="props.connection.url"
+                    as-child
+                    data-page-header-item="open-seerr"
+                >
+                    <a
+                        :href="props.connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open Seerr
+                    </a>
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Tabs -->
         <div class="flex flex-wrap items-center gap-1.5">
