@@ -11,6 +11,7 @@ use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\ServiceWarning;
+use App\Settings\WebhookSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -527,6 +528,106 @@ test('the invite dialog fits at phone width', function (): void {
 
     $webpage->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true)
         ->assertScript(phoneOverflowScript('[role="dialog"]'), '');
+});
+
+test("the phone menu's Import from Emby asks first; Cancel calls nothing and Import runs it", function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    Http::fake(['emby.local:8096/Users' => Http::response([])]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.users.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="import-emby"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Import every Emby user as a viewer account here?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    Http::assertNotSent(fn (Request $request): bool => str_ends_with($request->url(), '/Users'));
+
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="import-emby"]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Imported 0 Emby user(s), skipped 0.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/Users'));
+});
+
+test('the Capture & store toggle flips, sends the request and persists from the phone filters row', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.webhook-log.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertVisible('[data-page-header-filters]')
+        ->assertScript(pageHeaderInViewportScript('[data-page-header-filters] button'), true)
+        ->assertSeeIn('[data-page-header-filters]', 'Storing payloads')
+        ->click('[data-page-header-filters] button');
+
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[data-page-header-filters]").textContent.includes("Discarding")'));
+    $webpage->assertSeeIn('[data-page-header-filters]', 'Discarding')
+        ->assertSee('Webhook capture disabled.')
+        ->assertNoSmoke();
+
+    expect(resolve(WebhookSettings::class)->captureEnabled())->toBeFalse();
+});
+
+/**
+ * A minimal `agent_conversations` row: the table has no Eloquent model, so
+ * every conversation browser test inserts directly (mirrors
+ * AiConversationTranscriptTest's local helper, not shared across files).
+ */
+function pageHeaderConversation(User $user, string $title): string
+{
+    $conversationId = (string) Str::uuid();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId, 'participant_type' => $user->getMorphClass(), 'participant_id' => $user->id,
+        'title' => $title, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    return $conversationId;
+}
+
+test("the phone ⋯ menu's Delete asks first; Cancel keeps the conversation and Delete removes it", function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = pageHeaderConversation($admin, 'Delete me');
+    $this->actingAs($admin);
+
+    $webpage = visit(route('admin.ai-conversations.show', ['conversation' => $conversationId], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="delete"]')
+        ->assertSeeIn('[role="dialog"]', 'Delete this conversation?')
+        ->click('Cancel');
+
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[role=\"dialog\"]")'));
+    expect(DB::table('agent_conversations')->where('id', $conversationId)->exists())->toBeTrue();
+
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="delete"]')
+        ->assertSeeIn('[role="dialog"]', 'Delete this conversation?')
+        ->click('Delete permanently')
+        ->assertSee('Conversation deleted.')
+        ->assertNoSmoke();
+
+    expect(DB::table('agent_conversations')->where('id', $conversationId)->exists())->toBeFalse();
+});
+
+test('Archive flips to Unarchive from the phone header', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = pageHeaderConversation($admin, 'Archive me');
+    $this->actingAs($admin);
+
+    $webpage = visit(route('admin.ai-conversations.show', ['conversation' => $conversationId], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-conversation-archive]');
+
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[data-page-header-actions]").textContent.includes("Unarchive")'));
+    $webpage->assertSeeIn('[data-page-header-actions]', 'Unarchive')
+        ->assertNoSmoke();
+
+    expect(DB::table('agent_conversations')->where('id', $conversationId)->value('archived_at'))->not->toBeNull();
 });
 
 test('a conversation with a very long unbroken title still fits at phone width', function (): void {
