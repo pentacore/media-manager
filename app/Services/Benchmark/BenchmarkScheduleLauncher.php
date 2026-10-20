@@ -16,6 +16,7 @@ use App\Services\Notifications\AdminNotifier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -88,7 +89,7 @@ final readonly class BenchmarkScheduleLauncher
         $benchmarkSchedule->update([
             'last_run_at' => now(),
             'last_outcome' => $benchmarkScheduleAttempt->outcome,
-            'last_message' => $benchmarkScheduleAttempt->message,
+            'last_message' => Str::limit($benchmarkScheduleAttempt->message, 252),
         ]);
 
         return $benchmarkScheduleAttempt;
