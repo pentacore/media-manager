@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\BenchmarkCaseController;
 use App\Http\Controllers\Admin\BenchmarkRunController;
+use App\Http\Controllers\Admin\BenchmarkScheduleController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
 use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
@@ -81,6 +82,17 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('{benchmarkCase}/edit', [BenchmarkCaseController::class, 'edit'])->whereNumber('benchmarkCase')->name('edit');
             Route::put('{benchmarkCase}', [BenchmarkCaseController::class, 'update'])->whereNumber('benchmarkCase')->name('update');
             Route::delete('{benchmarkCase}', [BenchmarkCaseController::class, 'destroy'])->whereNumber('benchmarkCase')->name('destroy');
+        });
+
+        Route::prefix('benchmarks/schedules')->name('benchmarks.schedules.')->group(function (): void {
+            Route::get('/', [BenchmarkScheduleController::class, 'index'])->name('index');
+            Route::get('create', [BenchmarkScheduleController::class, 'create'])->name('create');
+            Route::post('/', [BenchmarkScheduleController::class, 'store'])->name('store');
+            Route::get('{benchmarkSchedule}/edit', [BenchmarkScheduleController::class, 'edit'])->whereNumber('benchmarkSchedule')->name('edit');
+            Route::put('{benchmarkSchedule}', [BenchmarkScheduleController::class, 'update'])->whereNumber('benchmarkSchedule')->name('update');
+            Route::patch('{benchmarkSchedule}/toggle', [BenchmarkScheduleController::class, 'toggle'])->whereNumber('benchmarkSchedule')->name('toggle');
+            Route::post('{benchmarkSchedule}/run', [BenchmarkScheduleController::class, 'run'])->whereNumber('benchmarkSchedule')->name('run');
+            Route::delete('{benchmarkSchedule}', [BenchmarkScheduleController::class, 'destroy'])->whereNumber('benchmarkSchedule')->name('destroy');
         });
 
         Route::prefix('benchmarks')->name('benchmarks.runs.')->group(function (): void {
