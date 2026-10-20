@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="T extends string">
+import { onMounted, useTemplateRef } from 'vue';
 import { cn } from '@/lib/utils';
 
 defineProps<{
@@ -11,10 +12,21 @@ defineProps<{
 defineEmits<{
     'update:modelValue': [value: T];
 }>();
+
+const stripEl = useTemplateRef<HTMLDivElement>('stripEl');
+
+// A deep-linked window (e.g. ?window=year) can select an option past the
+// strip's visible edge; bring it into view without scrolling the page.
+onMounted(() => {
+    stripEl.value
+        ?.querySelector('[aria-pressed="true"]')
+        ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+});
 </script>
 
 <template>
     <div
+        ref="stripEl"
         class="scrollbar-none flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-border bg-bg-elev p-0.5"
         role="group"
         data-filter-strip
