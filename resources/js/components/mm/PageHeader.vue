@@ -60,7 +60,7 @@ const alignClasses = {
             )
         "
     >
-        <div class="min-w-0">
+        <div class="min-w-0 break-words">
             <slot name="eyebrow" />
             <slot name="title" />
             <slot name="description" />

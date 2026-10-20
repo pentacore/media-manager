@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SeerrCache;
+use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
+use App\Jobs\ClearSeerrRequests;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * @return array<int, array<string, string>>
@@ -45,6 +50,30 @@ function pageHeaderFakeSonarr(object $state): void
         'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'sonarr.local:8989/*' => Http::response([]),
     ]);
+}
+
+/**
+ * One stateful Seerr fake: the pending count grows after the first read, so a
+ * Sync that re-reads it is visible, and $state counts the reads.
+ */
+function pageHeaderFakeSeerr(object $state): ServiceConnection
+{
+    $connection = ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => function () use ($state) {
+            $state->countCalls++;
+            $pending = $state->countCalls === 1 ? 1 : 2;
+
+            return Http::response(['total' => $pending, 'pending' => $pending, 'approved' => 0, 'declined' => 0, 'movie' => $pending, 'tv' => 0]);
+        },
+        'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1], 'results' => [
+            ['id' => 1, 'status' => 1, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 9001, 'status' => 3], 'requestedBy' => ['displayName' => 'Example User', 'email' => 'user@example.com'], 'createdAt' => '2026-10-01T00:00:00Z', 'seasons' => []],
+        ]]),
+        'seerr.local:5055/api/v1/movie/*' => Http::response(['id' => 9001, 'title' => 'Example Movie', 'posterPath' => '/example.jpg']),
+        'seerr.local:5055/*' => Http::response([]),
+    ]);
+
+    return $connection;
 }
 
 function pageHeaderInViewportScript(string $selector): string
@@ -129,7 +158,11 @@ test('the overflow menu works from the keyboard and returns focus to its trigger
         ->keys('[data-page-header-item="activity"]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-page-header-menu]")'));
     $webpage->assertNotPresent('[data-page-header-menu]')
-        ->assertScript('document.activeElement === document.querySelector("[data-page-header-more]")', true);
+        ->assertScript('document.activeElement === document.querySelector("[data-page-header-more]")', true)
+        ->keys('[data-page-header-more]', 'Enter');
+    $webpage->script(confirmDialogWaitUntilScript('document.activeElement?.getAttribute("data-page-header-item") === "sync"'));
+    $webpage->keys('[data-page-header-item="sync"]', 'Enter');
+    $webpage->assertSee('Synced with Sonarr.');
 });
 
 test('at desktop width the header shows every action inline and no menu trigger', function (): void {
@@ -162,44 +195,93 @@ test('the movie and Whisparr headers keep their main action on a phone', functio
     $webpage->assertScript(pageHeaderInViewportScript('[data-add-movie]'), true)
         ->assertScript(phoneOverflowScript('[data-page-header]'), '')
         ->click('[data-page-header-more]')
-        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-radarr"]', 'Open Radarr');
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="activity"]', 'Activity')
+        ->assertAttribute('[data-page-header-item="activity"]', 'href', 'http://radarr.local:7878/activity/queue')
+        ->assertAttribute('[data-page-header-item="activity"]', 'target', '_blank')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-radarr"]', 'Open Radarr')
+        ->assertAttribute('[data-page-header-item="open-radarr"]', 'href', 'http://radarr.local:7878')
+        ->assertAttribute('[data-page-header-item="open-radarr"]', 'target', '_blank');
 
     $webpage->navigate(route('media.whisparr.index', absolute: false));
     $webpage->script(appHydratedScript());
     $webpage->assertScript(pageHeaderInViewportScript('[data-library-sync]'), true)
         ->click('[data-page-header-more]')
-        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-whisparr"]', 'Open Whisparr');
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-whisparr"]', 'Open Whisparr')
+        ->assertAttribute('[data-page-header-item="open-whisparr"]', 'href', 'http://whisparr.local:6969')
+        ->assertAttribute('[data-page-header-item="open-whisparr"]', 'target', '_blank');
 });
 
 test("an admin's phone requests header keeps the user filter and puts Sync, the bulk deletes and Open Seerr in the menu", function (): void {
-    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
-    Http::fake([
-        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 1, 'tv' => 0]),
-        'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1], 'results' => [
-            ['id' => 1, 'status' => 1, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 9001, 'status' => 3], 'requestedBy' => ['displayName' => 'Example User', 'email' => 'user@example.com'], 'createdAt' => '2026-10-01T00:00:00Z', 'seasons' => []],
-        ]]),
-        'seerr.local:5055/api/v1/movie/*' => Http::response(['id' => 9001, 'title' => 'Example Movie', 'posterPath' => '/example.jpg']),
-        'seerr.local:5055/*' => Http::response([]),
-    ]);
+    $state = new class
+    {
+        public int $countCalls = 0;
+    };
+    $serviceConnection = pageHeaderFakeSeerr($state);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('media.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
     $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertVisible('[data-page-header-filters]')
+        ->assertScript(pageHeaderInViewportScript('[data-page-header-filters] button'), true)
+        ->assertSeeIn('[data-page-header]', '1 pending')
         ->click('[data-page-header-more]')
-        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="sync"]', 'Sync Seerr')
         ->assertSeeIn('[data-page-header-menu]', 'Bulk delete')
         ->assertPresent('[data-page-header-menu] [data-page-header-item="clear-declined"]')
-        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-seerr"]', 'Open Seerr');
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-seerr"]', 'Open Seerr')
+        ->assertAttribute('[data-page-header-item="open-seerr"]', 'href', 'http://seerr.local:5055')
+        ->assertAttribute('[data-page-header-item="open-seerr"]', 'target', '_blank')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="sync"]', 'Sync Seerr');
+
+    new SeerrCache($serviceConnection)->bustAll();
+    $webpage->click('[data-page-header-item="sync"]')
+        ->assertSeeIn('[data-page-header]', '2 pending');
+
+    expect($state->countCalls)->toBe(2);
+});
+
+test('a bulk delete from the phone menu asks first; Cancel queues nothing and the confirm queues the clear', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    pageHeaderFakeSeerr(new class
+    {
+        public int $countCalls = 0;
+    });
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="clear-failed"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Permanently delete every failed Seerr request?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    Queue::assertNotPushed(ClearSeerrRequests::class);
+
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="clear-failed"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Permanently delete every failed Seerr request?')
+        ->click('[data-confirm-accept]')
+        ->assertSee('in the background')
+        ->assertNoSmoke();
+
+    Queue::assertPushed(ClearSeerrRequests::class);
 });
 
 test("a member's phone dashboard keeps Review queue on screen and Refresh in the menu", function (): void {
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
     $this->actingAs(User::factory()->member()->create());
 
     $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
     $webpage->assertScript(pageHeaderInViewportScript('[data-dashboard-review-queue]'), true)
         ->assertMissing('[data-dashboard-refresh]')
+        ->assertSeeIn('[data-dashboard-pending-count]', '1 actions awaiting approval')
         ->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="refresh"]', 'Refresh');
+
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+
+    $webpage->click('[data-page-header-item="refresh"]')
+        ->assertSeeIn('[data-dashboard-pending-count]', '2 actions awaiting approval');
 });
