@@ -6,8 +6,9 @@ import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/Benchma
 import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import { formatUsd } from '@/components/benchmarks';
 import type { BenchmarkRunRow } from '@/components/benchmarks';
-import { Pill, TimeStamp } from '@/components/mm';
+import { PageHeader, Pill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Table,
     TableBody,
@@ -106,17 +107,19 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
     <Head title="Benchmarks" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-start justify-between gap-4">
-            <div>
+        <PageHeader align="start">
+            <template #title>
                 <h1 class="text-[20px] font-semibold">Benchmarks</h1>
+            </template>
+            <template #description>
                 <p
                     class="mt-1 max-w-[620px] text-[12.5px] text-muted-foreground"
                 >
                     Replay fixed cases against candidate models and compare
                     quality, cost and latency.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #secondaryActions>
                 <Button
                     variant="outline"
                     size="sm"
@@ -127,6 +130,8 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                         >Cases</Link
                     >
                 </Button>
+            </template>
+            <template #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -147,8 +152,15 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                         <Plus class="size-3.5" />New run
                     </Link>
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem as-child data-page-header-item="cases">
+                    <Link :href="BenchmarkCaseController.index.url()"
+                        >Cases</Link
+                    >
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <div class="overflow-x-auto rounded-xl border border-border bg-card">
             <Table>

@@ -12,7 +12,7 @@ import {
 } from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
-import { Pill, StatusPill, SvcChip } from '@/components/mm';
+import { PageHeader, Pill, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -181,34 +181,40 @@ function checkVersion(connection: Connection) {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin
                     <span class="text-fg-subtle">/</span>
                     Connections
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Service connections
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     One row per upstream service. Webhook URLs and tokens are
                     auto-generated; rotate by clearing the field on edit.
                 </p>
-            </div>
-            <Button
-                as-child
-                size="sm"
-                class="h-7 gap-1.5 text-xs"
-                data-connection-add
-            >
-                <Link :href="ServiceConnectionController.create.url()">
-                    <Plus class="size-3.5" />Add connection
-                </Link>
-            </Button>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Button
+                    as-child
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    data-connection-add
+                >
+                    <Link :href="ServiceConnectionController.create.url()">
+                        <Plus class="size-3.5" />Add connection
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <!-- Connections table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">

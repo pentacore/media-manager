@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -440,4 +441,58 @@ test("an admin's phone headers run the Emby library refresh and link to approval
     $webpage->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="approval-rules"]', 'Approval rules')
         ->assertAttribute('[data-page-header-item="approval-rules"]', 'href', '/actions/rules');
+});
+
+test('the admin list headers keep their main action on a phone', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.users.index', absolute: false))->on()->mobile()->assertNoSmoke();
+
+    foreach ([
+        'admin.users.index' => '[data-users-invite]',
+        'admin.connections.index' => '[data-connection-add]',
+        'admin.notification-destinations.index' => '[data-destination-add]',
+        'admin.benchmarks.cases.index' => '[data-benchmark-case-new]',
+        'admin.benchmarks.runs.index' => '[data-benchmark-run-new]',
+        'ai.templates.index' => '[data-template-new]',
+        'admin.jobs.index' => null,
+        'admin.webhook-log.index' => null,
+        'admin.statistics.index' => null,
+    ] as $routeName => $primary) {
+        $webpage->navigate(route($routeName, absolute: false));
+        $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '');
+
+        if ($primary !== null) {
+            $webpage->assertScript(pageHeaderInViewportScript($primary), true);
+        }
+    }
+});
+
+test('the invite dialog fits at phone width', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.users.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-users-invite]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+
+    $webpage->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true)
+        ->assertScript(phoneOverflowScript('[role="dialog"]'), '');
+});
+
+test('a conversation with a very long unbroken title still fits at phone width', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = '01900000-0000-7000-8000-000000000002';
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId, 'participant_type' => $admin->getMorphClass(), 'participant_id' => $admin->id,
+        'title' => str_repeat('Severance', 14), 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('admin.ai-conversations.show', ['conversation' => $conversationId], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '')
+        ->assertScript(pageHeaderInViewportScript('[data-conversation-archive]'), true)
+        ->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="delete"]', 'Delete');
 });
