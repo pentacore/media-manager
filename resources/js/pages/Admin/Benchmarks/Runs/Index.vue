@@ -182,6 +182,20 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                                 @click.stop
                                 >{{ run.name }}</Link
                             >
+                            <Link
+                                v-if="run.schedule"
+                                :href="
+                                    BenchmarkScheduleController.edit.url(
+                                        run.schedule.id,
+                                    )
+                                "
+                                class="ml-2 align-middle"
+                                :title="run.schedule.name"
+                                data-benchmark-run-scheduled
+                                @click.stop
+                            >
+                                <Pill variant="info">Scheduled</Pill>
+                            </Link>
                         </TableCell>
                         <TableCell>
                             <Pill :variant="statusVariant(run)" dot>{{

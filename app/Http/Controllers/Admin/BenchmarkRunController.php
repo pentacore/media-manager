@@ -38,7 +38,7 @@ class BenchmarkRunController extends Controller
     public function index(): Response
     {
         $lengthAwarePaginator = BenchmarkRun::query()
-            ->with('creator:id,name')
+            ->with(['creator:id,name', 'schedule:id,name'])
             ->latest()
             ->latest('id')
             ->paginate(self::PER_PAGE)
@@ -55,6 +55,7 @@ class BenchmarkRunController extends Controller
                     'candidate_count' => count($benchmarkRun->candidates),
                     'estimate_usd' => (float) $benchmarkRun->estimate_usd,
                     'cost_usd' => (float) $benchmarkRun->cost_usd,
+                    'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
                 ])->all(),
@@ -145,6 +146,8 @@ class BenchmarkRunController extends Controller
 
     public function show(Request $request, BenchmarkRun $benchmarkRun): Response
     {
+        $benchmarkRun->loadMissing(['schedule:id,name', 'baseline:id,name']);
+
         $counts = $benchmarkRun->results()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $count = static fn (BenchmarkResultStatus $status): int => (int) ($counts[$status->value] ?? 0);
 
@@ -159,6 +162,9 @@ class BenchmarkRunController extends Controller
                 'estimate_usd' => (float) $benchmarkRun->estimate_usd,
                 'cost_usd' => (float) $benchmarkRun->cost_usd,
                 'cost_cap_usd' => $benchmarkRun->cost_cap_usd === null ? null : (float) $benchmarkRun->cost_cap_usd,
+                'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
+                'baseline' => $benchmarkRun->baseline === null ? null : ['id' => $benchmarkRun->baseline->id, 'name' => $benchmarkRun->baseline->name],
+                'regressions' => $benchmarkRun->regressions,
                 'started_at' => $benchmarkRun->started_at?->toIso8601String(),
                 'finished_at' => $benchmarkRun->finished_at?->toIso8601String(),
                 'counts' => [

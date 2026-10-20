@@ -8,6 +8,7 @@ export * from './format';
 export * from './jsonObject';
 export { default as JudgeScoringFields } from './JudgeScoringFields.vue';
 export { default as PriceExpectationsEditor } from './PriceExpectationsEditor.vue';
+export { default as RegressionBanner } from './RegressionBanner.vue';
 export { default as ResultDrawer } from './ResultDrawer.vue';
 export { default as ScheduleCandidatesPreview } from './ScheduleCandidatesPreview.vue';
 export { default as SelectionRow } from './SelectionRow.vue';

@@ -105,6 +105,16 @@ export type BenchmarkSelection = {
     reasoning: string | null;
 };
 
+export type BenchmarkRegression = {
+    candidate: BenchmarkSelection;
+    paired_cases: number;
+    metrics: Array<{
+        metric: 'pass_rate' | 'avg_score' | 'error_rate';
+        before: number;
+        after: number;
+    }>;
+};
+
 export type BenchmarkRunRow = {
     id: number;
     name: string;
@@ -114,6 +124,7 @@ export type BenchmarkRunRow = {
     candidate_count: number;
     estimate_usd: number;
     cost_usd: number;
+    schedule: { id: number; name: string } | null;
     created_by: string | null;
     created_at: string | null;
 };
@@ -148,6 +159,9 @@ export type BenchmarkRunDetail = {
     estimate_usd: number;
     cost_usd: number;
     cost_cap_usd: number | null;
+    schedule: { id: number; name: string } | null;
+    baseline: { id: number; name: string } | null;
+    regressions: BenchmarkRegression[] | null;
     started_at: string | null;
     finished_at: string | null;
     counts: {
