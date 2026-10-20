@@ -35,8 +35,9 @@ final readonly class BenchmarkRunSettler
      * keeps its result) once the total reached the cap. In a run that already
      * ended, a result still running under a stale claim lost its worker and
      * will never finish: it fails with a fixed reason. A scheduled run that
-     * finishes (completed or stopped at its cap) queues its regression check. With $failStalled a
-     * run that is still going fails those results too, so it can complete.
+     * finishes (completed or stopped at its cap) queues its regression check.
+     * With $failStalled a run that is still going fails those results too, so
+     * it can complete.
      */
     public function settle(int $runId, bool $failStalled = false): void
     {

@@ -111,3 +111,31 @@ test('cancelled runs and other schedules never serve as a baseline', function ()
 
     expect(resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun)['baseline_run_id'])->toBeNull();
 });
+
+test('a drop of exactly the threshold is not a regression', function (): void {
+    $cases = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->count(10)->create()->all();
+    scheduledRunWith($this->schedule, $cases, array_fill(0, 10, [0.9, true]));
+    $benchmarkRun = scheduledRunWith($this->schedule, $cases, [...array_fill(0, 9, [0.9, true]), [0.9, false]]);
+
+    expect(resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun)['regressions'])->toBe([]);
+});
+
+test('with two candidates listed in another order only the regressed one is reported', function (): void {
+    $nano = ['provider' => 'openai', 'model' => 'gpt-nano', 'reasoning' => 'provider_default'];
+    $mini = ['provider' => 'openai', 'model' => 'gpt-mini', 'reasoning' => 'provider_default'];
+    $baseline = BenchmarkRun::factory()->forSchedule($this->schedule)->completed()->withCandidates([$mini, $nano])->create();
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule($this->schedule)->completed()->withCandidates([$nano, $mini])->create();
+
+    foreach ($this->cases as $case) {
+        BenchmarkResult::factory()->forCase($baseline, $case, 0)->scored(0.9, true)->create();
+        BenchmarkResult::factory()->forCase($baseline, $case, 1)->scored(0.9, true)->create();
+        BenchmarkResult::factory()->forCase($benchmarkRun, $case, 0)->scored(0.9, true)->create();
+        BenchmarkResult::factory()->forCase($benchmarkRun, $case, 1)->scored(0.1, false)->create();
+    }
+
+    $detected = resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun);
+
+    expect($detected['baseline_run_id'])->toBe($baseline->id)
+        ->and($detected['regressions'])->toHaveCount(1)
+        ->and($detected['regressions'][0]['candidate'])->toBe($mini);
+});

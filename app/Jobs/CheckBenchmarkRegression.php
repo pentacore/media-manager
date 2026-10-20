@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Enums\QueueLane;
 use App\Models\BenchmarkRun;
 use App\Notifications\ScheduledBenchmarkAlert;
 use App\Services\Benchmark\BenchmarkRegressionDetector;
@@ -12,7 +11,6 @@ use App\Services\Notifications\AdminNotifier;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 
@@ -21,7 +19,6 @@ use Illuminate\Queue\Attributes\Tries;
  * comparable run, stores the comparison on the run and alerts admins when a
  * model regressed. A run whose comparison is stored is never checked again.
  */
-#[Queue(QueueLane::Default)]
 #[Timeout(60)]
 #[Tries(3)]
 final class CheckBenchmarkRegression implements ShouldBeUnique, ShouldQueue

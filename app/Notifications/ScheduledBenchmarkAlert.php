@@ -41,7 +41,7 @@ class ScheduledBenchmarkAlert extends Notification
 
     public static function skipped(BenchmarkSchedule $benchmarkSchedule, string $reason): self
     {
-        return new self('skipped', $benchmarkSchedule->name, $reason, '/admin/benchmarks/schedules');
+        return new self('skipped', $benchmarkSchedule->name, $reason, route('admin.benchmarks.schedules.index', absolute: false));
     }
 
     /**

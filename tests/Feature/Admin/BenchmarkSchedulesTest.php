@@ -235,3 +235,12 @@ test('the skipped alert links to the schedules index', function (): void {
     expect(ScheduledBenchmarkAlert::skipped(BenchmarkSchedule::factory()->create(), 'x')->link)
         ->toBe(route('admin.benchmarks.schedules.index', absolute: false));
 });
+
+test('a schedule takes at most twenty tags', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $tags = array_map(static fn (int $i): string => 'tag-'.$i, range(1, 21));
+
+    $this->post(route('admin.benchmarks.schedules.store'), schedulePayload(['case_tags' => $tags]))->assertSessionHasErrors('case_tags');
+
+    expect(BenchmarkSchedule::query()->count())->toBe(0);
+});
