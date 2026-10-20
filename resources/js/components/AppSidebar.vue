@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import AppLogo from '@/components/AppLogo.vue';
 import AppVersion from '@/components/AppVersion.vue';
@@ -26,8 +26,21 @@ import type { NavGroup, NavItem } from '@/types';
 
 const page = usePage();
 const { isAdmin } = useCan();
-const { isMobile } = useSidebar();
+const { isMobile, setOpenMobile } = useSidebar();
 const { openChat } = useAiChat();
+
+let stopNavigateListener: (() => void) | null = null;
+
+// The phone sidebar is a Sheet over the page; close it once a visit lands.
+// The layout persists across pages, so this registers once per layout mount.
+onMounted(() => {
+    stopNavigateListener = router.on('navigate', () => setOpenMobile(false));
+});
+
+onUnmounted(() => {
+    stopNavigateListener?.();
+    stopNavigateListener = null;
+});
 
 const navGroups = useNavItems(useNavCounts());
 
