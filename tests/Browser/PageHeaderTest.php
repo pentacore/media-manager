@@ -5,15 +5,18 @@ declare(strict_types=1);
 use App\Cache\Services\SeerrCache;
 use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
+use App\Events\ActionRequestCreated;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Notifications\ServiceWarning;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 /**
  * @return array<int, array<string, string>>
@@ -429,6 +432,8 @@ test("an admin's phone headers run the Emby library refresh and link to approval
     $webpage->script(appHydratedScript());
     $webpage->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-emby"]', 'Open Emby')
+        ->assertAttribute('[data-page-header-item="open-emby"]', 'href', 'http://emby.local:8096')
+        ->assertAttribute('[data-page-header-item="open-emby"]', 'target', '_blank')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="refresh-library"]', 'Refresh library')
         ->click('[data-page-header-item="refresh-library"]')
         ->assertSee('Library refresh queued.')
@@ -441,6 +446,50 @@ test("an admin's phone headers run the Emby library refresh and link to approval
     $webpage->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="approval-rules"]', 'Approval rules')
         ->assertAttribute('[data-page-header-item="approval-rules"]', 'href', '/actions/rules');
+});
+
+test("an admin's phone Action Queue header shows the live stale notice, in the viewport, and Refresh brings the new request in", function (): void {
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example waiting request']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', ['status' => 'pending'], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $created = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example announced request']);
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($created)->broadcastWith(), 4));
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-action-stale]') !== null"));
+
+    $webpage->assertSeeIn('[data-action-stale]', '1 new')
+        ->assertScript(pageHeaderInViewportScript('[data-action-stale]'), true)
+        ->assertScript(pageHeaderInViewportScript('[data-action-stale] button'), true)
+        ->assertMissing(sprintf('[data-action-row="%d"]', $created->id))
+        ->click('[data-action-stale] button');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("document.querySelector('[data-action-row=\"%d\"]') !== null", $created->id)));
+
+    $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $created->id), 'Example announced request')
+        ->assertMissing('[data-action-stale]')
+        ->assertNoSmoke();
+});
+
+test("a member's phone Notifications header runs Mark all read", function (): void {
+    $member = User::factory()->member()->create();
+    $member->notifications()->create([
+        'id' => (string) Str::uuid(),
+        'type' => ServiceWarning::class,
+        'data' => ['service' => 'sabnzbd', 'title' => 'Disk warning', 'message' => 'Less than 1 GB free', 'level' => 'disk_full'],
+    ]);
+    $this->actingAs($member);
+
+    $webpage = visit(route('notifications.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertSeeIn('[data-page-header]', '1 unread')
+        ->assertScript(pageHeaderInViewportScript('[data-page-header] button'), true)
+        ->click('Mark all read');
+
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-page-header] button")'));
+    $webpage->assertSeeIn('[data-page-header]', '0 unread')
+        ->assertMissing('[data-page-header] button')
+        ->assertNoSmoke();
 });
 
 test('the admin list headers keep their main action on a phone', function (): void {
