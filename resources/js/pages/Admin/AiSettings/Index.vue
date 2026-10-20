@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill, Toggle } from '@/components/mm';
+import { Field, Pill, SettingsRow, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -223,16 +223,15 @@ const budgetState = computed<{
             class="rounded-xl border border-border bg-card p-6"
         >
             <div class="flex flex-col gap-5">
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Mode"
-                        hint="Executive routes destructive tool calls through the approval pipeline. Advisory short-circuits them."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Mode"
+                            hint="Executive routes destructive tool calls through the approval pipeline. Advisory short-circuits them."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Select
                             name="mode"
@@ -254,21 +253,20 @@ const budgetState = computed<{
                         </Select>
                         <InputError :message="errors.mode" class="mt-1" />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Chat timeout -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Chat timeout"
-                        hint="How long a chat turn may wait on the provider before it is aborted. A turn that chains several tool calls needs more time than a plain answer. Raising this past the server request limit (OCTANE_MAX_EXECUTION_TIME) has no effect. Leave blank to use the .env default."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Chat timeout"
+                            hint="How long a chat turn may wait on the provider before it is aborted. A turn that chains several tool calls needs more time than a plain answer. Raising this past the server request limit (OCTANE_MAX_EXECUTION_TIME) has no effect. Leave blank to use the .env default."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <div class="relative max-w-[200px]">
                             <Input
@@ -305,7 +303,7 @@ const budgetState = computed<{
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
@@ -328,16 +326,15 @@ const budgetState = computed<{
                         </p>
                     </div>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Sort upstreams"
-                            hint="Leave on OpenRouter default for load-balanced routing."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Sort upstreams"
+                                hint="Leave on OpenRouter default for load-balanced routing."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Select
                                 name="openrouter_sort"
@@ -364,18 +361,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Data collection"
-                            hint="Only use upstreams that neither store nor train on prompts."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Data collection"
+                                hint="Only use upstreams that neither store nor train on prompts."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="openRouterDenyDataCollection"
@@ -394,18 +390,17 @@ const budgetState = computed<{
                                 "
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Allow fallbacks"
-                            hint="Let OpenRouter use other upstreams when the preferred ones fail."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Allow fallbacks"
+                                hint="Let OpenRouter use other upstreams when the preferred ones fail."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="openRouterAllowFallbacks"
@@ -422,18 +417,17 @@ const budgetState = computed<{
                                 :value="openRouterAllowFallbacks ? '1' : '0'"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Preferred upstreams"
-                            hint="Comma-separated, tried in this order."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Preferred upstreams"
+                                hint="Comma-separated, tried in this order."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="openrouter_order"
@@ -448,18 +442,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Ignored upstreams"
-                            hint="Comma-separated upstreams OpenRouter must never use."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Ignored upstreams"
+                                hint="Comma-separated upstreams OpenRouter must never use."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="openrouter_ignore"
@@ -474,7 +467,7 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </div>
 
                 <Separator />
@@ -496,16 +489,15 @@ const budgetState = computed<{
                         </p>
                     </div>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Provider"
-                            hint="Provider that answers classification calls."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Provider"
+                                hint="Provider that answers classification calls."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <Select
@@ -547,18 +539,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Model"
-                            hint="Classification model. Leave blank to use the provider's default."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Model"
+                                hint="Classification model. Leave blank to use the provider's default."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="classification_model"
@@ -573,18 +564,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Webhook decision gate"
-                            hint="Skips the run when classification says the event is unlikely to need action. Stuck-import events always run."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Webhook decision gate"
+                                hint="Skips the run when classification says the event is unlikely to need action. Stuck-import events always run."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div class="flex flex-col gap-2">
                             <div>
                                 <Toggle
@@ -627,18 +617,17 @@ const budgetState = computed<{
                                 "
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Subtitle escalation triage"
-                            hint="Sends cases unlikely to benefit from an automatic replacement straight to review."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Subtitle escalation triage"
+                                hint="Sends cases unlikely to benefit from an automatic replacement straight to review."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div class="flex flex-col gap-2">
                             <div>
                                 <Toggle
@@ -681,18 +670,17 @@ const budgetState = computed<{
                                 "
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Chat tool routing"
-                            hint="Sends MediaAgent only the tools a message needs."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Chat tool routing"
+                                hint="Sends MediaAgent only the tools a message needs."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="chatRoutingEnabled"
@@ -711,18 +699,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Webhook tool scoping"
-                            hint="Also asks which kind of action the event needs, and loads only those tools. Stuck-import events always get every tool."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Webhook tool scoping"
+                                hint="Also asks which kind of action the event needs, and loads only those tools. Stuck-import events always get every tool."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="decisionToolScopingEnabled"
@@ -743,18 +730,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Stuck-import fast path"
-                            hint="Lets classification import or remove a stuck download without an agent run when it is confident. Removals still need approval; anything less confident runs the agent."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Stuck-import fast path"
+                                hint="Lets classification import or remove a stuck download without an agent run when it is confident. Removals still need approval; anything less confident runs the agent."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div class="flex flex-col gap-2">
                             <div>
                                 <Toggle
@@ -799,18 +785,17 @@ const budgetState = computed<{
                                 "
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Audit sample rate"
-                            hint="Share of events the webhook gate or subtitle triage would skip that run anyway, to measure how often a skip is wrong. 0 turns audits off."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Audit sample rate"
+                                hint="Share of events the webhook gate or subtitle triage would skip that run anyway, to measure how often a skip is wrong. 0 turns audits off."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="classification_audit_sample_rate"
@@ -831,7 +816,7 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </div>
 
                 <Separator />
@@ -852,16 +837,15 @@ const budgetState = computed<{
                         </p>
                     </div>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Provider"
-                            hint="Provider that reranks semantic search results."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Provider"
+                                hint="Provider that reranks semantic search results."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <Select
@@ -903,18 +887,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Model"
-                            hint="Reranking model. Leave blank to use the provider's default."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Model"
+                                hint="Reranking model. Leave blank to use the provider's default."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="reranking_model"
@@ -929,7 +912,7 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </div>
 
                 <Separator />
@@ -994,16 +977,15 @@ const budgetState = computed<{
                         Re-embedding the library…
                     </div>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Provider"
-                            hint="Provider library and query embeddings are generated on."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Provider"
+                                hint="Provider library and query embeddings are generated on."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Select
                                 name="embeddings_provider"
@@ -1030,18 +1012,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Model"
-                            hint="Embeddings model. Leave blank to use the provider's default. Must support 256 dimensions."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Model"
+                                hint="Embeddings model. Leave blank to use the provider's default. Must support 256 dimensions."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Input
                                 id="embeddings_model"
@@ -1056,22 +1037,21 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </div>
 
                 <Separator />
 
                 <!-- Advanced tools -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Advanced tools"
-                        hint="Provider-hosted tools register only when every provider the chat (tool search) or price updater (code execution) may reach supports them."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Advanced tools"
+                            hint="Provider-hosted tools register only when every provider the chat (tool search) or price updater (code execution) may reach supports them."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div
                         class="flex flex-col gap-1.5 text-[12px] text-muted-foreground"
                         data-advanced-tools
@@ -1110,20 +1090,19 @@ const budgetState = computed<{
                             — needs every provider in the chain to support it
                         </div>
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Soft monthly budget"
-                        hint="Triggers a one-shot notification to admins when current-month spend crosses this amount. Leave blank to disable."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Soft monthly budget"
+                            hint="Triggers a one-shot notification to admins when current-month spend crosses this amount. Leave blank to disable."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <div class="relative max-w-[200px]">
                             <span
@@ -1147,18 +1126,17 @@ const budgetState = computed<{
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Hard monthly budget"
-                        hint="Refuses new AI requests once current-month spend reaches this amount. Resets at the start of each calendar month. Leave blank to disable."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Hard monthly budget"
+                            hint="Refuses new AI requests once current-month spend reaches this amount. Resets at the start of each calendar month. Leave blank to disable."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <div class="relative max-w-[200px]">
                             <span
@@ -1182,18 +1160,17 @@ const budgetState = computed<{
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Model rate limits"
-                        hint="When enforced, a model whose per-minute/hour/day limit (set on the AI Prices page) is already used up is refused, and the failover provider takes the turn if one is configured. When informational, limits are only shown on the AI Usage page."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Model rate limits"
+                            hint="When enforced, a model whose per-minute/hour/day limit (set on the AI Prices page) is already used up is refused, and the failover provider takes the turn if one is configured. When informational, limits are only shown on the AI Usage page."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Toggle
                             v-model="rateLimitsEnforced"
@@ -1214,7 +1191,7 @@ const budgetState = computed<{
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <div
                     class="rounded-md border border-border bg-bg-elev px-3 py-2.5 text-[12px]"
@@ -1275,16 +1252,15 @@ const budgetState = computed<{
                         </p>
                     </div>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Models.dev feed"
-                            hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the first-party verifier agent only."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Models.dev feed"
+                                hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the first-party verifier agent only."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="modelsDevPricingEnabled"
@@ -1305,18 +1281,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="LiteLLM cross-check"
-                            hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="LiteLLM cross-check"
+                                hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="liteLlmPricingEnabled"
@@ -1337,18 +1312,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="OpenRouter API"
-                            hint="Prices OpenRouter model rows from OpenRouter's public models API."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="OpenRouter API"
+                                hint="Prices OpenRouter model rows from OpenRouter's public models API."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="openRouterPricingEnabled"
@@ -1369,18 +1343,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="xAI pricing API"
-                            hint="Prices xAI rows from xAI's own pricing API. These prices count as first-party verified."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="xAI pricing API"
+                                hint="Prices xAI rows from xAI's own pricing API. These prices count as first-party verified."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <Toggle
                                 v-model="xaiPricingEnabled"
@@ -1407,18 +1380,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Ignored providers"
-                            hint="Providers excluded from every automatic pricing path (feed sync, agent fallback, CLI scope). Their existing rows are kept as last-known-good."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Ignored providers"
+                                hint="Providers excluded from every automatic pricing path (feed sync, agent fallback, CLI scope). Their existing rows are kept as last-known-good."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <div class="flex flex-col gap-2">
                                 <label
@@ -1449,18 +1421,17 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
 
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Add new models"
-                            hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, and only new models the app uses (usage history or picked in these settings) are added."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Add new models"
+                                hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, and only new models the app uses (usage history or picked in these settings) are added."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div data-auto-create-providers>
                             <div class="flex flex-col gap-2">
                                 <label
@@ -1512,7 +1483,7 @@ const budgetState = computed<{
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </div>
 
                 <div class="flex justify-end pt-2">

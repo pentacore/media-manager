@@ -257,8 +257,12 @@ function confirmDialogGoneScript(): string
  * itself fits, or ellipsis-truncated text inside a fitting clip box — and every
  * matching `[role="dialog"]` root has no sideways scroll of its own (its
  * `overflow-y-auto` computes `overflow-x: auto`, so a wide child would scroll
- * the whole dialog instead of overflowing it). Otherwise returns up to ten
- * offenders (outermost only) as `tag[data-…] "text" left..right`.
+ * the whole dialog instead of overflowing it). A reka-ui `VisuallyHidden`
+ * element (the `name`d `Select`'s bubbled native `<select>`: `position:
+ * absolute`, 1×1 px, `overflow: hidden`, clipped) is excused like `.sr-only`
+ * — it paints nothing and sits pinned at the document's top-left corner
+ * regardless of its row. Otherwise returns up to ten offenders (outermost
+ * only) as `tag[data-…] "text" left..right`.
  * Use with assertScript(phoneOverflowScript(), '').
  */
 function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): string
@@ -277,6 +281,10 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
                 const rect = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
                 return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const visuallyHidden = (el) => {
+                const style = getComputedStyle(el);
+                return style.position === 'absolute' && parseFloat(style.width) <= 1 && parseFloat(style.height) <= 1 && (style.overflow === 'hidden' || style.overflow === 'clip') && (style.clipPath === 'inset(50%)' || style.clip.replace(/\s+/g, '') === 'rect(0px,0px,0px,0px)');
             };
             const excused = (el, root) => {
                 for (let parent = el.parentElement; parent && parent !== root && parent.tagName !== 'MAIN' && parent !== document.body; parent = parent.parentElement) {
@@ -303,7 +311,7 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
                     offenders.push(`\${describe(root)} scrolls sideways (\${root.scrollWidth} > \${root.clientWidth})`);
                 }
                 for (const el of [root, ...root.querySelectorAll('*')]) {
-                    if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || !shown(el) || fits(el) || excused(el, root)) {
+                    if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || visuallyHidden(el) || !shown(el) || fits(el) || excused(el, root)) {
                         continue;
                     }
                     const parent = el.parentElement;

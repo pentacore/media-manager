@@ -3,7 +3,7 @@ import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import UserPreferencesController from '@/actions/App/Http/Controllers/Settings/UserPreferencesController';
 import InputError from '@/components/InputError.vue';
-import { Field } from '@/components/mm';
+import { Field, SettingsRow } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -141,16 +141,15 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
         >
             <div class="flex flex-col gap-5">
                 <!-- Time format -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Time format"
-                        hint="Hour clock used for every time shown in the UI."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Time format"
+                            hint="Hour clock used for every time shown in the UI."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="max-w-[360px]">
                         <Select
                             name="time_format"
@@ -174,18 +173,20 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Date format -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field label="Date format" hint="Layout for full dates.">
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Date format"
+                            hint="Layout for full dates."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="max-w-[360px]">
                         <Select
                             name="date_format"
@@ -209,21 +210,20 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Timezone -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Timezone"
-                        hint="All times are converted to this zone before display."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Timezone"
+                            hint="All times are converted to this zone before display."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="flex max-w-[360px] flex-col gap-2">
                         <Input
                             v-model="timezoneQuery"
@@ -270,21 +270,20 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         </p>
                         <InputError :message="errors.timezone" class="mt-1" />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- First day of week -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="First day of week"
-                        hint="Used by week pickers and grouped charts."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="First day of week"
+                            hint="Used by week pickers and grouped charts."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="max-w-[360px]">
                         <Select
                             name="first_day_of_week"
@@ -310,21 +309,20 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Relative time toggle -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Relative time"
-                        hint="Show '8h ago' for recent entries instead of full timestamps."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Relative time"
+                            hint="Show '8h ago' for recent entries instead of full timestamps."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <label
                             class="inline-flex items-center gap-2 text-[13px]"
@@ -342,22 +340,21 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <template v-if="isAdmin">
                     <Separator />
 
                     <!-- Whisparr poster blur (Whisparr is admin-only) -->
-                    <div
-                        class="grid items-start gap-6"
-                        style="grid-template-columns: 200px 1fr"
-                    >
-                        <Field
-                            label="Whisparr posters"
-                            hint="Blur Whisparr posters until you hover, focus or tap them."
-                        >
-                            <span />
-                        </Field>
+                    <SettingsRow>
+                        <template #label>
+                            <Field
+                                label="Whisparr posters"
+                                hint="Blur Whisparr posters until you hover, focus or tap them."
+                            >
+                                <span />
+                            </Field>
+                        </template>
                         <div>
                             <label
                                 class="inline-flex items-center gap-2 text-[13px]"
@@ -378,7 +375,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                                 class="mt-1"
                             />
                         </div>
-                    </div>
+                    </SettingsRow>
                 </template>
 
                 <div class="flex justify-end pt-2">
