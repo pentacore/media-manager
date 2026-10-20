@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Ban, Plus, Trash2 } from '@lucide/vue';
 import BenchmarkCaseController from '@/actions/App/Http/Controllers/Admin/BenchmarkCaseController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
+import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import { formatUsd } from '@/components/benchmarks';
 import type { BenchmarkRunRow } from '@/components/benchmarks';
 import { Pill, TimeStamp } from '@/components/mm';
@@ -124,6 +125,16 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                 >
                     <Link :href="BenchmarkCaseController.index.url()"
                         >Cases</Link
+                    >
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    as-child
+                    data-benchmark-schedules-link
+                >
+                    <Link :href="BenchmarkScheduleController.index.url()"
+                        >Schedules</Link
                     >
                 </Button>
                 <Button

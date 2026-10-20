@@ -272,3 +272,46 @@ export type BenchmarkModelCapabilities = Record<
         levels: AiReasoningLevel[] | null;
     }
 >;
+
+export type BenchmarkScheduleOutcomeValue =
+    | 'launched'
+    | 'skipped_no_cases'
+    | 'skipped_no_candidates'
+    | 'skipped_running'
+    | 'skipped_over_cap'
+    | 'failed';
+
+export type BenchmarkScheduleRow = {
+    id: number;
+    name: string;
+    task: string;
+    task_label: string;
+    cadence: string;
+    enabled: boolean;
+    next_run_at: string | null;
+    last_run_at: string | null;
+    last_outcome: BenchmarkScheduleOutcomeValue | null;
+    last_outcome_label: string | null;
+    last_message: string | null;
+    latest_run: {
+        id: number;
+        name: string;
+        status: BenchmarkRunStatus;
+        status_label: string;
+    } | null;
+};
+
+export type BenchmarkScheduleForm = {
+    name: string;
+    task: string;
+    case_tags: string[];
+    judge: BenchmarkSelectionForm;
+    cost_cap_usd: number;
+    frequency: string;
+    time_of_day: string;
+    weekday: number | null;
+    day_of_month: number | null;
+    pass_rate_threshold: number;
+    score_threshold: number;
+    enabled: boolean;
+};
