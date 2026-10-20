@@ -15,8 +15,9 @@ defineEmits<{
 
 <template>
     <div
-        class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
+        class="scrollbar-none flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-border bg-bg-elev p-0.5"
         role="group"
+        data-filter-strip
     >
         <button
             v-for="opt in options"
@@ -30,7 +31,7 @@ defineEmits<{
             "
             :class="
                 cn(
-                    'inline-flex h-6 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                    'inline-flex h-6 shrink-0 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
                     modelValue === opt.value
                         ? 'bg-accent text-accent-foreground'
                         : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

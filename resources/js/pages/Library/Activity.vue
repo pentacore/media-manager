@@ -707,9 +707,10 @@ async function runQueueBulk(): Promise<void> {
             </div>
             <div class="flex items-center gap-2">
                 <div
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
                     role="tablist"
                     aria-label="Activity view"
+                    data-filter-strip
                 >
                     <button
                         v-for="tab in ['queue', 'history'] as const"
@@ -717,7 +718,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-activity-tab="tab"
                         :class="[
-                            'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
                             activeTab === tab
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -729,8 +730,9 @@ async function runQueueBulk(): Promise<void> {
                 </div>
                 <div
                     v-if="activeTab === 'queue'"
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
                     role="tablist"
+                    data-filter-strip
                 >
                     <button
                         v-for="value in ['all', 'sonarr', 'radarr'] as const"
@@ -738,7 +740,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-service-filter="value"
                         :class="[
-                            'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
                             serviceFilter === value
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

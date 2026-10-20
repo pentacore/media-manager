@@ -458,9 +458,12 @@ function formatAuditValue(value: unknown): string {
             </div>
             <div class="flex items-center gap-2">
                 <div
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
+                    data-filter-strip
                 >
-                    <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
+                    <Calendar
+                        class="ml-1.5 size-3.5 shrink-0 text-muted-foreground"
+                    />
                     <button
                         v-for="value in [
                             filterOptions.todayValue,
@@ -470,7 +473,7 @@ function formatAuditValue(value: unknown): string {
                         type="button"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                                'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
                                 filters.since === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -494,12 +497,13 @@ function formatAuditValue(value: unknown): string {
         <!-- Filters -->
         <div
             class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
+            data-activity-log-filters
         >
             <span
                 class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                 >Filter</span
             >
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
                 <span class="text-xs text-muted-foreground">Actor</span>
                 <button
                     v-for="actor in actorOptions"
@@ -519,7 +523,7 @@ function formatAuditValue(value: unknown): string {
                 </button>
             </div>
             <span class="h-4 w-px bg-border" />
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
                 <span class="text-xs text-muted-foreground">Service</span>
                 <button
                     type="button"
@@ -554,7 +558,10 @@ function formatAuditValue(value: unknown): string {
             </div>
             <template v-if="filterOptions.categories.length > 0">
                 <span class="h-4 w-px bg-border" />
-                <div class="flex items-center gap-1" data-category-filter>
+                <div
+                    class="flex flex-wrap items-center gap-1"
+                    data-category-filter
+                >
                     <span class="text-xs text-muted-foreground">Category</span>
                     <button
                         v-for="value in [
