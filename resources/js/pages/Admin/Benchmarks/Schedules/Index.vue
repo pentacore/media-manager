@@ -19,6 +19,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
 
 defineProps<{
+    timezone: string;
     schedules: {
         data: BenchmarkScheduleRow[];
         links: Array<{ url: string | null; label: string; active: boolean }>;
@@ -126,7 +127,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                     <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Task</TableHead>
-                        <TableHead>Cadence</TableHead>
+                        <TableHead>Cadence ({{ timezone }})</TableHead>
                         <TableHead>Next run</TableHead>
                         <TableHead>Last outcome</TableHead>
                         <TableHead>Enabled</TableHead>
@@ -192,6 +193,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                         <TableCell data-benchmark-schedule-toggle>
                             <Toggle
                                 :model-value="schedule.enabled"
+                                :label="schedule.enabled ? 'Enabled' : 'Paused'"
                                 @update:model-value="
                                     (enabled) => setEnabled(schedule, enabled)
                                 "

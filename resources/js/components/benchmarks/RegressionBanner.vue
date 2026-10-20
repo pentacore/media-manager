@@ -64,6 +64,7 @@ function metricsText(regression: BenchmarkRegression): string {
                     class="underline"
                     >{{ baseline.name }}</Link
                 >
+                <template v-else>an earlier run</template>
             </span>
         </div>
         <ul class="grid gap-1">

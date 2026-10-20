@@ -36,7 +36,7 @@ const props = defineProps<{
     frequencies: Array<{ label: string; value: string }>;
     weekdays: Array<{ label: string; value: number }>;
     models: Record<string, string[]>;
-    providers: string[];
+    timezone: string;
     reasoningLevels: Array<{ label: string; value: AiReasoningLevel }>;
     modelCapabilities: BenchmarkModelCapabilities;
     reasoningProviders: string[];
@@ -166,7 +166,6 @@ const estimateInputs = computed(() => ({
         model: form.judge.model,
         reasoning: form.judge.reasoning,
     },
-    cost_cap_usd: costCapValue.value,
 }));
 
 /** Bumped on every input change so a late estimate response is dropped. */
@@ -188,7 +187,7 @@ async function runEstimate(): Promise<void> {
         const response = await jsonRequest<BenchmarkEstimate>(
             'POST',
             BenchmarkRunController.estimate.url(),
-            estimateInputs.value,
+            { ...estimateInputs.value, cost_cap_usd: costCapValue.value },
         );
 
         if (version === inputVersion) {
@@ -417,7 +416,7 @@ function setJudge(judge: BenchmarkSelectionForm): void {
             </div>
             <div class="grid gap-1.5">
                 <label class="text-[13px] font-semibold" for="schedule-time"
-                    >Time</label
+                    >Time ({{ timezone }})</label
                 >
                 <Input
                     id="schedule-time"

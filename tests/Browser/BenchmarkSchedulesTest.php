@@ -58,14 +58,14 @@ test('the index toggles, runs now and deletes a schedule', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $benchmarkSchedule = BenchmarkSchedule::factory()->forTask(AiTask::Title)->create(['name' => 'Nightly titles']);
 
-    $page = visit(route('admin.benchmarks.schedules.index', absolute: false))
+    $webpage = visit(route('admin.benchmarks.schedules.index', absolute: false))
         ->assertNoSmoke()
         ->click(sprintf('[data-benchmark-schedule-row="%d"] [data-benchmark-schedule-toggle] button', $benchmarkSchedule->id))
         ->assertSee('Schedule paused.');
 
     expect($benchmarkSchedule->fresh()->enabled)->toBeFalse();
 
-    $page->click(sprintf('[data-benchmark-schedule-row="%d"] [data-benchmark-schedule-run]', $benchmarkSchedule->id))
+    $webpage->click(sprintf('[data-benchmark-schedule-row="%d"] [data-benchmark-schedule-run]', $benchmarkSchedule->id))
         ->assertSee('No Conversation titles cases match this schedule.')
         ->assertSeeIn('[data-benchmark-schedule-outcome]', 'Skipped: no cases')
         ->click(sprintf('[data-benchmark-schedule-row="%d"] [data-benchmark-schedule-delete]', $benchmarkSchedule->id))
@@ -80,4 +80,25 @@ test('the runs index links to the schedules', function (): void {
         ->assertNoSmoke()
         ->click('[data-benchmark-schedules-link]')
         ->assertPathIs(route('admin.benchmarks.schedules.index', absolute: false));
+});
+
+test('an admin creates a monthly schedule with a day of the month', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    visit(route('admin.benchmarks.schedules.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-benchmark-schedule-name]', 'Monthly titles')
+        ->click('[data-benchmark-schedule-task]')
+        ->click('[role="option"]:has-text("Conversation titles")')
+        ->click('[data-benchmark-schedule-frequency]')
+        ->click('[role="option"]:has-text("Monthly")')
+        ->assertVisible('[data-benchmark-schedule-day]')
+        ->assertMissing('[data-benchmark-schedule-weekday]')
+        ->fill('[data-benchmark-schedule-day]', '15')
+        ->click('[data-benchmark-schedule-save]')
+        ->assertPathIs(route('admin.benchmarks.schedules.index', absolute: false))
+        ->assertSeeIn('[data-benchmark-schedule-row]', 'Monthly on day 15 at');
+
+    expect(BenchmarkSchedule::query()->sole()->day_of_month)->toBe(15);
 });

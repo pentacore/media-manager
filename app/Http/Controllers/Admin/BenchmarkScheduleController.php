@@ -40,6 +40,7 @@ class BenchmarkScheduleController extends Controller
             ->withQueryString();
 
         return Inertia::render('Admin/Benchmarks/Schedules/Index', [
+            'timezone' => config('app.timezone'),
             'schedules' => [
                 'data' => $lengthAwarePaginator->getCollection()->map(static fn (BenchmarkSchedule $benchmarkSchedule): array => [
                     'id' => $benchmarkSchedule->id,
@@ -209,7 +210,7 @@ class BenchmarkScheduleController extends Controller
             'frequencies' => array_map(static fn (BenchmarkScheduleFrequency $frequency): array => ['label' => $frequency->label(), 'value' => $frequency->value], BenchmarkScheduleFrequency::cases()),
             'weekdays' => array_map(static fn (int $value, string $label): array => ['label' => $label, 'value' => $value], array_keys(BenchmarkSchedule::weekdays()), BenchmarkSchedule::weekdays()),
             'models' => $modelCatalog->modelsByConfiguredProvider(),
-            'providers' => $modelCatalog->textProviders(),
+            'timezone' => config('app.timezone'),
             'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
             'modelCapabilities' => $modelCatalog->reasoningCapabilities(),
             'reasoningProviders' => $modelCatalog->reasoningProviders(),
