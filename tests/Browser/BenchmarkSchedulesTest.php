@@ -29,6 +29,7 @@ test('an admin creates a weekly schedule with a preview of the tier models', fun
 
     visit(route('admin.benchmarks.schedules.create', absolute: false))
         ->assertNoSmoke()
+        ->assertSeeIn('[data-slot="breadcrumb-list"]', 'New schedule')
         ->fill('[data-benchmark-schedule-name]', 'Weekly anime titles')
         ->click('[data-benchmark-schedule-task]')
         ->click('[role="option"]:has-text("Conversation titles")')

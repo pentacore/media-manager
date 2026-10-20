@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, setLayoutProps, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
@@ -48,6 +48,23 @@ const props = defineProps<{
 }>();
 
 const isEditing = props.schedule !== null;
+
+setLayoutProps({
+    breadcrumbs: [
+        { title: 'Admin', href: dashboard().url },
+        { title: 'Benchmarks', href: BenchmarkRunController.index.url() },
+        { title: 'Schedules', href: BenchmarkScheduleController.index.url() },
+        isEditing && props.schedule !== null
+            ? {
+                  title: 'Edit schedule',
+                  href: BenchmarkScheduleController.edit.url(props.schedule.id),
+              }
+            : {
+                  title: 'New schedule',
+                  href: BenchmarkScheduleController.create.url(),
+              },
+    ],
+});
 
 defineOptions({
     layout: {
