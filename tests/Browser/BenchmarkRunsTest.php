@@ -13,6 +13,7 @@ use App\Models\AiTaskModel;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use App\Models\User;
 
 beforeEach(function (): void {
@@ -333,4 +334,39 @@ test('use this pre-fills tier 1 on AI Models and saves only after Save', functio
     expect(AiTaskModel::query()->forTask(AiTask::Title)->first())
         ->provider->toBe('openai')
         ->model->toBe('gpt-5-nano');
+});
+
+test('a scheduled run shows the regression banner and links to its schedule', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create(['name' => 'Nightly titles']);
+    $baseline = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Nightly titles · 2026-10-19']);
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create([
+        'name' => 'Nightly titles · 2026-10-20',
+        'baseline_run_id' => $baseline->id,
+        'regressions' => [[
+            'candidate' => ['provider' => 'openrouter', 'model' => 'free/model', 'reasoning' => 'high'],
+            'paired_cases' => 4,
+            'metrics' => [['metric' => 'pass_rate', 'before' => 1.0, 'after' => 0.5], ['metric' => 'error_rate', 'before' => 0.0, 'after' => 0.25]],
+        ]],
+    ]);
+
+    visit(route('admin.benchmarks.runs.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-benchmark-run-row="%d"] [data-benchmark-run-scheduled]', $benchmarkRun->id), 'Scheduled');
+
+    visit(route('admin.benchmarks.runs.show', $benchmarkRun, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-regressions]', 'Compared with Nightly titles · 2026-10-19')
+        ->assertSeeIn('[data-benchmark-regression="0"]', 'openrouter/free/model')
+        ->assertSeeIn('[data-benchmark-regression="0"]', 'pass rate 100% → 50%')
+        ->assertSeeIn('[data-benchmark-regression="0"]', 'errors 0% → 25%');
+});
+
+test('a checked run without regressions says so', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule(BenchmarkSchedule::factory()->create())->completed()->create(['regressions' => []]);
+
+    visit(route('admin.benchmarks.runs.show', $benchmarkRun, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-no-regression]', 'No earlier comparable run');
 });

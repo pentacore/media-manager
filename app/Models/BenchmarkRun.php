@@ -31,10 +31,15 @@ use Override;
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $finished_at
  * @property int|null $created_by
+ * @property int|null $benchmark_schedule_id
+ * @property int|null $baseline_run_id
+ * @property list<array{candidate: array{provider: string, model: string, reasoning: string|null}, paired_cases: int, metrics: list<array{metric: string, before: float, after: float}>}>|null $regressions
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Collection<int, BenchmarkResult> $results
  * @property-read User|null $creator
+ * @property-read BenchmarkSchedule|null $schedule
+ * @property-read BenchmarkRun|null $baseline
  *
  * @method static BenchmarkRunFactory factory($count = null, $state = [])
  * @method static Builder<static>|BenchmarkRun newModelQuery()
@@ -55,6 +60,9 @@ use Override;
     'started_at',
     'finished_at',
     'created_by',
+    'benchmark_schedule_id',
+    'baseline_run_id',
+    'regressions',
 ])]
 class BenchmarkRun extends Model
 {
@@ -77,6 +85,7 @@ class BenchmarkRun extends Model
             'cost_usd' => 'decimal:6',
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
+            'regressions' => 'array',
         ];
     }
 
@@ -94,6 +103,22 @@ class BenchmarkRun extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * @return BelongsTo<BenchmarkSchedule, $this>
+     */
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(BenchmarkSchedule::class, 'benchmark_schedule_id');
+    }
+
+    /**
+     * @return BelongsTo<BenchmarkRun, $this>
+     */
+    public function baseline(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'baseline_run_id');
     }
 
     public function isTerminal(): bool

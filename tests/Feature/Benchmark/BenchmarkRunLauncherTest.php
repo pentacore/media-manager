@@ -11,6 +11,7 @@ use App\Models\AiModelPrice;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use App\Models\User;
 use App\Services\Benchmark\BenchmarkRunLauncher;
 use Illuminate\Support\Collection;
@@ -189,4 +190,16 @@ test('re-judging twice queues one judge-only job per result', function (): void 
         ->and(resolve(BenchmarkRunLauncher::class)->rejudge($benchmarkRun))->toBe(0);
 
     Queue::assertPushed(RunBenchmarkCase::class, 1);
+});
+
+test('a launch without a user and with a schedule records both', function (): void {
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create();
+    $case = BenchmarkCase::factory()->create();
+
+    $benchmarkRun = resolve(BenchmarkRunLauncher::class)->launch(
+        'Nightly', collect([$case]), launcherCandidates(), ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => 'provider_default'], 1.0, null, $benchmarkSchedule->id,
+    );
+
+    expect($benchmarkRun->created_by)->toBeNull()
+        ->and($benchmarkRun->benchmark_schedule_id)->toBe($benchmarkSchedule->id);
 });

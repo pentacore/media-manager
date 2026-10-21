@@ -4,7 +4,9 @@ import { Ban, RefreshCw, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
+import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import {
+    RegressionBanner,
     ResultDrawer,
     candidateLabel,
     formatLatency,
@@ -309,6 +311,18 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                     <span v-if="run.cost_cap_usd !== null"
                         >Cap {{ formatUsd(run.cost_cap_usd) }}</span
                     >
+                    <span v-if="run.schedule" data-benchmark-run-schedule
+                        >Schedule:
+                        <Link
+                            :href="
+                                BenchmarkScheduleController.edit.url(
+                                    run.schedule.id,
+                                )
+                            "
+                            class="text-foreground underline"
+                            >{{ run.schedule.name }}</Link
+                        ></span
+                    >
                 </div>
             </div>
             <div class="flex gap-2">
@@ -344,6 +358,12 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                 </Button>
             </div>
         </div>
+
+        <RegressionBanner
+            v-if="run.regressions !== null"
+            :regressions="run.regressions"
+            :baseline="run.baseline"
+        />
 
         <p v-if="matrix.length === 0" class="text-[13px] text-muted-foreground">
             No results yet.

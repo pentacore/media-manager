@@ -19,6 +19,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkEstimator;
 use App\Services\Benchmark\BenchmarkMatrix;
 use App\Services\Benchmark\BenchmarkRunLauncher;
+use App\Services\Benchmark\BenchmarkTierCandidates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class BenchmarkRunController extends Controller
     public function index(): Response
     {
         $lengthAwarePaginator = BenchmarkRun::query()
-            ->with('creator:id,name')
+            ->with(['creator:id,name', 'schedule:id,name'])
             ->latest()
             ->latest('id')
             ->paginate(self::PER_PAGE)
@@ -54,6 +55,7 @@ class BenchmarkRunController extends Controller
                     'candidate_count' => count($benchmarkRun->candidates),
                     'estimate_usd' => (float) $benchmarkRun->estimate_usd,
                     'cost_usd' => (float) $benchmarkRun->cost_usd,
+                    'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
                 ])->all(),
@@ -68,7 +70,7 @@ class BenchmarkRunController extends Controller
         ]);
     }
 
-    public function create(TaskModelResolver $taskModelResolver, ModelCatalog $modelCatalog): Response
+    public function create(TaskModelResolver $taskModelResolver, ModelCatalog $modelCatalog, BenchmarkTierCandidates $benchmarkTierCandidates): Response
     {
         $resolvedSelection = $taskModelResolver->resolve(AiTask::BenchmarkJudge);
 
@@ -95,7 +97,7 @@ class BenchmarkRunController extends Controller
                 'model' => $resolvedSelection->model,
                 'reasoning' => $resolvedSelection->reasoning->value,
             ],
-            'currentTiers' => $this->currentTiers($taskModelResolver),
+            'currentTiers' => $benchmarkTierCandidates->all(),
         ]);
     }
 
@@ -144,6 +146,8 @@ class BenchmarkRunController extends Controller
 
     public function show(Request $request, BenchmarkRun $benchmarkRun): Response
     {
+        $benchmarkRun->loadMissing(['schedule:id,name', 'baseline:id,name']);
+
         $counts = $benchmarkRun->results()->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $count = static fn (BenchmarkResultStatus $status): int => (int) ($counts[$status->value] ?? 0);
 
@@ -158,6 +162,9 @@ class BenchmarkRunController extends Controller
                 'estimate_usd' => (float) $benchmarkRun->estimate_usd,
                 'cost_usd' => (float) $benchmarkRun->cost_usd,
                 'cost_cap_usd' => $benchmarkRun->cost_cap_usd === null ? null : (float) $benchmarkRun->cost_cap_usd,
+                'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
+                'baseline' => $benchmarkRun->baseline === null ? null : ['id' => $benchmarkRun->baseline->id, 'name' => $benchmarkRun->baseline->name],
+                'regressions' => $benchmarkRun->regressions,
                 'started_at' => $benchmarkRun->started_at?->toIso8601String(),
                 'finished_at' => $benchmarkRun->finished_at?->toIso8601String(),
                 'counts' => [
@@ -287,53 +294,6 @@ class BenchmarkRunController extends Controller
                 'cost_usd' => (float) $benchmarkResult->cost_usd + (float) $benchmarkResult->judge_cost_usd,
             ])->all(),
         ];
-    }
-
-    /**
-     * Per benchmarkable task, the models its tier list runs on now: every
-     * explicit tier plus the resolved pair when a tier inherits.
-     *
-     * @return array<string, list<array{provider: string, model: string, reasoning: string}>>
-     */
-    private function currentTiers(TaskModelResolver $taskModelResolver): array
-    {
-        $tiers = [];
-
-        foreach (AiTask::cases() as $aiTask) {
-            if (! $aiTask->isBenchmarkable()) {
-                continue;
-            }
-
-            $selections = [];
-            $inherits = false;
-
-            foreach ($taskModelResolver->tiers($aiTask) as $aiTaskModel) {
-                if (blank($aiTaskModel->model) || $aiTaskModel->model === 'auto') {
-                    $inherits = true;
-
-                    continue;
-                }
-
-                $selections[] = [
-                    'provider' => (string) ($aiTaskModel->provider ?: config('ai.default', 'openai')),
-                    'model' => (string) $aiTaskModel->model,
-                    'reasoning' => ($aiTaskModel->reasoning ?? AiReasoningLevel::ProviderDefault)->value,
-                ];
-            }
-
-            if ($inherits || $selections === []) {
-                $resolved = $taskModelResolver->resolve($aiTask);
-                $selections[] = [
-                    'provider' => $resolved->provider,
-                    'model' => $resolved->model,
-                    'reasoning' => $resolved->reasoning->value,
-                ];
-            }
-
-            $tiers[$aiTask->value] = array_values(array_unique($selections, SORT_REGULAR));
-        }
-
-        return $tiers;
     }
 
     /**

@@ -12,6 +12,7 @@ use App\Models\AiTaskModel;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
@@ -473,4 +474,42 @@ test('show counts running results', function (): void {
         ->assertInertia(fn ($page) => $page
             ->where('run.counts', ['total' => 2, 'pending' => 1, 'running' => 1, 'stalled' => 0, 'ok' => 0, 'failed' => 0, 'skipped' => 0])
             ->where('matrix.0.cases.0.cells.0.status', 'running'));
+});
+
+test('a scheduled run shows its schedule on the index', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create(['name' => 'Nightly']);
+    BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create();
+    BenchmarkRun::factory()->completed()->create(['created_at' => now()->subDay()]);
+
+    $this->get(route('admin.benchmarks.runs.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('runs.data.0.schedule', ['id' => $benchmarkSchedule->id, 'name' => 'Nightly'])
+            ->where('runs.data.1.schedule', null));
+});
+
+test('the run page carries the regression comparison', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create(['name' => 'Nightly']);
+    $baseline = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Nightly · 2026-10-19']);
+    $regressions = [[
+        'candidate' => ['provider' => 'openai', 'model' => 'gpt-tier', 'reasoning' => 'provider_default'],
+        'paired_cases' => 4,
+        'metrics' => [['metric' => 'pass_rate', 'before' => 1.0, 'after' => 0.5]],
+    ]];
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['baseline_run_id' => $baseline->id, 'regressions' => $regressions]);
+
+    $this->get(route('admin.benchmarks.runs.show', $benchmarkRun))
+        ->assertInertia(fn ($page) => $page
+            ->where('run.schedule.name', 'Nightly')
+            ->where('run.baseline', ['id' => $baseline->id, 'name' => 'Nightly · 2026-10-19'])
+            ->where('run.regressions.0.metrics.0.metric', 'pass_rate'));
+});
+
+test('an unchecked run has no comparison', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkRun = BenchmarkRun::factory()->completed()->create();
+
+    $this->get(route('admin.benchmarks.runs.show', $benchmarkRun))
+        ->assertInertia(fn ($page) => $page->where('run.regressions', null)->where('run.baseline', null)->where('run.schedule', null));
 });

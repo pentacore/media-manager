@@ -33,6 +33,22 @@ trait AiModelSelectionValidationRules
         ];
     }
 
+    /**
+     * A selection whose provider and model are both mandatory.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    protected function requiredSelectionRules(string $prefix): array
+    {
+        $rules = $this->selectionRules($prefix);
+
+        $rules[$prefix.'.provider'][0] = 'required';
+        $rules[$prefix.'.model'][0] = 'required';
+        $rules[$prefix.'.reasoning'] = ['nullable', 'string', AiReasoningLevel::validationRule()];
+
+        return $rules;
+    }
+
     protected function validatePricedSelection(Validator $validator, string $prefix, mixed $provider, mixed $model, bool $allowAuto = false): void
     {
         // Non-string values are reported by the field rules; this hook still runs after them.
