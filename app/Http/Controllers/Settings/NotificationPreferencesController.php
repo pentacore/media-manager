@@ -12,6 +12,7 @@ use App\Models\NotificationPreference;
 use App\Notifications\AiBudgetSoftLimitReached;
 use App\Notifications\DecisionAgentActed;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Notifications\ScheduledBenchmarkAlert;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Notifications\SubtitleCaseNeedsReview;
@@ -58,6 +59,10 @@ class NotificationPreferencesController extends Controller
         SubtitleCaseNeedsReview::class => [
             'label' => 'Subtitle case needs review',
             'description' => 'When a subtitle case is escalated and needs a human decision.',
+        ],
+        ScheduledBenchmarkAlert::class => [
+            'label' => 'Scheduled benchmark alerts',
+            'description' => 'When a scheduled benchmark run finds a model got worse, or a scheduled run could not start.',
         ],
     ];
 

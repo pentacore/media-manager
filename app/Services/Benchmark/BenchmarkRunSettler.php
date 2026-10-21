@@ -6,6 +6,7 @@ namespace App\Services\Benchmark;
 
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
+use App\Jobs\CheckBenchmarkRegression;
 use App\Models\BenchmarkRun;
 use App\Services\AiUsage\AiUsageReporting;
 use Illuminate\Support\Facades\DB;
@@ -33,8 +34,10 @@ final readonly class BenchmarkRunSettler
      * cost cap (skipping every pending result; a running one finishes and
      * keeps its result) once the total reached the cap. In a run that already
      * ended, a result still running under a stale claim lost its worker and
-     * will never finish: it fails with a fixed reason. With $failStalled a
-     * run that is still going fails those results too, so it can complete.
+     * will never finish: it fails with a fixed reason. A scheduled run that
+     * finishes (completed or stopped at its cap) queues its regression check.
+     * With $failStalled a run that is still going fails those results too, so
+     * it can complete.
      */
     public function settle(int $runId, bool $failStalled = false): void
     {
@@ -71,6 +74,7 @@ final readonly class BenchmarkRunSettler
 
             if (! $unfinished->exists()) {
                 $benchmarkRun->update(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+                $this->queueRegressionCheck($benchmarkRun);
 
                 return;
             }
@@ -78,8 +82,20 @@ final readonly class BenchmarkRunSettler
             if ($this->costCapReached($benchmarkRun)) {
                 $benchmarkRun->results()->where('status', BenchmarkResultStatus::Pending)->update(['status' => BenchmarkResultStatus::Skipped]);
                 $benchmarkRun->update(['status' => BenchmarkRunStatus::StoppedCostCap, 'finished_at' => now()]);
+                $this->queueRegressionCheck($benchmarkRun);
             }
         });
+    }
+
+    /**
+     * A scheduled run that just finished gets compared with its schedule's
+     * previous run once the settle commits.
+     */
+    private function queueRegressionCheck(BenchmarkRun $benchmarkRun): void
+    {
+        if ($benchmarkRun->benchmark_schedule_id !== null) {
+            dispatch(new CheckBenchmarkRegression($benchmarkRun->id))->afterCommit();
+        }
     }
 
     private function costCapReached(BenchmarkRun $benchmarkRun): bool

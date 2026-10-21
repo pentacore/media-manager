@@ -20,6 +20,7 @@ use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\RefreshWantedCount;
+use App\Console\Commands\RunDueBenchmarkSchedules;
 use App\Console\Commands\SettleStalledBenchmarkRuns;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\PruneSubtitleUploads;
@@ -98,6 +99,10 @@ Schedule::command(RefreshAiPrices::class, ['--verify', '--scheduled'])
     ->withoutOverlapping(120);
 
 Schedule::command(SettleStalledBenchmarkRuns::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10);
+
+Schedule::command(RunDueBenchmarkSchedules::class)
     ->everyFiveMinutes()
     ->withoutOverlapping(10);
 

@@ -3,6 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Ban, Plus, Trash2 } from '@lucide/vue';
 import BenchmarkCaseController from '@/actions/App/Http/Controllers/Admin/BenchmarkCaseController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
+import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import { formatUsd } from '@/components/benchmarks';
 import type { BenchmarkRunRow } from '@/components/benchmarks';
 import { Pill, TimeStamp } from '@/components/mm';
@@ -127,6 +128,16 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                     >
                 </Button>
                 <Button
+                    variant="outline"
+                    size="sm"
+                    as-child
+                    data-benchmark-schedules-link
+                >
+                    <Link :href="BenchmarkScheduleController.index.url()"
+                        >Schedules</Link
+                    >
+                </Button>
+                <Button
                     size="sm"
                     class="gap-1.5"
                     as-child
@@ -171,6 +182,20 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                                 @click.stop
                                 >{{ run.name }}</Link
                             >
+                            <Link
+                                v-if="run.schedule"
+                                :href="
+                                    BenchmarkScheduleController.edit.url(
+                                        run.schedule.id,
+                                    )
+                                "
+                                class="ml-2 align-middle"
+                                :title="run.schedule.name"
+                                data-benchmark-run-scheduled
+                                @click.stop
+                            >
+                                <Pill variant="info">Scheduled</Pill>
+                            </Link>
                         </TableCell>
                         <TableCell>
                             <Pill :variant="statusVariant(run)" dot>{{
