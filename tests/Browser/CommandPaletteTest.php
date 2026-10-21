@@ -140,3 +140,17 @@ test('a viewer palette offers only viewer destinations', function (): void {
         ->assertDontSeeIn('[data-palette-sections]', 'Action Queue')
         ->assertDontSeeIn('[data-palette-sections]', 'Grab queue');
 });
+
+test('on a short phone screen the palette keeps its input and scrolls its results to the last link', function (int $height): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    // The palette must stay inside the viewport and scroll its result list,
+    // never clip it: every link stays reachable on a short screen.
+    $webpage = visit(route('dashboard', absolute: false))->resize(375, $height)->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-header-search]')
+        ->assertVisible('[data-palette-sections]');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+    $webpage->assertScript('(() => { const dialog = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); const input = document.querySelector("[role=\"dialog\"] input[type=\"search\"]").getBoundingClientRect(); return dialog.top >= 0 && dialog.bottom <= window.innerHeight && input.top >= dialog.top && input.bottom <= dialog.bottom; })()', true)
+        ->assertScript('(() => { const sections = document.querySelector("[data-palette-sections]"); const scroller = sections.parentElement; scroller.scrollTop = scroller.scrollHeight; const dialog = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); const links = sections.querySelectorAll("[data-palette-link]"); const last = links[links.length - 1].getBoundingClientRect(); return last.top >= dialog.top && last.bottom <= dialog.bottom && last.bottom <= window.innerHeight; })()', true);
+})->with([500, 400]);

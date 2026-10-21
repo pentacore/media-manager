@@ -136,3 +136,19 @@ test('Seerr request cards keep to the screen width', function (): void {
     $webpage->assertVisible('[data-request-card="1"]')
         ->assertScript('document.querySelector("[data-request-card=\"1\"]").getBoundingClientRect().right <= window.innerWidth', true);
 });
+
+test('the containment check excuses a reka visually hidden box only while it stays left of the right edge', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(phoneOverflowScript('main'), '');
+
+    // reka's VisuallyHidden inline style, at its usual -1px corner: excused.
+    $webpage->script('(() => { const host = document.createElement("div"); host.style.position = "relative"; host.setAttribute("data-overflow-probe-host", ""); const box = document.createElement("span"); Object.assign(box.style, { position: "absolute", border: "0", width: "1px", height: "1px", padding: "0", margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", clipPath: "inset(50%)", whiteSpace: "nowrap", top: "-1px", left: "-1px" }); box.setAttribute("data-overflow-probe", ""); host.append(box); document.querySelector("main").prepend(host); })()');
+    $webpage->assertScript(phoneOverflowScript('main'), '');
+
+    // The same box past the right edge widens the page's scroll: reported.
+    $webpage->script('document.querySelector("[data-overflow-probe]").style.left = "400px"');
+    $webpage->assertScript('('.phoneOverflowScript('main').').includes("[data-overflow-probe]")', true);
+});

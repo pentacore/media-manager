@@ -258,11 +258,13 @@ function confirmDialogGoneScript(): string
  * matching `[role="dialog"]` root has no sideways scroll of its own (its
  * `overflow-y-auto` computes `overflow-x: auto`, so a wide child would scroll
  * the whole dialog instead of overflowing it). A reka-ui `VisuallyHidden`
- * element (the `name`d `Select`'s bubbled native `<select>`: `position:
- * absolute`, 1×1 px, `overflow: hidden`, clipped) is excused like `.sr-only`
- * — it paints nothing and sits pinned at the document's top-left corner
- * regardless of its row. Otherwise returns up to ten offenders (outermost
- * only) as `tag[data-…] "text" left..right`.
+ * element (the `name`d `Select`'s bubbled native `<select>`), matched by
+ * reka's inline style (`position: absolute`, 1×1 px, `overflow: hidden`,
+ * `clip-path: inset(50%)`), is excused like `.sr-only` while it does not
+ * reach past the right edge — it paints nothing and sits at -1px left of its
+ * containing block; one past the right edge would still widen the page's
+ * sideways scroll. Otherwise returns up to ten offenders (outermost only) as
+ * `tag[data-…] "text" left..right`.
  * Use with assertScript(phoneOverflowScript(), '').
  */
 function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): string
@@ -282,10 +284,7 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
                 const style = getComputedStyle(el);
                 return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
             };
-            const visuallyHidden = (el) => {
-                const style = getComputedStyle(el);
-                return style.position === 'absolute' && parseFloat(style.width) <= 1 && parseFloat(style.height) <= 1 && (style.overflow === 'hidden' || style.overflow === 'clip') && (style.clipPath === 'inset(50%)' || style.clip.replace(/\s+/g, '') === 'rect(0px,0px,0px,0px)');
-            };
+            const visuallyHidden = (el) => el.style.position === 'absolute' && el.style.width === '1px' && el.style.height === '1px' && el.style.overflow === 'hidden' && el.style.clipPath === 'inset(50%)' && el.getBoundingClientRect().right <= width + 1;
             const excused = (el, root) => {
                 for (let parent = el.parentElement; parent && parent !== root && parent.tagName !== 'MAIN' && parent !== document.body; parent = parent.parentElement) {
                     const value = overflowX(parent);

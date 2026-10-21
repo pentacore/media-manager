@@ -42,6 +42,20 @@ onUnmounted(() => {
     stopNavigateListener = null;
 });
 
+/**
+ * A visit to the page already open replaces it and fires no `navigate`, so
+ * the phone sheet also closes on the nav link click itself. Desktop keeps
+ * its collapse state: only the mobile sheet's open flag changes.
+ */
+function closeMobileOnLinkClick(event: MouseEvent): void {
+    if (
+        isMobile.value &&
+        (event.target as Element | null)?.closest('a[href]')
+    ) {
+        setOpenMobile(false);
+    }
+}
+
 const navGroups = useNavItems(useNavCounts());
 
 function keepItem(item: NavItem): boolean {
@@ -68,7 +82,7 @@ const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
 
 <template>
     <Sidebar collapsible="icon" variant="inset">
-        <SidebarHeader>
+        <SidebarHeader @click="closeMobileOnLinkClick">
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
@@ -80,7 +94,7 @@ const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
             </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent @click="closeMobileOnLinkClick">
             <NavMain
                 v-for="group in visibleGroups"
                 :key="group.label"

@@ -108,6 +108,8 @@ test('at phone width the series header keeps Add series on screen and moves the 
         ->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="sync"]', 'Sync')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="activity"]', 'Activity')
+        ->assertAttribute('[data-page-header-item="activity"]', 'href', 'http://sonarr.local:8989/activity/queue')
+        ->assertAttribute('[data-page-header-item="activity"]', 'target', '_blank')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="open-sonarr"]', 'Open Sonarr')
         ->assertAttribute('[data-page-header-item="open-sonarr"]', 'href', 'http://sonarr.local:8989')
         ->assertAttribute('[data-page-header-item="open-sonarr"]', 'target', '_blank');

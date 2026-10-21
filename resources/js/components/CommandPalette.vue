@@ -199,7 +199,7 @@ function onInputKey(event: KeyboardEvent): void {
 <template>
     <Dialog v-model:open="open">
         <DialogContent
-            class="top-[20%] gap-0 overflow-hidden p-0 max-sm:top-4 max-sm:translate-y-0 sm:max-w-xl"
+            class="top-[20%] gap-0 overflow-hidden p-0 max-sm:top-4 max-sm:flex max-sm:translate-y-0 max-sm:flex-col sm:max-w-xl"
             :show-close-button="false"
             @keydown="onLinkKey"
         >
@@ -209,7 +209,7 @@ function onInputKey(event: KeyboardEvent): void {
                 Escape to close.
             </DialogDescription>
             <form
-                class="flex items-center gap-2 border-b px-3"
+                class="flex shrink-0 items-center gap-2 border-b px-3"
                 @submit.prevent="submit"
             >
                 <SearchIcon
@@ -231,7 +231,7 @@ function onInputKey(event: KeyboardEvent): void {
                 </kbd>
             </form>
 
-            <div class="max-h-96 overflow-y-auto p-2">
+            <div class="max-h-96 min-h-0 overflow-y-auto p-2">
                 <div v-if="hasMediaResults" class="mb-2 border-b pb-2">
                     <p
                         class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"

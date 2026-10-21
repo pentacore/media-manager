@@ -73,3 +73,74 @@ test('at desktop width the breadcrumb trail keeps every crumb', function (): voi
         ->assertNoSmoke()
         ->assertScript('[...document.querySelectorAll("[data-slot=\"breadcrumb-item\"]")].filter((el) => el.getBoundingClientRect().width > 0).map((el) => el.textContent.trim()).join(" > ")', 'Assistant > AI Assistant > Templates');
 });
+
+/**
+ * Polls until the phone sidebar sheet has left the DOM.
+ */
+function mobileChromeSheetClosedScript(): string
+{
+    return confirmDialogWaitUntilScript('!document.querySelector("[data-sidebar=\"sidebar\"][data-mobile=\"true\"]")');
+}
+
+test('the phone sidebar closes after a click on a link it already prefetched', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $actionQueuePath = route('actions.requests.index', absolute: false);
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script('(() => { window.__mmPrefetched = []; document.addEventListener("inertia:prefetched", (event) => window.__mmPrefetched.push(event.detail.visit.url.pathname)); })()');
+    $webpage->click('[data-sidebar="trigger"]')
+        ->assertVisible('[data-sidebar="sidebar"][data-mobile="true"] [data-nav-item="Action Queue"]')
+        ->hover('[data-sidebar="sidebar"][data-mobile="true"] [data-nav-item="Action Queue"]');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('window.__mmPrefetched.includes("%s")', $actionQueuePath)));
+
+    expect($webpage->script(sprintf('window.__mmPrefetched.includes("%s")', $actionQueuePath)))->toBeTrue();
+
+    $webpage->click('[data-sidebar="sidebar"][data-mobile="true"] [data-nav-item="Action Queue"]')
+        ->assertPathIs($actionQueuePath);
+    $webpage->script(mobileChromeSheetClosedScript());
+    $webpage->assertNotPresent('[data-sidebar="sidebar"][data-mobile="true"]');
+});
+
+test('the phone sidebar closes when the browser goes back', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-sidebar="trigger"]')
+        ->click('[data-sidebar="sidebar"][data-mobile="true"] a[href$="/activity-log"]')
+        ->assertPathIs('/activity-log');
+    $webpage->script(mobileChromeSheetClosedScript());
+    $webpage->click('[data-sidebar="trigger"]')
+        ->assertVisible('[data-sidebar="sidebar"][data-mobile="true"]')
+        ->back()
+        ->assertPathIs(route('dashboard', absolute: false));
+    $webpage->script(mobileChromeSheetClosedScript());
+    $webpage->assertNotPresent('[data-sidebar="sidebar"][data-mobile="true"]');
+});
+
+test('the phone sidebar closes after a tap on the link to the page already open', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    // A visit to the current URL replaces the page and fires no `navigate`.
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-sidebar="trigger"]')
+        ->click('[data-sidebar="sidebar"][data-mobile="true"] [data-nav-item="Dashboard"]');
+    $webpage->script(mobileChromeSheetClosedScript());
+    $webpage->assertNotPresent('[data-sidebar="sidebar"][data-mobile="true"]')
+        ->assertPathIs(route('dashboard', absolute: false));
+});
+
+test('at desktop width a click on a sidebar link keeps the sidebar expanded', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertAttribute('[data-slot="sidebar"][data-state]', 'data-state', 'expanded')
+        ->click('[data-nav-item="Dashboard"]')
+        ->assertAttribute('[data-slot="sidebar"][data-state]', 'data-state', 'expanded')
+        ->click('[data-nav-item="Activity log"]')
+        ->assertPathIs('/activity-log')
+        ->assertAttribute('[data-slot="sidebar"][data-state]', 'data-state', 'expanded');
+});
