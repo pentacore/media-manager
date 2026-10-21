@@ -94,11 +94,17 @@ function mobileLayoutFakeServices(): void
 }
 
 /**
- * Waits for deferred props (no skeleton in main) and web fonts.
+ * Waits for deferred props and web fonts: no loading placeholder left in main
+ * or an open dialog — the shared Skeleton (`data-slot="skeleton"`) or a
+ * hand-rolled `animate-pulse` fallback (Statistics, AI usage), minus the
+ * header's realtime dot — and, when given, the route's deferred content.
  */
-function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage): void
+function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $deferred = null): void
 {
-    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("main [data-slot=\"skeleton\"]") && document.fonts.status === "loaded"'));
+    $loading = json_encode('main [data-slot="skeleton"], main .animate-pulse:not(header *), [role="dialog"] [data-slot="skeleton"], [role="dialog"] .animate-pulse', JSON_THROW_ON_ERROR);
+    $rendered = $deferred === null ? 'true' : '!!document.querySelector('.json_encode($deferred, JSON_THROW_ON_ERROR).')';
+
+    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector({$loading}) && {$rendered} && document.fonts.status === \"loaded\""));
 }
 
 /**
@@ -132,9 +138,13 @@ function mobileLayoutHoverOnlyScript(): string
     JS;
 }
 
-function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $primary): void
+function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $primary, ?string $deferred = null): void
 {
-    mobileLayoutSettle($webpage);
+    mobileLayoutSettle($webpage, $deferred);
+
+    if ($deferred !== null) {
+        $webpage->assertPresent($deferred);
+    }
 
     $webpage->assertScript(phoneOverflowScript(), '')
         ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
@@ -143,7 +153,7 @@ function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $w
 
     if ($primary !== null) {
         $encoded = json_encode($primary, JSON_THROW_ON_ERROR);
-        $webpage->assertScript("(() => { const element = document.querySelector({$encoded}); if (!element) { return 'missing'; } const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth ? 'visible' : 'off-screen'; })()", 'visible');
+        $webpage->assertScript("(() => { const element = document.querySelector({$encoded}); if (!element) { return 'missing'; } const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.right <= window.innerWidth ? 'visible' : 'off-screen'; })()", 'visible');
     }
 }
 
@@ -158,7 +168,8 @@ dataset('mobile layout member pages', [
     'now playing' => ['monitoring.now-playing', '[data-now-playing-refresh]'],
     'watch history' => ['monitoring.watch-history', '[data-page-header-more]'],
     'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
-    'statistics' => ['statistics.index', '[data-filter-strip]'],
+    // The third value is a deferred panel the settle waits for: the hour heatmap grid.
+    'statistics' => ['statistics.index', '[data-filter-strip]', 'main [style*="grid-template-columns"]'],
     'action queue' => ['actions.requests.index', '[data-action-refresh]'],
     'notifications' => ['notifications.index', null],
     'profile' => ['profile.edit', null],
@@ -174,24 +185,24 @@ dataset('mobile layout admin pages', [
     'ai settings' => ['admin.ai-settings.index', null],
     'decision agent' => ['admin.decision-agent.index', null],
     'media replacement' => ['admin.media-replacement.index', null],
-    'ai usage' => ['admin.ai-usage.index', null],
+    'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
     'webhook log' => ['admin.webhook-log.index', null],
     'jobs' => ['admin.jobs.index', null],
 ]);
 
-test('a member page fits a phone screen', function (string $routeName, ?string $primary): void {
+test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
     mobileLayoutFakeServices();
     $this->actingAs(User::factory()->member()->create(['name' => 'Example Member']));
 
-    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary);
+    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout member pages');
 
-test('an admin page fits a phone screen', function (string $routeName, ?string $primary): void {
+test('an admin page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
     config()->set('mediamanager.ai.enabled', true);
     mobileLayoutFakeServices();
     $this->actingAs(User::factory()->admin()->create(['name' => 'Example Admin']));
 
-    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary);
+    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout admin pages');
 
 test('an open dialog fits a phone screen', function (): void {
@@ -201,6 +212,7 @@ test('an open dialog fits a phone screen', function (): void {
     $webpage->script(appHydratedScript());
     $webpage->click('[data-users-invite]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+    mobileLayoutSettle($webpage);
 
     $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
