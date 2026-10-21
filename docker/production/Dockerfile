@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- builder ----------
-FROM php:8.5.11-cli-alpine AS builder
+FROM php:8.5.12-cli-alpine AS builder
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_NO_INTERACTION=1 \
@@ -48,7 +48,7 @@ RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
 # FrankenPHP = PHP + Caddy in a single binary; Laravel Octane keeps the framework booted across
 # requests in worker mode (~2-4× throughput vs cold-boot per request). Octane generates its own
 # Caddyfile at runtime under storage/octane/frankenphp/.
-FROM dunglas/frankenphp:1-php8.5-alpine AS runtime
+FROM dunglas/frankenphp:1-php8.5.12-alpine AS runtime
 
 # Baked in by CI from the release tag; "dev" for local builds.
 ARG APP_VERSION=dev
