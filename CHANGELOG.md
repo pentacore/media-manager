@@ -1,3 +1,25 @@
+# [1.48.0](https://github.com/pentacore/media-manager/compare/v1.47.1...v1.48.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **benchmarks:** add the final breadcrumb to the schedule form ([70c34ae](https://github.com/pentacore/media-manager/commit/70c34aee85d80ced92aca0b082061e3013afd86b))
+* **benchmarks:** fit the schedule row actions and drop the duplicate cap warning ([938669a](https://github.com/pentacore/media-manager/commit/938669a1385b4ad4ee2181db99d24683669ef6d7))
+* **benchmarks:** follow the enum, job and route rules; cap schedule tags; cover detector edges ([00a8216](https://github.com/pentacore/media-manager/commit/00a8216b0634f7e5d5aa0de2769ea6720fd761f6))
+* **benchmarks:** gate the schedule sweep on AI and isolate each schedule ([1e0ec0f](https://github.com/pentacore/media-manager/commit/1e0ec0f259bf18b1ffdadcd89e0ba13845ed1fd5))
+
+
+### Features
+
+* **benchmarks:** add benchmark schedule admin endpoints ([ba519b7](https://github.com/pentacore/media-manager/commit/ba519b78b67f9cac7960838efb088077f5b5ddf1))
+* **benchmarks:** add benchmark schedules and their next-run clock ([2f8aeb7](https://github.com/pentacore/media-manager/commit/2f8aeb7132f9eb7a02b7f3fb383359ddd445bd3a))
+* **benchmarks:** add the benchmark schedule pages ([1513391](https://github.com/pentacore/media-manager/commit/151339183c462ba39fd30f74f10c6f04ca23e847))
+* **benchmarks:** add the scheduled benchmark alert notification ([6088523](https://github.com/pentacore/media-manager/commit/6088523838406e2e565e269b29232e2d48b8f921))
+* **benchmarks:** compare finished scheduled runs and alert on regressions ([7fc408d](https://github.com/pentacore/media-manager/commit/7fc408d3dbb48bf23d90a863a36fbafb7ec1bdd9))
+* **benchmarks:** launch due benchmark schedules from the scheduler ([889eaaf](https://github.com/pentacore/media-manager/commit/889eaafed14634d8da8431908715c4b2d1d003d8))
+* **benchmarks:** show scheduled runs and their regression comparison ([f9e4c6d](https://github.com/pentacore/media-manager/commit/f9e4c6d20fa942e656f070da8d739413d7d2a51d))
+* **benchmarks:** show the schedule timezone, keep the estimate on cap edits, label the toggle ([5eceebc](https://github.com/pentacore/media-manager/commit/5eceebc96bc1b312bf1189a36caa9c7f9a7b4af1))
+
 ## [1.47.1](https://github.com/pentacore/media-manager/compare/v1.47.0...v1.47.1) (2026-10-19)
 
 

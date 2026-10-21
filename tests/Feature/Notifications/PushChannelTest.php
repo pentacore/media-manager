@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Models\BenchmarkSchedule;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\AiBudgetSoftLimitReached;
 use App\Notifications\Channels\PushChannel;
 use App\Notifications\DecisionAgentActed;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Notifications\ScheduledBenchmarkAlert;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Notifications\SubtitleCaseNeedsReview;
@@ -45,6 +47,7 @@ test('every catalog notification returns a PushMessage', function (): void {
         new MediaReplacementStatusChanged(service: 'sonarr', title: 'T', message: 'M', level: 'warning')->toPush($user),
         new ServiceUpdateAvailable($connection, '4.1.0', '4.0.0')->toPush($user),
         new SubtitleCaseNeedsReview(subtitleCaseId: 1, displayName: 'Show S01E01', summary: 'S', category: 'c')->toPush($user),
+        ScheduledBenchmarkAlert::skipped(BenchmarkSchedule::factory()->create(), 'Reason.')->toPush($user),
     ];
 
     foreach ($messages as $message) {

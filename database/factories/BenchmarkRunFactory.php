@@ -6,6 +6,7 @@ namespace Database\Factories;
 
 use App\Enums\BenchmarkRunStatus;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -62,6 +63,23 @@ class BenchmarkRunFactory extends Factory
             'status' => BenchmarkRunStatus::Cancelled,
             'started_at' => now()->subMinutes(5),
             'finished_at' => now(),
+        ]);
+    }
+
+    public function stoppedCostCap(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => BenchmarkRunStatus::StoppedCostCap,
+            'started_at' => now()->subMinutes(5),
+            'finished_at' => now(),
+        ]);
+    }
+
+    public function forSchedule(BenchmarkSchedule $benchmarkSchedule): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'benchmark_schedule_id' => $benchmarkSchedule->id,
+            'judge' => $benchmarkSchedule->judge,
         ]);
     }
 }

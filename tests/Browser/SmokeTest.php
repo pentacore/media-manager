@@ -388,6 +388,8 @@ function browserSmokeAdminRouteNames(): array
         'admin.benchmarks.runs.create',
         'admin.benchmarks.cases.index',
         'admin.benchmarks.cases.create',
+        'admin.benchmarks.schedules.index',
+        'admin.benchmarks.schedules.create',
         'admin.webhook-log.index',
         'admin.jobs.index',
         'ai.chat',

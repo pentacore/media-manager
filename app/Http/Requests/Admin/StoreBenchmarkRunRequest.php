@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Requests\Admin;
 
 use App\Concerns\AiModelSelectionValidationRules;
-use App\Enums\AiReasoningLevel;
 use App\Models\BenchmarkCase;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -64,21 +63,5 @@ class StoreBenchmarkRunRequest extends FormRequest
                 $this->validatePricedSelection($validator, 'judge', $judge['provider'] ?? null, $judge['model'] ?? null);
             }
         }];
-    }
-
-    /**
-     * A selection whose provider and model are both mandatory.
-     *
-     * @return array<string, array<int, mixed>>
-     */
-    private function requiredSelectionRules(string $prefix): array
-    {
-        $rules = $this->selectionRules($prefix);
-
-        $rules[$prefix.'.provider'][0] = 'required';
-        $rules[$prefix.'.model'][0] = 'required';
-        $rules[$prefix.'.reasoning'] = ['nullable', 'string', AiReasoningLevel::validationRule()];
-
-        return $rules;
     }
 }
