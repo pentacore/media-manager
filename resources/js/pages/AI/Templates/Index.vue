@@ -63,7 +63,7 @@ async function remove(template: ChatTemplate): Promise<void> {
     <Head title="Assistant templates" />
 
     <div class="space-y-6 p-6">
-        <PageHeader align="start">
+        <PageHeader align="start" class="sm:gap-4">
             <template #title>
                 <h1 class="text-[20px] font-semibold">Assistant templates</h1>
             </template>

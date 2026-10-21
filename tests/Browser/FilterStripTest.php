@@ -94,6 +94,17 @@ test('the activity log filter chips wrap on a phone', function (): void {
         );
 });
 
+test('a focused strip option draws its focus ring inside the strip', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    // The strip scrolls sideways and clips anything past its padding box, so
+    // the keyboard focus indicator is an inset ring, not an outer outline.
+    $webpage = visit(route('statistics.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script('document.querySelector("[data-filter-strip] button").focus({ focusVisible: true })');
+    $webpage->assertScript('(() => { const option = document.querySelector("[data-filter-strip] button"); const style = getComputedStyle(option); return option.matches(":focus-visible") && style.boxShadow.includes("inset") && style.outlineStyle === "none"; })()', true);
+});
+
 test('at desktop width a strip shows every option without scrolling', function (): void {
     $this->actingAs(User::factory()->member()->create());
 

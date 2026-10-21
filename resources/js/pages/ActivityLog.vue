@@ -467,7 +467,7 @@ function formatAuditValue(value: unknown): string {
             </template>
             <template #filters>
                 <div
-                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
                     data-filter-strip
                 >
                     <Calendar
@@ -482,7 +482,7 @@ function formatAuditValue(value: unknown): string {
                         type="button"
                         :class="
                             cn(
-                                'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                                'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                                 filters.since === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

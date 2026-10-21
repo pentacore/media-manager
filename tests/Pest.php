@@ -263,8 +263,11 @@ function confirmDialogGoneScript(): string
  * `clip-path: inset(50%)`), is excused like `.sr-only` while it does not
  * reach past the right edge — it paints nothing and sits at -1px left of its
  * containing block; one past the right edge would still widen the page's
- * sideways scroll. Otherwise returns up to ten offenders (outermost only) as
- * `tag[data-…] "text" left..right`.
+ * sideways scroll. Otherwise returns up to ten offenders as
+ * `tag[data-…] "text" left..right`: outermost only — an element is left out
+ * when an ancestor was itself reported, not merely when its parent does not
+ * fit, so the children of a zero-height wrapper (skipped as not shown) that
+ * end past the edge are still reported.
  * Use with assertScript(phoneOverflowScript(), '').
  */
 function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): string
@@ -305,6 +308,7 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
                 return `\${el.tagName.toLowerCase()}\${hooks} "\${text}" \${Math.round(rect.left)}..\${Math.round(rect.right)}`;
             };
             const offenders = [];
+            const reported = [];
             for (const root of document.querySelectorAll({$selector})) {
                 if (root.matches('[role="dialog"]') && root.scrollWidth > root.clientWidth + 1) {
                     offenders.push(`\${describe(root)} scrolls sideways (\${root.scrollWidth} > \${root.clientWidth})`);
@@ -313,10 +317,10 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
                     if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || visuallyHidden(el) || !shown(el) || fits(el) || excused(el, root)) {
                         continue;
                     }
-                    const parent = el.parentElement;
-                    if (parent && el !== root && !fits(parent) && !['auto', 'scroll'].includes(overflowX(parent))) {
+                    if (reported.some((ancestor) => ancestor.contains(el))) {
                         continue;
                     }
+                    reported.push(el);
                     offenders.push(describe(el));
                 }
             }

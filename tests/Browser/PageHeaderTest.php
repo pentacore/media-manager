@@ -409,6 +409,7 @@ test('the grab queue, now playing, service health, statistics, activity log, not
         $webpage->assertScript(phoneOverflowScript('[data-page-header]'), '');
 
         if ($routeName === 'activity-log') {
+            $webpage->script(appHydratedScript());
             $webpage->click('[data-page-header-more]')
                 ->assertSeeIn('[data-page-header-menu] [data-page-header-item="export"]', 'Export NDJSON')
                 ->assertAttribute('[data-page-header-item="export"]', 'href', '/activity-log/export');
@@ -446,6 +447,7 @@ test("an admin's phone headers run the Emby library refresh and link to approval
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/Library/Refresh'));
 
     $webpage->navigate(route('actions.requests.index', absolute: false));
+    $webpage->script(appHydratedScript());
     $webpage->click('[data-page-header-more]')
         ->assertSeeIn('[data-page-header-menu] [data-page-header-item="approval-rules"]', 'Approval rules')
         ->assertAttribute('[data-page-header-item="approval-rules"]', 'href', '/actions/rules');
@@ -507,7 +509,7 @@ test('the admin list headers keep their main action on a phone', function (): vo
         'admin.benchmarks.cases.index' => '[data-benchmark-case-new]',
         'admin.benchmarks.runs.index' => '[data-benchmark-run-new]',
         'ai.templates.index' => '[data-template-new]',
-        'admin.jobs.index' => null,
+        'admin.jobs.index' => '[data-jobs-refresh]',
         'admin.webhook-log.index' => null,
         'admin.statistics.index' => null,
     ] as $routeName => $primary) {
@@ -533,6 +535,20 @@ test('the phone Benchmarks runs header keeps only New run beside the menu, and t
         ->assertAttribute('[data-page-header-item="schedules"]', 'href', route('admin.benchmarks.schedules.index', absolute: false))
         ->click('[data-page-header-item="schedules"]')
         ->assertPathIs(route('admin.benchmarks.schedules.index', absolute: false));
+});
+
+test('at desktop width the admin list headers keep their 16 px gap', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // These headers were `justify-between gap-4` rows; PageHeader's own gap is
+    // 12 px, which would move a wrapped description line at mid widths.
+    $webpage = visit(route('admin.notification-destinations.index', absolute: false))->assertNoSmoke();
+
+    foreach (['admin.notification-destinations.index', 'ai.templates.index', 'admin.benchmarks.cases.index', 'admin.benchmarks.runs.index', 'admin.benchmarks.schedules.index'] as $routeName) {
+        $webpage->navigate(route($routeName, absolute: false));
+        $webpage->assertScript('getComputedStyle(document.querySelector("[data-page-header]")).columnGap', '16px');
+    }
 });
 
 test('the invite dialog fits at phone width', function (): void {

@@ -250,6 +250,7 @@ function formatHours(seconds: number): string {
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="mb-4 text-sm font-semibold">Watch heatmap</h2>
                 <Heatmap
+                    data-statistics-heatmap
                     :data="heatmapMatrix(hourHeatmap)"
                     :row-labels="heatmapRowLabels"
                     :col-labels="heatmapColLabels"

@@ -98,7 +98,7 @@ async function remove(row: DestinationRow): Promise<void> {
     <Head title="Notification destinations" />
 
     <div class="space-y-6 p-6">
-        <PageHeader align="start">
+        <PageHeader align="start" class="sm:gap-4">
             <template #title>
                 <h1 class="text-[20px] font-semibold">
                     Notification destinations

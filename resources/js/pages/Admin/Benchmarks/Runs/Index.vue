@@ -107,7 +107,7 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
     <Head title="Benchmarks" />
 
     <div class="flex flex-col gap-4 p-5">
-        <PageHeader align="start">
+        <PageHeader align="start" class="sm:gap-4">
             <template #title>
                 <h1 class="text-[20px] font-semibold">Benchmarks</h1>
             </template>

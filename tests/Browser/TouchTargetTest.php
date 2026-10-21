@@ -196,11 +196,29 @@ test('neighbouring row actions keep their own taps on a phone', function (): voi
 
     $webpage->navigate(route('sabnzbd.queue.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-sab-slot-delete]'));
-    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true);
+    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true)
+        ->assertAttribute('[data-sab-slot-delete]', 'aria-label', 'Delete Example.Show.S01E01')
+        ->assertScript('document.querySelector("[data-sab-slot-delete]").previousElementSibling.getAttribute("aria-label")', 'Pause Example.Show.S01E01');
 
     $webpage->navigate(route('admin.benchmarks.schedules.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-benchmark-schedule-delete]'));
     $webpage->assertScript(touchTargetNeighbourScript('[data-benchmark-schedule-delete]'), true);
+});
+
+test('the hand-rolled activity strips give each option a 40 px target on a phone', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(touchTargetTappableScript('[data-activity-tab="history"]'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-activity-tab="history"]'), true)
+        ->assertScript(touchTargetTappableScript('[data-service-filter="radarr"]'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-service-filter="radarr"]'), true);
+
+    $webpage->navigate(route('activity-log', absolute: false));
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(touchTargetTappableScript('[data-filter-strip] button:last-child'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-filter-strip] button:last-child'), true);
 });
 
 test('the dialog close button is a 40 px target on a phone', function (): void {

@@ -612,7 +612,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                             variant="ghost"
                                             size="sm"
                                             class="h-7 px-2 text-xs"
-                                            aria-label="Resume download"
+                                            :aria-label="`Resume ${slot.filename}`"
                                             @click="resumeSlot(slot.nzo_id)"
                                         >
                                             <Play class="size-3.5" />
@@ -622,7 +622,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                             variant="ghost"
                                             size="sm"
                                             class="h-7 px-2 text-xs"
-                                            aria-label="Pause download"
+                                            :aria-label="`Pause ${slot.filename}`"
                                             @click="pauseSlot(slot.nzo_id)"
                                         >
                                             <Pause class="size-3.5" />
@@ -632,7 +632,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                             size="sm"
                                             class="size-7 p-0 text-destructive hover:text-destructive"
                                             data-sab-slot-delete
-                                            aria-label="Delete download"
+                                            :aria-label="`Delete ${slot.filename}`"
                                             @click="
                                                 deleteSlot(
                                                     slot.nzo_id,

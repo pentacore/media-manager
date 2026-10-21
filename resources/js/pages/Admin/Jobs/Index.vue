@@ -155,6 +155,7 @@ function batchStatusVariant(
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
                     :disabled="refreshing"
+                    data-jobs-refresh
                     @click="refresh"
                 >
                     <RefreshCcw

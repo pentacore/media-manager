@@ -709,7 +709,7 @@ async function runQueueBulk(): Promise<void> {
             </template>
             <template #filters>
                 <div
-                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
                     role="tablist"
                     aria-label="Activity view"
                     data-filter-strip
@@ -720,7 +720,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-activity-tab="tab"
                         :class="[
-                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                             activeTab === tab
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -732,7 +732,7 @@ async function runQueueBulk(): Promise<void> {
                 </div>
                 <div
                     v-if="activeTab === 'queue'"
-                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
                     role="tablist"
                     data-filter-strip
                 >
@@ -742,7 +742,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-service-filter="value"
                         :class="[
-                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                             serviceFilter === value
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

@@ -100,7 +100,7 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
     <Head title="Benchmark cases" />
 
     <div class="flex flex-col gap-4 p-5">
-        <PageHeader align="start">
+        <PageHeader align="start" class="sm:gap-4">
             <template #title>
                 <h1 class="text-[20px] font-semibold">Benchmark cases</h1>
             </template>

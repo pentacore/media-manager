@@ -98,13 +98,38 @@ function mobileLayoutFakeServices(): void
  * or an open dialog — the shared Skeleton (`data-slot="skeleton"`) or a
  * hand-rolled `animate-pulse` fallback (Statistics, AI usage), minus the
  * header's realtime dot — and, when given, the route's deferred content.
+ * Throws after ~10 s naming what is still pending, so a slow deferred prop
+ * fails the row instead of letting it measure the placeholder.
  */
 function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $deferred = null): void
 {
     $loading = json_encode('main [data-slot="skeleton"], main .animate-pulse:not(header *), [role="dialog"] [data-slot="skeleton"], [role="dialog"] .animate-pulse', JSON_THROW_ON_ERROR);
-    $rendered = $deferred === null ? 'true' : '!!document.querySelector('.json_encode($deferred, JSON_THROW_ON_ERROR).')';
+    $deferredSelector = json_encode($deferred, JSON_THROW_ON_ERROR);
 
-    $webpage->script(confirmDialogWaitUntilScript("!document.querySelector({$loading}) && {$rendered} && document.fonts.status === \"loaded\""));
+    $webpage->script(<<<JS
+        (async () => {
+            const pending = () => {
+                const placeholder = document.querySelector({$loading});
+                if (placeholder) {
+                    return `a loading placeholder is still shown: \${placeholder.outerHTML.slice(0, 120)}`;
+                }
+                if ({$deferredSelector} !== null && !document.querySelector({$deferredSelector})) {
+                    return `the deferred content \${{$deferredSelector}} never rendered`;
+                }
+                if (document.fonts.status !== 'loaded') {
+                    return 'the web fonts never finished loading';
+                }
+                return null;
+            };
+            for (let attempt = 0; attempt < 500; attempt++) {
+                if (pending() === null) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            throw new Error(`The page never settled: \${pending()}`);
+        })()
+    JS);
 }
 
 /**
@@ -168,8 +193,8 @@ dataset('mobile layout member pages', [
     'now playing' => ['monitoring.now-playing', '[data-now-playing-refresh]'],
     'watch history' => ['monitoring.watch-history', '[data-page-header-more]'],
     'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
-    // The third value is a deferred panel the settle waits for: the hour heatmap grid.
-    'statistics' => ['statistics.index', '[data-filter-strip]', 'main [style*="grid-template-columns"]'],
+    // The third value is a deferred panel the settle waits for: the hour heatmap.
+    'statistics' => ['statistics.index', '[data-filter-strip]', '[data-statistics-heatmap]'],
     'action queue' => ['actions.requests.index', '[data-action-refresh]'],
     'notifications' => ['notifications.index', null],
     'profile' => ['profile.edit', null],
@@ -187,7 +212,7 @@ dataset('mobile layout admin pages', [
     'media replacement' => ['admin.media-replacement.index', null],
     'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
     'webhook log' => ['admin.webhook-log.index', null],
-    'jobs' => ['admin.jobs.index', null],
+    'jobs' => ['admin.jobs.index', '[data-jobs-refresh]'],
     'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
 ]);
 
@@ -217,4 +242,13 @@ test('an open dialog fits a phone screen', function (): void {
 
     $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
+});
+
+test('the settle wait fails loudly when the deferred content never renders', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+
+    expect(fn () => mobileLayoutSettle($webpage, '[data-never-rendered]'))
+        ->toThrow('the deferred content [data-never-rendered] never rendered');
 });

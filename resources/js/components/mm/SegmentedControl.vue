@@ -60,7 +60,7 @@ onMounted(() => {
             "
             :class="
                 cn(
-                    'inline-flex h-6 shrink-0 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors touch:h-10 touch:min-w-10 touch:justify-center',
+                    'inline-flex h-6 shrink-0 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                     modelValue === opt.value
                         ? 'bg-accent text-accent-foreground'
                         : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

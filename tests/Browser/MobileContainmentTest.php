@@ -152,3 +152,15 @@ test('the containment check excuses a reka visually hidden box only while it sta
     $webpage->script('document.querySelector("[data-overflow-probe]").style.left = "400px"');
     $webpage->assertScript('('.phoneOverflowScript('main').').includes("[data-overflow-probe]")', true);
 });
+
+test('the containment check reports an overflowing child of a zero-height wrapper', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // The wrapper holds only an absolutely positioned child, so it has no
+    // height and is skipped as not shown; its child still ends past the edge.
+    $webpage->script('(() => { const wrapper = document.createElement("div"); wrapper.style.position = "relative"; wrapper.style.width = "600px"; wrapper.setAttribute("data-overflow-probe-wrapper", ""); const child = document.createElement("div"); Object.assign(child.style, { position: "absolute", top: "0", left: "300px", width: "200px", height: "20px" }); child.setAttribute("data-overflow-probe-child", ""); wrapper.append(child); document.querySelector("main").prepend(wrapper); })()');
+    $webpage->assertScript('('.phoneOverflowScript('main').').includes("[data-overflow-probe-child]")', true);
+});
