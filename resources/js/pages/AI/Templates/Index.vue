@@ -131,10 +131,10 @@ async function remove(template: ChatTemplate): Promise<void> {
             <div
                 v-for="template in templates"
                 :key="template.id"
-                class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-bg-hover"
+                class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-bg-hover max-sm:flex-wrap"
                 :data-template-row="template.id"
             >
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1 max-sm:basis-full">
                     <div class="flex items-center gap-2">
                         <span class="text-[13.5px] font-medium">{{
                             template.name

@@ -15,12 +15,29 @@ defineEmits<{
 
 const stripEl = useTemplateRef<HTMLDivElement>('stripEl');
 
-// A deep-linked window (e.g. ?window=year) can select an option past the
-// strip's visible edge; bring it into view without scrolling the page.
+/**
+ * A deep-linked window (e.g. ?window=year) can select an option past the
+ * strip's visible edge. Scroll only the strip itself: scrollIntoView would
+ * also scroll the window and every scrolling ancestor (a table frame).
+ */
 onMounted(() => {
-    stripEl.value
-        ?.querySelector('[aria-pressed="true"]')
-        ?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    const strip = stripEl.value;
+    const selected = strip?.querySelector<HTMLElement>('[aria-pressed="true"]');
+
+    if (!strip || !selected) {
+        return;
+    }
+
+    const stripLeft = strip.getBoundingClientRect().left + strip.clientLeft;
+    const optionRect = selected.getBoundingClientRect();
+    const optionStart = optionRect.left - stripLeft;
+    const optionEnd = optionStart + optionRect.width;
+
+    if (optionStart < 0) {
+        strip.scrollLeft += optionStart;
+    } else if (optionEnd > strip.clientWidth) {
+        strip.scrollLeft += optionEnd - strip.clientWidth;
+    }
 });
 </script>
 

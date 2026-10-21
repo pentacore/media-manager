@@ -50,3 +50,26 @@ test('a breadcrumb trail stays on one line inside the phone header', function ()
         ->assertScript('(() => { const header = document.querySelector("main header"); const list = document.querySelector("[data-slot=\"breadcrumb-list\"]").getBoundingClientRect(); const rect = header.getBoundingClientRect(); return list.top >= rect.top && list.bottom <= rect.bottom; })()', true)
         ->assertScript(phoneOverflowScript('main header'), '');
 });
+
+test('a three-level breadcrumb trail shows only the current page left of the phone header search', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // "Assistant › AI Assistant › Templates" is wider than the room the phone
+    // header leaves; the parent crumbs must not push the current one out or
+    // paint under the search button.
+    $webpage = visit(route('ai.templates.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->assertVisible('[data-slot="breadcrumb-page"]')
+        ->assertAttribute('[data-slot="breadcrumb-page"]', 'title', 'Templates')
+        ->assertScript('(() => { const crumb = document.querySelector("[data-slot=\"breadcrumb-page\"]"); const rect = crumb.getBoundingClientRect(); const search = document.querySelector("[data-header-search]").getBoundingClientRect(); return rect.width > 0 && crumb.scrollWidth <= crumb.clientWidth && rect.right <= search.left; })()', true)
+        ->assertScript('(() => { const search = document.querySelector("[data-header-search]").getBoundingClientRect(); return [...document.querySelectorAll("[data-slot=\"breadcrumb-item\"], [data-slot=\"breadcrumb-separator\"]")].map((el) => el.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0).filter((rect) => rect.right > search.left && rect.left < search.right && rect.bottom > search.top && rect.top < search.bottom).length; })()', 0);
+});
+
+test('at desktop width the breadcrumb trail keeps every crumb', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('[...document.querySelectorAll("[data-slot=\"breadcrumb-item\"]")].filter((el) => el.getBoundingClientRect().width > 0).map((el) => el.textContent.trim()).join(" > ")', 'Assistant > AI Assistant > Templates');
+});

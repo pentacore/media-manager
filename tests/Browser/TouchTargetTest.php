@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\BenchmarkSchedule;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -181,6 +182,7 @@ test('neighbouring row actions keep their own taps on a phone', function (): voi
     ])]);
     AiModelPrice::factory()->create();
     AiFreeUsagePool::factory()->create();
+    BenchmarkSchedule::factory()->create(['name' => 'Example nightly']);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('admin.connections.index', absolute: false))->on()->mobile()->assertNoSmoke();
@@ -195,6 +197,10 @@ test('neighbouring row actions keep their own taps on a phone', function (): voi
     $webpage->navigate(route('sabnzbd.queue.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-sab-slot-delete]'));
     $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true);
+
+    $webpage->navigate(route('admin.benchmarks.schedules.index', absolute: false));
+    $webpage->script(touchTargetLibraryLoadedScript('[data-benchmark-schedule-delete]'));
+    $webpage->assertScript(touchTargetNeighbourScript('[data-benchmark-schedule-delete]'), true);
 });
 
 test('the dialog close button is a 40 px target on a phone', function (): void {

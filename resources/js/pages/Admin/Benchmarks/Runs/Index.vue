@@ -130,8 +130,6 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                         >Cases</Link
                     >
                 </Button>
-            </template>
-            <template #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -142,6 +140,8 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                         >Schedules</Link
                     >
                 </Button>
+            </template>
+            <template #primaryAction>
                 <Button
                     size="sm"
                     class="gap-1.5"
@@ -157,6 +157,11 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                 <DropdownMenuItem as-child data-page-header-item="cases">
                     <Link :href="BenchmarkCaseController.index.url()"
                         >Cases</Link
+                    >
+                </DropdownMenuItem>
+                <DropdownMenuItem as-child data-page-header-item="schedules">
+                    <Link :href="BenchmarkScheduleController.index.url()"
+                        >Schedules</Link
                     >
                 </DropdownMenuItem>
             </template>

@@ -518,6 +518,21 @@ test('the admin list headers keep their main action on a phone', function (): vo
     }
 });
 
+test('the phone Benchmarks runs header keeps only New run beside the menu, and the menu opens Schedules', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.benchmarks.runs.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(pageHeaderInViewportScript('[data-benchmark-run-new]'), true)
+        ->assertMissing('[data-benchmark-schedules-link]')
+        ->assertScript('[...document.querySelectorAll("[data-page-header-actions] a, [data-page-header-actions] button")].filter((element) => element.getBoundingClientRect().width > 0).map((element) => element.hasAttribute("data-page-header-more") ? "more" : element.textContent.trim()).join(",")', 'New run,more')
+        ->click('[data-page-header-more]')
+        ->assertSeeIn('[data-page-header-menu] [data-page-header-item="schedules"]', 'Schedules')
+        ->assertAttribute('[data-page-header-item="schedules"]', 'href', route('admin.benchmarks.schedules.index', absolute: false))
+        ->click('[data-page-header-item="schedules"]')
+        ->assertPathIs(route('admin.benchmarks.schedules.index', absolute: false));
+});
+
 test('the invite dialog fits at phone width', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 

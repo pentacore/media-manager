@@ -6,6 +6,7 @@ use App\Enums\ServiceType;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Database\Seeders\ActionTypeConfigSeeder;
 
 test('the statistics time window is one sideways strip on a phone and its last window can be picked', function (): void {
     $this->actingAs(User::factory()->member()->create());
@@ -30,6 +31,29 @@ test('a deep-linked window past the fold scrolls into view in the strip on a pho
         '(() => { const strip = document.querySelector("[data-filter-strip]"); const selected = strip.querySelector("[aria-pressed=\"true\"]"); const stripRect = strip.getBoundingClientRect(); const selectedRect = selected.getBoundingClientRect(); return selected.textContent.trim() === "This year" && selectedRect.left >= stripRect.left - 1 && selectedRect.right <= stripRect.right + 1; })()',
         true,
     );
+});
+
+test('a strip on Action rules leaves the page and the rules table frame unscrolled on a phone', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // One strip per rule row sits inside the table's overflow-x-auto frame;
+    // bringing a pressed option into view must move only the strip itself.
+    $webpage = visit(route('actions.rules.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertPresent('[data-rule-second-opinion] [data-filter-strip]')
+        ->assertScript('document.querySelector("[data-rule-second-opinion]").closest(".overflow-x-auto").scrollLeft', 0)
+        ->assertScript('window.scrollY', 0);
+});
+
+test('the template preview strip leaves the page unscrolled on a phone', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.templates.create', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertPresent('[data-filter-strip]')
+        ->assertScript('window.scrollY', 0);
 });
 
 test('the AI usage time window strip scrolls inside a phone screen beside its wrapping selects', function (): void {

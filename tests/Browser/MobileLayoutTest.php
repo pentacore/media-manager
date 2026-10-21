@@ -188,6 +188,7 @@ dataset('mobile layout admin pages', [
     'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
     'webhook log' => ['admin.webhook-log.index', null],
     'jobs' => ['admin.jobs.index', null],
+    'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
 ]);
 
 test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
