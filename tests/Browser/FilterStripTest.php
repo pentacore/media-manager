@@ -32,6 +32,20 @@ test('a deep-linked window past the fold scrolls into view in the strip on a pho
     );
 });
 
+test('the AI usage time window strip scrolls inside a phone screen beside its wrapping selects', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // UsageHeader is a hand-rolled header: its filter row must be allowed to
+    // shrink, or the strip's full width props the row (and main) open.
+    $webpage = visit(route('admin.ai-usage.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
+        ->assertScript('(() => { const strip = document.querySelector("[data-filter-strip]"); const rect = strip.getBoundingClientRect(); return strip.scrollWidth > strip.clientWidth && rect.right <= window.innerWidth; })()', true)
+        ->assertScript('Math.round(document.querySelector("[data-usage-kind-filter]").getBoundingClientRect().top) < Math.round(document.querySelector("[data-usage-benchmark-filter]").getBoundingClientRect().top)', true)
+        ->assertScript(phoneOverflowScript('main'), '');
+});
+
 test('the activity log filter chips wrap on a phone', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
