@@ -429,7 +429,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     data-view-toggle="grid"
                     :class="
                         cn(
-                            'touch-target inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'inline-flex size-6 items-center justify-center rounded transition-colors touch:size-10',
                             view === 'grid'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -446,7 +446,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     data-view-toggle="table"
                     :class="
                         cn(
-                            'touch-target inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'inline-flex size-6 items-center justify-center rounded transition-colors touch:size-10',
                             view === 'table'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

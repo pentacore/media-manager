@@ -295,7 +295,9 @@ function checkVersion(connection: Connection) {
                                 </Pill>
                             </td>
                             <td class="px-3 py-2.5 text-right">
-                                <div class="inline-flex items-center gap-1">
+                                <div
+                                    class="inline-flex items-center gap-1 touch:gap-2"
+                                >
                                     <Button
                                         as-child
                                         variant="ghost"

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Models\AiFreeUsagePool;
+use App\Models\AiModelPrice;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -15,6 +17,31 @@ function touchTargetHitAboveScript(string $selector, int $outside): string
     $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
 
     return "(() => { const element = document.querySelector({$encoded}); element.scrollIntoView({ block: 'center', inline: 'center' }); const rect = element.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top - {$outside}); return rect.height < 40 && !!hit && (hit === element || element.contains(hit)); })()";
+}
+
+/**
+ * True when the area a tap hits — the element's box or its touch-target
+ * ::after, whichever is larger — is at least 40 px tall and wide. Walks out
+ * from the centre with document.elementFromPoint(), so a clip by a scroller
+ * or a neighbour painted on top shrinks the measured area.
+ */
+function touchTargetTappableScript(string $selector): string
+{
+    $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
+
+    return "(() => { const element = document.querySelector({$encoded}); element.scrollIntoView({ block: 'center', inline: 'center' }); const rect = element.getBoundingClientRect(); const x = rect.left + rect.width / 2; const y = rect.top + rect.height / 2; const hits = (px, py) => { const hit = document.elementFromPoint(px, py); return !!hit && element.contains(hit); }; const reach = (dx, dy) => { let step = 0; while (step < 60 && hits(x + dx * (step + 1), y + dy * (step + 1))) { step++; } return step; }; return Math.min(reach(0, -1) + reach(0, 1), reach(-1, 0) + reach(1, 0)) >= 39; })()";
+}
+
+/**
+ * True when a tap 2 px inside the right edge of $selector's previous sibling
+ * still hits that sibling, and a tap 2 px inside $selector's left edge hits
+ * $selector — i.e. neither control's hit area takes the other's taps.
+ */
+function touchTargetNeighbourScript(string $selector): string
+{
+    $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
+
+    return "(() => { const later = document.querySelector({$encoded}); const earlier = later.previousElementSibling; later.scrollIntoView({ block: 'center', inline: 'center' }); const a = earlier.getBoundingClientRect(); const b = later.getBoundingClientRect(); const hitA = document.elementFromPoint(a.right - 2, a.top + a.height / 2); const hitB = document.elementFromPoint(b.left + 2, b.top + b.height / 2); return !!hitA && earlier.contains(hitA) && !!hitB && later.contains(hitB); })()";
 }
 
 /**
@@ -87,7 +114,9 @@ test('buttons, checkboxes and the view toggles have a 40 px hit area on a phone'
 
     $webpage->assertScript(touchTargetHitAboveScript('[data-add-series]', 5), true)
         ->assertScript(touchTargetHitAboveScript('[data-bulk-select-all] [role="checkbox"]', 10), true)
-        ->assertScript(touchTargetHitAboveScript('[data-view-toggle="table"]', 6), true)
+        ->assertScript(touchTargetTappableScript('[data-view-toggle="grid"]'), true)
+        ->assertScript(touchTargetTappableScript('[data-view-toggle="table"]'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-view-toggle="table"]'), true)
         ->assertAttribute('[data-view-toggle="table"]', 'aria-label', 'Table view')
         ->assertAttribute('[data-view-toggle="grid"]', 'aria-pressed', 'true');
 });
@@ -108,7 +137,8 @@ test("the movie card's Open in Radarr link shows without hover on a phone and wa
 
     $webpage = visit(route('media.movies.index', absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(touchTargetLibraryLoadedScript('[data-movie-open-external]'));
-    $webpage->assertScript('getComputedStyle(document.querySelector("[data-movie-open-external]")).opacity', '1');
+    $webpage->assertScript('getComputedStyle(document.querySelector("[data-movie-open-external]")).opacity', '1')
+        ->assertScript(touchTargetTappableScript('[data-movie-open-external]'), true);
 
     $desktop = visit(route('media.movies.index', absolute: false))->assertNoSmoke();
     $desktop->script(touchTargetLibraryLoadedScript('[data-movie-open-external]'));
@@ -126,4 +156,70 @@ test('no control in main is hidden behind hover at phone width', function (): vo
     $webpage->navigate(route('media.movies.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-movie-card]'));
     $webpage->assertScript(touchTargetHoverOnlyScript(), '[]');
+});
+
+test("a time window strip option is a 40 px target that leaves its neighbour's taps alone on a phone", function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('statistics.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(touchTargetTappableScript('[data-filter-strip] button:nth-child(1)'), true)
+        ->assertScript(touchTargetTappableScript('[data-filter-strip] button:nth-child(2)'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-filter-strip] button:nth-child(2)'), true);
+});
+
+test('neighbouring row actions keep their own taps on a phone', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    touchTargetFakeLibraries();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
+    Http::fake(['sabnzbd.local:8080/api*' => Http::response([
+        'status' => true,
+        'queue' => ['paused' => false, 'speed' => '10 M', 'speedlimit' => '', 'speedlimit_abs' => '', 'slots' => [
+            ['nzo_id' => 'SABnzbd_nzo_1', 'filename' => 'Example.Show.S01E01', 'cat' => 'tv', 'size' => '1.0 GB', 'sizeleft' => '0.5 GB', 'percentage' => '50', 'timeleft' => '0:05:00', 'status' => 'Downloading', 'priority' => '0'],
+        ]],
+        'history' => ['slots' => [], 'noofslots' => 0],
+    ])]);
+    AiModelPrice::factory()->create();
+    AiFreeUsagePool::factory()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.connections.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(touchTargetNeighbourScript('[data-connection-menu]'), true);
+
+    $webpage->navigate(route('admin.ai-prices.index', absolute: false));
+    $webpage->script(touchTargetLibraryLoadedScript('[data-pool-delete]'));
+    $webpage->assertScript(touchTargetNeighbourScript('[data-price-delete]'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-pool-delete]'), true);
+
+    $webpage->navigate(route('sabnzbd.queue.index', absolute: false));
+    $webpage->script(touchTargetLibraryLoadedScript('[data-sab-slot-delete]'));
+    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true);
+});
+
+test('the dialog close button is a 40 px target on a phone', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.users.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-users-invite]')
+        ->assertVisible('[data-slot="dialog-close"]')
+        ->assertScript(touchTargetTappableScript('[data-slot="dialog-close"]'), true);
+});
+
+test('a touch screen at desktop width gets the hit areas and the touch reveal', function (): void {
+    touchTargetFakeLibraries();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))->on()->iPadPro()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript('matchMedia("(pointer: coarse)").matches && innerWidth >= 640', true)
+        ->assertScript(touchTargetHitAboveScript('[data-add-series]', 5), true)
+        ->assertScript(touchTargetTappableScript('[data-view-toggle="grid"]'), true)
+        ->assertScript(touchTargetNeighbourScript('[data-view-toggle="table"]'), true);
+
+    $webpage->navigate(route('media.movies.index', absolute: false));
+    $webpage->script(touchTargetLibraryLoadedScript('[data-movie-open-external]'));
+    $webpage->assertScript('getComputedStyle(document.querySelector("[data-movie-open-external]")).opacity', '1')
+        ->assertScript(touchTargetTappableScript('[data-movie-open-external]'), true);
 });

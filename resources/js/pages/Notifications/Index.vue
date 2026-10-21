@@ -160,7 +160,7 @@ function shortType(type: string): string {
                         <span>{{ shortType(n.type) }}</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-1">
+                <div class="flex items-center gap-1 touch:gap-2">
                     <Button
                         v-if="!n.read_at"
                         variant="ghost"

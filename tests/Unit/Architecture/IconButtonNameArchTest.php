@@ -9,6 +9,9 @@ use Symfony\Component\Finder\Finder;
  * name, as "line: tag". A name is an aria-label, aria-labelledby or title
  * (static or bound) on the element or anything inside it (as-child anchors),
  * .sr-only text, visible text or an interpolation, or v-html/v-text content.
+ * Inner tags are stripped quote-aware, so a `>` inside an attribute
+ * (`v-if="count > 0"`) is not mistaken for text. A name passed only through
+ * `v-bind="{ 'aria-label': … }"` or a slot is not seen and is flagged.
  *
  * @return list<string>
  */
@@ -33,7 +36,7 @@ function iconButtonNameOffenders(string $code): array
             continue;
         }
 
-        if (trim((string) preg_replace('/<[^>]*>/s', '', $inner)) !== '') {
+        if (trim((string) preg_replace('/<(?:[^>"\']|"[^"]*"|\'[^\']*\')*>/s', '', $inner)) !== '') {
             continue;
         }
 
@@ -50,7 +53,8 @@ test('the name scanner finds an unnamed icon button and accepts every naming pat
         ->and(iconButtonNameOffenders("<template>\n<Button><X /><span class=\"sr-only\">Close</span></Button>\n</template>"))->toBe([])
         ->and(iconButtonNameOffenders("<template>\n<Button as-child><a :href=\"url\" title=\"Open\"><X /></a></Button>\n</template>"))->toBe([])
         ->and(iconButtonNameOffenders("<template>\n<Button>{{ label }}</Button>\n</template>"))->toBe([])
-        ->and(iconButtonNameOffenders("<template>\n<Button><span v-html=\"link.label\" /></Button>\n</template>"))->toBe([]);
+        ->and(iconButtonNameOffenders("<template>\n<Button><span v-html=\"link.label\" /></Button>\n</template>"))->toBe([])
+        ->and(iconButtonNameOffenders("<template>\n<Button><Loader2 v-if=\"count > 0\" /></Button>\n</template>"))->toBe(['2: Button']);
 });
 
 test('every icon-only button in a page or component has an accessible name', function (): void {

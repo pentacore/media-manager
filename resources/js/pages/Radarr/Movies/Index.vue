@@ -514,7 +514,7 @@ function is4k(movie: Movie): boolean {
                         target="_blank"
                         rel="noopener noreferrer"
                         :aria-label="`Open ${movie.title} in Radarr`"
-                        class="pointer-events-auto absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100 [@media(hover:none)]:opacity-100"
+                        class="pointer-events-auto touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100 [@media(hover:none)]:opacity-100"
                         data-movie-open-external
                     >
                         <ExternalLink class="size-3" />

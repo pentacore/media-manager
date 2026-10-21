@@ -604,7 +604,9 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     </Select>
                                 </td>
                                 <td class="px-3 py-2.5 text-right">
-                                    <div class="flex justify-end gap-1">
+                                    <div
+                                        class="flex justify-end gap-1 touch:gap-2"
+                                    >
                                         <Button
                                             v-if="slot.status === 'Paused'"
                                             variant="ghost"
@@ -805,7 +807,9 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     v-if="isAdmin"
                                     class="px-3 py-2.5 text-right"
                                 >
-                                    <div class="flex justify-end gap-1">
+                                    <div
+                                        class="flex justify-end gap-1 touch:gap-2"
+                                    >
                                         <Button
                                             v-if="slot.status === 'Failed'"
                                             variant="ghost"
