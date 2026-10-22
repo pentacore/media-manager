@@ -21,6 +21,7 @@ use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\RefreshWantedCount;
+use App\Console\Commands\RollupServerMetrics;
 use App\Console\Commands\RunDueBenchmarkSchedules;
 use App\Console\Commands\SettleStalledBenchmarkRuns;
 use App\Console\Commands\WarmServiceCaches;
@@ -36,6 +37,8 @@ use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServerFilesystemSample;
+use App\Models\ServerMetricSample;
 use App\Models\SubtitleCase;
 use App\Models\WebhookEvent;
 use Illuminate\Queue\Console\PruneBatchesCommand;
@@ -55,6 +58,16 @@ Schedule::command(RecordOpsHeartbeat::class)
 Schedule::command(CheckSilentAgents::class)
     ->everyMinute()
     ->withoutOverlapping(5);
+
+// Minute samples roll up into five-minute rows, and five-minute rows into
+// hourly ones; both re-read a short lookback and upsert, so a missed run heals.
+Schedule::command(RollupServerMetrics::class, ['--resolution' => 300])
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10);
+
+Schedule::command(RollupServerMetrics::class, ['--resolution' => 3600])
+    ->hourlyAt(7)
+    ->withoutOverlapping(30);
 
 // Every overlap lock carries an explicit expiry (minutes) sized to the task:
 // the 1440-minute default would let one crashed run silently skip a
@@ -182,6 +195,8 @@ Schedule::command('model:prune', [
         // case pruned tonight frees the action requests it pointed at.
         SubtitleCase::class,
         ActionRequest::class,
+        ServerMetricSample::class,
+        ServerFilesystemSample::class,
     ],
 ])
     ->dailyAt('03:00')
