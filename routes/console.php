@@ -9,6 +9,7 @@ use App\Console\Commands\BroadcastDashboardStats;
 use App\Console\Commands\CheckAppVersion;
 use App\Console\Commands\CheckServiceHealth;
 use App\Console\Commands\CheckServiceVersions;
+use App\Console\Commands\CheckSilentAgents;
 use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
@@ -46,6 +47,12 @@ use Laravel\Telescope\Telescope;
 // Liveness for the scheduler and every queue lane: the container
 // healthchecks (ops:check-heartbeat) and /metrics read these ages.
 Schedule::command(RecordOpsHeartbeat::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// After the heartbeat, which marks a scheduler resume: the sweep restarts its
+// silence clock from that moment, so a platform outage opens no incidents.
+Schedule::command(CheckSilentAgents::class)
     ->everyMinute()
     ->withoutOverlapping(5);
 
