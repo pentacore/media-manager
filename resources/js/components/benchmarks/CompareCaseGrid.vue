@@ -106,11 +106,14 @@ function lineLabel(row: BenchmarkComparisonCaseRow): string {
                             :key="runs[index].id"
                             class="text-center whitespace-nowrap"
                         >
-                            <template v-if="cell">
+                            <span
+                                v-if="cell"
+                                class="inline-flex items-center gap-1 touch:gap-2"
+                            >
                                 <button
                                     type="button"
                                     :class="[
-                                        'min-w-10 rounded-md px-2 py-1 text-[12.5px] tabular-nums hover:bg-bg-hover',
+                                        'min-w-10 rounded-md px-2 py-1 text-[12.5px] tabular-nums hover:bg-bg-hover touch:h-10',
                                         compareCellClass(cell),
                                     ]"
                                     :data-compare-cell="cell.result_id"
@@ -128,7 +131,7 @@ function lineLabel(row: BenchmarkComparisonCaseRow): string {
                                     v-if="index > 0 && row.cells[0]"
                                     variant="ghost"
                                     size="sm"
-                                    class="ml-1 h-6 px-1.5 text-[11px]"
+                                    class="h-6 px-1.5 text-[11px] touch:h-10 touch:min-w-10"
                                     :data-compare-vs-baseline="`${row.cells[0]!.result_id}:${cell.result_id}`"
                                     @click="
                                         emit(
@@ -139,7 +142,7 @@ function lineLabel(row: BenchmarkComparisonCaseRow): string {
                                     "
                                     >vs baseline</Button
                                 >
-                            </template>
+                            </span>
                             <span v-else class="text-muted-foreground">—</span>
                         </TableCell>
                     </TableRow>
