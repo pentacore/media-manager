@@ -25,3 +25,13 @@ A label-beside-control settings row is `SettingsRow` from `@/components/mm`: `<S
 - **Desktop** is unchanged either way: `DialogContent` keeps `grid`/`overflow-y-auto` and the X keeps `absolute top-4 right-4`.
 
 A dialog or sheet consumer whose content needs the X's corner reserves it with `pr-10`/`pr-12`. `OverlayCloseTest` pins both the dialog and the sheet; it scrolls `[data-slot="dialog-body"]` (not `[role="dialog"]`) to prove the dialog case, and `MobileContainmentTest` does the same for its own "taller than the viewport" case.
+
+## Phone tables become PhoneCardList cards
+On the phone-job pages (Action Queue, SABnzbd queue and history, grab queue, watch history, interactive search releases) a table becomes stacked cards below `sm`:
+- **The table:** keep it, and give its frame `max-sm:hidden`.
+- **The cards:** render them with `PhoneCardList` from `@/components/mm` (`sm:hidden`, a `card` slot per item, an optional `empty` slot), placed **after** the table in the DOM. Desktop text clicks then keep finding the visible table first.
+- **Hooks:** every hook inside a card gets its own `data-<x>-card-*` name (`data-action-card-select`, `data-sab-card-delete`), never the table row's. Pest's strict selectors count hidden elements, so a reused hook breaks every desktop test that uses it.
+- **Select-all on phones:** shared components with a static hook (`BulkSelectAll`'s `data-bulk-select-all`) are not repeated in cards. Phone select-all is the compact bulk bar's ⋯ item "Select all on this page" (`[data-bulk-select-all-phone]`).
+- **What a card holds:** the row's key facts and every row action, with long file or release names in `break-all` and titles in `break-words`.
+
+Admin-only tables keep their columns and scroll inside their frame. `ActionQueuePhoneTest`, `DownloadsPhoneTest`, `InteractiveSearchPhoneTest` and `MonitoringPhoneTest` pin it.

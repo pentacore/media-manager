@@ -2,6 +2,7 @@ export { default as ActionFailureDetails } from './ActionFailureDetails.vue';
 export { default as ActionPipeline } from './ActionPipeline.vue';
 export { default as ActionQueueHeader } from './ActionQueueHeader.vue';
 export { default as ActionQueuePagination } from './ActionQueuePagination.vue';
+export { default as ActionRequestCards } from './ActionRequestCards.vue';
 export { default as ActionRequestDetail } from './ActionRequestDetail.vue';
 export { default as ActionRequestTable } from './ActionRequestTable.vue';
 export { default as ActionStatusTabs } from './ActionStatusTabs.vue';

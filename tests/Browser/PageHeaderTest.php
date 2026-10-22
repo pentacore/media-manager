@@ -467,11 +467,11 @@ test("an admin's phone Action Queue header shows the live stale notice, in the v
     $webpage->assertSeeIn('[data-action-stale]', '1 new')
         ->assertScript(pageHeaderInViewportScript('[data-action-stale]'), true)
         ->assertScript(pageHeaderInViewportScript('[data-action-stale] button'), true)
-        ->assertMissing(sprintf('[data-action-row="%d"]', $created->id))
+        ->assertMissing(sprintf('[data-action-card="%d"]', $created->id))
         ->click('[data-action-stale] button');
-    $webpage->script(confirmDialogWaitUntilScript(sprintf("document.querySelector('[data-action-row=\"%d\"]') !== null", $created->id)));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("document.querySelector('[data-action-card=\"%d\"]') !== null", $created->id)));
 
-    $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $created->id), 'Example announced request')
+    $webpage->assertSeeIn(sprintf('[data-action-card="%d"]', $created->id), 'Example announced request')
         ->assertMissing('[data-action-stale]')
         ->assertNoSmoke();
 });

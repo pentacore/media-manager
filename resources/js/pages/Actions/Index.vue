@@ -5,6 +5,7 @@ import ActionRequestController from '@/actions/App/Http/Controllers/Actions/Acti
 import {
     ActionQueueHeader,
     ActionQueuePagination,
+    ActionRequestCards,
     ActionRequestDetail,
     ActionRequestTable,
     ActionStatusTabs,
@@ -232,6 +233,14 @@ function goToPage(url: string | null): void {
                 :bulk-busy="bulkBusy"
                 @toggle="toggleBulk"
                 @toggle-all="(value) => setAllBulk(pendingOnPage, value)"
+            />
+
+            <ActionRequestCards
+                :rows="visibleRequests"
+                :bulk-ids="bulkIds"
+                :bulk-busy="bulkBusy"
+                @open="(id) => (selectedId = id)"
+                @toggle="toggleBulk"
             />
 
             <ActionRequestDetail
