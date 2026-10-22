@@ -199,7 +199,7 @@ function onInputKey(event: KeyboardEvent): void {
 <template>
     <Dialog v-model:open="open">
         <DialogContent
-            class="top-[20%] gap-0 overflow-hidden p-0 max-sm:top-4 max-sm:flex max-sm:translate-y-0 max-sm:flex-col sm:max-w-xl"
+            class="top-[20%] gap-0 overflow-hidden p-0 max-sm:top-4 max-sm:flex max-sm:translate-y-0 max-sm:flex-col sm:max-w-xl [@media(max-height:500px)]:top-4 [@media(max-height:500px)]:translate-y-0"
             :show-close-button="false"
             @keydown="onLinkKey"
         >

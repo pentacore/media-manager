@@ -81,7 +81,9 @@ test('a dialog taller than the phone viewport scrolls inside itself', function (
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
 
     $webpage->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth; })()', true)
-        ->assertScript('(() => { const dialog = document.querySelector("[role=\"dialog\"]"); return dialog.scrollHeight > dialog.clientHeight; })()', true)
+        // The dialog's own box never scrolls; `[data-slot="dialog-body"]` does
+        // (OverlayCloseTest / `.ai/rules/components.md`).
+        ->assertScript('(() => { const body = document.querySelector("[data-slot=\"dialog-body\"]"); return body.scrollHeight > body.clientHeight; })()', true)
         ->assertScript('(() => { const dialog = document.querySelector("[role=\"dialog\"]"); const submit = dialog.querySelector("button[type=\"submit\"]"); submit.scrollIntoView({ block: "nearest" }); const rect = submit.getBoundingClientRect(); const frame = dialog.getBoundingClientRect(); return rect.top >= frame.top - 1 && rect.bottom <= frame.bottom + 1; })()', true);
 });
 
