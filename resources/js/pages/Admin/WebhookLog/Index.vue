@@ -3,7 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { Webhook } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
-import { Pill, SvcChip, Toggle } from '@/components/mm';
+import { PageHeader, Pill, SvcChip, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -227,37 +227,45 @@ function decisionVariant(status: string): PillVariant {
     <Head title="Webhook log" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> Webhook log
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Webhook log
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Every incoming webhook with its raw payload — useful for
                     debugging integrations and auditing what services are
                     actually sending.
                 </p>
-            </div>
-            <div
-                class="flex flex-col items-end gap-1 rounded-xl border border-border bg-card px-3 py-2"
-            >
-                <span
-                    class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
-                    >Capture &amp; store</span
+            </template>
+            <template #filters>
+                <div
+                    class="flex flex-col items-end gap-1 rounded-xl border border-border bg-card px-3 py-2"
                 >
-                <Toggle
-                    :model-value="captureEnabled"
-                    :disabled="updatingCapture"
-                    :label="captureEnabled ? 'Storing payloads' : 'Discarding'"
-                    @update:model-value="setCapture"
-                />
-            </div>
-        </div>
+                    <span
+                        class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                        >Capture &amp; store</span
+                    >
+                    <Toggle
+                        :model-value="captureEnabled"
+                        :disabled="updatingCapture"
+                        :label="
+                            captureEnabled ? 'Storing payloads' : 'Discarding'
+                        "
+                        @update:model-value="setCapture"
+                    />
+                </div>
+            </template>
+        </PageHeader>
 
         <div
             class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"

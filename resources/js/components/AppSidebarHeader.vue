@@ -36,7 +36,7 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
     <header
         class="sticky top-0 z-10 flex h-13 shrink-0 items-center gap-3 border-b border-border bg-background/70 px-6 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-4"
     >
-        <SidebarTrigger class="-ml-1" />
+        <SidebarTrigger class="-ml-1 max-md:size-10" />
         <ChevronRight
             v-if="breadcrumbs.length > 0"
             class="size-3.5 text-fg-subtle"
@@ -46,6 +46,16 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
         </template>
 
         <div class="ml-auto flex items-center gap-2">
+            <Button
+                variant="ghost"
+                size="icon"
+                class="size-10 sm:hidden"
+                aria-label="Search"
+                data-header-search
+                @click="palette.show()"
+            >
+                <Search class="size-4" />
+            </Button>
             <button
                 type="button"
                 class="hidden h-7 min-w-[240px] items-center gap-2 rounded-md border border-border bg-bg-elev px-3 text-xs text-fg-subtle transition-colors hover:border-border-strong hover:text-muted-foreground sm:flex"

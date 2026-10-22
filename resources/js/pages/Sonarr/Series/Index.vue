@@ -17,8 +17,15 @@ import {
     BulkSelectAll,
     LibraryBulkActions,
 } from '@/components/bulk';
-import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
+import {
+    OpenInServiceButton,
+    PageHeader,
+    Pill,
+    Poster,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -243,8 +250,8 @@ function sonarrSeriesUrl(slug: string | null): string | null {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="sonarr" />
                     <span class="text-fg-subtle">/</span>
@@ -252,9 +259,13 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         >TV Series</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1 class="text-[22px] font-semibold tracking-tight">
                     Library
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     <template v-if="series && !series.error">
                         {{ counts.all }} series ·
@@ -268,8 +279,8 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     <template v-else-if="series">Library unavailable</template>
                     <Skeleton v-else class="inline-block h-4 w-40" />
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #secondaryActions>
                 <Button
                     variant="outline"
                     size="sm"
@@ -293,8 +304,9 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         label="Open Sonarr"
                     />
                 </template>
+            </template>
+            <template v-if="can('manage-library')" #primaryAction>
                 <Button
-                    v-if="can('manage-library')"
                     as-child
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
@@ -304,8 +316,43 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         <Plus class="size-3.5" />Add series
                     </Link>
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    :disabled="syncing"
+                    data-page-header-item="sync"
+                    @select="syncSeries"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync
+                </DropdownMenuItem>
+                <template v-if="can('manage-library') && props.connection.url">
+                    <DropdownMenuItem as-child data-page-header-item="activity">
+                        <a
+                            :href="`${props.connection.url}/activity/queue`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink class="size-3.5" />Activity
+                        </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        as-child
+                        data-page-header-item="open-sonarr"
+                    >
+                        <a
+                            :href="props.connection.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink class="size-3.5" />Open Sonarr
+                        </a>
+                    </DropdownMenuItem>
+                </template>
+            </template>
+        </PageHeader>
 
         <!-- Toolbar -->
         <div
@@ -377,9 +424,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
             >
                 <button
                     type="button"
+                    aria-label="Grid view"
+                    :aria-pressed="view === 'grid'"
+                    data-view-toggle="grid"
                     :class="
                         cn(
-                            'inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'inline-flex size-6 items-center justify-center rounded transition-colors touch:size-10',
                             view === 'grid'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -391,9 +441,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 </button>
                 <button
                     type="button"
+                    aria-label="Table view"
+                    :aria-pressed="view === 'table'"
+                    data-view-toggle="table"
                     :class="
                         cn(
-                            'inline-flex size-6 items-center justify-center rounded transition-colors',
+                            'inline-flex size-6 items-center justify-center rounded transition-colors touch:size-10',
                             view === 'table'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

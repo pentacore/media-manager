@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { FolderSync, RefreshCcw } from '@lucide/vue';
+import { ExternalLink, FolderSync, RefreshCcw } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LibraryRefreshController from '@/actions/App/Http/Controllers/Emby/LibraryRefreshController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
@@ -8,11 +8,13 @@ import {
     InitialsAvatar,
     LiveDot,
     OpenInServiceButton,
+    PageHeader,
     Pill,
     Poster,
     SvcChip,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useConnectionState } from '@/composables/useConnectionState';
@@ -182,8 +184,8 @@ function remainingTicks(session: Session): number {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="emby" />
                     <span class="text-fg-subtle">/</span>
@@ -191,11 +193,15 @@ function remainingTicks(session: Session): number {
                         >Live sessions</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Now playing
                 </h1>
+            </template>
+            <template #description>
                 <p
                     v-if="props.sessions"
                     class="mt-1 text-[13px] text-muted-foreground"
@@ -206,11 +212,13 @@ function remainingTicks(session: Session): number {
                 <p v-else class="mt-1 text-[13px] text-muted-foreground">
                     Loading sessions…
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <Pill :variant="connectionPill.variant" dot>{{
                     connectionPill.label
                 }}</Pill>
+            </template>
+            <template #secondaryActions>
                 <OpenInServiceButton
                     :href="props.connection.url"
                     label="Open Emby"
@@ -226,11 +234,14 @@ function remainingTicks(session: Session): number {
                 >
                     <FolderSync class="size-3.5" />Refresh library
                 </Button>
+            </template>
+            <template #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
                     :disabled="refreshing"
+                    data-now-playing-refresh
                     @click="manualRefresh"
                 >
                     <RefreshCcw
@@ -238,14 +249,42 @@ function remainingTicks(session: Session): number {
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template v-if="props.connection.url || isAdmin" #menu>
+                <DropdownMenuItem
+                    v-if="props.connection.url"
+                    as-child
+                    data-page-header-item="open-emby"
+                >
+                    <a
+                        :href="props.connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open Emby
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    v-if="isAdmin"
+                    :disabled="refreshingLibrary"
+                    data-page-header-item="refresh-library"
+                    @select="refreshLibrary"
+                >
+                    <FolderSync class="size-3.5" />Refresh library
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Session cards -->
         <div
             v-if="!props.sessions"
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 420px), 1fr)
+                );
+            "
         >
             <Skeleton
                 v-for="i in 3"
@@ -264,12 +303,18 @@ function remainingTicks(session: Session): number {
         <div
             v-else
             class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr))"
+            style="
+                grid-template-columns: repeat(
+                    auto-fill,
+                    minmax(min(100%, 420px), 1fr)
+                );
+            "
         >
             <div
                 v-for="(session, i) in props.sessions"
                 :key="session.id ?? i"
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-session-card
             >
                 <div class="flex gap-4 p-4">
                     <Poster

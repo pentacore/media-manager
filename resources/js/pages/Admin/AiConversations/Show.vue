@@ -9,7 +9,7 @@ import {
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
-import { InitialsAvatar, Pill } from '@/components/mm';
+import { InitialsAvatar, PageHeader, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -19,6 +19,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { dashboard } from '@/routes';
 
 interface TranscriptToolCall {
@@ -153,8 +154,8 @@ function formatDate(iso: string | null): string {
     <Head :title="conversation.title" />
 
     <div class="flex max-w-4xl flex-col gap-4 p-5">
-        <div class="flex items-start justify-between gap-3">
-            <div>
+        <PageHeader align="start" primary-first>
+            <template #eyebrow>
                 <a
                     :href="AiConversationController.index.url()"
                     class="mb-1.5 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:underline"
@@ -162,11 +163,15 @@ function formatDate(iso: string | null): string {
                     <ArrowLeft class="size-3.5" />
                     All conversations
                 </a>
+            </template>
+            <template #title>
                 <h1
-                    class="text-[20px] leading-tight font-semibold tracking-tight"
+                    class="text-[20px] leading-tight font-semibold tracking-tight break-words"
                 >
                     {{ conversation.title }}
                 </h1>
+            </template>
+            <template #description>
                 <div
                     class="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground"
                 >
@@ -198,14 +203,15 @@ function formatDate(iso: string | null): string {
                         Archived {{ formatDate(conversation.archived_at) }}
                     </Pill>
                 </div>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #primaryAction>
                 <Button
                     v-if="!conversation.archived_at"
                     type="button"
                     size="sm"
                     variant="outline"
                     class="h-8 gap-1.5 text-xs"
+                    data-conversation-archive
                     @click="archive"
                 >
                     <Archive class="size-3.5" />
@@ -222,6 +228,8 @@ function formatDate(iso: string | null): string {
                     <ArchiveRestore class="size-3.5" />
                     Unarchive
                 </Button>
+            </template>
+            <template #secondaryActions>
                 <Button
                     type="button"
                     size="sm"
@@ -232,8 +240,17 @@ function formatDate(iso: string | null): string {
                     <Trash2 class="size-3.5" />
                     Delete
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    variant="destructive"
+                    data-page-header-item="delete"
+                    @select="confirming = true"
+                >
+                    <Trash2 class="size-3.5" />Delete
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <div
             class="flex flex-col gap-4 rounded-xl border border-border bg-card p-5"

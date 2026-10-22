@@ -4,7 +4,7 @@ import { Play, Plus, Trash2 } from '@lucide/vue';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import type { BenchmarkScheduleRow } from '@/components/benchmarks';
-import { Pill, TimeStamp, Toggle } from '@/components/mm';
+import { PageHeader, Pill, TimeStamp, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Table,
@@ -99,27 +99,31 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
     <Head title="Benchmark schedules" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-start justify-between gap-4">
-            <div>
+        <PageHeader align="start" class="sm:gap-4">
+            <template #title>
                 <h1 class="text-[20px] font-semibold">Benchmark schedules</h1>
+            </template>
+            <template #description>
                 <p
                     class="mt-1 max-w-[620px] text-[12.5px] text-muted-foreground"
                 >
                     Re-run a task's cases against its current tier models on a
                     schedule and get alerted when a model gets worse.
                 </p>
-            </div>
-            <Button
-                size="sm"
-                class="gap-1.5"
-                as-child
-                data-benchmark-schedule-new
-            >
-                <Link :href="BenchmarkScheduleController.create.url()">
-                    <Plus class="size-3.5" />New schedule
-                </Link>
-            </Button>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Button
+                    size="sm"
+                    class="gap-1.5"
+                    as-child
+                    data-benchmark-schedule-new
+                >
+                    <Link :href="BenchmarkScheduleController.create.url()">
+                        <Plus class="size-3.5" />New schedule
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <div class="overflow-x-auto rounded-xl border border-border bg-card">
             <Table>
@@ -200,28 +204,30 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                             />
                         </TableCell>
                         <TableCell class="w-[1%] whitespace-nowrap">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="size-7"
-                                aria-label="Run now"
-                                title="Run now"
-                                data-benchmark-schedule-run
-                                @click="runNow(schedule)"
-                            >
-                                <Play class="size-3.5" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                class="size-7 text-destructive"
-                                aria-label="Delete"
-                                title="Delete"
-                                data-benchmark-schedule-delete
-                                @click="remove(schedule)"
-                            >
-                                <Trash2 class="size-3.5" />
-                            </Button>
+                            <div class="flex items-center touch:gap-2">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    class="size-7"
+                                    aria-label="Run now"
+                                    title="Run now"
+                                    data-benchmark-schedule-run
+                                    @click="runNow(schedule)"
+                                >
+                                    <Play class="size-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    class="size-7 text-destructive"
+                                    aria-label="Delete"
+                                    title="Delete"
+                                    data-benchmark-schedule-delete
+                                    @click="remove(schedule)"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                </Button>
+                            </div>
                         </TableCell>
                     </TableRow>
                     <TableEmpty v-if="schedules.data.length === 0" :colspan="7">

@@ -71,6 +71,7 @@ async function copyWebhookUrl() {
                             variant="outline"
                             size="icon"
                             data-webhook-url-copy
+                            aria-label="Copy webhook URL"
                             @click="copyWebhookUrl"
                         >
                             <ClipboardCopy class="size-4" />
@@ -88,6 +89,7 @@ async function copyWebhookUrl() {
                             size="icon"
                             :disabled="configuringWebhook"
                             data-webhook-configure
+                            aria-label="Configure the webhook on the service"
                             @click="configureWebhookOnService"
                         >
                             <Wand2 class="size-4" />

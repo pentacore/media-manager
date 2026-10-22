@@ -1,3 +1,27 @@
+# [1.49.0](https://github.com/pentacore/media-manager/compare/v1.48.1...v1.49.0) (2026-10-22)
+
+
+### Bug Fixes
+
+* **layout:** keep grids, cards and dialogs inside a phone screen ([bbc8009](https://github.com/pentacore/media-manager/commit/bbc80091b30f655824c23366dedb2ba1bda2e7c6))
+* **ui:** close the phone sidebar on any nav tap and scroll the palette on short screens ([cf53e8a](https://github.com/pentacore/media-manager/commit/cf53e8a4309c4cab77cf972fd47ad5c34571bfb5))
+* **ui:** give strip options and neighbouring icon buttons full touch targets ([4afdeb8](https://github.com/pentacore/media-manager/commit/4afdeb814ef3141f6d79b44aef10bd23b3ed35c6))
+* **ui:** keep strips, breadcrumbs and the benchmark headers inside a phone screen ([80fdff5](https://github.com/pentacore/media-manager/commit/80fdff5987deb2af34771543ec8a25497a5369c1))
+* **ui:** keep the selected segment in view on a phone ([a404d89](https://github.com/pentacore/media-manager/commit/a404d891aaf759c595e6222b724628f0dbaece26))
+* **ui:** tighten strip focus and touch targets, row names and the phone gates ([38a678c](https://github.com/pentacore/media-manager/commit/38a678c7ddf447194894080035c0927b1d8b027e))
+* **ui:** truncate parent breadcrumbs at tablet widths and tidy row names and gaps ([3915c7d](https://github.com/pentacore/media-manager/commit/3915c7d4f0db71173679db781ce9ae1931febc88))
+
+
+### Features
+
+* **ui:** 40 px touch targets, named icon buttons and a touch reveal ([00b09b6](https://github.com/pentacore/media-manager/commit/00b09b6f6ed83bb36bd0ac63e3d4c1aa9f64017d))
+* **ui:** add PageHeader and move the library and dashboard headers onto it ([6d45124](https://github.com/pentacore/media-manager/commit/6d45124e1e83ab10c374c9d72af57d1097499f05))
+* **ui:** add SettingsRow and stack settings rows on phones ([3fc1774](https://github.com/pentacore/media-manager/commit/3fc1774b8842c2b324c56284f159c0b6d9bac131))
+* **ui:** close the phone sidebar on navigation, add header search, fit the palette and breadcrumbs ([d961276](https://github.com/pentacore/media-manager/commit/d96127616417299dcfdd90f6ae70e1c4ecb10932))
+* **ui:** move the admin headers onto PageHeader ([2d597f5](https://github.com/pentacore/media-manager/commit/2d597f59d1c3a36646b51fe1eb4d5e300046404a))
+* **ui:** move the downloads, monitoring and Action Queue headers onto PageHeader ([f1c8c7d](https://github.com/pentacore/media-manager/commit/f1c8c7dfe65143d0947dfb3b8235000b5a6fbaa8))
+* **ui:** turn segmented filters into sideways strips and wrap chip rows ([809dc7f](https://github.com/pentacore/media-manager/commit/809dc7f3cd605ac78428d1c63f5fc232eec2b719))
+
 ## [1.48.1](https://github.com/pentacore/media-manager/compare/v1.48.0...v1.48.1) (2026-10-22)
 
 

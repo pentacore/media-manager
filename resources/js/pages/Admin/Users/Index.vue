@@ -6,7 +6,7 @@ import EmbyLinkController from '@/actions/App/Http/Controllers/Admin/EmbyLinkCon
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';
-import { InitialsAvatar, Pill, SvcChip } from '@/components/mm';
+import { InitialsAvatar, PageHeader, Pill, SvcChip } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +18,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -204,22 +205,26 @@ async function importFromEmby(): Promise<void> {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> Users
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Users
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     Local accounts, SSO, and Emby-credential users live in one
                     table.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #secondaryActions>
                 <Button
                     variant="outline"
                     size="sm"
@@ -230,9 +235,15 @@ async function importFromEmby(): Promise<void> {
                 >
                     <Upload class="size-3.5" />Import from Emby
                 </Button>
+            </template>
+            <template #primaryAction>
                 <Dialog v-model:open="showCreateDialog">
                     <DialogTrigger as-child>
-                        <Button size="sm" class="h-7 gap-1.5 text-xs">
+                        <Button
+                            size="sm"
+                            class="h-7 gap-1.5 text-xs"
+                            data-users-invite
+                        >
                             <Plus class="size-3.5" />Invite user
                         </Button>
                     </DialogTrigger>
@@ -362,8 +373,17 @@ async function importFromEmby(): Promise<void> {
                         </Form>
                     </DialogContent>
                 </Dialog>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    :disabled="importing"
+                    data-page-header-item="import-emby"
+                    @select="importFromEmby"
+                >
+                    <Upload class="size-3.5" />Import from Emby
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Users table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">

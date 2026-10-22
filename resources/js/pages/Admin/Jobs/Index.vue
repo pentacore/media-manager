@@ -3,7 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { RefreshCcw } from '@lucide/vue';
 import { ref } from 'vue';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
-import { Pill } from '@/components/mm';
+import { PageHeader, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -129,35 +129,42 @@ function batchStatusVariant(
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> Jobs
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Jobs
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Read-only view of the queue, recent failures, and the
                     scheduled-command catalogue. Use this to verify that the
                     Laravel scheduler is alive and that nothing has piled up.
                 </p>
-            </div>
-            <Button
-                variant="outline"
-                size="sm"
-                class="h-7 gap-1.5 text-xs"
-                :disabled="refreshing"
-                @click="refresh"
-            >
-                <RefreshCcw
-                    class="size-3.5"
-                    :class="{ 'animate-spin': refreshing }"
-                />Refresh
-            </Button>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="refreshing"
+                    data-jobs-refresh
+                    @click="refresh"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh
+                </Button>
+            </template>
+        </PageHeader>
 
         <!-- Queued -->
         <section

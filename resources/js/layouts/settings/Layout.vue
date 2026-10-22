@@ -23,7 +23,7 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
 
 <template>
     <div class="p-5">
-        <div class="grid gap-8 lg:grid-cols-[200px_1fr]">
+        <div class="grid grid-cols-1 gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
             <aside>
                 <div
                     class="mb-3 text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"

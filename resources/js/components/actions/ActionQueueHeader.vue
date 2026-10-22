@@ -2,7 +2,9 @@
 import { Link } from '@inertiajs/vue3';
 import { RefreshCcw, Settings as SettingsIcon, Sparkles } from '@lucide/vue';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
+import { PageHeader } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useCan } from '@/composables/useCan';
 
 defineProps<{
@@ -19,20 +21,21 @@ const { isAdmin } = useCan();
 </script>
 
 <template>
-    <div class="flex items-end justify-between gap-3">
-        <div>
+    <PageHeader>
+        <template #title>
             <h1 class="text-[22px] font-semibold tracking-tight">
                 Action queue
             </h1>
+        </template>
+        <template #description>
             <p class="mt-1 text-[13px] text-muted-foreground">
                 <span class="font-mono-tabular">ActionRequest</span>
                 state machine — pending → approved → executing →
                 completed/failed
             </p>
-        </div>
-        <div class="flex items-center gap-2">
+        </template>
+        <template v-if="staleCount > 0" #filters>
             <div
-                v-if="staleCount > 0"
                 class="flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-sm text-accent"
                 data-action-stale
             >
@@ -47,13 +50,16 @@ const { isAdmin } = useCan();
                     Refresh
                 </Button>
             </div>
+        </template>
+        <template v-if="isAdmin" #secondaryActions>
             <Link
-                v-if="isAdmin"
                 :href="ActionTypeConfigController.index.url()"
                 class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
             >
                 <SettingsIcon class="size-3.5" />Approval rules
             </Link>
+        </template>
+        <template #primaryAction>
             <Button
                 variant="outline"
                 size="sm"
@@ -67,6 +73,13 @@ const { isAdmin } = useCan();
                     :class="{ 'animate-spin': refreshing }"
                 />Refresh
             </Button>
-        </div>
-    </div>
+        </template>
+        <template v-if="isAdmin" #menu>
+            <DropdownMenuItem as-child data-page-header-item="approval-rules">
+                <Link :href="ActionTypeConfigController.index.url()">
+                    <SettingsIcon class="size-3.5" />Approval rules
+                </Link>
+            </DropdownMenuItem>
+        </template>
+    </PageHeader>
 </template>

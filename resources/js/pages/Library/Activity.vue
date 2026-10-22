@@ -10,7 +10,7 @@ import {
 import { computed, ref, watch } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
-import { Pill, SvcChip } from '@/components/mm';
+import { PageHeader, Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -682,13 +682,15 @@ async function runQueueBulk(): Promise<void> {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Library activity
                 </h1>
+            </template>
+            <template #description>
                 <p
                     v-if="activeTab === 'queue'"
                     class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
@@ -704,12 +706,13 @@ async function runQueueBulk(): Promise<void> {
                     Grabs, imports, deletions and failures, newest first — one
                     service at a time.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <div
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
                     role="tablist"
                     aria-label="Activity view"
+                    data-filter-strip
                 >
                     <button
                         v-for="tab in ['queue', 'history'] as const"
@@ -717,7 +720,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-activity-tab="tab"
                         :class="[
-                            'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                             activeTab === tab
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -729,8 +732,9 @@ async function runQueueBulk(): Promise<void> {
                 </div>
                 <div
                     v-if="activeTab === 'queue'"
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
                     role="tablist"
+                    data-filter-strip
                 >
                     <button
                         v-for="value in ['all', 'sonarr', 'radarr'] as const"
@@ -738,7 +742,7 @@ async function runQueueBulk(): Promise<void> {
                         type="button"
                         :data-service-filter="value"
                         :class="[
-                            'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                             serviceFilter === value
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -748,6 +752,8 @@ async function runQueueBulk(): Promise<void> {
                         {{ value === 'all' ? 'All' : value }}
                     </button>
                 </div>
+            </template>
+            <template #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -761,8 +767,8 @@ async function runQueueBulk(): Promise<void> {
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh
                 </Button>
-            </div>
-        </div>
+            </template>
+        </PageHeader>
 
         <!-- Queue tab -->
         <template v-if="activeTab === 'queue'">

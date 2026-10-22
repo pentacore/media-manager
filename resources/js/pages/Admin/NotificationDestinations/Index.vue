@@ -4,7 +4,7 @@ import { Pencil, Plus, Send, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import NotificationDestinationController from '@/actions/App/Http/Controllers/Admin/NotificationDestinationController';
 import InputError from '@/components/InputError.vue';
-import { Pill } from '@/components/mm';
+import { PageHeader, Pill } from '@/components/mm';
 import DestinationFormFields from '@/components/notifications/DestinationFormFields.vue';
 import type { DestinationOption } from '@/components/notifications/DestinationFormFields.vue';
 import { Button } from '@/components/ui/button';
@@ -98,11 +98,13 @@ async function remove(row: DestinationRow): Promise<void> {
     <Head title="Notification destinations" />
 
     <div class="space-y-6 p-6">
-        <div class="flex items-start justify-between gap-4">
-            <div>
+        <PageHeader align="start" class="sm:gap-4">
+            <template #title>
                 <h1 class="text-[20px] font-semibold">
                     Notification destinations
                 </h1>
+            </template>
+            <template #description>
                 <p
                     class="mt-1 max-w-[620px] text-[12.5px] text-muted-foreground"
                 >
@@ -110,38 +112,42 @@ async function remove(row: DestinationRow): Promise<void> {
                     that reaches admins is also pushed once to each enabled
                     destination whose minimum severity it meets.
                 </p>
-            </div>
-            <Dialog v-model:open="showCreate">
-                <DialogTrigger as-child>
-                    <Button size="sm" class="gap-1.5" data-destination-add>
-                        <Plus class="size-3.5" />Add destination
-                    </Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add destination</DialogTitle>
-                    </DialogHeader>
-                    <Form
-                        v-bind="NotificationDestinationController.store.form()"
-                        class="space-y-4"
-                        v-slot="{ errors, processing }"
-                        @success="showCreate = false"
-                    >
-                        <DestinationFormFields
-                            id-prefix="create"
-                            :errors="errors"
-                            :channels="channels"
-                            :severities="severities"
-                        />
-                        <DialogFooter>
-                            <Button type="submit" :disabled="processing"
-                                >Save</Button
-                            >
-                        </DialogFooter>
-                    </Form>
-                </DialogContent>
-            </Dialog>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Dialog v-model:open="showCreate">
+                    <DialogTrigger as-child>
+                        <Button size="sm" class="gap-1.5" data-destination-add>
+                            <Plus class="size-3.5" />Add destination
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add destination</DialogTitle>
+                        </DialogHeader>
+                        <Form
+                            v-bind="
+                                NotificationDestinationController.store.form()
+                            "
+                            class="space-y-4"
+                            v-slot="{ errors, processing }"
+                            @success="showCreate = false"
+                        >
+                            <DestinationFormFields
+                                id-prefix="create"
+                                :errors="errors"
+                                :channels="channels"
+                                :severities="severities"
+                            />
+                            <DialogFooter>
+                                <Button type="submit" :disabled="processing"
+                                    >Save</Button
+                                >
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </template>
+        </PageHeader>
 
         <InputError :message="$page.props.errors.test" />
 

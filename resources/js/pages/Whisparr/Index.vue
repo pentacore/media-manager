@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { RefreshCcw, Search } from '@lucide/vue';
+import { ExternalLink, RefreshCcw, Search } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import WhisparrActionController from '@/actions/App/Http/Controllers/Whisparr/WhisparrActionController';
 import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
@@ -10,8 +10,15 @@ import {
     BulkSelectAll,
     LibraryBulkActions,
 } from '@/components/bulk';
-import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
+import {
+    OpenInServiceButton,
+    PageHeader,
+    Pill,
+    Poster,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -204,8 +211,8 @@ function sync(): void {
     <Head title="Whisparr" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader primary-first>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="whisparr" label="Whisparr" />
                     <span class="text-fg-subtle">/</span>
@@ -213,9 +220,13 @@ function sync(): void {
                         >Library</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1 class="text-[22px] font-semibold tracking-tight">
                     Whisparr
                 </h1>
+            </template>
+            <template #description>
                 <p
                     v-if="connection && library && !library.error"
                     class="mt-1 text-[13px] text-muted-foreground"
@@ -229,8 +240,14 @@ function sync(): void {
                     v-else-if="connection && !library"
                     class="mt-1 h-4 w-48"
                 />
-            </div>
-            <div v-if="connection" class="flex items-center gap-2">
+            </template>
+            <template v-if="connection" #secondaryActions>
+                <OpenInServiceButton
+                    :href="connection.url"
+                    label="Open Whisparr"
+                />
+            </template>
+            <template v-if="connection" #primaryAction>
                 <Button
                     variant="outline"
                     size="sm"
@@ -244,12 +261,22 @@ function sync(): void {
                         :class="{ 'animate-spin': syncing }"
                     />Sync
                 </Button>
-                <OpenInServiceButton
-                    :href="connection.url"
-                    label="Open Whisparr"
-                />
-            </div>
-        </div>
+            </template>
+            <template v-if="connection?.url" #menu>
+                <DropdownMenuItem
+                    as-child
+                    data-page-header-item="open-whisparr"
+                >
+                    <a
+                        :href="connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open Whisparr
+                    </a>
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <div
             v-if="!connection"
