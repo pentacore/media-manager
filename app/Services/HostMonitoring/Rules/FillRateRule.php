@@ -14,11 +14,13 @@ use Illuminate\Support\Number;
 
 /**
  * Predicts when each mount fills up from its recent 60 s samples of free space, and raises `fill:{mount}` when that is
- * under the configured hours. The window's samples are split in two halves by time and each gets a least-squares line:
- * only a decline in both halves counts (a single large write, routine on a media server, drops one half only), and the
- * time to full comes from the recent half's rate. A mount that does not answer, has too little history or no free space
- * left (DiskUsageRule covers that) gets no verdict; an empty filesystem list (an agent fault) is skipped so it cannot
- * sweep every fill incident away.
+ * under the configured hours. The window's samples are split in two halves at the time midpoint between the first and
+ * the last sample, each half needing at least half of `min_samples` (rounded down, so 15 contiguous minutes are judged),
+ * and each gets a least-squares line. Only a decline in both halves counts, and the time to full comes from the slower
+ * of the two: a single large write, routine on a media server, steepens one half only and cannot raise an alarm on its
+ * own, at the cost of reporting an accelerating fill later. A mount that does not answer, has too little history or no
+ * free space left (DiskUsageRule covers that) gets no verdict; an empty filesystem list (an agent fault) is skipped so
+ * it cannot sweep every fill incident away.
  */
 final readonly class FillRateRule implements ReportRule
 {
@@ -91,22 +93,24 @@ final readonly class FillRateRule implements ReportRule
         }
 
         [$earlierHalf, $recentHalf] = $this->halves($samples);
-        $minHalfSamples = (int) ceil($minSamples / 2);
+        $minHalfSamples = intdiv($minSamples, 2);
 
         if (count($earlierHalf) < $minHalfSamples || count($recentHalf) < $minHalfSamples) {
             return IncidentObservation::hold($key);
         }
 
         $earlierSlope = $this->slopePerHour($earlierHalf);
-        $slope = $this->slopePerHour($recentHalf);
+        $recentSlope = $this->slopePerHour($recentHalf);
 
-        if ($earlierSlope === null || $slope === null) {
+        if ($earlierSlope === null || $recentSlope === null) {
             return IncidentObservation::hold($key);
         }
 
-        if ($earlierSlope >= 0 || $slope >= 0) {
+        if ($earlierSlope >= 0 || $recentSlope >= 0) {
             return IncidentObservation::clear($key);
         }
+
+        $slope = max($earlierSlope, $recentSlope);
 
         $hoursToFull = $availableNow / -$slope;
         $severity = match (true) {
@@ -130,6 +134,7 @@ final readonly class FillRateRule implements ReportRule
                 'mount' => $mount,
                 'slope_bytes_per_hour' => (int) round($slope),
                 'earlier_slope_bytes_per_hour' => (int) round($earlierSlope),
+                'recent_slope_bytes_per_hour' => (int) round($recentSlope),
                 'hours_to_full' => round($hoursToFull, 2),
                 'samples' => count($samples),
             ],

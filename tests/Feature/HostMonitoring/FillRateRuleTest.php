@@ -18,7 +18,7 @@ const FILL_RATE_TOTAL = 100 * FILL_RATE_GIB;
  * Seeds one 60 s sample per minute for the mount, the last one at `$endsAt`, with `available_bytes` falling
  * linearly by `$lossPerHour` to `$endAvailable` at that last minute.
  */
-function fillRateSamples(Server $server, string $mount, int $count, int $endAvailable, int $lossPerHour, ?CarbonImmutable $endsAt = null): void
+function fillRateSamples(Server $server, string $mount, int $count, int $endAvailable, int $lossPerHour, ?CarbonImmutable $endsAt = null, int $total = FILL_RATE_TOTAL): void
 {
     $endsAt ??= now()->startOfMinute();
 
@@ -29,25 +29,25 @@ function fillRateSamples(Server $server, string $mount, int $count, int $endAvai
             ->for($server)
             ->mount($mount)
             ->at($endsAt->subMinutes($minutesBefore))
-            ->bytes(FILL_RATE_TOTAL, FILL_RATE_TOTAL - $available, $available)
+            ->bytes($total, $total - $available, $available)
             ->create();
     }
 }
 
 /**
- * A responsive filesystem entry of 100 GiB with the given bytes free.
+ * A responsive filesystem entry (100 GiB unless given) with the given bytes free.
  *
  * @return array<string, mixed>
  */
-function fillRateFilesystem(string $mount, int $available): array
+function fillRateFilesystem(string $mount, int $available, int $total = FILL_RATE_TOTAL): array
 {
     return [
         'mount' => $mount,
         'device' => '/dev/sdb1',
         'fstype' => 'xfs',
         'unresponsive' => false,
-        'total_bytes' => FILL_RATE_TOTAL,
-        'used_bytes' => FILL_RATE_TOTAL - $available,
+        'total_bytes' => $total,
+        'used_bytes' => $total - $available,
         'available_bytes' => $available,
     ];
 }
@@ -210,7 +210,7 @@ test('a single large write on a flat disk raises nothing', function (int $minute
     '45 minutes ago' => [45],
 ]);
 
-test('a steady fill over the whole hour raises with the time to full from the recent rate', function (): void {
+test('an accelerating fill is judged on the slower half of the window', function (): void {
     $server = Server::factory()->enrolled()->create();
     fillRateSamples($server, '/', 30, 12 * FILL_RATE_GIB + intdiv(6 * FILL_RATE_GIB * 30, 60), FILL_RATE_GIB, now()->startOfMinute()->subMinutes(30));
     fillRateSamples($server, '/', 30, 12 * FILL_RATE_GIB, 6 * FILL_RATE_GIB);
@@ -218,9 +218,32 @@ test('a steady fill over the whole hour raises with the time to full from the re
     fillRateReport($server, [fillRateFilesystem('/', 12 * FILL_RATE_GIB)]);
 
     expect(ServerIncident::query()->open()->where('key', 'fill:/')->sole())
+        ->severity->toBe(IncidentSeverity::Warning)
+        ->title->toBe('Disk / fills in 12 h')
+        ->detail->toBe('~12 h until full (losing 1 GB/h).');
+});
+
+test('a large write on top of slow background growth raises nothing', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $total = 500 * FILL_RATE_GIB;
+    $backgroundLossPerHour = intdiv(FILL_RATE_GIB, 2);
+    fillRateSamples($server, '/', 44, 225 * FILL_RATE_GIB + intdiv($backgroundLossPerHour * 16, 60), $backgroundLossPerHour, now()->startOfMinute()->subMinutes(16), $total);
+    fillRateSamples($server, '/', 16, 200 * FILL_RATE_GIB, $backgroundLossPerHour, total: $total);
+
+    fillRateReport($server, [fillRateFilesystem('/', 200 * FILL_RATE_GIB, $total)]);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+});
+
+test('exactly 15 contiguous samples are enough to judge', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    fillRateSamples($server, '/', 15, 18 * FILL_RATE_GIB, 9 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/', 18 * FILL_RATE_GIB)]);
+
+    expect(ServerIncident::query()->open()->where('key', 'fill:/')->sole())
         ->severity->toBe(IncidentSeverity::Critical)
-        ->title->toBe('Disk / fills in 2 h')
-        ->detail->toBe('~2 h until full (losing 6 GB/h).');
+        ->detail->toBe('~2 h until full (losing 9 GB/h).');
 });
 
 test('a large cleanup clears a fill incident', function (): void {
