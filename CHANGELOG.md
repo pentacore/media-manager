@@ -1,3 +1,10 @@
+## [1.48.1](https://github.com/pentacore/media-manager/compare/v1.48.0...v1.48.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **security:** pin production images to PHP 8.5.12 ([3a8e83a](https://github.com/pentacore/media-manager/commit/3a8e83a0ca4258de271b70fdbca26cec2bc3c655))
+
 # [1.48.0](https://github.com/pentacore/media-manager/compare/v1.47.1...v1.48.0) (2026-10-21)
 
 
