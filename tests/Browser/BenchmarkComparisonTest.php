@@ -11,6 +11,7 @@ use App\Models\BenchmarkNeutralJudgement;
 use App\Models\BenchmarkNeutralRejudge;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use App\Models\User;
 
 beforeEach(function (): void {
@@ -232,4 +233,65 @@ test('a running re-judge shows its progress and can be cancelled', function (): 
         ->click('[data-confirm-accept]')
         ->assertSee('Neutral re-judge cancelled.')
         ->assertSeeIn('[data-compare-rejudge-status]', 'Cancelled');
+});
+
+test('ticking two runs on the runs list opens their comparison', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $running = BenchmarkRun::factory()->running()->create(['name' => 'Still going']);
+
+    visit(route('admin.benchmarks.runs.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute(sprintf('[data-benchmark-run-select="%d"]', $running->id), 'disabled', '')
+        ->click(sprintf('[data-benchmark-run-select="%d"]', $before->id))
+        ->assertSeeIn('[data-benchmark-compare-bar]', '1 selected')
+        ->assertAttribute('[data-benchmark-compare-selected]', 'disabled', '')
+        ->click(sprintf('[data-benchmark-run-select="%d"]', $after->id))
+        ->click('[data-benchmark-compare-selected]')
+        ->assertVisible('[data-compare-page]')
+        ->assertVisible(sprintf('[data-compare-run="%d"] [data-compare-baseline]', $before->id));
+});
+
+test('a run page compares with the previous scheduled run', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create();
+    $before->update(['benchmark_schedule_id' => $benchmarkSchedule->id]);
+    $after->update(['benchmark_schedule_id' => $benchmarkSchedule->id]);
+
+    visit(route('admin.benchmarks.runs.show', $after, absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-benchmark-compare-with]')
+        ->assertSeeIn(sprintf('[data-benchmark-compare-option="%d"]', $before->id), 'Previous scheduled run')
+        ->click(sprintf('[data-benchmark-compare-option="%d"]', $before->id))
+        ->assertVisible('[data-compare-page]')
+        ->assertVisible(sprintf('[data-compare-run="%d"] [data-compare-baseline]', $before->id));
+});
+
+test('the regression banner opens the comparison with its baseline', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $after->update([
+        'baseline_run_id' => $before->id,
+        'regressions' => [[
+            'candidate' => ['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null],
+            'paired_cases' => 2,
+            'metrics' => [['metric' => 'pass_rate', 'before' => 1.0, 'after' => 0.5]],
+        ]],
+    ]);
+
+    visit(route('admin.benchmarks.runs.show', $after, absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-benchmark-compare-baseline]')
+        ->assertVisible('[data-compare-page]')
+        ->assertVisible(sprintf('[data-compare-run="%d"] [data-compare-baseline]', $before->id));
+});
+
+test('the comparison fits a phone screen', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+
+    visit(compareBrowserUrl($before, $after))->on()->mobile()
+        ->assertNoSmoke()
+        ->assertScript(phoneOverflowScript('[data-compare-page]'), '');
 });

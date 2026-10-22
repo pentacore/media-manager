@@ -9,6 +9,7 @@ use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkResultStatus;
+use App\Enums\BenchmarkRunStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\EstimateBenchmarkRunRequest;
 use App\Http\Requests\Admin\StoreBenchmarkRunRequest;
@@ -20,6 +21,7 @@ use App\Services\Benchmark\BenchmarkMatrix;
 use App\Services\Benchmark\BenchmarkResultDetails;
 use App\Services\Benchmark\BenchmarkRunLauncher;
 use App\Services\Benchmark\BenchmarkTierCandidates;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,6 +34,8 @@ class BenchmarkRunController extends Controller
 {
     private const int PER_PAGE = 25;
 
+    private const int COMPARE_OPTIONS = 20;
+
     /** How far the confirmed estimate may drift from a fresh one, in USD. */
     private const float ESTIMATE_TOLERANCE_USD = 0.01;
 
@@ -39,6 +43,7 @@ class BenchmarkRunController extends Controller
     {
         $lengthAwarePaginator = BenchmarkRun::query()
             ->with(['creator:id,name', 'schedule:id,name'])
+            ->withExists(['results as has_finished_results' => fn (Builder $builder): Builder => $builder->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])])
             ->latest()
             ->latest('id')
             ->paginate(self::PER_PAGE)
@@ -58,6 +63,8 @@ class BenchmarkRunController extends Controller
                     'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
+                    'comparable' => in_array($benchmarkRun->status, [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap], true)
+                        || ($benchmarkRun->status === BenchmarkRunStatus::Cancelled && (bool) $benchmarkRun->getAttribute('has_finished_results')),
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
@@ -180,6 +187,7 @@ class BenchmarkRunController extends Controller
                 ],
             ],
             'matrix' => BenchmarkMatrix::for($benchmarkRun),
+            'compareOptions' => $benchmarkRun->isComparable() ? $this->compareOptions($benchmarkRun) : [],
             'resultDetail' => Inertia::optional(fn (): array => BenchmarkResultDetails::for($benchmarkRun->results()->findOrFail($request->integer('result')))),
         ]);
     }
@@ -231,6 +239,43 @@ class BenchmarkRunController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Benchmark run deleted.')]);
 
         return to_route('admin.benchmarks.runs.index');
+    }
+
+    /**
+     * Finished runs that share a task with this one, newest first; the
+     * schedule's previous finished run leads the list.
+     *
+     * @return list<array{id: int, name: string, created_at: string|null, previous_scheduled: bool}>
+     */
+    private function compareOptions(BenchmarkRun $benchmarkRun): array
+    {
+        $tasks = $benchmarkRun->results()->distinct()->pluck('case_task');
+        $previous = $benchmarkRun->benchmark_schedule_id === null ? null : BenchmarkRun::query()
+            ->comparable()
+            ->where('benchmark_schedule_id', $benchmarkRun->benchmark_schedule_id)
+            ->where('id', '<', $benchmarkRun->id)
+            ->latest('id')
+            ->first(['id', 'name', 'created_at']);
+
+        $others = BenchmarkRun::query()
+            ->comparable()
+            ->whereKeyNot(array_filter([$benchmarkRun->id, $previous?->id]))
+            ->whereHas('results', fn (Builder $builder): Builder => $builder->whereIn('case_task', $tasks))
+            ->latest('id')
+            ->limit(self::COMPARE_OPTIONS - ($previous instanceof BenchmarkRun ? 1 : 0))
+            ->get(['id', 'name', 'created_at']);
+
+        $option = static fn (BenchmarkRun $run, bool $previousScheduled): array => [
+            'id' => $run->id,
+            'name' => $run->name,
+            'created_at' => $run->created_at?->toIso8601String(),
+            'previous_scheduled' => $previousScheduled,
+        ];
+
+        return [
+            ...($previous instanceof BenchmarkRun ? [$option($previous, true)] : []),
+            ...$others->map(static fn (BenchmarkRun $run): array => $option($run, false))->all(),
+        ];
     }
 
     /**

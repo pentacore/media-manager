@@ -513,3 +513,42 @@ test('an unchecked run has no comparison', function (): void {
     $this->get(route('admin.benchmarks.runs.show', $benchmarkRun))
         ->assertInertia(fn ($page) => $page->where('run.regressions', null)->where('run.baseline', null)->where('run.schedule', null));
 });
+
+test('the runs list says which runs can be compared', function (): void {
+    $completed = BenchmarkRun::factory()->completed()->create();
+    $running = BenchmarkRun::factory()->running()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('admin.benchmarks.runs.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('runs.data', fn ($rows): bool => collect($rows)->firstWhere('id', $completed->id)['comparable'] === true
+                && collect($rows)->firstWhere('id', $running->id)['comparable'] === false));
+});
+
+test('a run page offers runs sharing a task, the previous scheduled run first', function (): void {
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create();
+    $titleCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    $chatCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create();
+    $previous = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Previous']);
+    $other = BenchmarkRun::factory()->completed()->create(['name' => 'Other title run']);
+    $unrelated = BenchmarkRun::factory()->completed()->create(['name' => 'Chat only']);
+    $current = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Current']);
+
+    foreach ([$previous, $other, $current] as $benchmarkRun) {
+        BenchmarkResult::factory()->forCase($benchmarkRun, $titleCase, 0)->scored(0.8, true)->create();
+    }
+
+    BenchmarkResult::factory()->forCase($unrelated, $chatCase, 0)->scored(0.8, true)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('admin.benchmarks.runs.show', $current))
+        ->assertInertia(fn ($page) => $page
+            ->where('compareOptions.0.id', $previous->id)
+            ->where('compareOptions.0.previous_scheduled', true)
+            ->where('compareOptions.1.id', $other->id)
+            ->where('compareOptions.1.previous_scheduled', false)
+            ->count('compareOptions', 2));
+
+    $this->get(route('admin.benchmarks.runs.show', BenchmarkRun::factory()->running()->create()))
+        ->assertInertia(fn ($page) => $page->where('compareOptions', []));
+});

@@ -127,6 +127,14 @@ export type BenchmarkRunRow = {
     schedule: { id: number; name: string } | null;
     created_by: string | null;
     created_at: string | null;
+    comparable: boolean;
+};
+
+export type BenchmarkCompareOption = {
+    id: number;
+    name: string;
+    created_at: string | null;
+    previous_scheduled: boolean;
 };
 
 export type BenchmarkRunCaseOption = {
