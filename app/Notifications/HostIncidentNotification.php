@@ -80,7 +80,7 @@ abstract class HostIncidentNotification extends Notification
 
     public function link(): string
     {
-        return sprintf('/admin/servers/%d#incident-%d', $this->serverId, $this->incidentId);
+        return sprintf('%s#incident-%d', route('admin.servers.show', ['server' => $this->serverId], absolute: false), $this->incidentId);
     }
 
     /**

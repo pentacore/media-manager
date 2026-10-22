@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\MediaReplacementAttemptController;
 use App\Http\Controllers\Admin\MediaReplacementSettingsController;
 use App\Http\Controllers\Admin\NotificationDestinationController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
+use App\Http\Controllers\Admin\ServerController;
 use App\Http\Controllers\Admin\ServerWatcherController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\StatisticsController;
@@ -161,5 +162,10 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
     Route::get('statistics', StatisticsController::class)->name('statistics.index');
 
+    Route::get('servers', [ServerController::class, 'index'])->name('servers.index');
+    Route::post('servers', [ServerController::class, 'store'])->name('servers.store');
     Route::put('servers/watcher', ServerWatcherController::class)->name('servers.watcher.update');
+    Route::get('servers/{server}', [ServerController::class, 'show'])->whereNumber('server')->name('servers.show');
+    Route::post('servers/{server}/enrollment', [ServerController::class, 'regenerateEnrollment'])->whereNumber('server')->name('servers.enrollment.regenerate');
+    Route::delete('servers/{server}', [ServerController::class, 'destroy'])->whereNumber('server')->name('servers.destroy');
 });

@@ -29,6 +29,7 @@ import {
     Replace,
     ScrollText,
     Search,
+    Server,
     Settings2,
     Shield,
     Sprout,
@@ -52,6 +53,7 @@ import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admi
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
 import NotificationDestinationController from '@/actions/App/Http/Controllers/Admin/NotificationDestinationController';
+import ServerController from '@/actions/App/Http/Controllers/Admin/ServerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -399,6 +401,19 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                 ],
             });
         }
+
+        adminItems.push({
+            title: 'Servers',
+            icon: Server,
+            ability: 'admin',
+            children: [
+                {
+                    title: 'Servers',
+                    href: ServerController.index.url(),
+                    icon: Server,
+                },
+            ],
+        });
 
         adminItems.push({
             title: 'Diagnostics',
