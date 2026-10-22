@@ -49,10 +49,15 @@ class GitHubReleaseClient
         }
 
         if (! $response->successful()) {
-            Log::info('GitHubReleaseClient: non-successful response', [
-                'repo' => $repo,
-                'status' => $response->status(),
-            ]);
+            $context = ['repo' => $repo, 'status' => $response->status()];
+
+            // A repo without releases answers 404 on /releases/latest; that is
+            // expected, so it stays at debug.
+            if ($response->status() === 404) {
+                Log::debug('GitHubReleaseClient: no release found', $context);
+            } else {
+                Log::info('GitHubReleaseClient: non-successful response', $context);
+            }
 
             return null;
         }

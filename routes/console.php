@@ -6,6 +6,7 @@ use App\Console\Commands\AggregateStatistics;
 use App\Console\Commands\Ai\PruneConversations;
 use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
+use App\Console\Commands\CheckAgentVersion;
 use App\Console\Commands\CheckAppVersion;
 use App\Console\Commands\CheckServiceHealth;
 use App\Console\Commands\CheckServiceVersions;
@@ -90,6 +91,10 @@ Schedule::command(CheckServiceVersions::class)
     ->withoutOverlapping(60);
 
 Schedule::command(CheckAppVersion::class)
+    ->daily()
+    ->withoutOverlapping(30);
+
+Schedule::command(CheckAgentVersion::class)
     ->daily()
     ->withoutOverlapping(30);
 
