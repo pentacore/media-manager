@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkRunFactory;
@@ -45,6 +46,7 @@ use Override;
  * @method static Builder<static>|BenchmarkRun newModelQuery()
  * @method static Builder<static>|BenchmarkRun newQuery()
  * @method static Builder<static>|BenchmarkRun query()
+ * @method static Builder<static>|BenchmarkRun comparable()
  *
  * @mixin \Eloquent
  */
@@ -87,6 +89,32 @@ class BenchmarkRun extends Model
             'finished_at' => 'immutable_datetime',
             'regressions' => 'array',
         ];
+    }
+
+    /**
+     * Whether the run can be compared: it finished (completed or stopped at
+     * its cap), or it was cancelled after at least one case finished.
+     */
+    public function isComparable(): bool
+    {
+        return match ($this->status) {
+            BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap => true,
+            BenchmarkRunStatus::Cancelled => $this->results()->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])->exists(),
+            default => false,
+        };
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeComparable(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $builder): Builder => $builder
+            ->whereIn('status', [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap])
+            ->orWhere(fn (Builder $cancelled): Builder => $cancelled
+                ->where('status', BenchmarkRunStatus::Cancelled)
+                ->whereHas('results', fn (Builder $results): Builder => $results->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed]))));
     }
 
     /**
