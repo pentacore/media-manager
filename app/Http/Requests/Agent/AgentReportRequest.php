@@ -7,10 +7,12 @@ namespace App\Http\Requests\Agent;
 use App\Enums\HostCheckStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
 /**
  * The agent's minute report (see the host agent contract). Keys without a rule are dropped by validated(), so newer agents can add fields.
  */
+#[TypefinderIgnore]
 class AgentReportRequest extends FormRequest
 {
     /**

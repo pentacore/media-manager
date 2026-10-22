@@ -6,7 +6,9 @@ namespace App\Http\Requests\Agent;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
+#[TypefinderIgnore]
 class EnrollAgentRequest extends FormRequest
 {
     /**

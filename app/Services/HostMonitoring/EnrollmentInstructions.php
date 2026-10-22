@@ -27,10 +27,18 @@ final readonly class EnrollmentInstructions
             'debian_command' => sprintf(
                 'curl -fsSL %s | sudo sh -s -- --url %s --token %s',
                 config('mediamanager.monitoring.install_script_url'),
-                $platformUrl,
+                $this->shellArgument($platformUrl),
                 $token,
             ),
             'unraid_plugin_url' => (string) config('mediamanager.monitoring.unraid_plugin_url'),
         ];
+    }
+
+    /**
+     * Keeps a plain URL as typed and quotes one with characters a shell would read (`&`, `?`, spaces), so the pasted command passes it whole.
+     */
+    private function shellArgument(string $value): string
+    {
+        return preg_match('#^[A-Za-z0-9:/._-]+$#', $value) === 1 ? $value : escapeshellarg($value);
     }
 }

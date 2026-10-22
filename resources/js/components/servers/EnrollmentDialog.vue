@@ -67,6 +67,12 @@ function show(flash: unknown): void {
     }
 }
 
+// The token cannot be shown again, so a stray click or Escape must not lose
+// it: only Done or the close button dismiss the dialog.
+function keepOpen(event: Event): void {
+    event.preventDefault();
+}
+
 function close(open: boolean): void {
     if (!open) {
         instructions.value = null;
@@ -130,6 +136,8 @@ onBeforeUnmount(() => {
             v-if="instructions"
             class="sm:max-w-xl"
             data-enrollment-dialog
+            @interact-outside="keepOpen"
+            @escape-key-down="keepOpen"
         >
             <DialogHeader>
                 <DialogTitle>

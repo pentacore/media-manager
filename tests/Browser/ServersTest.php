@@ -36,10 +36,24 @@ test('adding a server shows its enrollment token once', function (): void {
     expect($server->name)->toBe('Mailserver')
         ->and(hash('sha256', (string) $token))->toBe($server->enrollment_token_hash);
 
+    $historyHoldsToken = sprintf("JSON.stringify(window.history.state ?? {}).includes('%s')", $token);
+
     $webpage->assertPathIs(route('admin.servers.show', $server, absolute: false))
         ->assertSeeIn('[data-enrollment-debian-command]', (string) $token)
+        ->assertScript($historyHoldsToken, false)
+        ->keys('[data-enrollment-dialog]', 'Escape')
+        ->assertVisible('[data-enrollment-dialog]')
         ->click('[data-enrollment-done]')
         ->assertMissing('[data-enrollment-dialog]');
+
+    $webpage->script('window.history.back()');
+    $webpage->assertPathIs(route('admin.servers.index', absolute: false));
+    $webpage->script('window.history.forward()');
+    $webpage->assertPathIs(route('admin.servers.show', $server, absolute: false))
+        ->assertSeeIn('[data-server-description]', 'No agent has enrolled yet.')
+        ->assertMissing('[data-enrollment-dialog]')
+        ->assertDontSee((string) $token)
+        ->assertScript($historyHoldsToken, false);
 
     $webpage->navigate(route('admin.servers.show', $server, absolute: false))
         ->assertNoSmoke()
@@ -48,7 +62,7 @@ test('adding a server shows its enrollment token once', function (): void {
         ->assertDontSee((string) $token);
 });
 
-test('a new enrollment token replaces the old one in the dialog', function (): void {
+test('a new enrollment token opens the dialog with a token for this server and keeps the agent token', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $server = Server::factory()->enrolled()->create(['name' => 'babel']);
 
@@ -112,6 +126,36 @@ test('the index shows status, outdated agents and open incident counts', functio
         ->assertPathIs(route('admin.servers.show', $incidentServer, absolute: false));
 });
 
+test('the index updates live when a server reports or an incident changes', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->enrolled()->create(['name' => 'babel']);
+    $row = sprintf('[data-server-row="%d"]', $server->id);
+
+    $webpage = visit(route('admin.servers.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible($row.' [data-server-status="pending"]')
+        ->assertSeeIn($row, 'Never');
+    $webpage->script(appHydratedScript());
+
+    $server->update(['last_report_at' => now()]);
+    $webpage->script(echoEmitScript('admin.servers', 'ServerReported', [
+        'server_id' => $server->id, 'last_report_at' => now()->toIso8601String(),
+    ]));
+
+    $webpage->assertVisible($row.' [data-server-status="ok"]')
+        ->assertDontSeeIn($row, 'Never')
+        ->assertSeeIn($row.' [data-server-open-incidents]', '0');
+
+    $serverIncident = ServerIncident::factory()->for($server)->open()->critical()->create(['title' => 'Disk almost full']);
+    $webpage->script(echoEmitScript('admin.servers', 'ServerIncidentChanged', [
+        'server_id' => $server->id, 'incident_id' => $serverIncident->id, 'key' => $serverIncident->key,
+        'status' => 'open', 'severity' => 'critical', 'title' => 'Disk almost full', 'occurred_at' => now()->toIso8601String(),
+    ]));
+
+    $webpage->assertVisible($row.' [data-server-status="incident"]')
+        ->assertSeeIn($row.' [data-server-open-incidents]', '1');
+});
+
 test('the watcher url saves and shows only its last four characters', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -119,7 +163,7 @@ test('the watcher url saves and shows only its last four characters', function (
         ->assertNoSmoke()
         ->assertSeeIn('[data-watcher-hint]', 'No push URL saved.')
         ->assertMissing('[data-watcher-clear]')
-        ->assertSee('private network');
+        ->assertSeeIn('[data-watcher-settings]', 'private network');
 
     $webpage->script(appHydratedScript());
 
