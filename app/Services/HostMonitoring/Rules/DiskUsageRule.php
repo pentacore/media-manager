@@ -11,7 +11,8 @@ use Illuminate\Support\Number;
 
 /**
  * Raises `disk:{mount}` at the configured usage thresholds, and as critical while a mount does not answer at all.
- * The same key carries both, so a mount that answers again is judged on its usage from the next report on.
+ * The same key carries both, so a mount that answers again is judged on its usage from the next report on. An empty
+ * filesystem list (an agent fault) is skipped, so it cannot sweep every disk incident away.
  */
 final readonly class DiskUsageRule implements ReportRule
 {
@@ -21,10 +22,14 @@ final readonly class DiskUsageRule implements ReportRule
     }
 
     /**
-     * @return list<IncidentObservation>
+     * @return list<IncidentObservation>|null
      */
-    public function evaluate(Server $server, AgentReport $agentReport): array
+    public function evaluate(Server $server, AgentReport $agentReport): ?array
     {
+        if ($agentReport->filesystems === []) {
+            return null;
+        }
+
         $warningPercent = (int) config('mediamanager.monitoring.disk.warning_percent');
         $criticalPercent = (int) config('mediamanager.monitoring.disk.critical_percent');
         $observations = [];
@@ -55,10 +60,9 @@ final readonly class DiskUsageRule implements ReportRule
                 continue;
             }
 
-            $percent = $used / $size * 100;
             $severity = match (true) {
-                $percent >= $criticalPercent => IncidentSeverity::Critical,
-                $percent >= $warningPercent => IncidentSeverity::Warning,
+                $used * 100 >= $criticalPercent * $size => IncidentSeverity::Critical,
+                $used * 100 >= $warningPercent * $size => IncidentSeverity::Warning,
                 default => null,
             };
 
@@ -67,14 +71,14 @@ final readonly class DiskUsageRule implements ReportRule
                 : IncidentObservation::raise(
                     $key,
                     $severity,
-                    sprintf('Disk %s is %d%% full', $mount, (int) floor($percent)),
+                    sprintf('Disk %s is %d%% full', $mount, intdiv($used * 100, $size)),
                     sprintf(
                         '%s used of %s, %s free.',
                         Number::fileSize($used, maxPrecision: 1),
                         Number::fileSize($size, maxPrecision: 1),
                         Number::fileSize($available, maxPrecision: 1),
                     ),
-                    ['mount' => $mount, 'used_bytes' => $used, 'available_bytes' => $available, 'percent' => round($percent, 1)],
+                    ['mount' => $mount, 'used_bytes' => $used, 'available_bytes' => $available, 'percent' => round($used / $size * 100, 1)],
                 );
         }
 

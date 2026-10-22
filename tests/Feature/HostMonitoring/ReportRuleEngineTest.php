@@ -99,7 +99,7 @@ test('hold keeps the incident and its clear streak untouched', function (): void
 test('the sweep clears only incidents the rules own', function (): void {
     $server = Server::factory()->enrolled()->create();
     $vanishedDisk = ServerIncident::factory()->for($server)->key('disk:/mnt/gone')->create();
-    $foreignKey = ServerIncident::factory()->for($server)->key('restarts:postfix')->create();
+    $foreignKey = ServerIncident::factory()->for($server)->key('unowned:x')->create();
     $otherServer = ServerIncident::factory()->key('disk:/mnt/gone')->create();
 
     AgentReportFixtures::dispatchReport($server, ruleEngineReportBody(30));

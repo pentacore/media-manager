@@ -127,6 +127,7 @@ test('recording a check result does not bump the config version', function (): v
 });
 
 test('two in-order reports on the same day both record their check results', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:06:00'));
     $server = Server::factory()->enrolled()->create();
     $check = ServerCheck::factory()->for($server)->create();
 

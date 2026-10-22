@@ -8,9 +8,13 @@ use App\Enums\IncidentSeverity;
 use App\Models\Server;
 use App\Models\ServerIncident;
 use App\Services\HostMonitoring\Rules\CheckStatusRule;
+use App\Services\HostMonitoring\Rules\ContainerRestartRule;
 use App\Services\HostMonitoring\Rules\DiskUsageRule;
 use App\Services\HostMonitoring\Rules\FailedUnitsRule;
+use App\Services\HostMonitoring\Rules\FillRateRule;
 use App\Services\HostMonitoring\Rules\IncidentObservation;
+use App\Services\HostMonitoring\Rules\MemoryPressureRule;
+use App\Services\HostMonitoring\Rules\OomRule;
 use App\Services\HostMonitoring\Rules\ReportRule;
 
 /**
@@ -28,7 +32,11 @@ final readonly class ReportRuleEngine
         $this->rules = [
             new CheckStatusRule,
             new DiskUsageRule,
+            new FillRateRule,
+            new MemoryPressureRule,
+            new OomRule,
             new FailedUnitsRule,
+            new ContainerRestartRule,
         ];
     }
 

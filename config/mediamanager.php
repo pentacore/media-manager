@@ -430,6 +430,12 @@ return [
             'warning_hours' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_WARNING_HOURS', 24),
             'critical_hours' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_CRITICAL_HOURS', 6),
         ],
+        'memory' => [
+            'window_minutes' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_WINDOW_MINUTES', 5),
+            'min_samples' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_MIN_SAMPLES', 4),
+            'warning_available_percent' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_WARNING_AVAILABLE_PERCENT', 10),
+            'critical_available_percent' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_CRITICAL_AVAILABLE_PERCENT', 5),
+        ],
         'oom' => [
             'clear_after_minutes' => (int) env('MEDIAMANAGER_MONITORING_OOM_CLEAR_AFTER_MINUTES', 30),
         ],

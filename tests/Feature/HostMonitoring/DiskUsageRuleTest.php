@@ -79,6 +79,27 @@ test('the title rounds the percentage down', function (): void {
     expect(ServerIncident::query()->open()->sole()->title)->toBe('Disk / is 89% full');
 });
 
+test('a usage exactly at a configured threshold is judged without float error', function (): void {
+    config(['mediamanager.monitoring.disk.warning_percent' => 57]);
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [diskRuleFilesystem('/', 57, 43)]);
+
+    expect(ServerIncident::query()->open()->sole())
+        ->severity->toBe(IncidentSeverity::Warning)
+        ->title->toBe('Disk / is 57% full');
+});
+
+test('a report without filesystems leaves disk incidents untouched', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [diskRuleFilesystem('/mnt/data', 96, 4)]);
+    diskRuleReport($server, []);
+    diskRuleReport($server, []);
+
+    expect(ServerIncident::query()->sole())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(0);
+});
+
 test('an unresponsive mount opens a critical not-responding incident', function (): void {
     $server = Server::factory()->enrolled()->create();
 
