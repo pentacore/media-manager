@@ -2,6 +2,8 @@ export { default as CandidateRows } from './CandidateRows.vue';
 export { default as CaseInputFields } from './CaseInputFields.vue';
 export { default as CaseSelector } from './CaseSelector.vue';
 export * from './compare';
+export { default as CompareCaseGrid } from './CompareCaseGrid.vue';
+export { default as CompareOutputsDialog } from './CompareOutputsDialog.vue';
 export { default as CompareRunBar } from './CompareRunBar.vue';
 export { default as CompareTaskTable } from './CompareTaskTable.vue';
 export { default as EstimateSummary } from './EstimateSummary.vue';

@@ -135,3 +135,41 @@ test('two different models are paired by hand and unpaired again', function (): 
         ->click(sprintf('[data-compare-line="%s"] [data-compare-unpair]', $oldLine))
         ->assertVisible(sprintf('[data-compare-line="%s"]', $newLine));
 });
+
+test('the case grid shows the changed rows and can show every case', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $benchmarkCase = BenchmarkCase::query()->where('name', 'Nolan chat')->sole();
+    $villeneuve = BenchmarkCase::query()->where('name', 'Villeneuve chat')->sole();
+    $gptA = sprintf('%d.0', $before->id);
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-compare-case-grid="title"] [data-compare-changed-count]', '1 of 4 rows changed')
+        ->assertVisible(sprintf('[data-compare-case-row="%d:%s"]', $benchmarkCase->id, $gptA))
+        ->assertMissing(sprintf('[data-compare-case-row="%d:%s"]', $villeneuve->id, $gptA))
+        ->click('[data-compare-case-grid="title"] [data-compare-show-all]')
+        ->assertVisible(sprintf('[data-compare-case-row="%d:%s"]', $villeneuve->id, $gptA));
+});
+
+test('a cell opens the result drawer and vs baseline shows both outputs', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $benchmarkResult = BenchmarkResult::query()->where('benchmark_run_id', $before->id)->where('output', 'Nolan Films')->sole();
+    $afterResult = BenchmarkResult::query()->where('benchmark_run_id', $after->id)->where('output', 'Some movies')->sole();
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-compare-cell="%d"]', $afterResult->id), '✗ 3.0')
+        ->click(sprintf('[data-compare-cell="%d"]', $afterResult->id))
+        ->assertVisible('[data-benchmark-drawer]')
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-output]', 'Some movies')
+        ->assertSeeIn('[data-benchmark-drawer-prompt]', 'Which films did Nolan direct?')
+        ->keys('[data-benchmark-drawer]', 'Escape')
+        ->click(sprintf('[data-compare-vs-baseline="%d:%d"]', $benchmarkResult->id, $afterResult->id))
+        ->assertVisible('[data-compare-outputs]')
+        ->assertSeeIn('[data-compare-output-side="baseline"] [data-compare-output-text]', 'Nolan Films')
+        ->assertSeeIn('[data-compare-output-side="baseline"]', 'Verdict on Nolan Films')
+        ->assertSeeIn('[data-compare-output-side="other"] [data-compare-output-text]', 'Some movies')
+        ->assertSeeIn('[data-compare-output-side="other"]', 'October rerun');
+});

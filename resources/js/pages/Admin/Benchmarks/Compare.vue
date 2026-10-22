@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import {
+    CompareCaseGrid,
+    CompareOutputsDialog,
     CompareRunBar,
     CompareTaskTable,
     compareState,
     compareUrl,
     pairKey,
+    ResultDrawer,
     withoutLinePairs,
 } from '@/components/benchmarks';
 import type {
@@ -64,6 +67,67 @@ function pair(
 
 function unpair(line: BenchmarkComparisonLine): void {
     visit({ pairs: withoutLinePairs(state.value.pairs, line) });
+}
+
+const drawerOpen = ref(false);
+const drawerLoading = ref(false);
+const drawerRunId = ref<number | null>(null);
+const selectedResultId = ref<number | null>(null);
+
+const drawerDetail = computed(() =>
+    props.resultDetail?.results.some(
+        (result) => result.result_id === selectedResultId.value,
+    )
+        ? props.resultDetail
+        : null,
+);
+
+const drawerCandidates = computed(
+    () =>
+        props.comparison.runs.find((run) => run.id === drawerRunId.value)
+            ?.candidates ?? [],
+);
+
+function openResult(resultId: number, runId: number): void {
+    selectedResultId.value = resultId;
+    drawerRunId.value = runId;
+    drawerOpen.value = true;
+    drawerLoading.value = true;
+
+    router.reload({
+        only: ['resultDetail'],
+        data: { result: resultId },
+        onFinish: () => {
+            drawerLoading.value = false;
+        },
+    });
+}
+
+const outputsOpen = ref(false);
+const outputsLoading = ref(false);
+const outputIds = ref<number[]>([]);
+
+const shownOutputs = computed(() =>
+    props.outputs &&
+    outputIds.value.every((id) =>
+        props.outputs!.some((output) => output.result_id === id),
+    )
+        ? props.outputs
+        : null,
+);
+
+function compareOutputs(baselineResultId: number, otherResultId: number): void {
+    outputIds.value = [baselineResultId, otherResultId];
+    outputsOpen.value = true;
+    outputsLoading.value = true;
+
+    router.reload({
+        only: ['outputs'],
+        data: { outputs: `${baselineResultId},${otherResultId}` },
+        onFinish: () => {
+            outputsLoading.value = false;
+        },
+    });
 }
 </script>
 
@@ -125,10 +189,26 @@ function unpair(line: BenchmarkComparisonLine): void {
                     @pair="pair"
                     @unpair="unpair"
                 />
-                <!-- Task 9: CompareCaseGrid goes here -->
+                <CompareCaseGrid
+                    :task="task"
+                    :runs="comparison.runs"
+                    :lines="comparison.lines"
+                    @open-result="openResult"
+                    @compare-outputs="compareOutputs"
+                />
             </template>
         </section>
 
-        <!-- Task 9: ResultDrawer and CompareOutputsDialog go here -->
+        <ResultDrawer
+            v-model:open="drawerOpen"
+            :detail="drawerDetail"
+            :candidates="drawerCandidates"
+            :loading="drawerLoading"
+        />
+        <CompareOutputsDialog
+            v-model:open="outputsOpen"
+            :outputs="shownOutputs"
+            :loading="outputsLoading"
+        />
     </div>
 </template>
