@@ -44,10 +44,13 @@ use Throwable;
 #[Tries(0)]
 #[MaxExceptions(1)]
 #[FailOnTimeout]
-#[UniqueFor(46800)]
+#[UniqueFor(46800)] // keep equal to LOST_AFTER_SECONDS
 final class RunNeutralJudgement implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+
+    /** The #[UniqueFor] window: a queued judgement untouched this long lost its dispatch. */
+    public const int LOST_AFTER_SECONDS = 46800;
 
     /** Kept below the 13 h UniqueFor window. */
     private const int MAX_WAIT_HOURS = 12;

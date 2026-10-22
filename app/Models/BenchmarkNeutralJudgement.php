@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\BenchmarkJudgeStatus;
+use App\Jobs\RunNeutralJudgement;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkNeutralJudgementFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,6 +39,7 @@ use Override;
  * @method static Builder<static>|BenchmarkNeutralJudgement newQuery()
  * @method static Builder<static>|BenchmarkNeutralJudgement query()
  * @method static Builder<static>|BenchmarkNeutralJudgement stale()
+ * @method static Builder<static>|BenchmarkNeutralJudgement sweepable()
  *
  * @mixin \Eloquent
  */
@@ -100,6 +102,26 @@ class BenchmarkNeutralJudgement extends Model
         return $query
             ->whereIn('status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
             ->where('updated_at', '<=', now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS));
+    }
+
+    /**
+     * Judgements the stalled sweep may fail: a claimed (pending) one untouched
+     * for the claim window (the worker died) or a queued one untouched for the
+     * job's whole unique window (the dispatch was lost). A queued judgement
+     * younger than that is just waiting for the single AI worker.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeSweepable(Builder $query): Builder
+    {
+        return $query->where(static fn (Builder $builder): Builder => $builder
+            ->where(static fn (Builder $pending): Builder => $pending
+                ->where('status', BenchmarkJudgeStatus::Pending)
+                ->where('updated_at', '<=', now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS)))
+            ->orWhere(static fn (Builder $queued): Builder => $queued
+                ->where('status', BenchmarkJudgeStatus::Queued)
+                ->where('updated_at', '<=', now()->subSeconds(RunNeutralJudgement::LOST_AFTER_SECONDS))));
     }
 
     /**

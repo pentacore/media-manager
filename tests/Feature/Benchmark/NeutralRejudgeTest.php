@@ -257,16 +257,40 @@ test('a judgement whose case was deleted fails', function (): void {
     expect(BenchmarkNeutralJudgement::query()->find($judgementId)->detail)->toBe(['error' => 'Case was deleted']);
 });
 
-test('the stalled sweep fails stuck judgements and settles their re-judge', function (): void {
+test('the stalled sweep fails lost judgements but leaves queued ones waiting', function (): void {
     Queue::fake();
     $fixture = neutralFixture();
     $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
-    $rejudge->judgements()->toBase()->update(['updated_at' => now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 1)]);
+    [$waiting, $claimed] = $rejudge->judgements()->orderBy('id')->get()->all();
+    $old = now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 60);
+    $waiting->forceFill(['updated_at' => $old])->saveQuietly();
+    $claimed->forceFill(['status' => BenchmarkJudgeStatus::Pending, 'updated_at' => $old])->saveQuietly();
 
     Artisan::call('benchmark:settle-stalled');
 
-    expect($rejudge->judgements()->pluck('detail')->unique()->values()->all())->toBe([['error' => 'Judge did not finish']])
+    expect($waiting->fresh()->status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($claimed->fresh()->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($claimed->fresh()->detail)->toBe(['error' => 'Judge did not finish'])
+        ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Running);
+
+    $waiting->forceFill(['updated_at' => now()->subSeconds(RunNeutralJudgement::LOST_AFTER_SECONDS + 1)])->saveQuietly();
+
+    Artisan::call('benchmark:settle-stalled');
+
+    expect($waiting->fresh()->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($waiting->fresh()->detail)->toBe(['error' => 'Judge did not finish'])
         ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Completed);
+});
+
+test('the stalled sweep settles a running re-judge with nothing open', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
+    $rejudge->judgements()->toBase()->update(['status' => BenchmarkJudgeStatus::Failed]);
+
+    Artisan::call('benchmark:settle-stalled');
+
+    expect($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Completed);
 });
 
 test('the job is unique per judgement on the AI lane', function (): void {

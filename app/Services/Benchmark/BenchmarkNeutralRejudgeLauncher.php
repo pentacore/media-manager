@@ -205,20 +205,26 @@ final readonly class BenchmarkNeutralRejudgeLauncher
     }
 
     /**
-     * Fail judgements stuck queued or pending past the claim window (a lost
-     * dispatch or a dead worker) and settle their re-judges.
+     * Fail judgements whose job is gone (claimed by a dead worker, or queued
+     * past the unique window with a lost dispatch) and settle every running
+     * re-judge with nothing left open. Judgements merely waiting in the queue
+     * are left alone.
      */
     public function sweepStalled(): int
     {
-        $stale = BenchmarkNeutralJudgement::query()->stale()->get(['id', 'benchmark_neutral_rejudge_id']);
+        $stale = BenchmarkNeutralJudgement::query()->sweepable()->get(['id']);
 
         BenchmarkNeutralJudgement::query()
             ->whereKey($stale->pluck('id'))
-            ->stale()
+            ->sweepable()
             ->update(['status' => BenchmarkJudgeStatus::Failed, 'detail' => json_encode(['error' => self::STALLED], JSON_THROW_ON_ERROR)]);
 
-        foreach ($stale->pluck('benchmark_neutral_rejudge_id')->filter()->unique() as $rejudgeId) {
-            $this->settle((int) $rejudgeId);
+        $rejudgeIds = BenchmarkNeutralRejudge::query()
+            ->where('status', BenchmarkNeutralRejudgeStatus::Running)
+            ->pluck('id');
+
+        foreach ($rejudgeIds as $rejudgeId) {
+            $this->settle($rejudgeId);
         }
 
         return $stale->count();
