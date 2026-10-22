@@ -14,6 +14,7 @@ use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
+use App\Console\Commands\PushUptimeHeartbeat;
 use App\Console\Commands\ReconcileBazarrSubtitles;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
 use App\Console\Commands\ReconcileStuckActionRequests;
@@ -56,6 +57,12 @@ Schedule::command(RecordOpsHeartbeat::class)
 // After the heartbeat, which marks a scheduler resume: the sweep restarts its
 // silence clock from that moment, so a platform outage opens no incidents.
 Schedule::command(CheckSilentAgents::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// The outside watcher: Uptime Kuma alerts when these pings stop. Does nothing
+// until a push URL is set.
+Schedule::command(PushUptimeHeartbeat::class)
     ->everyMinute()
     ->withoutOverlapping(5);
 

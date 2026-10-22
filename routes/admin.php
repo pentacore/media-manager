@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\MediaReplacementAttemptController;
 use App\Http\Controllers\Admin\MediaReplacementSettingsController;
 use App\Http\Controllers\Admin\NotificationDestinationController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
+use App\Http\Controllers\Admin\ServerWatcherController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\UserController;
@@ -159,4 +160,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::get('jobs', [JobsController::class, 'index'])->name('jobs.index');
 
     Route::get('statistics', StatisticsController::class)->name('statistics.index');
+
+    Route::put('servers/watcher', ServerWatcherController::class)->name('servers.watcher.update');
 });
