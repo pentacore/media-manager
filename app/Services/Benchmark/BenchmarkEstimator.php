@@ -115,8 +115,8 @@ final readonly class BenchmarkEstimator
         $totalUsd = 0.0;
 
         if ($snapshot !== null) {
-            foreach ($results as $benchmarkResult) {
-                $completionTokens = $benchmarkResult->completion_tokens > 0 ? $benchmarkResult->completion_tokens : self::DEFAULT_COMPLETION_TOKENS;
+            foreach ($results as $result) {
+                $completionTokens = $result->completion_tokens > 0 ? $result->completion_tokens : self::DEFAULT_COMPLETION_TOKENS;
 
                 $totalUsd += $this->modelPriceLookup->costOf([
                     'prompt_tokens' => self::JUDGE_PROMPT_TOKENS + $completionTokens * 2,
