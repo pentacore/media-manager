@@ -92,13 +92,28 @@ test('at desktop width the dialog and sheet close buttons keep their absolute pl
     $webpage->click('[data-users-invite]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"dialog-close\"]")'));
     $webpage->assertScript('getComputedStyle(document.querySelector("[data-slot=\"dialog-close\"]")).position', 'absolute')
-        ->assertScript('getComputedStyle(document.querySelector("[role=\"dialog\"]")).display', 'grid');
+        ->assertScript('getComputedStyle(document.querySelector("[role=\"dialog\"]")).display', 'grid')
+        ->assertScript('getComputedStyle(document.querySelector("[data-slot=\"dialog-body\"]")).display', 'contents');
 
     $webpage->navigate(route('media.discover.index', absolute: false));
     $webpage->script(appHydratedScript());
     $webpage->click('[data-title-card="tv-95396"]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-title-sheet] [data-sheet-close]")'));
     $webpage->assertScript('getComputedStyle(document.querySelector("[data-title-sheet] [data-sheet-close]")).position', 'absolute');
+});
+
+test('the command palette results touch the search form with no gap on a phone', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->keys(':root', 'Meta+k');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-palette-sections]") && document.querySelector("[data-palette-sections]").closest("[role=\"dialog\"]").getAnimations().length === 0'));
+
+    // `[data-slot="dialog-body"]` inherits the frame's `gap` (`gap-0` here),
+    // so the results scroller sits flush under the form's border instead of
+    // 16 px below it.
+    $webpage->assertScript('(() => { const form = document.querySelector("[role=\"dialog\"] form").getBoundingClientRect(); const results = document.querySelector("[data-palette-sections]").parentElement.getBoundingClientRect(); return Math.round(results.top - form.bottom) === 0; })()', true);
 });
 
 test('the command palette sits fully on screen on a landscape phone', function (): void {
@@ -111,4 +126,13 @@ test('the command palette sits fully on screen on a landscape phone', function (
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-palette-sections]") && document.querySelector("[data-palette-sections]").closest("[role=\"dialog\"]").getAnimations().length === 0'));
 
     $webpage->assertScript('(() => { const dialog = document.querySelector("[data-palette-sections]").closest("[role=\"dialog\"]").getBoundingClientRect(); const input = document.querySelector("[role=\"dialog\"] input[type=\"search\"]").getBoundingClientRect(); return dialog.top >= 0 && dialog.bottom <= window.innerHeight && input.top >= 0 && input.bottom <= window.innerHeight; })()', true);
+
+    // The results scroller shrinks to fit the short viewport — it never
+    // pokes out past the dialog's own bottom edge.
+    $webpage->assertScript('(() => { const dialog = document.querySelector("[data-palette-sections]").closest("[role=\"dialog\"]").getBoundingClientRect(); const results = document.querySelector("[data-palette-sections]").parentElement.getBoundingClientRect(); return results.bottom <= dialog.bottom + 1; })()', true);
+
+    // The last link is reachable by scrolling it into view — nothing clips
+    // it or pushes the dialog itself (and the input with it) off screen.
+    $webpage->script('(() => { const links = document.querySelectorAll("[data-palette-link]"); links[links.length - 1].scrollIntoView({ block: "nearest" }); })()');
+    $webpage->assertScript('(() => { const dialog = document.querySelector("[data-palette-sections]").closest("[role=\"dialog\"]").getBoundingClientRect(); const links = document.querySelectorAll("[data-palette-link]"); const last = links[links.length - 1].getBoundingClientRect(); return last.top >= dialog.top - 1 && last.bottom <= dialog.bottom + 1; })()', true);
 });

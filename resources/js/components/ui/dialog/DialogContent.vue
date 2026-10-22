@@ -40,7 +40,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     >
       <div
         data-slot="dialog-body"
-        class="contents max-sm:flex max-sm:flex-col max-sm:min-h-0 max-sm:flex-1 max-sm:gap-4 max-sm:overflow-y-auto"
+        class="contents max-sm:flex max-sm:flex-col max-sm:min-h-0 max-sm:flex-1 max-sm:-mx-2 max-sm:gap-[inherit] max-sm:overflow-y-auto max-sm:overflow-x-hidden max-sm:px-2"
       >
         <slot />
       </div>
