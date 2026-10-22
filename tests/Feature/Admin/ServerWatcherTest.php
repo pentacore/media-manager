@@ -66,4 +66,4 @@ test('a non-url is rejected', function (string $value): void {
         ->assertSessionHasErrors('push_url');
 
     expect(resolve(MonitoringSettings::class)->uptimeKumaPushUrl())->toBeNull();
-})->with(['not a url', 'ftp://kuma.test/push/abc123', str_repeat('a', 2049)]);
+})->with(['not a url', 'ftp://kuma.test/push/abc123', 'https://kuma.test/'.str_repeat('a', 2040)]);

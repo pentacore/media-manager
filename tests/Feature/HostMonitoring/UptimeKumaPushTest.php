@@ -2,18 +2,25 @@
 
 declare(strict_types=1);
 
+use App\Enums\QueueLane;
 use App\Services\HostMonitoring\UptimeKumaPusher;
 use App\Settings\MonitoringSettings;
+use App\Support\OpsHeartbeat;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
+    $this->freezeTime();
     Cache::flush();
+    OpsHeartbeat::record(OpsHeartbeat::forLane(QueueLane::Webhooks));
     config()->set('mediamanager.monitoring.uptime_kuma_push_url');
     Http::preventStrayRequests();
 });
@@ -72,10 +79,45 @@ test('a failing push is logged without the url and never throws', function (Clos
         ->twice();
 })->with([
     'a server error' => [fn () => Http::response('nope', 500)],
+    'a request exception' => [function (): never {
+        throw new RequestException(new Response(new PsrResponse(500)));
+    }],
+    'a redirect' => [fn () => Http::response('', 302, ['Location' => 'https://elsewhere.test/abc123'])],
     'a connection failure' => [function (): never {
         throw new ConnectionException('cURL error 7: could not connect to https://kuma.test/api/push/abc123');
     }],
 ]);
+
+test('a stale webhooks lane pushes down naming the lane', function (): void {
+    resolve(MonitoringSettings::class)->setUptimeKumaPushUrl('https://kuma.test/api/push/abc123');
+    Http::fake(['kuma.test/*' => Http::response(['ok' => true])]);
+    $this->travel(412)->seconds();
+
+    expect(resolve(UptimeKumaPusher::class)->push())->toBeTrue();
+
+    Http::assertSent(fn (Request $request): bool => $request->data() === ['status' => 'down', 'msg' => 'queue:webhooks stale (412s)']
+        && ! str_contains((string) $request['msg'], 'abc123'));
+});
+
+test('a missing webhooks heartbeat pushes down', function (): void {
+    Cache::flush();
+    resolve(MonitoringSettings::class)->setUptimeKumaPushUrl('https://kuma.test/api/push/abc123');
+    Http::fake(['kuma.test/*' => Http::response(['ok' => true])]);
+
+    expect(resolve(UptimeKumaPusher::class)->push())->toBeTrue();
+
+    Http::assertSent(fn (Request $request): bool => $request->data() === ['status' => 'down', 'msg' => 'no queue heartbeat']);
+});
+
+test('a fresh webhooks lane pushes up', function (): void {
+    resolve(MonitoringSettings::class)->setUptimeKumaPushUrl('https://kuma.test/api/push/abc123');
+    Http::fake(['kuma.test/*' => Http::response(['ok' => true])]);
+    $this->travel(60)->seconds();
+
+    expect(resolve(UptimeKumaPusher::class)->push())->toBeTrue();
+
+    Http::assertSent(fn (Request $request): bool => $request->data() === ['status' => 'up', 'msg' => 'OK']);
+});
 
 test('the push url hint shows only the last four characters', function (): void {
     $monitoringSettings = resolve(MonitoringSettings::class);

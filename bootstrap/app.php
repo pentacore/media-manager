@@ -52,5 +52,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The Uptime Kuma push URL carries its token in the path.
+        $exceptions->dontFlash(['push_url']);
         $exceptions->shouldRenderJsonWhen(fn (Request $request, Throwable $e): bool => $request->is('api/agent/*') || $request->expectsJson());
     })->create();
