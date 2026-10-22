@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Benchmark;
 
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkResult;
 use App\Services\AiUsage\ModelPriceLookup;
 use Illuminate\Support\Collection;
 
@@ -96,6 +97,38 @@ final readonly class BenchmarkEstimator
             'rows' => $rows,
             'judge_usd' => $judgeUsd,
             'unpriced' => array_values(array_unique($unpriced)),
+        ];
+    }
+
+    /**
+     * The judge allowance for re-scoring stored results: the judge prompt
+     * plus each result's own output twice (prompt and quoted), as in
+     * estimate(); a result with no recorded output length counts the default.
+     *
+     * @param  Collection<int, BenchmarkResult>  $results
+     * @param  array<string, mixed>  $judge
+     * @return array{total_usd: float, results: int, unpriced: list<string>}
+     */
+    public function judgeOnly(Collection $results, array $judge): array
+    {
+        $snapshot = $this->snapshot($judge);
+        $totalUsd = 0.0;
+
+        if ($snapshot !== null) {
+            foreach ($results as $benchmarkResult) {
+                $completionTokens = $benchmarkResult->completion_tokens > 0 ? $benchmarkResult->completion_tokens : self::DEFAULT_COMPLETION_TOKENS;
+
+                $totalUsd += $this->modelPriceLookup->costOf([
+                    'prompt_tokens' => self::JUDGE_PROMPT_TOKENS + $completionTokens * 2,
+                    'completion_tokens' => self::JUDGE_COMPLETION_TOKENS,
+                ], $snapshot);
+            }
+        }
+
+        return [
+            'total_usd' => round($totalUsd, 6),
+            'results' => $results->count(),
+            'unpriced' => $snapshot === null && $results->isNotEmpty() ? [$this->label($judge)] : [],
         ];
     }
 
