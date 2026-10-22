@@ -13,11 +13,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\EstimateBenchmarkRunRequest;
 use App\Http\Requests\Admin\StoreBenchmarkRunRequest;
 use App\Models\BenchmarkCase;
-use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkEstimator;
 use App\Services\Benchmark\BenchmarkMatrix;
+use App\Services\Benchmark\BenchmarkResultDetails;
 use App\Services\Benchmark\BenchmarkRunLauncher;
 use App\Services\Benchmark\BenchmarkTierCandidates;
 use Illuminate\Http\JsonResponse;
@@ -180,7 +180,7 @@ class BenchmarkRunController extends Controller
                 ],
             ],
             'matrix' => BenchmarkMatrix::for($benchmarkRun),
-            'resultDetail' => Inertia::optional(fn (): array => $this->resultDetail($benchmarkRun, $request->integer('result'))),
+            'resultDetail' => Inertia::optional(fn (): array => BenchmarkResultDetails::for($benchmarkRun->results()->findOrFail($request->integer('result')))),
         ]);
     }
 
@@ -246,54 +246,6 @@ class BenchmarkRunController extends Controller
             ->filter()
             ->unique('id')
             ->values();
-    }
-
-    /**
-     * Every candidate's result for the clicked result's case, with the case's
-     * scoring and prompt when the case still exists.
-     *
-     * @return array<string, mixed>
-     */
-    private function resultDetail(BenchmarkRun $benchmarkRun, int $resultId): array
-    {
-        $clicked = $benchmarkRun->results()->findOrFail($resultId);
-
-        $siblings = $benchmarkRun->results()
-            ->where('case_task', $clicked->case_task)
-            ->when(
-                $clicked->benchmark_case_id === null,
-                static fn ($query) => $query->whereNull('benchmark_case_id')->where('case_name', $clicked->case_name),
-                static fn ($query) => $query->where('benchmark_case_id', $clicked->benchmark_case_id),
-            )
-            ->orderBy('candidate_index')
-            ->get();
-
-        $benchmarkCase = $clicked->benchmarkCase;
-
-        return [
-            'case_id' => $clicked->benchmark_case_id,
-            'case_name' => $clicked->case_name,
-            'case_task' => $clicked->case_task,
-            'scoring' => $benchmarkCase?->scoring,
-            'prompt' => $benchmarkCase?->input['prompt'] ?? null,
-            'results' => $siblings->map(static fn (BenchmarkResult $benchmarkResult): array => [
-                'result_id' => $benchmarkResult->id,
-                'candidate_index' => $benchmarkResult->candidate_index,
-                'status' => $benchmarkResult->status->value,
-                'output' => $benchmarkResult->output,
-                'intended_actions' => $benchmarkResult->intended_actions,
-                'score' => $benchmarkResult->score,
-                'passed' => $benchmarkResult->passed,
-                'judge_status' => $benchmarkResult->judge_status->value,
-                'judge_stale' => $benchmarkResult->isJudgeStale(),
-                'stale' => $benchmarkResult->isRunStale(),
-                'score_detail' => collect($benchmarkResult->score_detail ?? [])->except('tool_log')->all(),
-                'error' => $benchmarkResult->error,
-                'tool_log' => $benchmarkResult->score_detail['tool_log'] ?? [],
-                'latency_ms' => $benchmarkResult->latency_ms,
-                'cost_usd' => (float) $benchmarkResult->cost_usd + (float) $benchmarkResult->judge_cost_usd,
-            ])->all(),
-        ];
     }
 
     /**
