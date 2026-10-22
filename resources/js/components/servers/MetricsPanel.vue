@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue';
 import { BarChart, SegmentedControl } from '@/components/mm';
 import type { BarChartPoint } from '@/components/mm';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useDateTime } from '@/composables/useDateTime';
 import { cn } from '@/lib/utils';
 import type {
     EnumOption,
@@ -34,6 +35,8 @@ function selectRange(range: ServerMetricRange): void {
         return;
     }
 
+    let succeeded = false;
+
     selected.value = range;
     router.reload({
         data: { range },
@@ -41,18 +44,54 @@ function selectRange(range: ServerMetricRange): void {
         onStart: () => {
             reloading.value = true;
         },
+        onSuccess: () => {
+            succeeded = true;
+        },
         onFinish: () => {
             reloading.value = false;
+
+            // A failed or cancelled reload left the old range's charts on screen.
+            if (!succeeded) {
+                selected.value = props.range;
+            }
         },
     });
 }
 
+const { formatDate, formatDateTime, formatTime } = useDateTime();
+
+/** Axis labels: the time for 6 h, date and time for 48 h and 30 d, the date for a year. */
+function axisLabel(at: string): string {
+    switch (props.range) {
+        case '6h':
+            return formatTime(at);
+        case '1y':
+            return formatDate(at);
+        default:
+            return formatDateTime(at);
+    }
+}
+
+/** Tooltips always carry the date, except on the year chart where the time means nothing. */
+function tooltipLabel(at: string): string {
+    return props.range === '1y' ? formatDate(at) : formatDateTime(at);
+}
+
 function bars(points: MetricPoint[]): BarChartPoint[] {
-    return points.map((point) => ({
-        label: point.label,
-        value: point.value,
-        tooltip: `${point.label}: ${point.value}%`,
-    }));
+    return points.map((point) =>
+        point.value === null
+            ? {
+                  label: axisLabel(point.at),
+                  value: 0,
+                  placeholder: true,
+                  tooltip: `${tooltipLabel(point.at)}: no data`,
+              }
+            : {
+                  label: axisLabel(point.at),
+                  value: point.value,
+                  tooltip: `${tooltipLabel(point.at)}: ${point.value}%`,
+              },
+    );
 }
 
 const charts = computed(() => {

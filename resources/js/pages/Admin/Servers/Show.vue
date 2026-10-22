@@ -43,10 +43,12 @@ const props = defineProps<{
 const isThisServer = (event: { server_id: number }): boolean =>
     event.server_id === props.server.id;
 
+// `range` rides along with `metrics`, so the range selector always names the
+// range the charts on screen were read for, whichever reload lands last.
 const reports = useRealtimeReload({
     channel: 'admin.servers',
     event: 'ServerReported',
-    only: ['server', 'latest', 'checks', 'incidents', 'metrics'],
+    only: ['server', 'latest', 'checks', 'incidents', 'metrics', 'range'],
     filter: isThisServer,
 });
 

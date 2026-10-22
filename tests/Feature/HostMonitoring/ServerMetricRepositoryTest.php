@@ -10,6 +10,17 @@ use App\Services\HostMonitoring\ServerMetricRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Sequence;
 
+/**
+ * The buckets that have a value, keyed by their ISO start.
+ *
+ * @param  list<array{at: string, value: ?float}>  $points
+ * @return array<string, float>
+ */
+function serverMetricRepositoryValues(array $points): array
+{
+    return array_filter(array_column($points, 'value', 'at'), static fn (?float $value): bool => $value !== null);
+}
+
 test('the six hour range buckets minute samples into at most 120 points', function (): void {
     // Off a bucket boundary: a window of exactly now − 6 h would touch 121 three-minute buckets.
     $this->travelTo(CarbonImmutable::parse('2026-10-22 12:01:30'));
@@ -26,8 +37,9 @@ test('the six hour range buckets minute samples into at most 120 points', functi
 
     // The window starts at 06:03, so 06:02 is left out; the first bucket averages 06:03, 06:04 and 06:05 (35.8, 35.7, 35.6).
     expect($series['cpu'])->toHaveCount(120)
-        ->and($series['cpu'][0])->toBe(['at' => '2026-10-22T06:03:00+00:00', 'label' => '06:03', 'value' => 35.7])
-        ->and($series['cpu'][119]['label'])->toBe('12:00')
+        ->and($series['cpu'][0])->toBe(['at' => '2026-10-22T06:03:00+00:00', 'value' => 35.7])
+        ->and($series['cpu'][119]['at'])->toBe('2026-10-22T12:00:00+00:00')
+        ->and(serverMetricRepositoryValues($series['cpu']))->toHaveCount(120)
         ->and($series['memory'])->toHaveCount(120)
         ->and($series['memory'][0]['value'])->toBe(25.0);
 });
@@ -42,7 +54,8 @@ test('the 30 day range reads five-minute rows only', function (): void {
 
     $series = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::ThirtyDays);
 
-    expect($series['cpu'])->toBe([['at' => '2026-10-22T06:00:00+00:00', 'label' => 'Oct 22', 'value' => 10.0]])
+    expect($series['cpu'])->toHaveCount(120)
+        ->and(serverMetricRepositoryValues($series['cpu']))->toBe(['2026-10-22T06:00:00+00:00' => 10.0])
         ->and($series['filesystems'])->toBe([]);
 });
 
@@ -58,11 +71,11 @@ test('memory and filesystem points are percentages', function (): void {
 
     $series = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::SixHours);
 
-    expect($series['memory'])->toBe([['at' => '2026-10-22T11:54:00+00:00', 'label' => '11:54', 'value' => 50.0]])
-        ->and($series['filesystems'])->toBe([
-            ['mount' => '/', 'points' => [['at' => '2026-10-22T11:54:00+00:00', 'label' => '11:54', 'value' => 25.0]]],
-            ['mount' => '/srv', 'points' => [['at' => '2026-10-22T11:54:00+00:00', 'label' => '11:54', 'value' => 90.0]]],
-        ]);
+    expect(serverMetricRepositoryValues($series['memory']))->toBe(['2026-10-22T11:54:00+00:00' => 50.0])
+        ->and(array_column($series['filesystems'], 'mount'))->toBe(['/', '/srv'])
+        ->and(serverMetricRepositoryValues($series['filesystems'][0]['points']))->toBe(['2026-10-22T11:54:00+00:00' => 25.0])
+        ->and(serverMetricRepositoryValues($series['filesystems'][1]['points']))->toBe(['2026-10-22T11:54:00+00:00' => 90.0])
+        ->and($series['filesystems'][1]['points'])->toHaveCount(120);
 });
 
 test('a zero-size filesystem produces no points and no error', function (): void {
@@ -72,9 +85,33 @@ test('a zero-size filesystem produces no points and no error', function (): void
 
     $series = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::SixHours);
 
-    expect($series['cpu'])->toHaveCount(1)
+    expect(serverMetricRepositoryValues($series['cpu']))->toHaveCount(1)
         ->and($series['memory'])->toBe([])
         ->and($series['filesystems'])->toBe([]);
+});
+
+test('buckets without samples stay in the series as gaps', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:01:30'));
+    $server = Server::factory()->create();
+    ServerMetricSample::factory()->for($server)->at(now()->setTime(11, 0))->create(['cpu_percent' => 30]);
+    ServerMetricSample::factory()->for($server)->at(now()->setTime(12, 0))->create(['cpu_percent' => 60]);
+    ServerFilesystemSample::factory()->for($server)->mount('/mnt/nas')->at(now()->setTime(9, 0))->bytes(100, 50, 50)->create();
+    ServerFilesystemSample::factory()->for($server)->mount('/mnt/nas')->at(now()->setTime(12, 0))->bytes(100, 60, 40)->create();
+
+    $series = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::SixHours);
+    $byStart = array_column($series['cpu'], 'value', 'at');
+
+    expect($series['cpu'])->toHaveCount(120)
+        ->and($byStart['2026-10-22T11:00:00+00:00'])->toBe(30.0)
+        ->and($byStart['2026-10-22T11:03:00+00:00'])->toBeNull()
+        ->and($byStart['2026-10-22T11:57:00+00:00'])->toBeNull()
+        ->and($byStart['2026-10-22T12:00:00+00:00'])->toBe(60.0)
+        ->and(serverMetricRepositoryValues($series['cpu']))->toHaveCount(2)
+        ->and($series['filesystems'][0]['points'])->toHaveCount(120)
+        ->and(serverMetricRepositoryValues($series['filesystems'][0]['points']))->toBe([
+            '2026-10-22T09:00:00+00:00' => 50.0,
+            '2026-10-22T12:00:00+00:00' => 60.0,
+        ]);
 });
 
 test('a new server has empty series for every range', function (ServerMetricRange $range): void {

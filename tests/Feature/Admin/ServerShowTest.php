@@ -86,9 +86,10 @@ test('the server page shows facts, checks and incidents with metrics deferred', 
             ->has('ranges', 4)
             ->missing('metrics')
             ->loadDeferredProps('metrics', fn ($reload) => $reload
-                ->has('metrics.cpu', 1)
-                ->where('metrics.cpu.0.value', 42)
-                ->has('metrics.memory', 1)
+                ->has('metrics.cpu', 120)
+                ->where('metrics.cpu.0.value', null)
+                ->where('metrics.cpu.119.value', 42)
+                ->has('metrics.memory', 120)
                 ->has('metrics.filesystems', 0)));
 });
 

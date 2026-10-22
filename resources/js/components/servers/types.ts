@@ -137,14 +137,16 @@ export interface ServerIncidentRow {
     resolved_at: string | null;
 }
 
-/** One chart bucket; `label` is already formatted by the server in the app timezone. */
+/** One chart bucket: its ISO start and its average, null when no sample fell in it. */
 export interface MetricPoint {
     at: string;
-    label: string;
-    value: number;
+    value: number | null;
 }
 
-/** `ServerMetricRepository::series()`: percentages, at most 120 points each. */
+/**
+ * `ServerMetricRepository::series()`: percentages. A series with data has
+ * every bucket of the window (at most 120); one without data is empty.
+ */
 export interface MetricSeries {
     cpu: MetricPoint[];
     memory: MetricPoint[];

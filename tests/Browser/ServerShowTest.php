@@ -27,32 +27,76 @@ function serverShowReportingServer(array $attributes = []): Server
     return $server;
 }
 
+/**
+ * Holds back the answer to the page's first deferred `metrics` request, as a slow network would: it is sent and
+ * answered at once, but the page only sees the answer when window.__mmReleaseHeld() runs.
+ */
+function serverShowHoldMetricsScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmHeldAnswered = false;
+            window.__mmReleaseHeld = () => {};
+            let armed = true;
+            const setRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+            XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+                if (String(name).toLowerCase() === 'x-inertia-partial-data' && String(value).split(',').includes('metrics')) {
+                    this.__mmMetrics = true;
+                }
+                return setRequestHeader.call(this, name, value);
+            };
+            const send = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function (body) {
+                if (armed && this.__mmMetrics) {
+                    armed = false;
+                    const onload = this.onload;
+                    this.onload = (...args) => {
+                        window.__mmReleaseHeld = () => onload.apply(this, args);
+                        window.__mmHeldAnswered = true;
+                    };
+                }
+                return send.call(this, body);
+            };
+        })()
+    JS;
+}
+
 test('an incident is visible on the server page with its anchor', function (): void {
     Cache::put(AgentRelease::CACHE_KEY, '0.3.0');
     $this->actingAs(User::factory()->admin()->create());
     $server = serverShowReportingServer(['agent_version' => '0.2.0']);
     $serverIncident = ServerIncident::factory()->for($server)->open()->critical()->key('disk:/')->create(['title' => 'Disk / is 95% full', 'detail' => '5.0 GB left of 100 GB.']);
-    $resolved = ServerIncident::factory()->for($server)->resolved()->create(['title' => 'Backups were stale']);
+    $resolved = collect(range(1, 18))->map(fn (int $hours): ServerIncident => ServerIncident::factory()->for($server)->resolved()->create([
+        'title' => sprintf('Backups were stale %d', $hours),
+        'resolved_at' => now()->subHours($hours),
+    ]));
+    $deepIncident = $resolved[14];
     $serverCheck = ServerCheck::factory()->for($server)->mountPresent()->withResult(HostCheckStatus::Crit, '/mnt/backups is not mounted')->create();
     DB::table('server_checks')->where('id', $serverCheck->id)->update(['last_observed' => '{"mounted": false}']);
     $row = sprintf('[data-incident-row="%d"]', $serverIncident->id);
+    $deepRowTop = sprintf('document.getElementById("incident-%d").getBoundingClientRect().top', $deepIncident->id);
 
     $webpage = visit(route('admin.servers.show', $server, absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn($row.' [data-incident-title]', 'Disk / is 95% full')
         ->assertSeeIn($row.' [data-incident-detail]', '5.0 GB left of 100 GB.')
         ->assertVisible($row.' [data-incident-severity="critical"]')
-        ->assertVisible(sprintf('[data-incident-row="%d"] [data-incident-resolved]', $resolved->id))
+        ->assertVisible(sprintf('[data-incident-row="%d"] [data-incident-resolved]', $resolved[0]->id))
         ->assertScript(sprintf("document.getElementById('incident-%d') !== null", $serverIncident->id), true)
-        ->assertScript('[...document.querySelectorAll("[data-incident-row]")].map((row) => row.dataset.incidentStatus).join(",")', 'open,resolved');
+        ->assertScript('[...document.querySelectorAll("[data-incident-row]")].map((row) => row.dataset.incidentStatus).join(",")', 'open'.str_repeat(',resolved', 18))
+        ->assertMissing('[data-incident-linked]')
+        ->assertScript($deepRowTop.' > window.innerHeight', true);
 
     // visit() drops a URL fragment, so load the notification link's shape (path + query + #incident-id) from the page itself.
-    $webpage->script(sprintf("location.assign(location.pathname + '?range=6h#incident-%d')", $serverIncident->id));
+    $webpage->script(sprintf("location.assign(location.pathname + '?range=6h#incident-%d')", $deepIncident->id));
     $webpage->script(confirmDialogWaitUntilScript("document.readyState === 'complete' && location.search === '?range=6h' && document.querySelector('#app')?.__vue_app__ !== undefined"));
+    $webpage->script(confirmDialogWaitUntilScript($deepRowTop.' < window.innerHeight'));
 
-    $webpage->assertScript('location.hash', '#incident-'.$serverIncident->id)
-        ->assertScript('document.querySelector("[data-incident-linked]")?.dataset.incidentRow', (string) $serverIncident->id)
-        ->assertScript(sprintf('(() => { const rect = document.getElementById("incident-%d").getBoundingClientRect(); return rect.top >= 0 && rect.top < window.innerHeight; })()', $serverIncident->id), true);
+    // The row started below the fold; the page scrolled until all of it is on screen.
+    $webpage->assertScript('location.hash', '#incident-'.$deepIncident->id)
+        ->assertScript('document.querySelector("[data-incident-linked]")?.dataset.incidentRow', (string) $deepIncident->id)
+        ->assertScript('document.scrollingElement.scrollTop > 0', true)
+        ->assertScript(sprintf('(() => { const rect = document.getElementById("incident-%d").getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight; })()', $deepIncident->id), true);
 
     $webpage->assertVisible('[data-server-facts] [data-server-agent-outdated]')
         ->assertSeeIn('[data-server-uptime]', '1d 0h')
@@ -63,32 +107,71 @@ test('an incident is visible on the server page with its anchor', function (): v
 });
 
 test('switching the range reloads the graphs', function (): void {
-    $this->actingAs(User::factory()->admin()->create());
+    $this->actingAs(User::factory()->admin()->create(['preferences' => ['timezone' => 'Asia/Kolkata', 'time_format' => '24h', 'date_format' => 'iso']]));
     $server = Server::factory()->reporting()->create();
-    ServerMetricSample::factory()->for($server)->at(now()->startOfMinute())->create(['cpu_percent' => 40]);
-    ServerFilesystemSample::factory()->for($server)->at(now()->startOfMinute())->create();
+    $sampledAt = now()->startOfMinute();
+    ServerMetricSample::factory()->for($server)->at($sampledAt)->create(['cpu_percent' => 40]);
+    ServerFilesystemSample::factory()->for($server)->at($sampledAt)->create();
     ServerMetricSample::factory()->for($server)->resolution(ServerMetricSample::FIVE_MINUTES)->at(now()->subDays(3))->create(['cpu_percent' => 10]);
     ServerMetricSample::factory()->for($server)->resolution(ServerMetricSample::FIVE_MINUTES)->at(now()->subDays(10))->create(['cpu_percent' => 20]);
+    $tenDaysAgo = now()->subDays(10);
+    $realBars = '[data-metrics-chart="cpu"] rect[data-bar-placeholder="false"]';
+    $firstAxisLabel = 'document.querySelector(\'[data-metrics-chart="cpu"] svg\').nextElementSibling.firstElementChild.textContent.trim()';
+    $firstRealTooltip = sprintf("document.querySelector('%s title').textContent", $realBars);
 
     $webpage = visit(route('admin.servers.show', $server, absolute: false))
         ->assertNoSmoke()
         ->assertVisible('[data-metrics-panel] [data-metrics-chart="cpu"]')
         ->assertVisible('[data-metrics-chart="memory"]')
         ->assertVisible('[data-metrics-chart-fs="/"]')
-        ->assertAttribute('[data-metrics-range="6h"]', 'aria-pressed', 'true')
-        ->assertCount('[data-metrics-chart="cpu"] rect', 1);
+        ->assertAttribute('[data-metrics-range="6h"]', 'aria-pressed', 'true');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length === 120'));
+
+    $webpage->assertScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length', 120)
+        ->assertScript(sprintf("document.querySelectorAll('%s').length", $realBars), 1)
+        // Times are the viewer's (Asia/Kolkata), not the app's UTC; 6 h buckets are three minutes wide.
+        ->assertScript($firstRealTooltip, sprintf('%s: 40%%', $sampledAt->subMinutes($sampledAt->minute % 3)->setTimezone('Asia/Kolkata')->format('Y-m-d H:i')))
+        ->assertScript(sprintf('/^\\d{2}:\\d{2}$/.test(%s)', $firstAxisLabel), true);
     $webpage->script(appHydratedScript());
 
     $webpage->click('[data-metrics-range="30d"]');
-    $webpage->script(confirmDialogWaitUntilScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length === 2'));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("document.querySelectorAll('%s').length === 2", $realBars)));
 
     $webpage->assertAttribute('[data-metrics-range="30d"]', 'aria-pressed', 'true')
         ->assertAttribute('[data-metrics-range="6h"]', 'aria-pressed', 'false')
-        ->assertCount('[data-metrics-chart="cpu"] rect', 2)
-        ->assertVisible('[data-metrics-chart="cpu"]')
+        ->assertScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length', 120)
+        ->assertScript(sprintf("document.querySelectorAll('%s').length", $realBars), 2)
         ->assertMissing('[data-metrics-chart-fs="/"]')
         ->assertQueryStringHas('range', '30d')
-        ->assertScript('document.querySelector(\'[data-metrics-chart="cpu"] rect title\').textContent.endsWith(": 20%")', true);
+        // 30 d buckets are six hours wide, counted from midnight.
+        ->assertScript($firstRealTooltip, sprintf('%s: 20%%', $tenDaysAgo->startOfDay()->addHours(intdiv($tenDaysAgo->hour, 6) * 6)->setTimezone('Asia/Kolkata')->format('Y-m-d H:i')))
+        ->assertScript(sprintf('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}$/.test(%s)', $firstAxisLabel), true)
+        ->assertScript('document.querySelector(\'[data-metrics-chart="cpu"] rect[data-bar-placeholder="true"] title\').textContent.endsWith(": no data")', true);
+});
+
+test('the graphs show a skeleton until the deferred metrics arrive', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+    ServerMetricSample::factory()->for($server)->at(now()->startOfMinute())->create();
+
+    $webpage = visit(route('admin.servers.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(serverShowHoldMetricsScript());
+
+    $webpage->click(sprintf('[data-server-row="%d"] [data-server-link]', $server->id))
+        ->assertPathIs(route('admin.servers.show', $server, absolute: false));
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmHeldAnswered === true'));
+
+    $webpage->assertVisible('[data-metrics-panel] [data-metrics-loading]')
+        ->assertAttribute('[data-metrics-panel]', 'aria-busy', 'true')
+        ->assertMissing('[data-metrics-chart="cpu"]');
+
+    $webpage->script('window.__mmReleaseHeld()');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector(\'[data-metrics-chart="cpu"]\') !== null'));
+
+    $webpage->assertVisible('[data-metrics-chart="cpu"]')
+        ->assertMissing('[data-metrics-loading]')
+        ->assertAttribute('[data-metrics-panel]', 'aria-busy', 'false');
 });
 
 test('a new incident appears live', function (): void {
