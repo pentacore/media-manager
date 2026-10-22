@@ -218,6 +218,8 @@ final readonly class BenchmarkScorer
             $benchmarkCase->task === AiTask::Chat ? AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')) : null,
         );
 
+        $agentResponse = null;
+
         try {
             $this->aiBudgetGuard->enforce();
 
@@ -237,7 +239,7 @@ final readonly class BenchmarkScorer
                 'passed' => null,
                 'detail' => ['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)],
                 'judge_status' => BenchmarkJudgeStatus::Failed,
-                'judge_cost_usd' => 0.0,
+                'judge_cost_usd' => $agentResponse instanceof AgentResponse ? $this->judgeCost($agentResponse) : 0.0,
             ];
         }
 

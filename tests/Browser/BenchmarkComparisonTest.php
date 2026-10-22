@@ -118,6 +118,19 @@ test('an admin swaps the baseline, adds a run and removes it again', function ()
         ->assertVisible(sprintf('[data-compare-run="%d"] [data-compare-baseline]', $after->id));
 });
 
+test('an admin sets the middle run as the baseline', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $benchmarkRun = compareBrowserRun('Middle run', [['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null]]);
+
+    visit(compareBrowserUrl($before, $benchmarkRun, $after))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-compare-run="%d"] [data-compare-set-baseline]', $benchmarkRun->id))
+        ->assertVisible(sprintf('[data-compare-run="%d"] [data-compare-baseline]', $benchmarkRun->id))
+        ->assertMissing(sprintf('[data-compare-run="%d"] [data-compare-set-baseline]', $benchmarkRun->id))
+        ->assertScript("document.querySelector('[data-compare-run-bar] [data-compare-run]').dataset.compareRun", (string) $benchmarkRun->id);
+});
+
 test('two different models are paired by hand and unpaired again', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);

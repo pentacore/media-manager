@@ -101,6 +101,7 @@ test('a start is refused', function (Closure $payload, string $field): void {
 })->with([
     'cap below the estimate' => [fn (array $runIds): array => endpointPayload($runIds, ['cost_cap_usd' => 0.001]), 'cost_cap_usd'],
     'no cap' => [fn (array $runIds): array => endpointPayload($runIds, ['cost_cap_usd' => null]), 'cost_cap_usd'],
+    'a cap above the maximum' => [fn (array $runIds): array => endpointPayload($runIds, ['cost_cap_usd' => 5000]), 'cost_cap_usd'],
     'an unpriced judge' => [fn (array $runIds): array => endpointPayload($runIds, ['judge' => ['provider' => 'openai', 'model' => 'gpt-unknown', 'reasoning' => null]]), 'judge.model'],
     'one run' => [fn (array $runIds): array => endpointPayload([$runIds[0]]), 'run_ids'],
     'a running run' => [fn (array $runIds): array => endpointPayload([$runIds[0], BenchmarkRun::factory()->running()->create()->id]), 'run_ids'],

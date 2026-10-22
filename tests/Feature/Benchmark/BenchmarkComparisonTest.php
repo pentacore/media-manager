@@ -247,6 +247,24 @@ test('a candidate is self-judged against the judge whose scores are shown', func
         ->and($neutral[1]['figures'][0]['self_judged'])->toBeTrue();
 });
 
+test('a case a run never finished is not common to the runs', function (): void {
+    [$x, $y] = [compareTitleCase('X'), compareTitleCase('Y')];
+    $benchmarkRun = compareRun([compareSelection('gpt-a')]);
+    $runB = compareRun([compareSelection('gpt-a')]);
+    compareResult($benchmarkRun, $x, 0, 0.8, true);
+    compareResult($benchmarkRun, $y, 0, 0.8, true);
+    compareResult($runB, $x, 0, 0.6, false);
+    compareResult($runB, $y, 0, null, null, ['status' => BenchmarkResultStatus::Skipped]);
+
+    expect(BenchmarkComparisonScope::commonCases([$benchmarkRun->id, $runB->id]))->toBe(['title' => ['common' => [$x->id], 'excluded' => 1]]);
+
+    $task = compareBuild([$benchmarkRun->id, $runB->id])['tasks'][0];
+
+    expect($task)->toMatchArray(['common_cases' => 1, 'excluded_cases' => 1])
+        ->and($task['cases'])->toHaveCount(1)
+        ->and(collect($task['cases'])->pluck('case_id')->all())->not->toContain($y->id);
+});
+
 test('a task with no common cases has no rows', function (): void {
     $benchmarkRun = compareRun([compareSelection('gpt-a')]);
     $runB = compareRun([compareSelection('gpt-a')]);

@@ -67,7 +67,7 @@ const isActive = computed(
 
 const { start: startPolling, stop: stopPolling } = usePoll(
     POLL_INTERVAL_MS,
-    { only: ['run', 'matrix'] },
+    { only: ['run', 'matrix', 'compareOptions'] },
     { autoStart: false },
 );
 

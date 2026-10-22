@@ -121,9 +121,11 @@ test('outputs show both sides of a case', function (): void {
     [$runA, $runB, $before, $after] = comparePagePair();
     $this->actingAs(User::factory()->admin()->create());
     $url = comparePageUrl($runA, $runB);
+    $outside = BenchmarkResult::factory()->forCase(BenchmarkRun::factory()->completed()->create(), BenchmarkCase::query()->sole(), 0)->scored(0.1, false)->create(['output' => 'Outside']);
 
-    $this->get(sprintf('%s&outputs=%d,%d', $url, $before->id, $after->id), comparePartialHeaders($this, $url, 'outputs'))
+    $this->get(sprintf('%s&outputs=%d,%d,%d', $url, $before->id, $after->id, $outside->id), comparePartialHeaders($this, $url, 'outputs'))
         ->assertOk()
+        ->assertJsonCount(2, 'props.outputs')
         ->assertJsonPath('props.outputs.0.output', 'Old')
         ->assertJsonPath('props.outputs.1.output', 'New')
         ->assertJsonPath('props.outputs.1.rationale', 'Worse');

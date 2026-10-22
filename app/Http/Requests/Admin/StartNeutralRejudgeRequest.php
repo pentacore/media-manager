@@ -31,7 +31,7 @@ class StartNeutralRejudgeRequest extends FormRequest
             ...$this->comparisonRunRules(),
             'judge' => ['required', 'array:provider,model,reasoning'],
             ...$this->requiredSelectionRules('judge'),
-            'cost_cap_usd' => ['required', 'numeric', 'gt:0'],
+            'cost_cap_usd' => ['required', 'numeric', 'gt:0', 'max:1000'],
         ];
     }
 

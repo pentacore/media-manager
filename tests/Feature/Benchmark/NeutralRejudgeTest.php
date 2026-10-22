@@ -6,6 +6,7 @@ use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkNeutralRejudgeStatus;
+use App\Enums\BenchmarkResultStatus;
 use App\Enums\QueueLane;
 use App\Jobs\RunNeutralJudgement;
 use App\Models\AiModelPrice;
@@ -112,6 +113,20 @@ test('the scope is the judged results on common cases that still need this judge
     BenchmarkNeutralJudgement::factory()->forResult($fixture['judged'][1], neutralJudge())->failed('boom')->create();
 
     expect(neutralLauncher()->scope($fixture['runs'], $key)->pluck('id')->all())->toBe([$fixture['judged'][1]->id]);
+});
+
+test('a case one run only skipped is left out of the scope', function (): void {
+    $fixture = neutralFixture();
+    $skippedCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Skipped']);
+    $benchmarkRun = BenchmarkRun::query()->findOrFail($fixture['runs'][0]);
+    $second = BenchmarkRun::query()->findOrFail($fixture['runs'][1]);
+    $kept = BenchmarkResult::factory()->forCase($benchmarkRun, $skippedCase, 0)->scored(0.8, true)->create(['output' => 'Out']);
+    BenchmarkResult::factory()->forCase($second, $skippedCase, 0)->create(['status' => BenchmarkResultStatus::Skipped]);
+
+    $ids = neutralLauncher()->scope($fixture['runs'], BenchmarkNeutralJudgement::keyFor(neutralJudge()))->pluck('id')->all();
+
+    expect($ids)->not->toContain($kept->id)
+        ->and($ids)->toBe([$fixture['judged'][0]->id, $fixture['judged'][1]->id]);
 });
 
 test('the estimate prices each result by its own output length', function (): void {
