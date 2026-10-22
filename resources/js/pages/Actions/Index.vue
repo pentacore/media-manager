@@ -7,6 +7,7 @@ import {
     ActionQueuePagination,
     ActionRequestCards,
     ActionRequestDetail,
+    ActionRequestSheet,
     ActionRequestTable,
     ActionStatusTabs,
     BulkRejectDialog,
@@ -64,11 +65,22 @@ const selectedId = ref<number | null>(
         : (visibleRequests.value[0]?.id ?? null),
 );
 
+/** Below `sm` the selected action opens in a full-screen sheet. */
+const sheetOpen = ref(false);
+
+function openSheet(id: number): void {
+    selectedId.value = id;
+    sheetOpen.value = true;
+}
+
 watch(visibleRequests, (rows) => {
     if (
         selectedId.value === null ||
         !rows.some((row) => row.id === selectedId.value)
     ) {
+        // The phone sheet never swaps to another action under the user's
+        // thumb: when its row leaves the list, the sheet closes.
+        sheetOpen.value = false;
         selectedId.value = rows[0]?.id ?? null;
     }
 });
@@ -143,8 +155,28 @@ async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
     }
 }
 
-// Takes the live channel leases and visit listeners for this visit.
-onMounted(subscribeLive);
+/**
+ * A notification deep link (`?request=<id>`) opens the action in the sheet on
+ * a phone. Desktop selects it in the pane, as before. Client-only: SSR
+ * renders the closed sheet either way.
+ */
+function openDeepLinkedSheet(): void {
+    if (
+        props.preselect !== null &&
+        selectedId.value === props.preselect &&
+        window.matchMedia('(max-width: 639.98px)').matches
+    ) {
+        sheetOpen.value = true;
+    }
+}
+
+// Takes the live channel leases and visit listeners for this visit, then
+// opens a deep-linked action. One hook: ActionQueueLiveListTest re-runs the
+// page's only mounted hook to prove a second subscribe binds nothing twice.
+onMounted(() => {
+    subscribeLive();
+    openDeepLinkedSheet();
+});
 
 function setFilter(id: string): void {
     router.get(
@@ -239,7 +271,7 @@ function goToPage(url: string | null): void {
                 :rows="visibleRequests"
                 :bulk-ids="bulkIds"
                 :bulk-busy="bulkBusy"
-                @open="(id) => (selectedId = id)"
+                @open="openSheet"
                 @toggle="toggleBulk"
             />
 
@@ -286,6 +318,14 @@ function goToPage(url: string | null): void {
             :count="bulkCount"
             :busy="bulkBusy"
             @confirm="bulkReview('reject')"
+        />
+
+        <ActionRequestSheet
+            v-model:open="sheetOpen"
+            :selected="selected"
+            @approve="approve"
+            @reject="reject"
+            @retry="retry"
         />
 
         <ActionQueuePagination

@@ -40,3 +40,12 @@ On the phone-job pages (Action Queue, SABnzbd queue and history, grab queue, wat
 - **What a card holds:** the row's key facts and every row action, with long file or release names in `break-all` and titles in `break-words`.
 
 Admin-only tables keep their columns and scroll inside their frame. `ActionQueuePhoneTest`, `DownloadsPhoneTest`, `InteractiveSearchPhoneTest` and `MonitoringPhoneTest` pin it.
+
+## The Action Queue detail has a pane and a sheet layout
+`ActionRequestDetail` is the one implementation of an action's detail, review buttons and failure/second-opinion cards:
+- **`layout="pane"`** (default) is the desktop panel beside the table, `max-sm:hidden`.
+- **`layout="sheet"`** renders the same markup inside `ActionRequestSheet`, the phone's full-screen `Sheet`. The card stops clipping (sticky needs a non-clipping ancestor) and the Approve/Decline and Retry rows become `sticky bottom-0` bars.
+
+Never fork the detail for a new presentation; add a layout case.
+
+The sheet opens from a card (`openSheet`) or, on a phone, from a `?request=<id>` deep link in `onMounted` (`openDeepLinkedSheet()`, called from the page's single `onMounted` after `subscribeLive()`: `ActionQueueLiveListTest` re-runs the page's only mounted hook, so never add a second one). On close it restores the window's scroll position and focuses the card (`@close-auto-focus`, default prevented). The page's `visibleRequests` watcher closes the sheet before it moves the selection, so a row that leaves the list (approved under the Pending tab) never turns the sheet into another action. Live status changes need nothing extra, because the sheet renders the same `selected` row `useActionQueueLive` orders by `status_version`. `ActionQueuePhoneTest` pins it.
