@@ -87,6 +87,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
         Route::prefix('benchmarks/compare')->name('benchmarks.compare.')->group(function (): void {
             Route::get('/', [BenchmarkComparisonController::class, 'show'])->name('show');
+            Route::post('neutral/estimate', [BenchmarkComparisonController::class, 'estimate'])->name('estimate');
+            Route::post('neutral', [BenchmarkComparisonController::class, 'start'])->name('start');
+            Route::post('neutral/{benchmarkNeutralRejudge}/cancel', [BenchmarkComparisonController::class, 'cancel'])->whereNumber('benchmarkNeutralRejudge')->name('cancel');
         });
 
         Route::prefix('benchmarks/schedules')->name('benchmarks.schedules.')->group(function (): void {

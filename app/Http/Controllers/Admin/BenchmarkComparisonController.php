@@ -10,14 +10,22 @@ use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\EstimateNeutralRejudgeRequest;
 use App\Http\Requests\Admin\ShowBenchmarkComparisonRequest;
+use App\Http\Requests\Admin\StartNeutralRejudgeRequest;
+use App\Models\BenchmarkNeutralJudgement;
 use App\Models\BenchmarkNeutralRejudge;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Providers\AIServiceProvider;
+use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkComparison;
+use App\Services\Benchmark\BenchmarkNeutralRejudgeLauncher;
 use App\Services\Benchmark\BenchmarkResultDetails;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -62,6 +70,75 @@ class BenchmarkComparisonController extends Controller
                 $comparison['score_source']['current'],
             )),
         ]);
+    }
+
+    public function estimate(EstimateNeutralRejudgeRequest $estimateNeutralRejudgeRequest, BenchmarkNeutralRejudgeLauncher $benchmarkNeutralRejudgeLauncher): JsonResponse
+    {
+        $validated = $estimateNeutralRejudgeRequest->validated();
+        $judge = $this->judgeFrom($validated['judge']);
+
+        return response()->json($benchmarkNeutralRejudgeLauncher->estimate(
+            $benchmarkNeutralRejudgeLauncher->scope(array_map(intval(...), $validated['run_ids']), BenchmarkNeutralJudgement::keyFor($judge)),
+            $judge,
+        ));
+    }
+
+    public function start(StartNeutralRejudgeRequest $startNeutralRejudgeRequest, BenchmarkNeutralRejudgeLauncher $benchmarkNeutralRejudgeLauncher, AuditLogger $auditLogger): RedirectResponse
+    {
+        $validated = $startNeutralRejudgeRequest->validated();
+        $runIds = array_map(intval(...), $validated['run_ids']);
+        $judge = $this->judgeFrom($validated['judge']);
+        $costCap = (float) $validated['cost_cap_usd'];
+        $scope = $benchmarkNeutralRejudgeLauncher->scope($runIds, BenchmarkNeutralJudgement::keyFor($judge));
+
+        throw_if($scope->isEmpty(), ValidationException::withMessages(['judge' => __('Every result already has a score from this judge')]));
+
+        $estimate = $benchmarkNeutralRejudgeLauncher->estimate($scope, $judge);
+
+        throw_if($costCap < $estimate['total_usd'], ValidationException::withMessages(['cost_cap_usd' => __('The cost cap is below the estimate.')]));
+
+        $benchmarkNeutralRejudge = $benchmarkNeutralRejudgeLauncher->start($runIds, $judge, $costCap, $estimate['total_usd'], $startNeutralRejudgeRequest->user());
+
+        throw_unless($benchmarkNeutralRejudge instanceof BenchmarkNeutralRejudge, ValidationException::withMessages(['judge' => __('Every result already has a score from this judge')]));
+
+        $auditLogger->record(
+            'benchmark.neutral_rejudge.started',
+            $benchmarkNeutralRejudge,
+            sprintf('Started a neutral re-judge of runs %s with %s.', implode(', ', $benchmarkNeutralRejudge->run_ids), BenchmarkComparison::candidateLabel($judge)),
+            context: ['run_ids' => $benchmarkNeutralRejudge->run_ids, 'judge' => $judge, 'cost_cap_usd' => $costCap, 'results' => $estimate['results']],
+        );
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Neutral re-judge started.')]);
+
+        return back();
+    }
+
+    public function cancel(BenchmarkNeutralRejudge $benchmarkNeutralRejudge, BenchmarkNeutralRejudgeLauncher $benchmarkNeutralRejudgeLauncher, AuditLogger $auditLogger): RedirectResponse
+    {
+        if (! $benchmarkNeutralRejudgeLauncher->cancel($benchmarkNeutralRejudge)) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => __('This re-judge has already finished.')]);
+
+            return back();
+        }
+
+        $auditLogger->record('benchmark.neutral_rejudge.cancelled', $benchmarkNeutralRejudge, sprintf('Cancelled neutral re-judge #%d.', $benchmarkNeutralRejudge->id));
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Neutral re-judge cancelled.')]);
+
+        return back();
+    }
+
+    /**
+     * @param  array<string, mixed>  $judge
+     * @return array{provider: string, model: string, reasoning: string|null}
+     */
+    private function judgeFrom(array $judge): array
+    {
+        return [
+            'provider' => (string) $judge['provider'],
+            'model' => (string) $judge['model'],
+            'reasoning' => is_string($judge['reasoning'] ?? null) ? $judge['reasoning'] : null,
+        ];
     }
 
     /**
