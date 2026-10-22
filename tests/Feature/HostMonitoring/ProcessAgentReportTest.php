@@ -9,6 +9,7 @@ use App\Models\ServerCheck;
 use App\Models\ServerFilesystemSample;
 use App\Models\ServerMetricSample;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Tests\Support\AgentReportFixtures;
@@ -111,6 +112,17 @@ test('a long check message is cut to 500 characters', function (): void {
     ]]));
 
     expect($check->fresh()->last_message)->toBe(str_repeat('x', 500));
+});
+
+test('an empty observed result is stored as a json object, not a list', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $check = ServerCheck::factory()->for($server)->create();
+
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody(['checks' => [
+        AgentReportFixtures::agentCheckResult($check->uuid, HostCheckStatus::Ok, observed: []),
+    ]]));
+
+    expect(DB::table('server_checks')->where('id', $check->id)->value('last_observed'))->toBe('{}');
 });
 
 test('recording a check result does not bump the config version', function (): void {

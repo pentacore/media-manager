@@ -142,7 +142,20 @@ class Server extends Model
     }
 
     /**
-     * Requires the withStatus() scope on the query that loaded this server.
+     * Adds the withStatus() counts to a server already in hand (a route-bound one) in one query that reads only its key, not the whole row again.
+     */
+    public function loadStatus(): static
+    {
+        $aggregates = static::query()->select($this->getKeyName())->whereKey($this->getKey())->withStatus()->firstOrFail();
+
+        return $this->forceFill([
+            'open_incidents_count' => $aggregates->open_incidents_count,
+            'silent_incident_exists' => $aggregates->silent_incident_exists,
+        ])->syncOriginalAttributes(['open_incidents_count', 'silent_incident_exists']);
+    }
+
+    /**
+     * Requires the withStatus() scope on the query that loaded this server, or loadStatus() on it.
      */
     public function status(): ServerStatus
     {

@@ -17,6 +17,7 @@ final readonly class CheckResultRecorder
     {
         foreach ($agentReport->checks as $check) {
             // A builder update: no model events, so a result never bumps config_version, and updated_at keeps meaning "last edited".
+            // `observed` is always an object; the (object) cast keeps an empty one `{}` instead of `[]`.
             ServerCheck::query()
                 ->where('server_id', $server->id)
                 ->where('uuid', $check['id'])
@@ -24,7 +25,7 @@ final readonly class CheckResultRecorder
                 ->update([
                     'last_status' => $check['status']->value,
                     'last_message' => $check['message'] === null ? null : Str::limit($check['message'], 500, ''),
-                    'last_observed' => $check['observed'] === null ? null : json_encode($check['observed'], JSON_THROW_ON_ERROR),
+                    'last_observed' => $check['observed'] === null ? null : json_encode((object) $check['observed'], JSON_THROW_ON_ERROR),
                     'last_evaluated_at' => $agentReport->receivedAt,
                 ]);
         }
