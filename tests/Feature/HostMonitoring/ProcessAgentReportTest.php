@@ -142,6 +142,7 @@ test('two in-order reports on the same day both record their check results', fun
 });
 
 test('an older report processed after a newer one stores samples but changes no check result', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:06:00'));
     $server = Server::factory()->enrolled()->create();
     $check = ServerCheck::factory()->for($server)->create();
 
