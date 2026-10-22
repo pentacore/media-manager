@@ -11,6 +11,7 @@ use App\Http\Middleware\LimitWebhookPayloadSize;
 use App\Http\Middleware\SetSecurityHeaders;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\VerifyAgentToken;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -36,6 +37,11 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        // Priority middleware (auth, throttle) is sorted ahead of everything else, including the
+        // payload limit; put the limit first so oversized bodies are refused before authentication
+        // and before they count against a rate limit.
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, LimitWebhookPayloadSize::class);
 
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
