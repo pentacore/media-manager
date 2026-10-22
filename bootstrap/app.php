@@ -10,10 +10,12 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\LimitWebhookPayloadSize;
 use App\Http\Middleware\SetSecurityHeaders;
 use App\Http\Middleware\TrustProxies;
+use App\Http\Middleware\VerifyAgentToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -40,8 +42,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'password.set' => EnsurePasswordIsSet::class,
             'ai.enabled' => EnsureAIEnabled::class,
             'webhook.payload-limit' => LimitWebhookPayloadSize::class,
+            'agent.token' => VerifyAgentToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->shouldRenderJsonWhen(fn (Request $request, Throwable $e): bool => $request->is('api/agent/*') || $request->expectsJson());
     })->create();
