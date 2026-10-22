@@ -329,3 +329,146 @@ export type BenchmarkScheduleForm = {
     score_threshold: number;
     enabled: boolean;
 };
+
+export type BenchmarkComparisonMetric =
+    'pass_rate' | 'avg_score' | 'cost_per_case' | 'latency_p50' | 'error_rate';
+
+export type BenchmarkComparisonStats = {
+    results: number;
+    ok: number;
+    failed: number;
+    skipped: number;
+    scored: number;
+    avg_score: number | null;
+    pass_rate: number | null;
+    cost_per_case: number | null;
+    latency_p50: number | null;
+    latency_p95: number | null;
+    tool_misses: number;
+    error_rate: number | null;
+    self_judged: boolean;
+};
+
+export type BenchmarkComparisonDelta = Record<
+    BenchmarkComparisonMetric,
+    number | null
+>;
+
+export type BenchmarkComparisonCell = {
+    result_id: number;
+    status: string;
+    score: number | null;
+    passed: boolean | null;
+    judge_status: BenchmarkJudgeStatus;
+};
+
+export type BenchmarkComparisonRun = {
+    id: number;
+    name: string;
+    status: BenchmarkRunStatus;
+    status_label: string;
+    created_at: string | null;
+    judge: BenchmarkSelection | null;
+    judge_label: string | null;
+    schedule_name: string | null;
+    is_baseline: boolean;
+    candidates: BenchmarkSelection[];
+};
+
+export type BenchmarkComparisonMember = {
+    run_id: number;
+    candidate_index: number;
+};
+
+export type BenchmarkComparisonLine = {
+    key: string;
+    label: string;
+    paired: boolean;
+    members: BenchmarkComparisonMember[];
+};
+
+export type BenchmarkComparisonCaseRow = {
+    case_id: number;
+    case_name: string;
+    line_key: string;
+    changed: boolean;
+    /** Aligned with the runs; null where the line has no result. */
+    cells: Array<BenchmarkComparisonCell | null>;
+};
+
+export type BenchmarkComparisonTask = {
+    task: string;
+    task_label: string;
+    common_cases: number;
+    excluded_cases: number;
+    rows: Array<{
+        line_key: string;
+        /** Aligned with the runs; null where the line has no result. */
+        figures: Array<BenchmarkComparisonStats | null>;
+        /** Aligned with the runs; the baseline's is always null. */
+        deltas: Array<BenchmarkComparisonDelta | null>;
+    }>;
+    cases: BenchmarkComparisonCaseRow[];
+};
+
+export type BenchmarkComparison = {
+    runs: BenchmarkComparisonRun[];
+    lines: BenchmarkComparisonLine[];
+    /** Manual pairs the server applied, "41.0~57.1". */
+    pairs: string[];
+    tasks: BenchmarkComparisonTask[];
+    score_source: {
+        current: string;
+        options: Array<{ key: string; label: string; coverage: number }>;
+    };
+    judges_differ: boolean;
+};
+
+export type BenchmarkNeutralRejudgeSummary = {
+    id: number;
+    status: 'running' | 'completed' | 'stopped_cost_cap' | 'cancelled';
+    status_label: string;
+    judge_key: string;
+    judge_label: string;
+    estimate_usd: number;
+    cost_cap_usd: number;
+    cost_usd: number;
+    total: number;
+    done: number;
+    failed: number;
+};
+
+export type BenchmarkPickableRun = {
+    id: number;
+    name: string;
+    created_at: string | null;
+    task_labels: string[];
+};
+
+export type BenchmarkJudgeOptions = {
+    models: Record<string, string[]>;
+    reasoningLevels: Array<{ label: string; value: AiReasoningLevel }>;
+    modelCapabilities: BenchmarkModelCapabilities;
+    reasoningProviders: string[];
+    judgeDefault: { provider: string; model: string; reasoning: string };
+};
+
+export type BenchmarkCompareOutput = {
+    result_id: number;
+    run_id: number;
+    run_name: string;
+    candidate_label: string;
+    status: string;
+    output: string | null;
+    error: string | null;
+    score: number | null;
+    passed: boolean | null;
+    rationale: string | null;
+    judge_label: string | null;
+};
+
+export type BenchmarkNeutralEstimate = {
+    total_usd: number;
+    results: number;
+    unpriced: string[];
+};
