@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
-use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkCase;
 use App\Services\AiUsage\ModelPriceLookup;
 use Illuminate\Support\Collection;
@@ -46,7 +45,7 @@ final readonly class BenchmarkEstimator
         foreach ($cases as $case) {
             $promptTokens = $case->source_prompt_tokens ?? self::DEFAULT_PROMPT_TOKENS;
             $completionTokens = $case->source_completion_tokens ?? self::DEFAULT_COMPLETION_TOKENS;
-            $judged = $this->isJudged($case);
+            $judged = $case->isJudged();
 
             foreach ($candidates as $index => $candidate) {
                 $snapshot = $candidateSnapshots[$index];
@@ -98,14 +97,6 @@ final readonly class BenchmarkEstimator
             'judge_usd' => $judgeUsd,
             'unpriced' => array_values(array_unique($unpriced)),
         ];
-    }
-
-    private function isJudged(BenchmarkCase $benchmarkCase): bool
-    {
-        $scoringType = BenchmarkScoringType::tryFrom((string) ($benchmarkCase->scoring['type'] ?? ''))
-            ?? $benchmarkCase->task->benchmarkScoringType();
-
-        return $scoringType === BenchmarkScoringType::Judge;
     }
 
     /**
