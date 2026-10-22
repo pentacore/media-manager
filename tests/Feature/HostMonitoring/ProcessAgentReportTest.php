@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\HostCheckStatus;
+use App\Events\ServerReported;
 use App\Models\Server;
 use App\Models\ServerCheck;
 use App\Models\ServerFilesystemSample;
 use App\Models\ServerMetricSample;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Tests\Support\AgentReportFixtures;
 
@@ -172,4 +174,18 @@ test('a job for a deleted server does nothing', function (): void {
 
     expect(ServerMetricSample::query()->count())->toBe(0)
         ->and(ServerFilesystemSample::query()->count())->toBe(0);
+});
+
+test('processing broadcasts ServerReported once with the server and its last report time', function (): void {
+    Event::fake([ServerReported::class]);
+    $this->freezeSecond();
+    $server = Server::factory()->enrolled()->create(['last_report_at' => now()]);
+
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody());
+
+    Event::assertDispatchedTimes(ServerReported::class, 1);
+    Event::assertDispatched(fn (ServerReported $event): bool => $event->broadcastWith() === [
+        'server_id' => $server->id,
+        'last_report_at' => now()->toIso8601String(),
+    ]);
 });

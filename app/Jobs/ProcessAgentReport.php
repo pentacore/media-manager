@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\QueueLane;
+use App\Events\ServerReported;
 use App\Models\Server;
 use App\Services\HostMonitoring\AgentReport;
 use App\Services\HostMonitoring\CheckResultRecorder;
@@ -48,6 +49,8 @@ class ProcessAgentReport implements ShouldQueue
             $agentReport = AgentReport::fromPayload($this->payload, CarbonImmutable::parse($this->receivedAt));
 
             $metricSampleWriter->write($server, $agentReport);
+
+            DB::afterCommit(fn () => event(new ServerReported($server->id, $server->last_report_at?->toIso8601String())));
 
             if ($this->isStale($server, $agentReport)) {
                 return;

@@ -11,6 +11,9 @@ use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
 use App\Models\NotificationPreference;
 use App\Notifications\AiBudgetSoftLimitReached;
 use App\Notifications\DecisionAgentActed;
+use App\Notifications\HostIncidentEscalated;
+use App\Notifications\HostIncidentOpened;
+use App\Notifications\HostIncidentResolved;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Notifications\ScheduledBenchmarkAlert;
 use App\Notifications\ServiceUpdateAvailable;
@@ -64,6 +67,27 @@ class NotificationPreferencesController extends Controller
             'label' => 'Scheduled benchmark alerts',
             'description' => 'When a scheduled benchmark run finds a model got worse, or a scheduled run could not start.',
         ],
+        HostIncidentOpened::class => [
+            'label' => 'Server incident opened',
+            'description' => 'A server problem was detected: a failed check, a filling disk, a silent agent.',
+        ],
+        HostIncidentEscalated::class => [
+            'label' => 'Server incident escalated',
+            'description' => 'A server problem became critical.',
+        ],
+        HostIncidentResolved::class => [
+            'label' => 'Server incident resolved',
+            'description' => 'A server problem cleared on its own.',
+        ],
+    ];
+
+    /**
+     * Rows only admins are notified about, so they are neither listed for nor saved from anyone else.
+     */
+    private const array ADMIN_ONLY = [
+        HostIncidentOpened::class,
+        HostIncidentEscalated::class,
+        HostIncidentResolved::class,
     ];
 
     public function edit(Request $request): Response
@@ -79,6 +103,10 @@ class NotificationPreferencesController extends Controller
 
         $catalog = [];
         foreach (self::CATALOG as $class => $meta) {
+            if (! $isAdmin && in_array($class, self::ADMIN_ONLY, true)) {
+                continue;
+            }
+
             $defaults = $preferenceResolver->defaultsFor($class);
             $perSeverity = [];
             foreach (PreferenceResolver::SEVERITIES as $severity) {
@@ -135,6 +163,10 @@ class NotificationPreferencesController extends Controller
 
         foreach ($validated['preferences'] as $entry) {
             if (! array_key_exists((string) $entry['class'], self::CATALOG)) {
+                continue;
+            }
+
+            if (! $isAdmin && in_array($entry['class'], self::ADMIN_ONLY, true)) {
                 continue;
             }
 
