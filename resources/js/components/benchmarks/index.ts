@@ -12,6 +12,7 @@ export { default as FixtureEditor } from './FixtureEditor.vue';
 export * from './format';
 export * from './jsonObject';
 export { default as JudgeScoringFields } from './JudgeScoringFields.vue';
+export { default as NeutralJudgePanel } from './NeutralJudgePanel.vue';
 export { default as PriceExpectationsEditor } from './PriceExpectationsEditor.vue';
 export { default as RegressionBanner } from './RegressionBanner.vue';
 export { default as ResultDrawer } from './ResultDrawer.vue';

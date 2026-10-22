@@ -17,7 +17,6 @@ use App\Models\BenchmarkNeutralJudgement;
 use App\Models\BenchmarkNeutralRejudge;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
-use App\Providers\AIServiceProvider;
 use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkComparison;
 use App\Services\Benchmark\BenchmarkNeutralRejudgeLauncher;
@@ -60,7 +59,6 @@ class BenchmarkComparisonController extends Controller
                     'reasoning' => $resolvedSelection->reasoning->value,
                 ],
             ],
-            'aiEnabled' => AIServiceProvider::enabled(),
             'resultDetail' => Inertia::optional(fn (): array => BenchmarkResultDetails::for(
                 BenchmarkResult::query()->whereIn('benchmark_run_id', $runIds)->findOrFail($showBenchmarkComparisonRequest->integer('result')),
             )),

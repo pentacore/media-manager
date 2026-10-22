@@ -59,7 +59,6 @@ test('an admin sees the comparison of two runs', function (): void {
             ->where('comparison.tasks.0.task', 'title')
             ->where('comparison.score_source.current', 'original')
             ->where('rejudge', null)
-            ->where('aiEnabled', true)
             ->where('judgeOptions.judgeDefault.provider', 'openai')
             ->where('pickableRuns', fn ($runs): bool => collect($runs)->pluck('id')->doesntContain($running->id) && collect($runs)->pluck('id')->contains($runA->id))
             ->missing('resultDetail')

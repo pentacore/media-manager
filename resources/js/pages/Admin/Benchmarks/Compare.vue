@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, router, usePoll } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import {
     CompareCaseGrid,
@@ -9,6 +9,7 @@ import {
     CompareTaskTable,
     compareState,
     compareUrl,
+    NeutralJudgePanel,
     pairKey,
     ResultDrawer,
     withoutLinePairs,
@@ -30,7 +31,6 @@ const props = defineProps<{
     rejudge: BenchmarkNeutralRejudgeSummary | null;
     pickableRuns: BenchmarkPickableRun[];
     judgeOptions: BenchmarkJudgeOptions;
-    aiEnabled: boolean;
     resultDetail?: BenchmarkResultDetail;
     outputs?: BenchmarkCompareOutput[];
 }>();
@@ -53,6 +53,26 @@ function visit(next: Partial<CompareState>): void {
         { preserveScroll: true },
     );
 }
+
+const REJUDGE_POLL_MS = 3_000;
+
+const { start: startPolling, stop: stopPolling } = usePoll(
+    REJUDGE_POLL_MS,
+    { only: ['comparison', 'rejudge'] },
+    { autoStart: false },
+);
+
+watch(
+    () => props.rejudge?.status === 'running',
+    (running) => {
+        if (running) {
+            startPolling();
+        } else {
+            stopPolling();
+        }
+    },
+    { immediate: true },
+);
 
 function changeRuns(runs: number[], baseline: number): void {
     visit({ runs, baseline });
@@ -149,7 +169,12 @@ function compareOutputs(baselineResultId: number, otherResultId: number): void {
             @change="changeRuns"
         />
 
-        <!-- Task 10: NeutralJudgePanel goes here -->
+        <NeutralJudgePanel
+            :comparison="comparison"
+            :rejudge="rejudge"
+            :judge-options="judgeOptions"
+            @scores="(scores) => visit({ scores })"
+        />
 
         <p
             v-if="comparison.tasks.length === 0"

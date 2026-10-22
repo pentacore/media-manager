@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkNeutralJudgement;
+use App\Models\BenchmarkNeutralRejudge;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\User;
@@ -172,4 +175,61 @@ test('a cell opens the result drawer and vs baseline shows both outputs', functi
         ->assertSeeIn('[data-compare-output-side="baseline"]', 'Verdict on Nolan Films')
         ->assertSeeIn('[data-compare-output-side="other"] [data-compare-output-text]', 'Some movies')
         ->assertSeeIn('[data-compare-output-side="other"]', 'October rerun');
+});
+
+test('runs judged by different judges are flagged', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns(afterJudge: 'gpt-b');
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-compare-judges-differ]', 'openai · gpt-judge')
+        ->assertSeeIn('[data-compare-judges-differ]', 'openai · gpt-b');
+});
+
+test('an admin re-judges both runs with a neutral judge and switches to its scores', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    BenchmarkJudgeAgent::fake(fn (): array => ['score' => 6, 'rationale' => 'Neutral take']);
+    $gptA = sprintf('%d.0', $before->id);
+    $key = 'openai|gpt-neutral|provider_default';
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertMissing(sprintf('[data-compare-score-source="%s"]', $key))
+        ->click('[data-compare-neutral-open]')
+        ->assertVisible('[data-compare-neutral-dialog]')
+        ->click('[data-compare-neutral-dialog] [data-benchmark-model-select] button')
+        ->click('[role="option"][aria-label="gpt-neutral"]')
+        ->click('[data-compare-neutral-estimate]')
+        ->assertSeeIn('[data-compare-neutral-estimate-total]', '8 results')
+        ->fill('[data-compare-neutral-cap]', '1')
+        ->click('[data-compare-neutral-start]')
+        ->assertSee('Neutral re-judge started.')
+        ->assertSeeIn('[data-compare-rejudge-status]', 'Completed')
+        ->click(sprintf('[data-compare-score-source="%s"]', $key))
+        ->click('[data-compare-metric="avg_score"]')
+        ->assertSeeIn(sprintf('[data-compare-figure="%s:%d"]', $gptA, $before->id), '6.0');
+
+    expect(BenchmarkNeutralJudgement::query()->count())->toBe(8);
+});
+
+test('a running re-judge shows its progress and can be cancelled', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $judge = ['provider' => 'openai', 'model' => 'gpt-neutral', 'reasoning' => null];
+    $rejudge = BenchmarkNeutralRejudge::factory()->running()->forRuns([$before->id, $after->id], $judge)->create();
+
+    foreach (BenchmarkResult::query()->where('benchmark_run_id', $before->id)->get() as $benchmarkResult) {
+        BenchmarkNeutralJudgement::factory()->forResult($benchmarkResult, $judge)->queued()->create(['benchmark_neutral_rejudge_id' => $rejudge->id]);
+    }
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-compare-rejudge-status]', '0 / 4')
+        ->assertAttribute('[data-compare-neutral-open]', 'disabled', '')
+        ->click('[data-compare-rejudge-cancel]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Neutral re-judge cancelled.')
+        ->assertSeeIn('[data-compare-rejudge-status]', 'Cancelled');
 });
