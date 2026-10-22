@@ -12,8 +12,9 @@ use Illuminate\Support\Number;
 
 /**
  * Raises `memory` when available memory stayed under the configured share of the total for the whole window of 60 s
- * samples: the best reading in the window sets the severity, so a short dip raises nothing. A healthy reading clears at
- * once; a low one without enough history gets no verdict. A report without a memory total is skipped.
+ * samples: the best reading in the window sets the severity, so a short dip raises nothing. Only a healthy current
+ * reading clears; a low one without enough history, or after a brief recovery inside the window, gets no verdict, so an
+ * open incident is not resolved while memory is still low. A report without a memory total is skipped.
  */
 final readonly class MemoryPressureRule implements ReportRule
 {
@@ -66,7 +67,7 @@ final readonly class MemoryPressureRule implements ReportRule
         };
 
         if ($severity === null) {
-            return [IncidentObservation::clear(self::KEY)];
+            return [IncidentObservation::hold(self::KEY)];
         }
 
         $availablePercent = intdiv($available * 100, $total);

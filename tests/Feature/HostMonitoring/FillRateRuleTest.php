@@ -195,3 +195,61 @@ test('an unmounted filesystem resolves its fill incident after two reports', fun
 
     expect($incident->fresh()->status)->toBe(IncidentStatus::Resolved);
 });
+
+test('a single large write on a flat disk raises nothing', function (int $minutesAgo): void {
+    $server = Server::factory()->enrolled()->create();
+    fillRateSamples($server, '/', 60 - $minutesAgo, 60 * FILL_RATE_GIB, 0, now()->startOfMinute()->subMinutes($minutesAgo));
+    fillRateSamples($server, '/', $minutesAgo, 35 * FILL_RATE_GIB, 0);
+
+    fillRateReport($server, [fillRateFilesystem('/', 35 * FILL_RATE_GIB)]);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+})->with([
+    '5 minutes ago' => [5],
+    '29 minutes ago' => [29],
+    '45 minutes ago' => [45],
+]);
+
+test('a steady fill over the whole hour raises with the time to full from the recent rate', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    fillRateSamples($server, '/', 30, 12 * FILL_RATE_GIB + intdiv(6 * FILL_RATE_GIB * 30, 60), FILL_RATE_GIB, now()->startOfMinute()->subMinutes(30));
+    fillRateSamples($server, '/', 30, 12 * FILL_RATE_GIB, 6 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/', 12 * FILL_RATE_GIB)]);
+
+    expect(ServerIncident::query()->open()->where('key', 'fill:/')->sole())
+        ->severity->toBe(IncidentSeverity::Critical)
+        ->title->toBe('Disk / fills in 2 h')
+        ->detail->toBe('~2 h until full (losing 6 GB/h).');
+});
+
+test('a large cleanup clears a fill incident', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $incident = ServerIncident::factory()->for($server)->key('fill:/')->critical()->create();
+    fillRateSamples($server, '/', 50, 10 * FILL_RATE_GIB, 9 * FILL_RATE_GIB, now()->startOfMinute()->subMinutes(10));
+    fillRateSamples($server, '/', 10, 40 * FILL_RATE_GIB, 9 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/', 40 * FILL_RATE_GIB)]);
+
+    expect($incident->fresh())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(1);
+});
+
+test('a gap in the samples still predicts a steady fill', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    fillRateSamples($server, '/', 20, 18 * FILL_RATE_GIB + intdiv(9 * FILL_RATE_GIB * 40, 60), 9 * FILL_RATE_GIB, now()->startOfMinute()->subMinutes(40));
+    fillRateSamples($server, '/', 20, 18 * FILL_RATE_GIB, 9 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/', 18 * FILL_RATE_GIB)]);
+
+    expect(ServerIncident::query()->open()->where('key', 'fill:/')->sole()->detail)->toBe('~2 h until full (losing 9 GB/h).');
+});
+
+test('a disk with no space left gets no fill verdict', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $incident = ServerIncident::factory()->for($server)->key('fill:/')->create(['clear_streak' => 1]);
+    fillRateSamples($server, '/', 30, 0, 9 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/', 0)]);
+
+    expect($incident->fresh())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(1);
+});

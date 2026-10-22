@@ -128,3 +128,17 @@ test('a report without a memory total leaves the memory incident untouched', fun
 
     expect($incident->fresh())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(0);
 });
+
+test('a brief recovery inside the window holds an open incident while memory is still low', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $incident = ServerIncident::factory()->for($server)->key('memory')->critical()->create(['clear_streak' => 1]);
+    memoryRuleSamples($server, 4, 4);
+    ServerMetricSample::query()->where('recorded_at', now()->startOfMinute()->subMinutes(2))->update(['memory_used_bytes' => MEMORY_RULE_TOTAL - intdiv(MEMORY_RULE_TOTAL * 50, 100)]);
+
+    memoryRuleReport($server, 4);
+
+    expect($incident->fresh())
+        ->status->toBe(IncidentStatus::Open)
+        ->clear_streak->toBe(1)
+        ->severity->toBe(IncidentSeverity::Critical);
+});

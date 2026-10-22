@@ -13,9 +13,12 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Number;
 
 /**
- * Predicts when each mount fills up from a least-squares line through its recent 60 s samples of free space, and raises
- * `fill:{mount}` when that is under the configured hours. A mount that does not answer, or has too little history, gets
- * no verdict; an empty filesystem list (an agent fault) is skipped so it cannot sweep every fill incident away.
+ * Predicts when each mount fills up from its recent 60 s samples of free space, and raises `fill:{mount}` when that is
+ * under the configured hours. The window's samples are split in two halves by time and each gets a least-squares line:
+ * only a decline in both halves counts (a single large write, routine on a media server, drops one half only), and the
+ * time to full comes from the recent half's rate. A mount that does not answer, has too little history or no free space
+ * left (DiskUsageRule covers that) gets no verdict; an empty filesystem list (an agent fault) is skipped so it cannot
+ * sweep every fill incident away.
  */
 final readonly class FillRateRule implements ReportRule
 {
@@ -81,17 +84,27 @@ final readonly class FillRateRule implements ReportRule
      */
     private function observe(array $samples, string $key, string $mount, int $availableNow): IncidentObservation
     {
-        if (count($samples) < (int) config('mediamanager.monitoring.fill_rate.min_samples')) {
+        $minSamples = (int) config('mediamanager.monitoring.fill_rate.min_samples');
+
+        if ($availableNow <= 0 || $samples === [] || count($samples) < $minSamples) {
             return IncidentObservation::hold($key);
         }
 
-        $slope = $this->slopePerHour($samples);
+        [$earlierHalf, $recentHalf] = $this->halves($samples);
+        $minHalfSamples = (int) ceil($minSamples / 2);
 
-        if ($slope === null) {
+        if (count($earlierHalf) < $minHalfSamples || count($recentHalf) < $minHalfSamples) {
             return IncidentObservation::hold($key);
         }
 
-        if ($slope >= 0) {
+        $earlierSlope = $this->slopePerHour($earlierHalf);
+        $slope = $this->slopePerHour($recentHalf);
+
+        if ($earlierSlope === null || $slope === null) {
+            return IncidentObservation::hold($key);
+        }
+
+        if ($earlierSlope >= 0 || $slope >= 0) {
             return IncidentObservation::clear($key);
         }
 
@@ -116,6 +129,7 @@ final readonly class FillRateRule implements ReportRule
             [
                 'mount' => $mount,
                 'slope_bytes_per_hour' => (int) round($slope),
+                'earlier_slope_bytes_per_hour' => (int) round($earlierSlope),
                 'hours_to_full' => round($hoursToFull, 2),
                 'samples' => count($samples),
             ],
@@ -123,12 +137,40 @@ final readonly class FillRateRule implements ReportRule
     }
 
     /**
-     * Least-squares slope of free bytes over hours since the first sample; null when every sample shares one time.
+     * The samples before and from the midpoint between the first and the last sample's time.
+     *
+     * @param  non-empty-list<array{recorded_at: CarbonImmutable, available_bytes: int}>  $samples
+     * @return array{0: list<array{recorded_at: CarbonImmutable, available_bytes: int}>, 1: list<array{recorded_at: CarbonImmutable, available_bytes: int}>}
+     */
+    private function halves(array $samples): array
+    {
+        $first = $samples[0]['recorded_at'];
+        $midpoint = $first->addSeconds((int) floor($first->diffInSeconds(array_last($samples)['recorded_at']) / 2));
+        $earlier = [];
+        $recent = [];
+
+        foreach ($samples as $sample) {
+            if ($sample['recorded_at']->lessThan($midpoint)) {
+                $earlier[] = $sample;
+            } else {
+                $recent[] = $sample;
+            }
+        }
+
+        return [$earlier, $recent];
+    }
+
+    /**
+     * Least-squares slope of free bytes over hours since the first sample; null without samples or when they share one time.
      *
      * @param  list<array{recorded_at: CarbonImmutable, available_bytes: int}>  $samples
      */
     private function slopePerHour(array $samples): ?float
     {
+        if ($samples === []) {
+            return null;
+        }
+
         $first = $samples[0]['recorded_at'];
         $points = array_map(static fn (array $sample): array => [
             $first->diffInSeconds($sample['recorded_at']) / 3600,

@@ -10,11 +10,15 @@ use Carbon\CarbonImmutable;
 use Tests\Support\AgentReportFixtures;
 
 /**
- * Processes one report with the given OOM kill counter and nothing else that could open an incident.
+ * Processes one report with the given OOM kill counter and nothing else that could open an incident. The uptime is
+ * counted from `$bootedAt` (a day before the tests' start unless given).
  */
-function oomRuleReport(Server $server, int $oomKillsTotal): void
+function oomRuleReport(Server $server, int $oomKillsTotal, ?CarbonImmutable $bootedAt = null): void
 {
+    $bootedAt ??= CarbonImmutable::parse('2026-10-21 12:00:00');
+
     AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody([
+        'host.uptime_seconds' => (int) $bootedAt->diffInSeconds(now()),
         'metrics.oom_kills_total' => $oomKillsTotal,
         'metrics.failed_units' => [],
         'checks' => [],
@@ -31,7 +35,7 @@ test('the first report only records a baseline', function (): void {
     oomRuleReport($server, 5);
 
     expect(ServerIncident::query()->exists())->toBeFalse()
-        ->and($server->fresh()->rule_state['oom'])->toEqual(['total' => 5, 'last_increase_at' => null, 'last_delta' => 0]);
+        ->and($server->fresh()->rule_state['oom'])->toEqual(['total' => 5, 'booted_at' => '2026-10-21T12:00:00+00:00', 'last_increase_at' => null, 'last_delta' => 0]);
 });
 
 test('the baseline report holds an open oom incident', function (): void {
@@ -91,14 +95,53 @@ test('a counter reset after a reboot opens nothing', function (): void {
 
     oomRuleReport($server, 7);
     $this->travel(1)->minutes();
-    oomRuleReport($server, 0);
+    oomRuleReport($server, 0, bootedAt: now()->subSeconds(30));
 
     expect(ServerIncident::query()->exists())->toBeFalse()
         ->and($server->fresh()->rule_state['oom']['total'])->toBe(0);
 
     $this->travel(1)->minutes();
-    oomRuleReport($server, 1);
+    oomRuleReport($server, 1, bootedAt: now()->subSeconds(90));
 
     expect(ServerIncident::query()->open()->sole()->detail)
         ->toBe('The kernel killed 1 process(es) since the previous report (1 in total).');
+});
+
+test('a counter that reaches the old total after a reboot opens nothing', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    oomRuleReport($server, 5);
+    $this->travel(10)->minutes();
+    $rebootedAt = now()->subMinutes(2);
+    oomRuleReport($server, 7, bootedAt: $rebootedAt);
+
+    expect(ServerIncident::query()->exists())->toBeFalse()
+        ->and($server->fresh()->rule_state['oom'])->toMatchArray(['total' => 7, 'booted_at' => $rebootedAt->toIso8601String()]);
+
+    $this->travel(1)->minutes();
+    oomRuleReport($server, 8, bootedAt: $rebootedAt);
+
+    expect(ServerIncident::query()->open()->sole()->detail)
+        ->toBe('The kernel killed 1 process(es) since the previous report (8 in total).');
+});
+
+test('a few seconds of jitter in the boot time is not a reboot', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    oomRuleReport($server, 5);
+    $this->travel(1)->minutes();
+    oomRuleReport($server, 7, bootedAt: CarbonImmutable::parse('2026-10-21 12:00:20'));
+
+    expect(ServerIncident::query()->open()->sole()->key)->toBe('oom');
+});
+
+test('without an uptime a lower counter still counts as a reboot', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody(['host.uptime_seconds' => null, 'metrics.oom_kills_total' => 7, 'metrics.failed_units' => [], 'checks' => []]));
+    $this->travel(1)->minutes();
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody(['host.uptime_seconds' => null, 'metrics.oom_kills_total' => 0, 'metrics.failed_units' => [], 'checks' => []]));
+
+    expect(ServerIncident::query()->exists())->toBeFalse()
+        ->and($server->fresh()->rule_state['oom']['total'])->toBe(0);
 });
