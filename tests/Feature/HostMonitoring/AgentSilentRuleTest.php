@@ -128,6 +128,79 @@ test('when every reporting agent went silent within two minutes nothing opens an
         ->once();
 });
 
+test('agents that stop together are suppressed although only one has crossed the threshold yet', function (): void {
+    Log::spy();
+    Server::factory()->reporting()->create(['last_report_at' => now()->subSeconds(190)]);
+    Server::factory()->reporting()->create(['last_report_at' => now()->subSeconds(160)]);
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(ServerIncident::query()->count())->toBe(0);
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message): bool => str_contains($message, 'every agent went silent at once'))
+        ->once();
+});
+
+test('a server that went silent long before does not defeat the ingress suppression', function (int $deadSecondsAgo, bool $silentIncidentOpen): void {
+    $dead = Server::factory()->reporting()->create(['last_report_at' => now()->subSeconds($deadSecondsAgo)]);
+
+    if ($silentIncidentOpen) {
+        ServerIncident::factory()->for($dead)->key('silent')->critical()->open()->create();
+    }
+
+    Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(10)]);
+    Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(10)->addSeconds(60)]);
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(ServerIncident::query()->count())->toBe($silentIncidentOpen ? 1 : 0);
+})->with([
+    'dead for two days' => [2 * 86_400, false],
+    'already has an open silent incident' => [700, true],
+]);
+
+test('two agents just past the threshold alert while a third reported recently', function (): void {
+    Server::factory()->reporting()->create(['name' => 'turbo', 'last_report_at' => now()->subSeconds(181)]);
+    Server::factory()->reporting()->create(['name' => 'mailserver', 'last_report_at' => now()->subSeconds(181)]);
+    Server::factory()->reporting()->create(['name' => 'babel', 'last_report_at' => now()->subSeconds(70)]);
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(ServerIncident::query()->open()->where('key', 'silent')->where('severity', IncidentSeverity::Critical)->count())->toBe(2);
+});
+
+test('a single-server fleet that goes silent still alerts', function (): void {
+    Log::spy();
+    Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(10)]);
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(silentRuleOpenSilentCount())->toBe(1);
+    Log::shouldNotHaveReceived('warning');
+});
+
+test('the ingress warning is logged once per suppression episode', function (): void {
+    Log::spy();
+    $servers = Server::factory()->reporting()->count(2)->create(['last_report_at' => now()->subMinutes(5)]);
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+    $this->travel(1)->minutes();
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    $servers->each(fn (Server $server): bool => $server->update(['last_report_at' => now()]));
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    $this->travel(5)->minutes();
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(ServerIncident::query()->count())->toBe(0);
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message): bool => str_contains($message, 'every agent went silent at once'))
+        ->twice();
+});
+
 test('every agent silent but at times more than two minutes apart still alerts', function (): void {
     Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(5)]);
     Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(20)]);

@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Services\HostMonitoring\Rules;
 
 use App\Enums\IncidentSeverity;
+use App\Enums\IncidentStatus;
 use App\Models\Server;
 use App\Services\HostMonitoring\IncidentTracker;
 use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -19,9 +22,11 @@ use Illuminate\Support\Facades\Log;
  * nothing to evaluate. The next processed report resolves the incident (ProcessAgentReport clears `silent`).
  *
  * Two outages of the platform itself must not read as silent agents. After a scheduler gap the clock restarts from
- * the moment the scheduler resumed, and the sweep skips a tick whose heartbeat is stale. When every agent that ever
- * reported (two or more) fell silent within one two-minute window, the ingress in front of the platform is down
- * rather than the hosts: the outside watcher reports that, so nothing opens here. A partial outage still alerts.
+ * the moment the scheduler resumed, and the sweep skips a tick whose heartbeat is stale. An ingress outage (NPM in
+ * front of the platform) stops every live agent at once: their last reports sit within two minutes of each other and
+ * even the newest is overdue. The outside watcher reports that, so nothing opens here. Agents report at their own
+ * offsets and cross the threshold on different ticks, so the test looks at the live fleet, not only the candidates.
+ * A partial outage still alerts, because an agent that keeps reporting makes the newest report current.
  */
 final readonly class AgentSilentRule
 {
@@ -29,6 +34,12 @@ final readonly class AgentSilentRule
 
     /** The widest spread of last reports that still reads as every agent dropping at once. */
     private const int MASS_SILENCE_WINDOW_SECONDS = 120;
+
+    /** Slack past one report interval before the newest report counts as overdue (network and queue delays). */
+    private const int OVERDUE_SLACK_SECONDS = 30;
+
+    /** Set while a mass silence is being suppressed, so the warning is logged once per episode. */
+    private const string SUPPRESSION_CACHE_KEY = 'host-monitoring:silent-suppressed';
 
     public function __construct(private IncidentTracker $incidentTracker) {}
 
@@ -44,40 +55,77 @@ final readonly class AgentSilentRule
         }
 
         $resumedAt = OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED);
-        $servers = Server::query()->whereNotNull('enrolled_at')->get(['id', 'name', 'enrolled_at', 'last_report_at', 'report_interval_seconds']);
+        $servers = Server::query()
+            ->select(['id', 'name', 'enrolled_at', 'last_report_at', 'report_interval_seconds'])
+            ->whereNotNull('enrolled_at')
+            ->withExists(['incidents as silent_incident_exists' => fn (Builder $incidents): Builder => $incidents->where('status', IncidentStatus::Open->value)->where('key', self::KEY)])
+            ->get();
         $silent = $servers->filter(fn (Server $server): bool => $this->isSilent($server, $resumedAt));
 
         if ($silent->isEmpty()) {
-            return 0;
-        }
-
-        if ($this->everyAgentDroppedAtOnce($servers, $silent)) {
-            Log::warning('AgentSilentRule: every agent went silent at once; assuming platform ingress is down', [
-                'servers' => $silent->pluck('name')->all(),
-                'last_report_at' => $silent->map(fn (Server $server): ?string => $server->last_report_at?->toIso8601String())->values()->all(),
-            ]);
+            Cache::forget(self::SUPPRESSION_CACHE_KEY);
 
             return 0;
         }
+
+        $liveFleet = $this->liveFleet($servers);
+
+        if ($this->ingressLooksDown($liveFleet)) {
+            if (Cache::add(self::SUPPRESSION_CACHE_KEY, now()->toIso8601String())) {
+                Log::warning('AgentSilentRule: every agent went silent at once; assuming platform ingress is down', [
+                    'servers' => $liveFleet->pluck('name')->values()->all(),
+                    'last_report_at' => $liveFleet->map(fn (Server $server): ?string => $server->last_report_at?->toIso8601String())->values()->all(),
+                ]);
+            }
+
+            return 0;
+        }
+
+        Cache::forget(self::SUPPRESSION_CACHE_KEY);
 
         return $silent->sum(fn (Server $server): int => $this->raise($server->id, $resumedAt) ? 1 : 0);
     }
 
     /**
+     * The agents that were reporting until recently: they have reported, are not already known to be silent, and
+     * their last report is within their own silence threshold of the newest report in the fleet. A long-dead server
+     * would otherwise stretch the spread and disable the ingress test for everyone.
+     *
      * @param  Collection<int, Server>  $servers
-     * @param  Collection<int, Server>  $silent
+     * @return Collection<int, Server>
      */
-    private function everyAgentDroppedAtOnce(Collection $servers, Collection $silent): bool
+    private function liveFleet(Collection $servers): Collection
     {
         $reported = $servers->filter(fn (Server $server): bool => $server->last_report_at instanceof CarbonImmutable);
+        $newest = $reported->max(fn (Server $server): int => (int) $server->last_report_at?->getTimestamp());
 
-        if ($reported->count() < 2 || $reported->contains(fn (Server $server): bool => $silent->doesntContain($server))) {
+        return $reported
+            ->reject(fn (Server $server): bool => (bool) $server->silent_incident_exists)
+            ->filter(fn (Server $server): bool => (int) $server->last_report_at?->getTimestamp() >= $newest - $this->allowedSilenceSeconds($server))
+            ->values();
+    }
+
+    /**
+     * Two or more live agents whose last reports fall within one two-minute window, with even the newest overdue.
+     *
+     * @param  Collection<int, Server>  $liveFleet
+     */
+    private function ingressLooksDown(Collection $liveFleet): bool
+    {
+        if ($liveFleet->count() < 2) {
             return false;
         }
 
-        $timestamps = $reported->map(fn (Server $server): int => (int) $server->last_report_at?->getTimestamp());
+        $timestamps = $liveFleet->map(fn (Server $server): int => (int) $server->last_report_at?->getTimestamp());
 
-        return $timestamps->max() - $timestamps->min() <= self::MASS_SILENCE_WINDOW_SECONDS;
+        if ($timestamps->max() - $timestamps->min() > self::MASS_SILENCE_WINDOW_SECONDS) {
+            return false;
+        }
+
+        /** @var Server $newest */
+        $newest = $liveFleet->sortByDesc(fn (Server $server): int => (int) $server->last_report_at?->getTimestamp())->first();
+
+        return now()->getTimestamp() - (int) $newest->last_report_at?->getTimestamp() > $newest->report_interval_seconds + self::OVERDUE_SLACK_SECONDS;
     }
 
     /**
@@ -127,8 +175,11 @@ final readonly class AgentSilentRule
             $since = $resumedAt;
         }
 
-        $allowedSeconds = (int) config('mediamanager.monitoring.silent_after_intervals') * $server->report_interval_seconds;
+        return now()->getTimestamp() - $since->getTimestamp() > $this->allowedSilenceSeconds($server);
+    }
 
-        return now()->getTimestamp() - $since->getTimestamp() > $allowedSeconds;
+    private function allowedSilenceSeconds(Server $server): int
+    {
+        return (int) config('mediamanager.monitoring.silent_after_intervals') * $server->report_interval_seconds;
     }
 }
