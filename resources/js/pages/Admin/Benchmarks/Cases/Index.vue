@@ -7,7 +7,7 @@ import type {
     BenchmarkCaseRow,
     BenchmarkTaskOption,
 } from '@/components/benchmarks';
-import { Pill } from '@/components/mm';
+import { PageHeader, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -100,9 +100,11 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
     <Head title="Benchmark cases" />
 
     <div class="flex flex-col gap-4 p-5">
-        <div class="flex items-start justify-between gap-4">
-            <div>
+        <PageHeader align="start" class="sm:gap-4">
+            <template #title>
                 <h1 class="text-[20px] font-semibold">Benchmark cases</h1>
+            </template>
+            <template #description>
                 <p
                     class="mt-1 max-w-[620px] text-[12.5px] text-muted-foreground"
                 >
@@ -110,13 +112,20 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
                     replay them against candidate models and score the answers.
                     Build one from scratch, or from an AI usage record.
                 </p>
-            </div>
-            <Button size="sm" class="gap-1.5" as-child data-benchmark-case-new>
-                <Link :href="BenchmarkCaseController.create.url()">
-                    <Plus class="size-3.5" />New case
-                </Link>
-            </Button>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Button
+                    size="sm"
+                    class="gap-1.5"
+                    as-child
+                    data-benchmark-case-new
+                >
+                    <Link :href="BenchmarkCaseController.create.url()">
+                        <Plus class="size-3.5" />New case
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <form
             class="flex flex-wrap items-end gap-3"

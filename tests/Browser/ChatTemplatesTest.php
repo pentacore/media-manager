@@ -267,6 +267,23 @@ test('the list shows templates and pins them', function (): void {
     expect($chatTemplate->fresh()->pinned)->toBeTrue();
 });
 
+test('on a phone a template row keeps its name clear of the last-used text and its actions', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Example officiis template', 'last_used_at' => null]);
+    $this->actingAs($admin);
+
+    // The name, the "Never used" text and the Pin/Edit/Delete buttons share
+    // one line at desktop; at 375 px the name must not run under the others.
+    $row = sprintf('[data-template-row="%d"]', $chatTemplate->id);
+    $boxes = json_encode([$row.' > div:first-child span', $row.' > span', $row.' > div:last-child'], JSON_THROW_ON_ERROR);
+
+    visit(route('ai.templates.index', absolute: false))->on()->mobile()
+        ->assertNoSmoke()
+        ->assertSeeIn($row.' > span', 'Never used')
+        ->assertScript("(() => { const rects = {$boxes}.map((selector) => document.querySelector(selector).getBoundingClientRect()); const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom; return !overlap(rects[0], rects[1]) && !overlap(rects[0], rects[2]) && !overlap(rects[1], rects[2]); })()", true)
+        ->assertScript(phoneOverflowScript($row), '');
+});
+
 test('the empty list explains the placeholder syntax and links to the editor', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 

@@ -205,7 +205,7 @@ function save(): void {
                         {{ entry.description }}
                     </p>
                 </div>
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto" data-notification-matrix>
                     <table class="w-full border-collapse text-[12.5px]">
                         <thead>
                             <tr>
@@ -480,7 +480,7 @@ function save(): void {
         <InputError :message="$page.props.errors.test_channel" />
 
         <div class="flex justify-end">
-            <Button :disabled="saving" @click="save">
+            <Button :disabled="saving" data-notification-save @click="save">
                 {{ saving ? 'Saving…' : 'Save preferences' }}
             </Button>
         </div>

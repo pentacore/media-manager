@@ -3,8 +3,15 @@ import { Head, router } from '@inertiajs/vue3';
 import { Calendar, ChevronDown, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
-import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';
+import {
+    InitialsAvatar,
+    PageHeader,
+    Pill,
+    SvcChip,
+    TimeStamp,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
@@ -445,22 +452,27 @@ function formatAuditValue(value: unknown): string {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #title>
                 <h1 class="text-[22px] font-semibold tracking-tight">
                     Activity log
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Every webhook, tool call and write — same source as the
                     dashboard. Admins also see the Audit category: who changed
                     users, connections, removals and settings.
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <div
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    class="scrollbar-none inline-flex h-7 max-w-full items-center overflow-x-auto overflow-y-hidden rounded-md border border-border bg-card p-0.5 touch:h-auto"
+                    data-filter-strip
                 >
-                    <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
+                    <Calendar
+                        class="ml-1.5 size-3.5 shrink-0 text-muted-foreground"
+                    />
                     <button
                         v-for="value in [
                             filterOptions.todayValue,
@@ -470,7 +482,7 @@ function formatAuditValue(value: unknown): string {
                         type="button"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                                'inline-flex h-6 shrink-0 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset touch:h-10 touch:min-w-10 touch:justify-center',
                                 filters.since === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -481,6 +493,8 @@ function formatAuditValue(value: unknown): string {
                         {{ rangeButtonLabel(value) }}
                     </button>
                 </div>
+            </template>
+            <template #secondaryActions>
                 <a
                     :href="exportUrl()"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
@@ -488,18 +502,26 @@ function formatAuditValue(value: unknown): string {
                 >
                     <Download class="size-3.5" />Export NDJSON
                 </a>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem as-child data-page-header-item="export">
+                    <a :href="exportUrl()">
+                        <Download class="size-3.5" />Export NDJSON
+                    </a>
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Filters -->
         <div
             class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
+            data-activity-log-filters
         >
             <span
                 class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                 >Filter</span
             >
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
                 <span class="text-xs text-muted-foreground">Actor</span>
                 <button
                     v-for="actor in actorOptions"
@@ -519,7 +541,7 @@ function formatAuditValue(value: unknown): string {
                 </button>
             </div>
             <span class="h-4 w-px bg-border" />
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
                 <span class="text-xs text-muted-foreground">Service</span>
                 <button
                     type="button"
@@ -554,7 +576,10 @@ function formatAuditValue(value: unknown): string {
             </div>
             <template v-if="filterOptions.categories.length > 0">
                 <span class="h-4 w-px bg-border" />
-                <div class="flex items-center gap-1" data-category-filter>
+                <div
+                    class="flex flex-wrap items-center gap-1"
+                    data-category-filter
+                >
                     <span class="text-xs text-muted-foreground">Category</span>
                     <button
                         v-for="value in [

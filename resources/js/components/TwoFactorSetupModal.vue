@@ -221,6 +221,7 @@ watch(
                                         class="h-full w-full bg-background p-3 text-foreground"
                                     />
                                     <button
+                                        aria-label="Copy setup key"
                                         @click="copy(manualSetupKey || '')"
                                         class="relative block h-auto border-l border-border px-3 hover:bg-muted"
                                     >

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Download, Sparkles } from '@lucide/vue';
+import { Download, ExternalLink, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {
     InitialsAvatar,
     OpenInServiceButton,
+    PageHeader,
     Pill,
     StatCard,
     SvcChip,
@@ -13,6 +14,7 @@ import {
     TimeWindowFilter,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -291,8 +293,8 @@ function currentFilter(): string {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="emby" />
                     <span class="text-fg-subtle">/</span>
@@ -300,17 +302,21 @@ function currentFilter(): string {
                         >Watch history</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
                     Watch history
                 </h1>
+            </template>
+            <template #description>
                 <p class="mt-1 text-[13px] text-muted-foreground">
                     {{ activities.meta.total }} entries · recorded from Emby
                     playback webhooks
                 </p>
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #filters>
                 <Select
                     :default-value="currentFilter()"
                     @update:model-value="onMediaTypeChange"
@@ -329,6 +335,8 @@ function currentFilter(): string {
                     :model-value="filters.since"
                     @update:model-value="setRange"
                 />
+            </template>
+            <template #secondaryActions>
                 <a
                     :href="exportUrl"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
@@ -339,8 +347,28 @@ function currentFilter(): string {
                     :href="props.connection?.url"
                     label="Open Emby"
                 />
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem as-child data-page-header-item="export">
+                    <a :href="exportUrl">
+                        <Download class="size-3.5" />Export CSV
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    v-if="props.connection?.url"
+                    as-child
+                    data-page-header-item="open-emby"
+                >
+                    <a
+                        :href="props.connection.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open Emby
+                    </a>
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <!-- Stats -->
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

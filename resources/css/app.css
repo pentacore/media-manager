@@ -7,6 +7,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Phones and touch screens: narrower than `sm`, or a coarse primary pointer
+ * (a tablet at desktop width). `touch:h-10` sizes a control for a finger
+ * there and leaves desktop density alone.
+ */
+@custom-variant touch {
+    @media (width < 40rem), (pointer: coarse) {
+        @slot;
+    }
+}
+
 @theme inline {
     --font-sans:
         Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
@@ -415,5 +426,38 @@
     .mm-markdown th {
         background: var(--bg-elev, transparent);
         font-weight: 600;
+    }
+}
+
+@utility scrollbar-none {
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/*
+ * A 40 px hit area on phones and touch screens, without changing the visual
+ * box: a centred ::after at least 2.5rem square. Desktop (wide, fine pointer)
+ * is untouched. An element that is already positioned keeps its position.
+ * A scroller clips the ::after, and a neighbour closer than (40 - size) / 2
+ * loses taps to it: size those controls with `touch:` instead.
+ */
+@utility touch-target {
+    @variant touch {
+        &:where(:not(.absolute, .fixed, .sticky)) {
+            position: relative;
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: max(100%, 2.5rem);
+            height: max(100%, 2.5rem);
+            transform: translate(-50%, -50%);
+        }
     }
 }

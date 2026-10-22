@@ -54,7 +54,7 @@ const emit = defineEmits<{
                 >.
             </p>
         </div>
-        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <div class="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
             <div data-usage-kind-filter>
                 <Select
                     :model-value="kind ?? 'all'"

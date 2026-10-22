@@ -8,7 +8,7 @@ import {
     EXAMPLE_TEMPLATE_RESULT,
 } from '@/components/chat-templates';
 import type { ChatTemplate } from '@/components/chat-templates';
-import { Pill, TimeStamp } from '@/components/mm';
+import { PageHeader, Pill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/composables/useConfirm';
 import { dashboard } from '@/routes';
@@ -63,22 +63,26 @@ async function remove(template: ChatTemplate): Promise<void> {
     <Head title="Assistant templates" />
 
     <div class="space-y-6 p-6">
-        <div class="flex items-start justify-between gap-4">
-            <div>
+        <PageHeader align="start" class="sm:gap-4">
+            <template #title>
                 <h1 class="text-[20px] font-semibold">Assistant templates</h1>
+            </template>
+            <template #description>
                 <p
                     class="mt-1 max-w-[620px] text-[12.5px] text-muted-foreground"
                 >
                     Prompts you reuse. Pinned templates show on new chats; all
                     of them are in the composer's template menu.
                 </p>
-            </div>
-            <Button size="sm" class="gap-1.5" as-child data-template-new>
-                <Link :href="ChatTemplateController.create.url()">
-                    <Plus class="size-3.5" />New template
-                </Link>
-            </Button>
-        </div>
+            </template>
+            <template #primaryAction>
+                <Button size="sm" class="gap-1.5" as-child data-template-new>
+                    <Link :href="ChatTemplateController.create.url()">
+                        <Plus class="size-3.5" />New template
+                    </Link>
+                </Button>
+            </template>
+        </PageHeader>
 
         <div
             v-if="templates.length === 0"
@@ -127,10 +131,10 @@ async function remove(template: ChatTemplate): Promise<void> {
             <div
                 v-for="template in templates"
                 :key="template.id"
-                class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-bg-hover"
+                class="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-bg-hover max-sm:flex-wrap"
                 :data-template-row="template.id"
             >
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0 flex-1 max-sm:basis-full">
                     <div class="flex items-center gap-2">
                         <span class="text-[13.5px] font-medium">{{
                             template.name

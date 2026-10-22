@@ -136,7 +136,7 @@ const emit = defineEmits<{
             <TimeStamp :iso="price.pricing_verified_at" mode="smart" />
         </td>
         <td class="px-3 py-2.5 text-right">
-            <div class="flex justify-end gap-1">
+            <div class="flex justify-end gap-1 touch:gap-2">
                 <Button
                     variant="ghost"
                     size="sm"
@@ -151,6 +151,7 @@ const emit = defineEmits<{
                     size="sm"
                     class="size-7 p-0 text-destructive hover:text-destructive"
                     data-price-delete
+                    aria-label="Delete price"
                     @click="emit('delete')"
                 >
                     <Trash2 class="size-3.5" />

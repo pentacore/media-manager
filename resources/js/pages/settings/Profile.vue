@@ -6,7 +6,7 @@ import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkCont
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill, SvcChip } from '@/components/mm';
+import { Field, Pill, SettingsRow, SvcChip } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,16 +86,15 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
             class="rounded-xl border border-border bg-card p-6"
         >
             <div class="flex flex-col gap-5">
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Name"
-                        hint="Shown across the app and in audit logs."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Name"
+                            hint="Shown across the app and in audit logs."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Input
                             id="name"
@@ -108,20 +107,19 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                         />
                         <InputError :message="errors.name" class="mt-1" />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Email"
-                        hint="Used for sign-in and account notifications."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Email"
+                            hint="Used for sign-in and account notifications."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Input
                             id="email"
@@ -156,7 +154,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                             New verification link sent.
                         </div>
                     </div>
-                </div>
+                </SettingsRow>
 
                 <div class="flex justify-end pt-2">
                     <Button
@@ -230,16 +228,15 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 v-slot="{ errors, processing }"
                 class="space-y-4"
             >
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Emby username"
-                        hint="The display name you use to sign in to Emby."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Emby username"
+                            hint="The display name you use to sign in to Emby."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Input
                             id="emby-username"
@@ -253,18 +250,17 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
                 <Separator />
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Emby password"
-                        hint="Verifies it's actually you. Stored only as a session check, not retained."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Emby password"
+                            hint="Verifies it's actually you. Stored only as a session check, not retained."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <PasswordInput
                             id="emby-password"
@@ -275,7 +271,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                         />
                         <InputError :message="errors.password" class="mt-1" />
                     </div>
-                </div>
+                </SettingsRow>
                 <div class="flex justify-end">
                     <Button
                         size="sm"

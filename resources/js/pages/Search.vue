@@ -273,6 +273,7 @@ function openTitle(item: DiscoverTitle): void {
                     v-if="query"
                     type="button"
                     class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                    aria-label="Clear search"
                     @click="clearQuery"
                 >
                     <X class="size-3.5" />
