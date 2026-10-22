@@ -74,6 +74,20 @@ test('at desktop width the breadcrumb trail keeps every crumb', function (): voi
         ->assertScript('[...document.querySelectorAll("[data-slot=\"breadcrumb-item\"]")].filter((el) => el.getBoundingClientRect().width > 0).map((el) => el.textContent.trim()).join(" > ")', 'Assistant > AI Assistant > Templates');
 });
 
+test('at tablet width with the sidebar expanded the breadcrumb trail truncates left of the header search', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // At 820 px the expanded sidebar and the 240 px search field leave the
+    // trail far less room than it needs: the parent crumbs truncate first and
+    // nothing paints under the search field.
+    $webpage = visit(route('ai.templates.index', absolute: false))->resize(820, 1180)->assertNoSmoke();
+    $webpage->assertScript('document.querySelector("[data-sidebar=\"sidebar\"][data-mobile=\"true\"]") === null && document.querySelector("[data-slot=\"sidebar\"]").dataset.state', 'expanded')
+        ->assertScript('(() => { const search = document.querySelector("main header kbd").closest("button").getBoundingClientRect(); return [...document.querySelectorAll("[data-slot=\"breadcrumb-item\"], [data-slot=\"breadcrumb-separator\"]")].map((el) => el.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0).filter((rect) => rect.right > search.left).length; })()', 0)
+        ->assertScript('Math.round(document.querySelector("[data-slot=\"breadcrumb-page\"]").getBoundingClientRect().width) >= 24', true)
+        ->assertScript(phoneOverflowScript('main header'), '');
+});
+
 /**
  * Polls until the phone sidebar sheet has left the DOM.
  */

@@ -204,7 +204,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                             />
                         </TableCell>
                         <TableCell class="w-[1%] whitespace-nowrap">
-                            <div class="flex items-center gap-1 touch:gap-2">
+                            <div class="flex items-center touch:gap-2">
                                 <Button
                                     variant="ghost"
                                     size="icon"

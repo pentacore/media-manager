@@ -309,12 +309,20 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
             };
             const offenders = [];
             const reported = [];
+            const excusedAncestors = [];
             for (const root of document.querySelectorAll({$selector})) {
                 if (root.matches('[role="dialog"]') && root.scrollWidth > root.clientWidth + 1) {
                     offenders.push(`\${describe(root)} scrolls sideways (\${root.scrollWidth} > \${root.clientWidth})`);
                 }
                 for (const el of [root, ...root.querySelectorAll('*')]) {
-                    if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || visuallyHidden(el) || !shown(el) || fits(el) || excused(el, root)) {
+                    if ((el instanceof SVGElement && !(el instanceof SVGSVGElement)) || el.closest('.sr-only') || visuallyHidden(el) || !shown(el) || fits(el)) {
+                        continue;
+                    }
+                    if (excusedAncestors.some((ancestor) => ancestor.contains(el))) {
+                        continue;
+                    }
+                    if (excused(el, root)) {
+                        excusedAncestors.push(el);
                         continue;
                     }
                     if (reported.some((ancestor) => ancestor.contains(el))) {

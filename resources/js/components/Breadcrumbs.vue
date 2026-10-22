@@ -25,7 +25,7 @@ defineProps<Props>();
                     :class="
                         index === breadcrumbs.length - 1
                             ? 'min-w-0'
-                            : 'shrink-0 max-md:hidden'
+                            : 'min-w-0 shrink-[4] max-md:hidden'
                     "
                 >
                     <template v-if="index === breadcrumbs.length - 1">
@@ -34,7 +34,7 @@ defineProps<Props>();
                         }}</BreadcrumbPage>
                     </template>
                     <template v-else>
-                        <BreadcrumbLink as-child>
+                        <BreadcrumbLink as-child class="truncate">
                             <Link :href="item.href">{{ item.title }}</Link>
                         </BreadcrumbLink>
                     </template>
