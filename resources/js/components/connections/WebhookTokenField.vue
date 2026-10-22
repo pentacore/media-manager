@@ -72,6 +72,9 @@ async function copyWebhookToken() {
                             size="icon"
                             :disabled="!webhookToken"
                             data-webhook-token-toggle
+                            :aria-label="
+                                tokenVisible ? 'Hide token' : 'Show token'
+                            "
                             @click="tokenVisible = !tokenVisible"
                         >
                             <EyeOff v-if="tokenVisible" class="size-4" />
@@ -90,6 +93,7 @@ async function copyWebhookToken() {
                             size="icon"
                             :disabled="!webhookToken"
                             data-webhook-token-copy
+                            aria-label="Copy token"
                             @click="copyWebhookToken"
                         >
                             <ClipboardCopy class="size-4" />
@@ -106,6 +110,7 @@ async function copyWebhookToken() {
                             variant="outline"
                             size="icon"
                             data-webhook-token-generate
+                            aria-label="Generate a new token"
                             @click="generateWebhookToken"
                         >
                             <RefreshCw class="size-4" />

@@ -127,6 +127,7 @@ function ruleError(index: number): string {
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label="Remove rule"
                     @click="removeRule(ruleIndex)"
                 >
                     <Trash2 class="h-3.5 w-3.5" />
@@ -212,6 +213,7 @@ function ruleError(index: number): string {
                         type="button"
                         variant="ghost"
                         size="icon"
+                        aria-label="Remove condition"
                         @click="removeCondition(rule, conditionIndex)"
                     >
                         <Trash2 class="h-3.5 w-3.5" />

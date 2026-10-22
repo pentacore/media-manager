@@ -1,0 +1,114 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\ServiceType;
+use App\Models\ActivityLog;
+use App\Models\ServiceConnection;
+use App\Models\User;
+use Database\Seeders\ActionTypeConfigSeeder;
+
+test('the statistics time window is one sideways strip on a phone and its last window can be picked', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('statistics.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript('(() => { const strip = document.querySelector("[data-filter-strip]"); const rect = strip.getBoundingClientRect(); return strip.scrollWidth > strip.clientWidth && rect.right <= window.innerWidth && new Set([...strip.querySelectorAll("button")].map((button) => Math.round(button.getBoundingClientRect().top))).size === 1; })()', true)
+        ->assertScript('getComputedStyle(document.querySelector("[data-filter-strip]")).scrollbarWidth', 'none')
+        ->click('[data-filter-strip] button:last-child')
+        ->assertAttribute('[data-filter-strip] button:last-child', 'aria-pressed', 'true')
+        ->assertScript(phoneOverflowScript('main'), '');
+});
+
+test('a deep-linked window past the fold scrolls into view in the strip on a phone', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    // "year" is TimeWindow::ThisYear, the 8th of 9 options — a cold load on
+    // a phone must not leave the pressed option scrolled off the strip.
+    $webpage = visit(route('statistics.index', ['window' => 'year'], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript(
+        '(() => { const strip = document.querySelector("[data-filter-strip]"); const selected = strip.querySelector("[aria-pressed=\"true\"]"); const stripRect = strip.getBoundingClientRect(); const selectedRect = selected.getBoundingClientRect(); return selected.textContent.trim() === "This year" && selectedRect.left >= stripRect.left - 1 && selectedRect.right <= stripRect.right + 1; })()',
+        true,
+    );
+});
+
+test('a strip on Action rules leaves the page and the rules table frame unscrolled on a phone', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // One strip per rule row sits inside the table's overflow-x-auto frame;
+    // bringing a pressed option into view must move only the strip itself.
+    $webpage = visit(route('actions.rules.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertPresent('[data-rule-second-opinion] [data-filter-strip]')
+        ->assertScript('document.querySelector("[data-rule-second-opinion]").closest(".overflow-x-auto").scrollLeft', 0)
+        ->assertScript('window.scrollY', 0);
+});
+
+test('the template preview strip leaves the page unscrolled on a phone', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.templates.create', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertPresent('[data-filter-strip]')
+        ->assertScript('window.scrollY', 0);
+});
+
+test('the AI usage time window strip scrolls inside a phone screen beside its wrapping selects', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    // UsageHeader is a hand-rolled header: its filter row must be allowed to
+    // shrink, or the strip's full width props the row (and main) open.
+    $webpage = visit(route('admin.ai-usage.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
+        ->assertScript('(() => { const strip = document.querySelector("[data-filter-strip]"); const rect = strip.getBoundingClientRect(); return strip.scrollWidth > strip.clientWidth && rect.right <= window.innerWidth; })()', true)
+        ->assertScript('Math.round(document.querySelector("[data-usage-kind-filter]").getBoundingClientRect().top) < Math.round(document.querySelector("[data-usage-benchmark-filter]").getBoundingClientRect().top)', true)
+        ->assertScript(phoneOverflowScript('main'), '');
+});
+
+test('the activity log filter chips wrap on a phone', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    // Enough chips in the Service row (9: "all" + every ServiceType) and the
+    // Actor row (5: "all" + 4 named actors) that neither fits one line at
+    // 375px — the test must prove flex-wrap actually wraps, not just that a
+    // row happened to already fit.
+    foreach (ServiceType::cases() as $type) {
+        ServiceConnection::factory()->create(['type' => $type]);
+    }
+
+    foreach (['Ada Lovelace', 'Grace Hopper', 'Linus Torvalds', 'Margaret Hamilton'] as $name) {
+        ActivityLog::factory()->create(['user_id' => User::factory()->create(['name' => $name])->id]);
+    }
+
+    $webpage = visit(route('activity-log', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->assertVisible('[data-activity-log-filters]')
+        ->assertScript(phoneOverflowScript('[data-activity-log-filters]'), '')
+        ->assertScript(
+            '(() => { const groups = [...document.querySelectorAll("[data-activity-log-filters] > div")]; const serviceGroup = groups.find((group) => group.querySelector("span")?.textContent?.trim() === "Service"); const tops = new Set([...serviceGroup.querySelectorAll("button")].map((button) => Math.round(button.getBoundingClientRect().top))); return tops.size > 1; })()',
+            true,
+        );
+});
+
+test('a focused strip option draws its focus ring inside the strip', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    // The strip scrolls sideways and clips anything past its padding box, so
+    // the keyboard focus indicator is an inset ring, not an outer outline.
+    $webpage = visit(route('statistics.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script('document.querySelector("[data-filter-strip] button").focus({ focusVisible: true })');
+    $webpage->assertScript('(() => { const option = document.querySelector("[data-filter-strip] button"); const style = getComputedStyle(option); return option.matches(":focus-visible") && style.boxShadow.includes("inset") && style.outlineStyle === "none"; })()', true);
+});
+
+test('at desktop width a strip shows every option without scrolling', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('statistics.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('(() => { const strip = document.querySelector("[data-filter-strip]"); return strip.scrollWidth === strip.clientWidth; })()', true);
+});

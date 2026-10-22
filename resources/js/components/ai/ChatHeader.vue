@@ -114,6 +114,7 @@ function onRenameKey(event: KeyboardEvent): void {
                 size="sm"
                 class="size-7 p-0"
                 data-chat-rename-save
+                aria-label="Save title"
                 @click="commitRename"
             >
                 <Check class="size-3.5" />
@@ -123,6 +124,7 @@ function onRenameKey(event: KeyboardEvent): void {
                 variant="ghost"
                 size="sm"
                 class="size-7 p-0"
+                aria-label="Cancel rename"
                 @click="cancelRename"
             >
                 <X class="size-3.5" />

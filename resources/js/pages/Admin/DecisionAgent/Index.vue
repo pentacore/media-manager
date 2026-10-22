@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import InputError from '@/components/InputError.vue';
-import { Field, Toggle } from '@/components/mm';
+import { Field, SettingsRow, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -127,16 +127,15 @@ function submit(): void {
         >
             <div class="flex flex-col gap-5">
                 <!-- Enabled -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Enabled"
-                        hint="Master switch. When off, no inbound event is ever handed to the agent."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Enabled"
+                            hint="Master switch. When off, no inbound event is ever handed to the agent."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Toggle
                             :model-value="form.enabled"
@@ -148,21 +147,20 @@ function submit(): void {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Event allowlist -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Event allowlist"
-                        hint="Only these inbound events wake the agent. Empty = the agent never runs. Opt in deliberately."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Event allowlist"
+                            hint="Only these inbound events wake the agent. Empty = the agent never runs. Opt in deliberately."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="flex flex-col gap-4">
                         <div
                             v-for="(events, service) in eventCatalog"
@@ -205,21 +203,20 @@ function submit(): void {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Manual import capability -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Manual-import resolution"
-                        hint="Lets the agent resolve stuck Sonarr/Radarr imports. Ambiguous imports are always queued for approval regardless of the action rule."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Manual-import resolution"
+                            hint="Lets the agent resolve stuck Sonarr/Radarr imports. Ambiguous imports are always queued for approval regardless of the action rule."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Toggle
                             :model-value="form.allow_manual_import"
@@ -235,21 +232,20 @@ function submit(): void {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Notifications -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Notify admins"
-                        hint="Send an admin notification when the agent suggests and/or auto-acts on something."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Notify admins"
+                            hint="Send an admin notification when the agent suggests and/or auto-acts on something."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="flex flex-col gap-2.5">
                         <Toggle
                             :model-value="form.notify_on_suggest"
@@ -270,21 +266,20 @@ function submit(): void {
                             "
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Per-run cap -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Max actions per run"
-                        hint="Upper bound on how many actions one decision can spawn — bounds the blast radius of a single event."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Max actions per run"
+                            hint="Upper bound on how many actions one decision can spawn — bounds the blast radius of a single event."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <Input
                             v-model.number="form.max_actions_per_run"
@@ -298,21 +293,20 @@ function submit(): void {
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
                 <!-- Second opinion -->
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Second opinion"
-                        hint="How automated proposals are double-checked on the action types you choose under Approval Rules. A failed check always holds the action for approval."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Second opinion"
+                            hint="How automated proposals are double-checked on the action types you choose under Approval Rules. A failed check always holds the action for approval."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div class="flex flex-col gap-2.5">
                         <Select v-model="form.second_opinion_engine">
                             <SelectTrigger
@@ -372,7 +366,7 @@ function submit(): void {
                             :message="form.errors.second_opinion_jev_threshold"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <div class="flex justify-end pt-2">
                     <Button

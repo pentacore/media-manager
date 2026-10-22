@@ -4,7 +4,7 @@ import { ShieldCheck } from '@lucide/vue';
 import { onUnmounted, ref } from 'vue';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill } from '@/components/mm';
+import { Field, Pill, SettingsRow } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TwoFactorRecoveryCodes from '@/components/TwoFactorRecoveryCodes.vue';
 import TwoFactorSetupModal from '@/components/TwoFactorSetupModal.vue';
@@ -76,16 +76,15 @@ onUnmounted(() => clearTwoFactorAuthData());
             class="rounded-xl border border-border bg-card p-6"
         >
             <div class="flex flex-col gap-5">
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Current password"
-                        hint="Confirms it's really you."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Current password"
+                            hint="Confirms it's really you."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <PasswordInput
                             id="current_password"
@@ -99,17 +98,19 @@ onUnmounted(() => clearTwoFactorAuthData());
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field label="New password" hint="At least 8 characters.">
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="New password"
+                            hint="At least 8 characters."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <PasswordInput
                             id="password"
@@ -120,20 +121,19 @@ onUnmounted(() => clearTwoFactorAuthData());
                         />
                         <InputError :message="errors.password" class="mt-1" />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <Separator />
 
-                <div
-                    class="grid items-start gap-6"
-                    style="grid-template-columns: 200px 1fr"
-                >
-                    <Field
-                        label="Confirm password"
-                        hint="Type the new password again."
-                    >
-                        <span />
-                    </Field>
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            label="Confirm password"
+                            hint="Type the new password again."
+                        >
+                            <span />
+                        </Field>
+                    </template>
                     <div>
                         <PasswordInput
                             id="password_confirmation"
@@ -147,7 +147,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                             class="mt-1"
                         />
                     </div>
-                </div>
+                </SettingsRow>
 
                 <div class="flex justify-end pt-2">
                     <Button

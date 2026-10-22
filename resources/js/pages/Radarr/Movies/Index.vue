@@ -10,8 +10,15 @@ import {
     BulkSelectAll,
     LibraryBulkActions,
 } from '@/components/bulk';
-import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
+import {
+    OpenInServiceButton,
+    PageHeader,
+    Pill,
+    Poster,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -248,8 +255,8 @@ function is4k(movie: Movie): boolean {
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <PageHeader>
+            <template #eyebrow>
                 <div class="mb-1.5 flex items-center gap-2">
                     <SvcChip id="radarr" />
                     <span class="text-fg-subtle">/</span>
@@ -257,7 +264,11 @@ function is4k(movie: Movie): boolean {
                         >Movies</span
                     >
                 </div>
+            </template>
+            <template #title>
                 <h1 class="text-[22px] font-semibold tracking-tight">Movies</h1>
+            </template>
+            <template #description>
                 <p
                     v-if="movies && !movies.error"
                     class="mt-1 text-[13px] text-muted-foreground"
@@ -275,8 +286,8 @@ function is4k(movie: Movie): boolean {
                     Library unavailable
                 </p>
                 <Skeleton v-else class="mt-1 h-4 w-48" />
-            </div>
-            <div class="flex items-center gap-2">
+            </template>
+            <template #secondaryActions>
                 <Button
                     variant="outline"
                     size="sm"
@@ -300,8 +311,9 @@ function is4k(movie: Movie): boolean {
                         label="Open Radarr"
                     />
                 </template>
+            </template>
+            <template v-if="can('manage-library')" #primaryAction>
                 <Button
-                    v-if="can('manage-library')"
                     as-child
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
@@ -311,8 +323,43 @@ function is4k(movie: Movie): boolean {
                         <Plus class="size-3.5" />Add movie
                     </Link>
                 </Button>
-            </div>
-        </div>
+            </template>
+            <template #menu>
+                <DropdownMenuItem
+                    :disabled="syncing"
+                    data-page-header-item="sync"
+                    @select="syncMovies"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync
+                </DropdownMenuItem>
+                <template v-if="can('manage-library') && props.connection.url">
+                    <DropdownMenuItem as-child data-page-header-item="activity">
+                        <a
+                            :href="`${props.connection.url}/activity/queue`"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink class="size-3.5" />Activity
+                        </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        as-child
+                        data-page-header-item="open-radarr"
+                    >
+                        <a
+                            :href="props.connection.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink class="size-3.5" />Open Radarr
+                        </a>
+                    </DropdownMenuItem>
+                </template>
+            </template>
+        </PageHeader>
 
         <!-- Toolbar -->
         <div
@@ -467,7 +514,7 @@ function is4k(movie: Movie): boolean {
                         target="_blank"
                         rel="noopener noreferrer"
                         :aria-label="`Open ${movie.title} in Radarr`"
-                        class="pointer-events-auto absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                        class="pointer-events-auto touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100 [@media(hover:none)]:opacity-100"
                         data-movie-open-external
                     >
                         <ExternalLink class="size-3" />

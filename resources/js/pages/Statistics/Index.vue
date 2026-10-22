@@ -5,6 +5,7 @@ import StatisticsController from '@/actions/App/Http/Controllers/StatisticsContr
 import {
     BarChart,
     Heatmap,
+    PageHeader,
     Poster,
     StatCard,
     TimeWindowFilter,
@@ -100,14 +101,18 @@ function formatHours(seconds: number): string {
     <Head title="Statistics" />
 
     <div class="space-y-6 p-6">
-        <div class="flex items-center justify-between">
-            <h1 class="text-xl font-semibold">Statistics</h1>
-            <TimeWindowFilter
-                :options="windows"
-                :model-value="window"
-                @update:model-value="setWindow"
-            />
-        </div>
+        <PageHeader align="center">
+            <template #title>
+                <h1 class="text-xl font-semibold">Statistics</h1>
+            </template>
+            <template #filters>
+                <TimeWindowFilter
+                    :options="windows"
+                    :model-value="window"
+                    @update:model-value="setWindow"
+                />
+            </template>
+        </PageHeader>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
@@ -245,6 +250,7 @@ function formatHours(seconds: number): string {
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="mb-4 text-sm font-semibold">Watch heatmap</h2>
                 <Heatmap
+                    data-statistics-heatmap
                     :data="heatmapMatrix(hourHeatmap)"
                     :row-labels="heatmapRowLabels"
                     :col-labels="heatmapColLabels"

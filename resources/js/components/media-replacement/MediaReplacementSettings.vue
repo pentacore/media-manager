@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, toRaw } from 'vue';
-import { Field } from '@/components/mm';
+import { Field, SettingsRow } from '@/components/mm';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -115,16 +115,15 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </p>
         </div>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Automatic selection"
-                hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Automatic selection"
+                    hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
+                >
+                    <span />
+                </Field>
+            </template>
             <label class="flex items-center gap-2 text-sm">
                 <input
                     v-model="state.automatic_selection_enabled"
@@ -132,18 +131,17 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 />
                 Enable automatic candidate selection
             </label>
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Confidence threshold"
-                hint="Minimum subtitle confidence (0–100) required before a candidate can be selected automatically."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Confidence threshold"
+                    hint="Minimum subtitle confidence (0–100) required before a candidate can be selected automatically."
+                >
+                    <span />
+                </Field>
+            </template>
             <Input
                 v-model.number="state.automatic_selection_threshold"
                 type="number"
@@ -151,34 +149,32 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 max="100"
                 class="h-8 max-w-[120px] text-sm"
             />
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Automatic subtitle check"
-                hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Automatic subtitle check"
+                    hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
+                >
+                    <span />
+                </Field>
+            </template>
             <label class="flex items-center gap-2 text-sm">
                 <input v-model="state.subtitle_check.enabled" type="checkbox" />
                 Check tagged imports for missing subtitles
             </label>
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Attempts per item"
-                hint="How many replacements the automatic check may request for the same item inside the cooldown window."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Attempts per item"
+                    hint="How many replacements the automatic check may request for the same item inside the cooldown window."
+                >
+                    <span />
+                </Field>
+            </template>
             <Input
                 v-model.number="state.subtitle_check.max_attempts_per_target"
                 type="number"
@@ -186,18 +182,17 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 max="10"
                 class="h-8 max-w-[120px] text-sm"
             />
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Cooldown (hours)"
-                hint="Window over which the attempts-per-item limit is counted."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Cooldown (hours)"
+                    hint="Window over which the attempts-per-item limit is counted."
+                >
+                    <span />
+                </Field>
+            </template>
             <Input
                 v-model.number="state.subtitle_check.cooldown_hours"
                 type="number"
@@ -205,18 +200,17 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 max="720"
                 class="h-8 max-w-[120px] text-sm"
             />
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Preferred subtitle languages"
-                hint="Global comma-separated list of required subtitle languages. Scopes inherit this unless overridden."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Preferred subtitle languages"
+                    hint="Global comma-separated list of required subtitle languages. Scopes inherit this unless overridden."
+                >
+                    <span />
+                </Field>
+            </template>
             <Input
                 :model-value="languagesToText(state.global_languages)"
                 type="text"
@@ -224,18 +218,17 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 class="h-8 max-w-[320px] text-sm"
                 @update:model-value="setGlobalLanguages(String($event))"
             />
-        </div>
+        </SettingsRow>
 
-        <div
-            class="grid items-start gap-6"
-            style="grid-template-columns: 200px 1fr"
-        >
-            <Field
-                label="Season-pack policy"
-                hint="Controls whether a season pack may replace an individual episode, and whether it forces approval."
-            >
-                <span />
-            </Field>
+        <SettingsRow>
+            <template #label>
+                <Field
+                    label="Season-pack policy"
+                    hint="Controls whether a season pack may replace an individual episode, and whether it forces approval."
+                >
+                    <span />
+                </Field>
+            </template>
             <Select v-model="state.season_pack_policy">
                 <SelectTrigger class="h-8 max-w-[320px] text-sm">
                     <SelectValue placeholder="Select a policy" />
@@ -250,7 +243,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                     </SelectItem>
                 </SelectContent>
             </Select>
-        </div>
+        </SettingsRow>
 
         <template v-for="scope in scopes" :key="scope.key">
             <Separator />

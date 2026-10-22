@@ -18,3 +18,5 @@ export { default as BarChart } from './BarChart.vue';
 export type { BarChartPoint } from './BarChart.vue';
 export { default as Heatmap } from './Heatmap.vue';
 export { default as BreakdownMeter } from './BreakdownMeter.vue';
+export { default as PageHeader } from './PageHeader.vue';
+export { default as SettingsRow } from './SettingsRow.vue';
