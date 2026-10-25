@@ -28,6 +28,11 @@ final readonly class ChatToolRouter
 {
     public const float INCLUDE_AT = 0.5;
 
+    /**
+     * The stored name of RequestToolsTool, the tool the assistant asks for more groups with.
+     */
+    public const string TOOL_REQUEST_NAME = 'RequestToolsTool';
+
     private const int PREVIOUS_REPLY_LIMIT = 1500;
 
     public function __construct(
@@ -37,25 +42,29 @@ final readonly class ChatToolRouter
     ) {}
 
     /**
-     * The groups to load for this message, or null for the full toolset.
-     * Groups whose tools the previous assistant turn called stay loaded, so
-     * a "yes, do it" follow-up keeps the tool it confirms. When $turnKey is
-     * given and classification returned answers, records one outcome row
-     * per group.
+     * The groups to load for this message and why, or null for the full
+     * toolset. Sources merge in order picked, carried over, approved, pinned,
+     * so a later source wins per group. Groups whose tools the previous
+     * assistant turn called stay loaded (a "yes, do it" follow-up keeps the
+     * tool it confirms). Requested loads count only when the latest reply
+     * made that tool request. Pins change nothing when routing falls back to
+     * the full toolset. When $turnKey is given and classification returned
+     * answers, records one outcome row per group.
      *
-     * @return list<ToolGroup>|null
+     * @param  list<ToolGroup>  $pinned
+     * @param  list<ToolGroup>  $requestedLoads
      */
-    public function route(string $message, ?string $conversationId, ?string $turnKey = null): ?array
+    public function route(string $message, ?string $conversationId, ?string $turnKey = null, array $pinned = [], array $requestedLoads = []): ?RoutedToolGroups
     {
         if (! $this->aiSettings->chatRoutingEnabled()) {
             return null;
         }
 
-        [$previousReply, $previousToolNames] = $this->previousTurn($conversationId);
+        $previous = $this->previousTurn($conversationId);
 
         $answers = $this->classifier->classify(
             self::class,
-            ['message' => $message, 'previous_assistant_reply' => Str::limit($previousReply, self::PREVIOUS_REPLY_LIMIT)],
+            ['message' => $message, 'previous_assistant_reply' => Str::limit($previous['reply'], self::PREVIOUS_REPLY_LIMIT)],
             collect(ToolGroup::cases())
                 ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new Boolean($toolGroup->question())])
                 ->all(),
@@ -68,21 +77,68 @@ final readonly class ChatToolRouter
 
         $probabilities = collect($answers)->map(fn (Answer $answer): float => $answer instanceof BooleanAnswer ? $answer->probability : 0.0);
 
-        $groups = $probabilities->max() < self::INCLUDE_AT
-            ? null
-            : $probabilities->filter(fn (float $probability): bool => $probability >= self::INCLUDE_AT)
-                ->keys()
-                ->map(fn (string $value): ToolGroup => ToolGroup::from($value))
-                ->merge(collect($previousToolNames)->flatMap(fn (string $name): array => ToolGroup::forToolName($name)))
-                ->unique(fn (ToolGroup $toolGroup): string => $toolGroup->value)
-                ->values()
-                ->all();
+        $routed = null;
 
-        if ($turnKey !== null) {
-            $this->recordRouting($turnKey, $probabilities->all(), $groups);
+        if ($probabilities->max() >= self::INCLUDE_AT) {
+            $sources = [];
+
+            foreach ($probabilities as $group => $probability) {
+                if ($probability >= self::INCLUDE_AT) {
+                    $sources[$group] = ToolGroupSource::Picked;
+                }
+            }
+
+            $sources = array_merge($sources, $this->carriedOverFrom($previous));
+
+            foreach ($requestedLoads as $toolGroup) {
+                if (in_array($toolGroup->value, $previous['requested'], true)) {
+                    $sources[$toolGroup->value] = ToolGroupSource::Assistant;
+                }
+            }
+
+            foreach ($pinned as $toolGroup) {
+                $sources[$toolGroup->value] = ToolGroupSource::Pinned;
+            }
+
+            $routed = new RoutedToolGroups(RoutedToolGroups::ordered($sources));
         }
 
-        return $groups;
+        if ($turnKey !== null) {
+            $this->recordRouting($turnKey, $probabilities->all(), $routed?->groups());
+        }
+
+        return $routed;
+    }
+
+    /**
+     * The groups the next message carries from the latest reply: those whose
+     * tools it called, as `assistant` when that reply loaded them as
+     * `assistant` and `carried_over` otherwise.
+     *
+     * @return array<string, ToolGroupSource>
+     */
+    public function carriedOver(?string $conversationId): array
+    {
+        return $this->carriedOverFrom($this->previousTurn($conversationId));
+    }
+
+    /**
+     * @param  array{reply: string, tools: list<string>, groups: ?RoutedToolGroups, requested: list<string>}  $previous
+     * @return array<string, ToolGroupSource>
+     */
+    private function carriedOverFrom(array $previous): array
+    {
+        $sources = [];
+
+        foreach ($previous['tools'] as $name) {
+            foreach (ToolGroup::forToolName($name) as $toolGroup) {
+                $sources[$toolGroup->value] = ($previous['groups']->sources[$toolGroup->value] ?? null) === ToolGroupSource::Assistant
+                    ? ToolGroupSource::Assistant
+                    : ToolGroupSource::CarriedOver;
+            }
+        }
+
+        return $sources;
     }
 
     /**
@@ -165,31 +221,71 @@ final readonly class ChatToolRouter
     }
 
     /**
-     * The newest assistant reply and the tool names it called.
+     * The newest assistant reply: its text, the tool names it called, the
+     * groups it loaded (meta.tool_groups) and the groups its tool request
+     * asked for.
      *
-     * @return array{0: string, 1: list<string>}
+     * @return array{reply: string, tools: list<string>, groups: ?RoutedToolGroups, requested: list<string>}
      */
     private function previousTurn(?string $conversationId): array
     {
+        $none = ['reply' => '', 'tools' => [], 'groups' => null, 'requested' => []];
         $conversationStore = resolve(ConversationStore::class);
 
         if ($conversationId === null || ! $conversationStore instanceof PaginatesConversations) {
-            return ['', []];
+            return $none;
         }
 
         $last = collect($conversationStore->paginateConversationMessages($conversationId, 4)->items())
             ->first(fn (StoredMessage $storedMessage): bool => $storedMessage->role === 'assistant');
 
         if (! $last instanceof StoredMessage) {
-            return ['', []];
+            return $none;
         }
 
+        $toolCalls = $last->toolCalls();
+
         return [
-            $last->content,
-            array_values(array_unique(array_filter(array_map(
+            'reply' => $last->content,
+            'tools' => array_values(array_unique(array_filter(array_map(
                 static fn (array $toolCall): string => (string) ($toolCall['name'] ?? ''),
-                $last->toolCalls(),
+                $toolCalls,
             )))),
+            'groups' => RoutedToolGroups::fromArray($last->meta['tool_groups'] ?? null),
+            'requested' => $this->requestedGroups($toolCalls),
         ];
+    }
+
+    /**
+     * Group values named by the reply's tool requests.
+     *
+     * @param  list<array<string, mixed>>  $toolCalls
+     * @return list<string>
+     */
+    private function requestedGroups(array $toolCalls): array
+    {
+        $requested = [];
+
+        foreach ($toolCalls as $toolCall) {
+            if (($toolCall['name'] ?? null) !== self::TOOL_REQUEST_NAME) {
+                continue;
+            }
+
+            $result = $toolCall['result'] ?? null;
+            $decoded = is_string($result) ? json_decode($result, true) : $result;
+            $groups = is_array($decoded) ? ($decoded['tool_request']['groups'] ?? null) : null;
+
+            if (! is_array($groups)) {
+                continue;
+            }
+
+            foreach ($groups as $group) {
+                if (is_array($group) && is_string($group['group'] ?? null)) {
+                    $requested[] = $group['group'];
+                }
+            }
+        }
+
+        return array_values(array_unique($requested));
     }
 }

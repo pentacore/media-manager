@@ -73,8 +73,8 @@ class ChatController extends Controller
             : null;
 
         try {
-            $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
-            $response = $chatTurnGuard->agentFor($conversationId, $user, $groups)
+            $routed = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
+            $response = $chatTurnGuard->agentFor($conversationId, $user, $routed)
                 ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $chatFailureResponder->respond($throwable, $user);
@@ -141,8 +141,8 @@ class ChatController extends Controller
             : null;
 
         try {
-            $groups = $chatToolRouter->route($message, $conversationId, $turnKey);
-            $stream = $chatTurnGuard->agentFor($conversationId, $user, $groups)
+            $routed = $chatToolRouter->route($message, $conversationId, $turnKey);
+            $stream = $chatTurnGuard->agentFor($conversationId, $user, $routed)
                 ->stream($message, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $chatFailureResponder->respond($throwable, $user);
