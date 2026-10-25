@@ -11,10 +11,14 @@ use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiTask;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Laravel\Ai\Files\File;
@@ -41,7 +45,10 @@ final readonly class BenchmarkCaseRunner
 
     private const string PROVIDER_WEBFETCH_FLAG = 'mediamanager.ai.price_fetcher_provider_webfetch';
 
-    public function __construct(private BenchmarkRunContext $benchmarkRunContext) {}
+    public function __construct(
+        private BenchmarkRunContext $benchmarkRunContext,
+        private DecisionAgentSettings $decisionAgentSettings,
+    ) {}
 
     public function run(BenchmarkCase $benchmarkCase): CaseOutcome
     {
@@ -197,12 +204,56 @@ final readonly class BenchmarkCaseRunner
         return match ($benchmarkCase->task) {
             AiTask::Chat => $this->asText(resolve(MediaAgent::class)->prompt($prompt, attachments: $this->sdkFiles($benchmarkCase, null))),
             AiTask::Title => $this->asTitle(resolve(TitleAgent::class)->prompt($prompt)),
-            AiTask::Decision => $this->asText(resolve(DecisionAgent::class)->prompt($prompt)),
+            AiTask::Decision => $this->asText($this->promptDecision($benchmarkCase, $prompt)),
             AiTask::FileInspector => $this->asJson(resolve(MediaFileInspectorAgent::class)->prompt($prompt)),
             AiTask::StuckDownloadInvestigator => $this->asJson(resolve(StuckDownloadInvestigatorAgent::class)->prompt($prompt)),
             AiTask::PriceUpdater => $this->asText($this->promptPriceUpdater($benchmarkCase, $prompt)),
             default => throw new InvalidArgumentException(sprintf('The %s task cannot be benchmarked.', $benchmarkCase->task->value)),
         };
+    }
+
+    /**
+     * Prompts the DecisionAgent inside the run context the case's event and
+     * action kind describe, so instructions and tools scope like production.
+     * Same bind/forget pattern as RunDecisionAgent::handle(); tools stay
+     * replayed, so the context's caps and subject binding never execute.
+     */
+    private function promptDecision(BenchmarkCase $benchmarkCase, string $prompt): AgentResponse
+    {
+        app()->instance(DecisionRunContext::class, $this->decisionRunContext($benchmarkCase));
+
+        try {
+            return resolve(DecisionAgent::class)->prompt($prompt);
+        } finally {
+            app()->forgetInstance(DecisionRunContext::class);
+        }
+    }
+
+    private function decisionRunContext(BenchmarkCase $benchmarkCase): DecisionRunContext
+    {
+        $input = $benchmarkCase->input;
+        $event = $input['event'] ?? null;
+        $payload = [];
+
+        if (is_array($event)) {
+            $service = (string) ($event['service'] ?? 'agent');
+            $eventType = (string) ($event['event_type'] ?? '');
+            $payload = DecisionPrompt::payloadFromJson((string) ($event['payload_json'] ?? '')) ?? [];
+        } elseif (is_string($input['event_key'] ?? null) && str_contains($input['event_key'], ':')) {
+            [$service, $eventType] = explode(':', $input['event_key'], 2);
+        } else {
+            $service = 'agent';
+            $eventType = null;
+        }
+
+        return new DecisionRunContext(
+            webhookEventId: null,
+            maxActions: $this->decisionAgentSettings->maxActionsPerRun(),
+            sourceService: $service,
+            eventPayload: $payload,
+            eventType: $eventType,
+            actionKind: DecisionActionKind::tryFrom((string) ($input['action_kind'] ?? '')),
+        );
     }
 
     /**
