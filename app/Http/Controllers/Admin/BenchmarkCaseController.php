@@ -9,6 +9,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
@@ -23,6 +24,7 @@ use App\Services\Benchmark\CaseAttachmentSync;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
+use App\Services\Benchmark\VerifierCaseInput;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -65,6 +67,7 @@ class BenchmarkCaseController extends Controller
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
                     'attachment_count' => $benchmarkCase->attachments_count ?? 0,
                     'scripted' => $benchmarkCase->isScripted(),
+                    'expected_agrees' => ($benchmarkCase->scoring['type'] ?? null) === 'verdict' ? ($benchmarkCase->scoring['expected_agrees'] ?? null) : null,
                     'webhook_event' => is_array($benchmarkCase->input['event'] ?? null),
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
@@ -260,6 +263,7 @@ class BenchmarkCaseController extends Controller
                 ->map(static fn (DecisionActionKind $kind): array => ['value' => $kind->value, 'label' => $kind->label()])
                 ->values()
                 ->all(),
+            'verifierActionTypes' => $this->verifierActionTypes(),
             'writeTools' => $this->writeToolNames(),
             'defaultRubrics' => $this->defaultRubrics(),
         ]);
@@ -291,6 +295,11 @@ class BenchmarkCaseController extends Controller
             } else {
                 $input['event_key'] = $validated['input']['event_key'] ?? null;
             }
+        }
+
+        if ($aiTask === AiTask::DecisionVerifier && is_array($validated['input']['verifier'] ?? null)) {
+            $input['verifier'] = VerifierCaseInput::normalize($validated['input']['verifier']);
+            $input['prompt'] = VerifierCaseInput::prompt($input['verifier']);
         }
 
         if ($aiTask === AiTask::PriceUpdater) {
@@ -353,6 +362,19 @@ class BenchmarkCaseController extends Controller
             static fn (AiTask $aiTask): array => ['name' => $aiTask->label(), 'value' => $aiTask->value],
             array_filter(AiTask::cases(), static fn (AiTask $aiTask): bool => $aiTask->isBenchmarkable()),
         ));
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function verifierActionTypes(): array
+    {
+        $labels = VerifierCaseInput::actionLabels();
+
+        return array_map(
+            static fn (string $type): array => ['value' => $type, 'label' => $labels[$type]],
+            SecondOpinionVerifier::supportedActionTypes(),
+        );
     }
 
     /**
