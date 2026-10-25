@@ -2,9 +2,13 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, onUnmounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import { inferChosenLabels } from '@/components/ai/chatCards';
+import {
+    inferChosenLabels,
+    toolRequestAnswer,
+} from '@/components/ai/chatCards';
 import type {
     ActionRequestCard,
+    ToolRequestCard,
     AnsweredBy,
     ChatCard,
     ChatMessage,
@@ -62,6 +66,12 @@ export type UseChatTurnsReturn = {
     declineWorkflow: (message: ChatMessage) => void;
     /** Sends a choices card's picked labels as the user's answer. */
     choose: (message: ChatMessage, labels: string[]) => void;
+    /** Answers the assistant's tool request: load the groups or decline. */
+    answerToolRequest: (
+        message: ChatMessage,
+        card: ToolRequestCard,
+        load: boolean,
+    ) => void;
     /** Approves or rejects a queued action card through the bulk review. */
     reviewAction: (
         card: ActionRequestCard,
@@ -469,11 +479,21 @@ export function useChatTurns({
         messages.value.forEach((message, index) => {
             const next = messages.value[index + 1];
 
-            if (
-                message.chosen === undefined &&
-                next?.role === 'user' &&
-                message.cards?.some((card) => card.type === 'choices')
-            ) {
+            if (message.chosen !== undefined || next?.role !== 'user') {
+                return;
+            }
+
+            const toolRequest = message.cards?.find(
+                (card) => card.type === 'tool_request',
+            );
+
+            if (toolRequest) {
+                message.chosen = [
+                    next.text === toolRequestAnswer(toolRequest, true)
+                        ? 'load'
+                        : 'decline',
+                ];
+            } else if (message.cards?.some((card) => card.type === 'choices')) {
                 message.chosen = inferChosenLabels(message.cards, next.text);
             }
         });
@@ -487,6 +507,30 @@ export function useChatTurns({
 
         message.chosen = labels;
         void sendUserMessage({ text: labels.join(', '), pendingFiles: [] });
+    }
+
+    /**
+     * Answer the assistant's tool request. Load also asks the server to carry
+     * the groups for this one turn; the server only honours it when the latest
+     * reply requested exactly those groups.
+     */
+    function answerToolRequest(
+        message: ChatMessage,
+        card: ToolRequestCard,
+        load: boolean,
+    ): void {
+        if (sending.value) {
+            return;
+        }
+
+        message.chosen = [load ? 'load' : 'decline'];
+        void sendUserMessage({
+            text: toolRequestAnswer(card, load),
+            pendingFiles: [],
+            ...(load
+                ? { loadToolGroups: card.groups.map((group) => group.group) }
+                : {}),
+        });
     }
 
     /** Action request ids whose approve/reject request is in flight. */
@@ -553,6 +597,7 @@ export function useChatTurns({
         approveWorkflow,
         declineWorkflow,
         choose,
+        answerToolRequest,
         reviewAction,
     };
 }

@@ -108,9 +108,18 @@ export type ChatCard =
           /** An ActionRequestStatus, or 'changed' once a review lost a race. */
           status: string;
           requires_approval: boolean;
+      }
+    | {
+          type: 'tool_request';
+          /** The tool call id of the assistant's RequestToolsTool call. */
+          id: string;
+          groups: Array<{ group: ToolGroupValue; label: string }>;
+          reason: string;
       };
 
 export type ChoicesCard = Extract<ChatCard, { type: 'choices' }>;
+
+export type ToolRequestCard = Extract<ChatCard, { type: 'tool_request' }>;
 
 export type ActionRequestCard = Extract<ChatCard, { type: 'action_request' }>;
 

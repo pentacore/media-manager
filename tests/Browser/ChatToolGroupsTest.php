@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ToolGroup;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -256,4 +259,83 @@ test('the admin transcript shows each reply\'s tools', function (): void {
         ->assertNoSmoke()
         ->assertSee('Stored reply')
         ->assertPresent('[data-turn-tool="playback"][data-turn-tool-source="picked"]');
+});
+
+/**
+ * Fakes a first reply that asks to load Subtitles & replacement through a
+ * RequestToolsTool call, then answers every later turn with $replies.
+ *
+ * @param  list<string>  $replies
+ */
+function chatToolGroupsFakeToolRequest(array $replies): void
+{
+    Bus::fake([GenerateConversationTitle::class]);
+    $calls = 0;
+    MediaAgent::fake(function () use (&$calls, $replies): ToolCall|string {
+        $calls++;
+
+        return match ($calls) {
+            1 => new ToolCall(id: 'call_request', name: 'RequestToolsTool', arguments: [
+                'groups' => ['subtitles_replacement'],
+                'reason' => 'I need the replacement tools to find a better release.',
+            ]),
+            2 => 'May I load the replacement tools?',
+            default => $replies[0],
+        };
+    });
+    Classification::fake(array_fill(0, 5, chatToolGroupsAnswers(['playback' => 0.9])));
+}
+
+test('loading a requested group continues the request', function (): void {
+    chatToolGroupsFakeToolRequest(['Here are 3 replacement releases']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->fill('[data-chat-input]', 'Replace this file with a better release')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertSeeIn('[data-chat-thread] [data-tool-request-card]', 'I need the replacement tools to find a better release.')
+        ->assertSeeIn('[data-chat-thread] [data-tool-request-card]', 'Subtitles & replacement')
+        ->click('[data-tool-request-load]')
+        ->assertSeeIn('[data-chat-thread]', 'Loaded Subtitles & replacement — continue.')
+        ->assertSeeIn('[data-chat-thread]', 'Here are 3 replacement releases')
+        ->assertPresent('[data-turn-tool="subtitles_replacement"][data-turn-tool-source="assistant"]')
+        ->assertDisabled('[data-tool-request-load]')
+        ->assertDisabled('[data-tool-request-decline]')
+        ->assertPresent('[data-tool-request-load][data-tool-request-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('declining sends a decline and loads nothing', function (): void {
+    chatToolGroupsFakeToolRequest(['Understood, no extra tools.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->fill('[data-chat-input]', 'Replace this file with a better release')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertPresent('[data-tool-request-decline]')
+        ->click('[data-tool-request-decline]')
+        ->assertSeeIn('[data-chat-thread]', "Don't load Subtitles & replacement — continue without it.")
+        ->assertSeeIn('[data-chat-thread]', 'Understood, no extra tools.')
+        ->assertMissing('[data-turn-tool="subtitles_replacement"]')
+        ->assertDisabled('[data-tool-request-load]')
+        ->assertPresent('[data-tool-request-decline][data-tool-request-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('an older tool request card cannot be answered', function (): void {
+    chatToolGroupsFakeToolRequest(['Fine, moving on.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->fill('[data-chat-input]', 'Replace this file with a better release')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertEnabled('[data-tool-request-load]')
+        ->fill('[data-chat-input]', 'Never mind, something else')
+        ->keys('[data-chat-input]', 'Enter')
+        ->assertSeeIn('[data-chat-thread]', 'Fine, moving on.')
+        ->assertDisabled('[data-tool-request-load]')
+        ->assertDisabled('[data-tool-request-decline]');
 });

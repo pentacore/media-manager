@@ -165,6 +165,7 @@ const {
     approveWorkflow,
     declineWorkflow,
     choose,
+    answerToolRequest,
     reviewAction,
 } = useChatTurns({
     mode,
@@ -636,6 +637,9 @@ function newConversation(): void {
                 @approve="approveWorkflow(m)"
                 @decline="declineWorkflow(m)"
                 @choose="(labels) => choose(m, labels)"
+                @answer-tool-request="
+                    (card, load) => answerToolRequest(m, card, load)
+                "
                 @review="reviewAction"
             />
 

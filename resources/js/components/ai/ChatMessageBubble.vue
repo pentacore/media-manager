@@ -13,8 +13,13 @@ import AttachmentChips from './AttachmentChips.vue';
 import ChoiceCard from './ChoiceCard.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import ToolCallChip from './ToolCallChip.vue';
+import ToolRequestCard from './ToolRequestCard.vue';
 import TurnToolGroups from './TurnToolGroups.vue';
-import type { ActionRequestCard, ChatMessage } from './types';
+import type {
+    ActionRequestCard,
+    ChatMessage,
+    ToolRequestCard as ToolRequestCardData,
+} from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
 
 const props = defineProps<{
@@ -36,6 +41,7 @@ const emit = defineEmits<{
     (e: 'approve'): void;
     (e: 'decline'): void;
     (e: 'choose', labels: string[]): void;
+    (e: 'answerToolRequest', card: ToolRequestCardData, load: boolean): void;
     (e: 'review', card: ActionRequestCard, action: 'approve' | 'reject'): void;
 }>();
 
@@ -130,6 +136,13 @@ const caseQuery = computed(() =>
                     :interactive="isLatestAssistant && !busy && !message.chosen"
                     :chosen="message.chosen ?? null"
                     @choose="(labels) => emit('choose', labels)"
+                />
+                <ToolRequestCard
+                    v-else-if="card.type === 'tool_request'"
+                    :card="card"
+                    :interactive="isLatestAssistant && !busy && !message.chosen"
+                    :chosen="message.chosen?.[0] ?? null"
+                    @answer="(load) => emit('answerToolRequest', card, load)"
                 />
                 <ActionApprovalCard
                     v-else
