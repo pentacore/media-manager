@@ -17,12 +17,14 @@ use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkRun;
+use App\Models\ChatAttachment;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -323,7 +325,7 @@ test('records that cannot become a case redirect back with an error toast', func
         ->assertRedirect(route('admin.ai-usage.index'))
         ->assertInertiaFlash('toast.type', 'error');
 })->with([
-    'attachments' => [['prompt_text' => "Look\n\nAttachments: poster.png"]],
+    'attachments on a non-chat agent' => [['agent_class' => TitleAgent::class, 'prompt_text' => "Look\n\nAttachments: poster.png"]],
     'no prompt text' => [['prompt_text' => null]],
     'not a text record' => [['kind' => AiUsageKind::Embeddings]],
     'unknown agent' => [['agent_class' => 'App\\Nope']],
@@ -676,4 +678,118 @@ test('from_usage takes priority over from_invocation', function (): void {
     $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id, 'from_invocation' => $byInvocation->invocation_id]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('draft.source_invocation_id', $aiUsageRecord->invocation_id));
+});
+
+/**
+ * @param  list<array<string, mixed>>  $attachments  stored SDK attachment JSON
+ * @param  array<string, mixed>  $meta
+ */
+function benchmarkConversationMessage(string $conversationId, string $role, string $content, CarbonInterface $at, array $attachments = [], array $meta = []): string
+{
+    DB::table('agent_conversations')->insertOrIgnore(['id' => $conversationId, 'title' => 'T', 'created_at' => now()->subHour(), 'updated_at' => now()->subHour()]);
+    $id = (string) Str::uuid7();
+    DB::table('agent_conversation_messages')->insert([
+        'id' => $id, 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+        'role' => $role, 'content' => $content, 'attachments' => json_encode($attachments), 'steps' => '[]', 'usage' => '[]',
+        'meta' => json_encode($meta), 'created_at' => $at, 'updated_at' => $at,
+    ]);
+
+    return $id;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function benchmarkStoredAttachment(ChatAttachment $chatAttachment): array
+{
+    return ['type' => $chatAttachment->isImage() ? 'stored-image' : 'stored-document', 'name' => null, 'path' => $chatAttachment->path, 'disk' => 'local'];
+}
+
+/**
+ * A two-turn conversation whose second user turn (with a screenshot) is captured; the first carries a log.
+ *
+ * @return array{0: AiUsageRecord, 1: ChatAttachment, 2: ChatAttachment, 3: string}
+ */
+function benchmarkCapturedChatWithAttachments(): array
+{
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    $log = ChatAttachment::factory()->create(['conversation_id' => $conversationId, 'path' => 'chat-attachments/1/download.log', 'original_name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64]);
+    $screenshot = ChatAttachment::factory()->create(['conversation_id' => $conversationId]);
+    benchmarkConversationMessage($conversationId, 'user', 'My download is stuck.', $turnAt->subMinutes(5), [benchmarkStoredAttachment($log)]);
+    benchmarkConversationMessage($conversationId, 'assistant', 'Send a screenshot.', $turnAt->subMinutes(4));
+    benchmarkConversationMessage($conversationId, 'user', 'What does this error mean?', $turnAt, [benchmarkStoredAttachment($screenshot)]);
+    $aiUsageRecord = benchmarkTextUsage(MediaAgent::class, "What does this error mean?\n\nAttachments: screenshot.png", ['conversation_id' => $conversationId, 'created_at' => $turnAt]);
+    $replyId = benchmarkConversationMessage($conversationId, 'assistant', 'A stalled import.', $turnAt, meta: ['mode' => 'advisory', 'invocation_id' => $aiUsageRecord->invocation_id]);
+
+    return [$aiUsageRecord, $log, $screenshot, $replyId];
+}
+
+test('a chat capture drafts the attachments of every kept user turn and strips the list from the prompt', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [$aiUsageRecord, $log, $screenshot] = benchmarkCapturedChatWithAttachments();
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input.prompt', 'What does this error mean?')
+            ->where('draft.input.history', [
+                ['role' => 'user', 'content' => 'My download is stuck.'],
+                ['role' => 'assistant', 'content' => 'Send a screenshot.'],
+            ])
+            ->where('draft.input.mode', 'advisory')
+            ->where('draft.input.conversation', 'context')
+            ->where('draft.draft_attachments', [
+                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64],
+                ['chat_attachment_id' => $screenshot->id, 'turn' => null, 'name' => 'screenshot.png', 'mime_type' => 'image/png', 'size' => 1024],
+            ])
+            ->where('draft.source_truncated', false)
+            ->where('draftWarnings', []));
+});
+
+test('a captured attachment whose file is gone is left out with a warning', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [$aiUsageRecord, $log, $screenshot] = benchmarkCapturedChatWithAttachments();
+    Storage::disk('local')->delete($screenshot->path);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.draft_attachments', [
+                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64],
+            ])
+            ->where('draft.source_truncated', true)
+            ->where('draftWarnings', ['Some attachments of this conversation are no longer stored and were left out.']));
+});
+
+test('a captured turn that listed attachments but stored none is warned about', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [$aiUsageRecord] = benchmarkCapturedChatWithAttachments();
+    DB::table('agent_conversation_messages')
+        ->where('conversation_id', $aiUsageRecord->conversation_id)
+        ->where('content', 'What does this error mean?')
+        ->update(['attachments' => '[]']);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.draft_attachments.0.turn', 0)
+            ->has('draft.draft_attachments', 1)
+            ->where('draft.source_truncated', true)
+            ->where('draftWarnings', ['The captured turn listed attachments, but none could be found.']));
+});
+
+test('a chat reply with attachments is captured from the chat message too', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [, , $screenshot, $replyId] = benchmarkCapturedChatWithAttachments();
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_chat_message' => $replyId]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input.prompt', 'What does this error mean?')
+            ->where('draft.draft_attachments.1.chat_attachment_id', $screenshot->id));
 });

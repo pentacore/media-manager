@@ -18,7 +18,7 @@ use LogicException;
  * While active, TaskModelResolver pins the case task to the candidate (and
  * BenchmarkJudge to the judge), AiSettings drops the failover provider,
  * ReplayBenchmarkTools answers every tool call from the fixtures, MediaAgent
- * replays the case history and usage rows carry the run id (unless it does not bill the run).
+ * replays the case history (a scripted run advances it turn by turn) and usage rows carry the run id (unless it does not bill the run).
  */
 final class BenchmarkRunContext
 {
@@ -122,6 +122,16 @@ final class BenchmarkRunContext
     public function history(): array
     {
         return $this->history;
+    }
+
+    /**
+     * @param  list<Message>  $history
+     */
+    public function setHistory(array $history): void
+    {
+        throw_unless($this->active(), LogicException::class, 'No benchmark run is active.');
+
+        $this->history = $history;
     }
 
     public function mode(): ?AiMode

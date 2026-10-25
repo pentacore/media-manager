@@ -17,7 +17,15 @@ trait ChatAttachmentValidationRules
     {
         return [
             'attachments' => ['nullable', 'array', 'max:3'],
-            'attachments.*' => ['file', File::types(['png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'log', 'json', 'pdf'])->max(10 * 1024)],
+            'attachments.*' => ['file', $this->chatAttachmentFileRule()],
         ];
+    }
+
+    /**
+     * The type and size limits of one attached file.
+     */
+    protected function chatAttachmentFileRule(): File
+    {
+        return File::types(['png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'log', 'json', 'pdf'])->max(10 * 1024);
     }
 }
