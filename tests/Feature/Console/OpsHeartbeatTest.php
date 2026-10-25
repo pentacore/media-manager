@@ -72,3 +72,41 @@ test('the heartbeat is recorded every minute', function (): void {
     expect($event)->not->toBeNull()
         ->and($event->expression)->toBe('* * * * *');
 });
+
+test('the first heartbeat after a gap records when the scheduler resumed', function (): void {
+    Queue::fake();
+    $this->freezeTime();
+    config(['mediamanager.monitoring.platform_gap_seconds' => 180]);
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->travel(200)->seconds();
+
+    $this->artisan('ops:record-heartbeat')->assertSuccessful();
+
+    expect(OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED)?->getTimestamp())->toBe(now()->getTimestamp())
+        ->and(OpsHeartbeat::ageInSeconds(OpsHeartbeat::SCHEDULER))->toBe(0)
+        ->and(OpsHeartbeat::components())->not->toContain(OpsHeartbeat::SCHEDULER_RESUMED);
+});
+
+test('a heartbeat without a gap keeps the old resume time', function (): void {
+    Queue::fake();
+    $this->freezeTime();
+    config(['mediamanager.monitoring.platform_gap_seconds' => 180]);
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER_RESUMED);
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $resumedAt = now()->getTimestamp();
+    $this->travel(60)->seconds();
+
+    $this->artisan('ops:record-heartbeat')->assertSuccessful();
+
+    expect(OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED)?->getTimestamp())->toBe($resumedAt)
+        ->and(OpsHeartbeat::ageInSeconds(OpsHeartbeat::SCHEDULER))->toBe(0);
+});
+
+test('the very first heartbeat counts as a resume', function (): void {
+    Queue::fake();
+    $this->freezeTime();
+
+    $this->artisan('ops:record-heartbeat')->assertSuccessful();
+
+    expect(OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED)?->getTimestamp())->toBe(now()->getTimestamp());
+});

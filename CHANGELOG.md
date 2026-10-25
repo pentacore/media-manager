@@ -1,3 +1,40 @@
+# [1.52.0](https://github.com/pentacore/media-manager/compare/v1.51.0...v1.52.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **agent:** run the payload limit before authentication and throttling ([ee2db85](https://github.com/pentacore/media-manager/commit/ee2db855923d8c59abb24d97fe8430651f25131a))
+* **monitoring:** report the webhooks lane in the Uptime Kuma push and never leak the url ([23b6269](https://github.com/pentacore/media-manager/commit/23b62694e7df099f8c0e460ac85c918e3b08333f))
+* **servers:** hold only disk usage incidents in the clear band ([ac6d0f0](https://github.com/pentacore/media-manager/commit/ac6d0f0c31b3e88f3b523255fd7d2b6a03ae5756))
+* **servers:** hold the resolved push instead of silently reopening ([0435e86](https://github.com/pentacore/media-manager/commit/0435e86ac44c0f8c8f59fa1166b7859effa9a08e))
+* **servers:** ignore a stale incident server filter and share the pill variant ([e1fb305](https://github.com/pentacore/media-manager/commit/e1fb3055c94861bc1bfdee87734151e7c045699a))
+* **servers:** judge disk fill on the slower half of the window ([6238dd8](https://github.com/pentacore/media-manager/commit/6238dd8ef13eef32a9c26d3ca9f3f80118e1f2f1))
+* **servers:** judge ingress outages on the live fleet and log suppression once per episode ([b10dd73](https://github.com/pentacore/media-manager/commit/b10dd737c38a703eb1f3cf7d46ba34c37330162f))
+* **servers:** keep metric gaps and show chart times in the viewer's timezone ([155d558](https://github.com/pentacore/media-manager/commit/155d558dffd697a2c89fd43a1b462624a300e1a3))
+* **servers:** keep outages and flapping problems from paging repeatedly ([820c47d](https://github.com/pentacore/media-manager/commit/820c47da2e9716b1bcac3da3a8f3d2b8666c90b1))
+* **servers:** keep unchanged checks from bumping the config and tighten check params ([919e2ab](https://github.com/pentacore/media-manager/commit/919e2abd06a4aafe2796d5ab86d916bdbff96b4e))
+* **servers:** require a sustained decline for fill alarms and detect reboots by uptime ([b5a64d4](https://github.com/pentacore/media-manager/commit/b5a64d4a405d9577d17126b8a6c4fbbe1d53e629))
+* **servers:** test the live index, keep the enrollment dialog open and quote unusual platform urls ([01de662](https://github.com/pentacore/media-manager/commit/01de6623dd5e4fa81724591bff47943870a859be))
+
+
+### Features
+
+* **agent:** accept agent reports and store minute samples and check results ([49a528d](https://github.com/pentacore/media-manager/commit/49a528d1f8afce6fe035dfde018a5b5824d6139e))
+* **agent:** add agent enrollment, bearer token auth and ingress limits ([1eb3192](https://github.com/pentacore/media-manager/commit/1eb3192805641e8b9c179188758fb3814eac0418))
+* **monitoring:** push a heartbeat to an outside Uptime Kuma monitor ([ec720cb](https://github.com/pentacore/media-manager/commit/ec720cbd4605d9fa9a58498969ffd0cccd3dab13))
+* **servers:** add the incidents admin page ([2eefd94](https://github.com/pentacore/media-manager/commit/2eefd947a247ee8638c11a580d035bbe3a2aadab))
+* **servers:** add the server, check, incident and metric sample data model ([364c622](https://github.com/pentacore/media-manager/commit/364c622f84820ae051eef9e5ba3d87b97d53c1ea))
+* **servers:** add the servers admin page with agent enrollment ([f2ef04d](https://github.com/pentacore/media-manager/commit/f2ef04dea2008f35111dd30397271266a4185953))
+* **servers:** add, edit, pause and remove server checks ([85d56d1](https://github.com/pentacore/media-manager/commit/85d56d182d9911b7a57a52cc7d26a475efc14c86))
+* **servers:** check the latest lookout release daily ([678eaf1](https://github.com/pentacore/media-manager/commit/678eaf19f404efae4fa1852999fdd08338b444f3))
+* **servers:** evaluate check, disk usage and failed unit rules into incidents ([45d1cd8](https://github.com/pentacore/media-manager/commit/45d1cd8e8bed82fe11c7e2cca5138aeef08b58dc))
+* **servers:** predict disk fill time and detect OOM kills and container restart loops ([bbad103](https://github.com/pentacore/media-manager/commit/bbad1038f986f920edd0ec745d205855103fd02d))
+* **servers:** raise silent-agent incidents with platform downtime grace ([fc035be](https://github.com/pentacore/media-manager/commit/fc035beb23e14ef5b269ec18925f1fa3318f6841))
+* **servers:** roll minute metrics up to five-minute and hourly tiers ([b0e5e24](https://github.com/pentacore/media-manager/commit/b0e5e24af4580736772cf0bc1573ae11654ec7a6))
+* **servers:** show rejected agent reports and environment watcher urls ([e3cffd1](https://github.com/pentacore/media-manager/commit/e3cffd10f76bcbc60cc424332cee59be890773e4))
+* **servers:** show server facts, metric graphs and incidents ([7c1363b](https://github.com/pentacore/media-manager/commit/7c1363bbc9c8c41e2d032e6679c88e8a3b2ab43b))
+* **servers:** track host incidents and notify admins on open, escalation and resolve ([84bc2a7](https://github.com/pentacore/media-manager/commit/84bc2a7c658420fe0dae9bb590446b9acb7a25ff))
+
 # [1.51.0](https://github.com/pentacore/media-manager/compare/v1.50.1...v1.51.0) (2026-10-25)
 
 

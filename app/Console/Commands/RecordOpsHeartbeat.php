@@ -17,7 +17,7 @@ class RecordOpsHeartbeat extends Command
 {
     public function handle(): int
     {
-        OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+        OpsHeartbeat::recordScheduler((int) config('mediamanager.monitoring.platform_gap_seconds'));
 
         foreach (QueueLane::cases() as $queueLane) {
             dispatch(new RecordQueueHeartbeat($queueLane));

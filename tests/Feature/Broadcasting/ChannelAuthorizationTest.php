@@ -188,3 +188,26 @@ test('only admins can join the audit activity channel', function (): void {
         ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => 'private-activity.audit'])
         ->assertOk();
 });
+
+test('only admins can join the admin.servers channel', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.servers',
+        ])
+        ->assertOk();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.servers',
+        ])
+        ->assertForbidden();
+
+    $this->actingAs(User::factory()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.servers',
+        ])
+        ->assertForbidden();
+});
