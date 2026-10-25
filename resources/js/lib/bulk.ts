@@ -82,18 +82,33 @@ function moveFocusToBulkTarget(): void {
         return;
     }
 
-    const target =
-        document.querySelector<HTMLElement>(
-            '[data-bulk-select-all] button:not([disabled])',
-        ) ?? document.querySelector<HTMLElement>('h1');
+    const selectAll = document.querySelector<HTMLElement>(
+        '[data-bulk-select-all] button:not([disabled])',
+    );
 
-    if (target === null) {
+    if (selectAll === null) {
+        focusPageHeading();
+
         return;
     }
 
-    if (target.tagName === 'H1' && !target.hasAttribute('tabindex')) {
-        target.setAttribute('tabindex', '-1');
+    selectAll.focus();
+}
+
+/**
+ * Focuses the page's `h1`, made programmatically focusable first: where focus
+ * goes when the control it belongs on is gone.
+ */
+export function focusPageHeading(options?: FocusOptions): void {
+    const heading = document.querySelector<HTMLElement>('h1');
+
+    if (heading === null) {
+        return;
     }
 
-    target.focus();
+    if (!heading.hasAttribute('tabindex')) {
+        heading.setAttribute('tabindex', '-1');
+    }
+
+    heading.focus(options);
 }

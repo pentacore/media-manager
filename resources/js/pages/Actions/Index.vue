@@ -73,6 +73,33 @@ function openSheet(id: number): void {
     sheetOpen.value = true;
 }
 
+/**
+ * A deep link is one-shot: once the sheet closes, drop `?request=` from the
+ * URL and the history entry (a client-side replace, no new entry), so a
+ * reload or a back/forward return does not reopen it.
+ */
+function forgetDeepLink(): void {
+    const url = new URL(window.location.href);
+
+    if (!url.searchParams.has('request')) {
+        return;
+    }
+
+    url.searchParams.delete('request');
+    router.replace({
+        url: `${url.pathname}${url.search}${url.hash}`,
+        props: (current) => ({ ...current, preselect: null }),
+        preserveState: true,
+        preserveScroll: true,
+    });
+}
+
+watch(sheetOpen, (isOpen) => {
+    if (!isOpen) {
+        forgetDeepLink();
+    }
+});
+
 watch(visibleRequests, (rows) => {
     if (
         selectedId.value === null ||

@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import { nextTick, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import {
     Sheet,
     SheetContent,
     SheetDescription,
     SheetTitle,
 } from '@/components/ui/sheet';
+import { focusPageHeading } from '@/lib/bulk';
 import ActionRequestDetail from './ActionRequestDetail.vue';
 import { payloadTitle } from './actionRow';
 import type { ActionRequestRow } from './types';
 
 /**
  * The Action Queue's phone detail: `ActionRequestDetail` in its `sheet`
- * layout, full screen. Closing returns to the list where it was: the list's
- * scroll position is restored and the action's card gets focus.
+ * layout, full screen. Closing returns to the list: the action's card is
+ * brought back into view and gets focus.
  */
 const props = defineProps<{
     selected: ActionRequestRow | null;
@@ -27,49 +28,48 @@ const emit = defineEmits<{
     retry: [row: ActionRequestRow];
 }>();
 
-/** The window's scroll position when the sheet opened. */
-let listScrollTop = 0;
-
-/** The action the sheet showed last, so focus returns to its card. */
-let shownId: number | null = null;
+/**
+ * The row the sheet shows. It follows `selected` only while the sheet is
+ * open, so a sheet sliding out after its row left the list keeps showing that
+ * row (inert) instead of the page's next selection.
+ */
+const shownRow = ref<ActionRequestRow | null>(props.selected);
 
 watch(
-    open,
-    (isOpen) => {
+    [open, () => props.selected],
+    ([isOpen, row]) => {
         if (isOpen) {
-            listScrollTop = window.scrollY;
-            shownId = props.selected?.id ?? null;
+            shownRow.value = row;
         }
     },
-    { flush: 'sync' },
-);
-
-watch(
-    () => props.selected?.id ?? null,
-    (id) => {
-        if (open.value && id !== null) {
-            shownId = id;
-        }
-    },
+    { flush: 'sync', immediate: true },
 );
 
 /**
  * Reka would focus whatever had focus before the sheet opened, and could
- * scroll the page to it. Return to the card instead, where the list was.
+ * scroll the page to it. Return to the card instead, bringing it back into
+ * view even if rows were added above it meanwhile. When the card has left the
+ * list, focus goes to the page heading.
  */
 function returnToList(event: Event): void {
     event.preventDefault();
 
     const card =
-        shownId === null
+        shownRow.value === null
             ? null
             : document.querySelector<HTMLElement>(
-                  `[data-action-card-open="${shownId}"]`,
+                  `[data-action-card-open="${shownRow.value.id}"]`,
               );
 
-    card?.focus({ preventScroll: true });
+    if (card === null) {
+        focusPageHeading({ preventScroll: true });
+
+        return;
+    }
+
+    card.focus({ preventScroll: true });
     void nextTick(() =>
-        window.scrollTo({ top: listScrollTop, behavior: 'instant' }),
+        card.scrollIntoView({ block: 'nearest', behavior: 'instant' }),
     );
 }
 </script>
@@ -83,16 +83,17 @@ function returnToList(event: Event): void {
             @close-auto-focus="returnToList"
         >
             <SheetTitle class="sr-only">{{
-                selected ? payloadTitle(selected) : 'Action request'
+                shownRow ? payloadTitle(shownRow) : 'Action request'
             }}</SheetTitle>
             <SheetDescription class="sr-only">
                 Why this action was proposed, its target and its outcome.
                 Approve or decline it at the bottom.
             </SheetDescription>
             <ActionRequestDetail
-                v-if="selected"
+                v-if="shownRow"
                 layout="sheet"
-                :selected="selected"
+                :selected="shownRow"
+                :inert="!open"
                 @approve="(id) => emit('approve', id)"
                 @reject="(id) => emit('reject', id)"
                 @retry="(row) => emit('retry', row)"

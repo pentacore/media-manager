@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\User;
@@ -94,6 +95,37 @@ function actionQueuePhoneToastScript(int $actionRequestId, string $status): stri
 }
 
 /**
+ * Records, on every DOM change, the title the Action Queue sheet shows and
+ * whether an Approve that is not inert sits under any other title.
+ */
+function actionQueuePhoneSheetWatchScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmSheetTitles = [];
+            window.__mmOtherApproveClickable = false;
+            const record = () => {
+                const sheet = document.querySelector('[data-action-sheet]');
+                if (!sheet) {
+                    return;
+                }
+                const title = sheet.querySelector('[data-action-title]');
+                const text = title ? title.textContent : '(no action)';
+                if (window.__mmSheetTitles[window.__mmSheetTitles.length - 1] !== text) {
+                    window.__mmSheetTitles.push(text);
+                }
+                const approve = sheet.querySelector('[data-action-approve]');
+                if (approve && !approve.closest('[inert]') && !text.includes('Severance')) {
+                    window.__mmOtherApproveClickable = true;
+                }
+            };
+            record();
+            new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+        })()
+    JS;
+}
+
+/**
  * Two animation frames: long enough for a sheet opened in onMounted to have
  * rendered, without a timed sleep.
  */
@@ -155,6 +187,35 @@ test('closing the sheet returns to the same place in the list and focuses the ca
         ->assertScript(sprintf('document.activeElement === document.querySelector("[data-action-card-open=\"%d\"]")', $target->id), true);
 });
 
+test('closing the sheet brings the card back into view after a new action was listed above it', function (): void {
+    $requests = ActionRequest::factory()->count(14)->sequence(fn ($sequence): array => [
+        'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
+        'created_at' => now()->subMinutes($sequence->index + 1),
+    ])->create(['status' => ActionRequestStatus::Completed]);
+    $target = $requests[10];
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    // The card sits at the bottom edge, so a card added above pushes it off
+    // screen unless closing follows the card rather than the old scroll offset.
+    $webpage->script(sprintf('(() => { const card = document.querySelector("[data-action-card-open=\"%d\"]"); card.scrollIntoView({ block: "end" }); })()', $target->id));
+    $webpage->click(sprintf('[data-action-card-open="%d"]', $target->id));
+    $webpage->script(actionQueuePhoneSheetOpenScript());
+
+    $created = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Example Live Show"']);
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($created)->broadcastWith(), 4));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('!!document.querySelector("[data-action-card=\"%d\"]")', $created->id)));
+    $webpage->assertPresent(sprintf('[data-action-card="%d"]', $created->id));
+
+    $webpage->click('[data-action-sheet] [data-sheet-close]');
+    $webpage->script(actionQueuePhoneSheetClosedScript());
+
+    $webpage->assertScript(sprintf('(() => { const rect = document.querySelector("[data-action-card-open=\"%d\"]").getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight + 1; })()', $target->id), true)
+        ->assertScript(sprintf('document.activeElement === document.querySelector("[data-action-card-open=\"%d\"]")', $target->id), true)
+        ->assertNoSmoke();
+});
+
 test('a notification deep link opens its action in the sheet on a phone', function (): void {
     $older = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Severance"', 'created_at' => now()->subHour()]);
     ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Andor"']);
@@ -165,6 +226,35 @@ test('a notification deep link opens its action in the sheet on a phone', functi
     $webpage->script(actionQueuePhoneSheetOpenScript());
 
     $webpage->assertSeeIn('[data-action-sheet] [data-action-title]', 'Severance')
+        ->assertScript('document.getElementById(document.querySelector("[data-action-sheet]").getAttribute("aria-labelledby"))?.textContent.includes("Severance") ?? false', true);
+
+    // Nothing had focus before a deep-linked sheet opened, so only the sheet's
+    // own close handler can put focus on the action's card.
+    $webpage->click('[data-action-sheet] [data-sheet-close]');
+    $webpage->script(actionQueuePhoneSheetClosedScript());
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('document.activeElement === document.querySelector("[data-action-card-open=\"%d\"]")', $older->id)));
+
+    $webpage->assertScript(sprintf('document.activeElement === document.querySelector("[data-action-card-open=\"%d\"]")', $older->id), true)
+        ->assertNoSmoke();
+});
+
+test('closing a deep-linked sheet drops the request from the URL without a new history entry', function (): void {
+    $older = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Severance"', 'created_at' => now()->subHour()]);
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Andor"']);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('actions.requests.index', ['request' => $older->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueuePhoneSheetOpenScript());
+    $webpage->script('(() => { window.__mmHistoryLength = history.length; })()');
+
+    $webpage->click('[data-action-sheet] [data-sheet-close]');
+    $webpage->script(actionQueuePhoneSheetClosedScript());
+    $webpage->script(confirmDialogWaitUntilScript('!new URL(window.location.href).searchParams.has("request")'));
+
+    $webpage->assertScript('new URL(window.location.href).searchParams.has("request")', false)
+        ->assertScript('history.length === window.__mmHistoryLength', true)
+        ->assertScript('(history.state?.page?.props?.preselect ?? null) === null', true)
         ->assertNoSmoke();
 });
 
@@ -233,6 +323,9 @@ test('approving under the Pending tab closes the sheet instead of showing the ne
     $webpage->script(appHydratedScript());
     $webpage->click(sprintf('[data-action-card-open="%d"]', $newer->id));
     $webpage->script(actionQueuePhoneSheetOpenScript());
+    // Watch the sheet through its slide-out: every title it shows, and whether
+    // an Approve for any other action is ever clickable in it.
+    $webpage->script(actionQueuePhoneSheetWatchScript());
 
     $webpage->click('[data-action-sheet] [data-action-approve]')
         ->assertSee('Action approved and queued.');
@@ -240,6 +333,12 @@ test('approving under the Pending tab closes the sheet instead of showing the ne
 
     $webpage->assertMissing('[data-action-sheet]')
         ->assertMissing(sprintf('[data-action-card="%d"]', $newer->id))
+        ->assertScript('window.__mmSheetTitles.length > 0 && window.__mmSheetTitles.every((title) => title.includes("Severance"))', true)
+        ->assertScript('window.__mmOtherApproveClickable', false);
+
+    // The action's card is gone, so focus lands on the page heading.
+    $webpage->script(confirmDialogWaitUntilScript('document.activeElement?.tagName === "H1"'));
+    $webpage->assertScript('document.activeElement?.tagName', 'H1')
         ->assertNoSmoke();
     expect($newer->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
