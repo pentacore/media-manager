@@ -14,12 +14,14 @@ use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Models\ActivityLog;
+use App\Models\AgentDecision;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkRun;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use App\Models\WebhookEvent;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonInterface;
@@ -885,4 +887,21 @@ test('a chat reply with attachments is captured from the chat message too', func
         ->assertInertia(fn ($page) => $page
             ->where('draft.input.prompt', 'What does this error mean?')
             ->where('draft.draft_attachments.1.chat_attachment_id', $screenshot->id));
+});
+
+test('the create form pre-fills a decision draft with its webhook event', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $payload = ['series' => ['id' => 7]];
+    $aiUsageRecord = benchmarkTextUsage(DecisionAgent::class, DecisionPrompt::build('sonarr', 'Grab', $payload));
+    AgentDecision::factory()->create([
+        'webhook_event_id' => WebhookEvent::factory()->create(['event_type' => 'Grab', 'payload' => $payload])->id,
+        'service' => 'sonarr', 'event_type' => 'Grab', 'invocation_id' => $aiUsageRecord->invocation_id,
+    ]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input.event.service', 'sonarr')
+            ->where('draft.input.event.event_type', 'Grab')
+            ->where('draft.input.event_key', 'sonarr:Grab')
+            ->where('draftWarnings', ['The gate scope of this run was not recorded; the case runs with the full toolset.']));
 });

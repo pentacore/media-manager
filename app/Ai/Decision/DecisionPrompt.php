@@ -64,4 +64,35 @@ PROMPT;
 
         return is_array($payload) ? $payload : null;
     }
+
+    /**
+     * The payload as the JSON text a case stores; an empty payload is an object.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function payloadJson(array $payload): string
+    {
+        if ($payload === []) {
+            return '{}';
+        }
+
+        return (string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * The service, event type and payload text of a prompt built by build();
+     * null for any other text.
+     *
+     * @return array{service: string, event_type: string, payload_json: string}|null
+     */
+    public static function parse(string $prompt): ?array
+    {
+        $pattern = '/\AA webhook event was received and needs your decision\.\n\nService: (?<service>[^\n]+)\nEvent type: (?<event_type>[^\n]+)\n.*?\n<untrusted_webhook_payload>\n(?<payload>.*)\n<\/untrusted_webhook_payload>\n\nDecide whether any action is warranted\./s';
+
+        if (preg_match($pattern, $prompt, $matches) !== 1) {
+            return null;
+        }
+
+        return ['service' => $matches['service'], 'event_type' => $matches['event_type'], 'payload_json' => $matches['payload']];
+    }
 }

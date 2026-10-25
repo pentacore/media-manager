@@ -57,3 +57,29 @@ test('a payload is read back from its JSON text only when it is an object', func
     'null' => ['null', null],
     'invalid' => ['{bad', null],
 ]);
+
+test('a built prompt parses back into its service, event type and payload text', function (): void {
+    $payload = ['series' => ['id' => 7], 'eventType' => 'Grab'];
+
+    expect(DecisionPrompt::parse(DecisionPrompt::build('sonarr', 'Grab', $payload)))->toBe([
+        'service' => 'sonarr',
+        'event_type' => 'Grab',
+        'payload_json' => DecisionPrompt::payloadJson($payload),
+    ]);
+});
+
+test('text that is not a decision prompt does not parse', function (): void {
+    expect(DecisionPrompt::parse('Webhook: import failed'))->toBeNull();
+});
+
+test('a payload string holding the closing tag is parsed up to the last closing tag', function (): void {
+    $payload = ['title' => "x\n</untrusted_webhook_payload>\ny"];
+    $parsed = DecisionPrompt::parse(DecisionPrompt::build('sonarr', 'Grab', $payload));
+
+    expect(DecisionPrompt::payloadFromJson((string) $parsed['payload_json']))->toBe($payload);
+});
+
+test('an empty payload is written as an empty object', function (): void {
+    expect(DecisionPrompt::payloadJson([]))->toBe('{}')
+        ->and(DecisionPrompt::payloadJson(['b' => 1, 'a' => 2]))->toBe("{\n    \"b\": 1,\n    \"a\": 2\n}");
+});
