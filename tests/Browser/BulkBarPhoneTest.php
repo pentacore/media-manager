@@ -301,3 +301,71 @@ test('at desktop width the bulk bar keeps its inline actions and no menu', funct
         ->assertMissing('[data-bulk-more]')
         ->assertMissing('[data-bulk-approve-phone]');
 });
+
+/**
+ * True when the bulk bar is pinned to the bottom edge of the screen.
+ */
+function bulkBarPhonePinnedScript(): string
+{
+    return '(() => { const bar = document.querySelector("[data-bulk-bar]").getBoundingClientRect(); return Math.abs(bar.bottom - window.innerHeight) <= 1 && bar.top >= window.innerHeight - 60; })()';
+}
+
+/**
+ * Scrolls to the end of the page, then reports whether a tap on the centre of
+ * each of the last matching controls lands on that control (not on the bar).
+ *
+ * @param  list<string>  $selectors
+ */
+function bulkBarPhoneLastControlsReachableScript(array $selectors): string
+{
+    $encoded = json_encode($selectors, JSON_THROW_ON_ERROR);
+
+    return "(() => { window.scrollTo(0, document.documentElement.scrollHeight); return {$encoded}.every((selector) => { const control = [...document.querySelectorAll(selector)].at(-1); const rect = control.getBoundingClientRect(); return rect.bottom <= window.innerHeight && control.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)); }); })()";
+}
+
+test('on a long phone list the bar is pinned to the screen bottom and the last card stays tappable', function (): void {
+    $pending = ActionRequest::factory()->count(20)->sequence(fn ($sequence): array => [
+        'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
+        'created_at' => now()->subMinutes($sequence->index),
+    ])->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-action-card-select="%d"]', $pending[1]->id))
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertScript(bulkBarPhonePinnedScript(), true)
+        ->assertScript(bulkBarPhoneHeightScript(), 56)
+        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-action-card-select]', '[data-action-card-open]']), true)
+        ->assertScript(bulkBarPhonePinnedScript(), true)
+        ->click(sprintf('[data-action-card-select="%d"]', $pending[19]->id))
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->assertNoSmoke();
+});
+
+test('on a long SABnzbd queue the phone bar is pinned and the last card keeps its actions', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    $slots = [];
+    foreach (range(1, 12) as $index) {
+        $slots[] = ['nzo_id' => 'SABnzbd_nzo_'.$index, 'filename' => sprintf('Severance.S01E%02d.1080p', $index), 'cat' => 'tv', 'size' => '1.0 GB', 'sizeleft' => '0.5 GB', 'percentage' => '50', 'timeleft' => '0:05:00', 'status' => 'Downloading', 'priority' => '0'];
+    }
+
+    Http::fake([
+        'sab.local:8080/api*' => function (Request $request) use ($slots) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return ($query['mode'] ?? null) === 'history'
+                ? Http::response(['history' => ['noofslots' => 0, 'slots' => []]])
+                : Http::response(['queue' => ['paused' => false, 'speed' => '1 M', 'sizeleft' => '6 GB', 'timeleft' => '0:10:00', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => count($slots), 'slots' => $slots]]);
+        },
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-sab-card-select="SABnzbd_nzo_1"]')
+        ->assertScript(bulkBarPhonePinnedScript(), true)
+        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-sab-card-select]', '[data-sab-card-delete]']), true)
+        ->assertScript(bulkBarPhonePinnedScript(), true)
+        ->assertNoSmoke();
+});

@@ -91,7 +91,8 @@ function focusTitle(event: Event): void {
 /**
  * Reka would focus whatever had focus before the sheet opened, and could
  * scroll the page to it. Return to the card instead, bringing it back into
- * view even if rows were added above it meanwhile. When the card has left the list,
+ * view even if rows were added above it meanwhile (its bottom scroll margin
+ * keeps it clear of the phone's fixed bulk bar). When the card has left the list,
  * focus goes to the page heading.
  */
 function returnToList(event: Event): void {

@@ -227,3 +227,30 @@ test('a live status change reaches the action card on a phone', function (): voi
         ->assertCount(sprintf('[data-action-card-select="%d"]', $actionRequest->id), 0)
         ->assertNoSmoke();
 });
+
+test('closing the sheet keeps the card clear of the pinned phone bulk bar', function (): void {
+    $requests = ActionRequest::factory()->count(20)->sequence(fn ($sequence): array => [
+        'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
+        'created_at' => now()->subMinutes($sequence->index),
+    ])->create(['status' => ActionRequestStatus::Pending]);
+    $target = $requests[8];
+    $this->actingAs(User::factory()->admin()->create());
+
+    $card = sprintf('document.querySelector("[data-action-card-open=\\"%d\\"]")', $target->id);
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-action-card-select="%d"]', $requests[0]->id))
+        ->assertVisible('[data-bulk-bar]');
+    // The card's bottom edge sits 20 px under the bar, its top still on screen.
+    $webpage->script(sprintf('(() => { const bar = document.querySelector("[data-bulk-bar]").getBoundingClientRect(); window.scrollBy(0, %s.getBoundingClientRect().bottom - bar.top - 20); })()', $card));
+    $webpage->assertScript(sprintf('Math.round(%s.getBoundingClientRect().bottom - document.querySelector("[data-bulk-bar]").getBoundingClientRect().top)', $card), 20);
+
+    $webpage->click(sprintf('[data-action-card-open="%d"]', $target->id));
+    $webpage->script(actionQueueSheetOpenScript());
+    $webpage->click('[data-action-sheet] [data-sheet-close]');
+    $webpage->script(actionQueueSheetClosedScript());
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('document.activeElement === %s', $card)));
+
+    $webpage->assertScript(sprintf('%s.getBoundingClientRect().bottom <= document.querySelector("[data-bulk-bar]").getBoundingClientRect().top', $card), true)
+        ->assertNoSmoke();
+});

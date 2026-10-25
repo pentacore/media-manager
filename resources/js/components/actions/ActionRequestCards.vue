@@ -61,7 +61,7 @@ const { isAdmin } = useCan();
                 />
                 <button
                     type="button"
-                    class="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    class="flex min-w-0 flex-1 scroll-mb-[calc(4.5rem+env(safe-area-inset-bottom))] flex-col gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     :data-action-card-open="row.id"
                     @click="emit('open', row.id)"
                 >

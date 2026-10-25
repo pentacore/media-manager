@@ -124,7 +124,10 @@ function mobileLayoutFakeServices(): void
 
     ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "'.str_repeat('Severance', 6).'"']);
     ActionRequest::factory()->described()->failed()->create();
-    EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly']);
+    // Played and without a series title, so Statistics' Top titles always
+    // lists this long title (the factory's random action and series title
+    // used to show it only sometimes, which made the statistics row flaky).
+    EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'action' => 'played']);
 }
 
 /**
