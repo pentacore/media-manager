@@ -80,16 +80,16 @@ test('new files are stored per turn in the case folder', function (): void {
     ]))->assertSessionHasNoErrors()->assertRedirect(route('admin.benchmarks.cases.index'));
 
     $benchmarkCase = BenchmarkCase::query()->sole();
-    $log = $benchmarkCase->attachmentsFor(0)->sole();
+    $benchmarkCaseAttachment = $benchmarkCase->attachmentsFor(0)->sole();
     $screen = $benchmarkCase->attachmentsFor(null)->sole();
 
-    expect($log->original_name)->toBe('download.log')
+    expect($benchmarkCaseAttachment->original_name)->toBe('download.log')
         ->and($screen->original_name)->toBe('screen.png')
         ->and($screen->mime_type)->toBe('image/png')
         ->and($screen->path)->toStartWith(sprintf('benchmark-cases/%d/', $benchmarkCase->id))
         ->and($benchmarkCase->input['conversation'])->toBe('context')
         ->and($benchmarkCase->input['history'])->toBe([['role' => 'user', 'content' => 'Here is the log.'], ['role' => 'assistant', 'content' => 'Thanks.']]);
-    Storage::disk('local')->assertExists([$log->path, $screen->path]);
+    Storage::disk('local')->assertExists([$benchmarkCaseAttachment->path, $screen->path]);
 });
 
 test('the JSON payload keeps tool argument types a multipart form would turn into strings', function (): void {
@@ -171,12 +171,12 @@ test('a draft attachment is copied into the case folder on save and the chat fil
         'draft_attachment_ids' => ['final' => [$chatAttachment->id]],
     ])))->assertSessionHasNoErrors()->assertInertiaFlash('toast.type', 'success');
 
-    $attachment = BenchmarkCaseAttachment::query()->sole();
-    expect($attachment->turn)->toBeNull()
-        ->and($attachment->original_name)->toBe('screenshot.png')
-        ->and($attachment->mime_type)->toBe('image/png')
-        ->and($attachment->path)->toStartWith(sprintf('benchmark-cases/%d/', $attachment->benchmark_case_id))
-        ->and(Storage::disk('local')->get($attachment->path))->toBe('png-bytes');
+    $benchmarkCaseAttachment = BenchmarkCaseAttachment::query()->sole();
+    expect($benchmarkCaseAttachment->turn)->toBeNull()
+        ->and($benchmarkCaseAttachment->original_name)->toBe('screenshot.png')
+        ->and($benchmarkCaseAttachment->mime_type)->toBe('image/png')
+        ->and($benchmarkCaseAttachment->path)->toStartWith(sprintf('benchmark-cases/%d/', $benchmarkCaseAttachment->benchmark_case_id))
+        ->and(Storage::disk('local')->get($benchmarkCaseAttachment->path))->toBe('png-bytes');
     Storage::disk('local')->assertExists($chatAttachment->path);
 });
 

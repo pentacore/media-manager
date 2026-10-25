@@ -376,7 +376,7 @@ test('a scripted case stops before a turn once it used its time budget', functio
     $turns = [];
     $slow = runnerScriptedReply('Yes, Dune is there.', 100, $turns);
     MediaAgent::fake([
-        function (string $prompt, Collection $attachments) use ($slow, &$turns): TextResponse {
+        function (string $prompt, Collection $attachments) use ($slow): TextResponse {
             $response = $slow($prompt, $attachments);
             $this->travel(201)->seconds();
 

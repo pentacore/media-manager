@@ -80,7 +80,7 @@ test('turn keys and labels name the prompt and count history turns', function ()
         ->and(BenchmarkCaseAttachment::turnFromKey(0))->toBe(0)
         ->and(BenchmarkCaseAttachment::keyForTurn(null))->toBe('final')
         ->and(BenchmarkCaseAttachment::keyForTurn(3))->toBe('3')
-        ->and(fn () => BenchmarkCaseAttachment::turnFromKey('later'))->toThrow(InvalidArgumentException::class)
+        ->and(fn (): ?int => BenchmarkCaseAttachment::turnFromKey('later'))->toThrow(InvalidArgumentException::class)
         ->and(BenchmarkCaseAttachment::factory()->make(['turn' => 0])->turnLabel())->toBe('turn 1')
         ->and(BenchmarkCaseAttachment::factory()->make(['turn' => null])->turnLabel())->toBe('final prompt');
 });
