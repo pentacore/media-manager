@@ -6,6 +6,7 @@ use App\Enums\MediaReplacementScope;
 use App\Enums\SubtitleAuditBatchStatus;
 use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Jobs\SearchSubtitleAuditEpisode;
+use App\Jobs\WatchSubtitleAuditBatch;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleAuditBatch;
@@ -221,4 +222,26 @@ test('every queued search retries until the batch deadline', function (): void {
         SearchSubtitleAuditEpisode::class,
         fn (SearchSubtitleAuditEpisode $searchSubtitleAuditEpisode): bool => $searchSubtitleAuditEpisode->retryUntil()->getTimestamp() !== $deadline->getTimestamp(),
     );
+});
+
+test('a repair schedules the batch watchdog three minutes out', function (): void {
+    $this->freezeSecond();
+
+    $subtitleAuditBatch = resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, repairEpisodes()), $this->user);
+
+    Queue::assertPushed(WatchSubtitleAuditBatch::class, 1);
+    Queue::assertPushed(
+        WatchSubtitleAuditBatch::class,
+        fn (WatchSubtitleAuditBatch $watchSubtitleAuditBatch): bool => $watchSubtitleAuditBatch->subtitleAuditBatchId === $subtitleAuditBatch->id
+            && $watchSubtitleAuditBatch->delay instanceof DateTimeInterface
+            && $watchSubtitleAuditBatch->delay->getTimestamp() === now()->addSeconds(180)->getTimestamp(),
+    );
+});
+
+test('a refused repair schedules no watchdog', function (): void {
+    repairRefusalReason(fn (): SubtitleAuditBatch => resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, [
+        new SeriesSubtitleAuditEpisode(102, 1, 2, SeriesSubtitleAuditEpisode::STATUS_OK),
+    ]), $this->user));
+
+    Queue::assertNotPushed(WatchSubtitleAuditBatch::class);
 });

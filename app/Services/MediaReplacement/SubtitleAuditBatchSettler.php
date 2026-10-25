@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\DB;
  * Not final: the searcher and job tests mock it to assert a batch is settled.
  *
  * A batch is ready once no episode is still searching. Exactly one of two
- * things then happens: the chat tool shows the card (the wait saw it ready),
- * or the tool handed the batch off first and admins get a notification.
+ * things then happens: the chat tool claims the card (the wait saw it ready),
+ * or the batch was handed off first — by the tool, or by the watchdog when the
+ * chat turn died before it could do either — and admins get a notification.
  */
 class SubtitleAuditBatchSettler
 {
@@ -53,13 +54,59 @@ class SubtitleAuditBatchSettler
         $subtitleAuditBatch->refresh();
 
         if ($shouldNotify) {
-            DB::afterCommit(fn () => $this->adminNotifier->send(new MediaReplacementStatusChanged(
-                service: 'sonarr',
-                title: sprintf('Subtitle audit: %s', $subtitleAuditBatch->series_title),
-                message: $this->summary($subtitleAuditBatch),
-                level: 'info',
-                url: route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id], absolute: false),
-            )));
+            $this->notifyReady($subtitleAuditBatch);
+        }
+    }
+
+    /**
+     * Claim the chat card for a ready batch nobody handed off. Returns false
+     * when the batch is still searching or was handed off (by the tool or the
+     * watchdog), so the notification path owns it instead.
+     */
+    public function claimCard(SubtitleAuditBatch $subtitleAuditBatch): bool
+    {
+        $claimed = DB::transaction(function () use ($subtitleAuditBatch): bool {
+            $locked = SubtitleAuditBatch::query()->lockForUpdate()->findOrFail($subtitleAuditBatch->id);
+
+            if ($locked->status !== SubtitleAuditBatchStatus::Ready || $locked->handed_off_at !== null) {
+                return false;
+            }
+
+            $locked->card_shown_at = now();
+            $locked->save();
+
+            return true;
+        });
+
+        $subtitleAuditBatch->refresh();
+
+        return $claimed;
+    }
+
+    /**
+     * The watchdog's take-over of a batch whose chat turn neither showed the
+     * card nor handed it off (the request died first): hand it off, and notify
+     * at once when it is already ready, since no later settle() will.
+     */
+    public function adopt(SubtitleAuditBatch $subtitleAuditBatch): void
+    {
+        $shouldNotify = DB::transaction(function () use ($subtitleAuditBatch): bool {
+            $locked = SubtitleAuditBatch::query()->lockForUpdate()->findOrFail($subtitleAuditBatch->id);
+
+            if ($locked->card_shown_at !== null || $locked->handed_off_at !== null) {
+                return false;
+            }
+
+            $locked->handed_off_at = now();
+            $locked->save();
+
+            return $locked->status === SubtitleAuditBatchStatus::Ready;
+        });
+
+        $subtitleAuditBatch->refresh();
+
+        if ($shouldNotify) {
+            $this->notifyReady($subtitleAuditBatch);
         }
     }
 
@@ -115,5 +162,16 @@ class SubtitleAuditBatchSettler
         }
 
         return implode(', ', $parts).'.';
+    }
+
+    private function notifyReady(SubtitleAuditBatch $subtitleAuditBatch): void
+    {
+        DB::afterCommit(fn () => $this->adminNotifier->send(new MediaReplacementStatusChanged(
+            service: 'sonarr',
+            title: sprintf('Subtitle audit: %s', $subtitleAuditBatch->series_title),
+            message: $this->summary($subtitleAuditBatch),
+            level: 'info',
+            url: route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id], absolute: false),
+        )));
     }
 }

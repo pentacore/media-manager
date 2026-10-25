@@ -132,6 +132,33 @@ test('a repair result becomes a subtitle audit batch card and hydrates its statu
     expect($chatCardExtractor->hydrate($cards))->toBe([]);
 });
 
+test('a handed off repair shows its searching card, which hydrates to the finished batch', function (): void {
+    $batch = SubtitleAuditBatch::factory()->create(['series_id' => 42, 'series_title' => 'Show', 'handed_off_at' => now()]);
+    $episode = SubtitleAuditEpisode::factory()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 2,
+    ]);
+    $chatCardExtractor = resolve(ChatCardExtractor::class);
+
+    $cards = $chatCardExtractor->fromToolResults([[
+        'id' => 'call_1', 'name' => 'RepairSeriesSubtitlesTool', 'arguments' => [], 'result_id' => null,
+        'result' => json_encode(['handed_off' => true, 'subtitle_audit_batch_id' => $batch->id, 'searching' => 1, 'message' => 'Later.', 'subtitle_audit_batch' => SubtitleAuditBatchCard::present($batch)]),
+    ]]);
+
+    expect($cards)->toHaveCount(1)
+        ->and($cards[0]['status'])->toBe('searching')
+        ->and($cards[0]['episodes'][0]['outcome'])->toBe('searching');
+
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $episode->update(['outcome' => 'queued', 'action_request_id' => $actionRequest->id, 'release_title' => 'Show.S01E02.CR']);
+    $batch->update(['status' => 'ready', 'completed_at' => now()]);
+
+    $hydrated = $chatCardExtractor->hydrate($cards);
+
+    expect($hydrated[0]['status'])->toBe('ready')
+        ->and($hydrated[0]['episodes'][0]['outcome'])->toBe('queued')
+        ->and($hydrated[0]['pending_action_request_ids'])->toBe([$actionRequest->id]);
+});
+
 test('hydrating several messages keeps each card in its group and order', function (): void {
     $first = SubtitleAuditBatch::factory()->create(['series_title' => 'First']);
     $second = SubtitleAuditBatch::factory()->create(['series_title' => 'Second']);

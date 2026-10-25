@@ -25,6 +25,7 @@ use Override;
  * @property SubtitleAuditBatchStatus $status
  * @property CarbonImmutable|null $search_deadline_at
  * @property CarbonImmutable|null $handed_off_at
+ * @property CarbonImmutable|null $card_shown_at
  * @property CarbonImmutable|null $completed_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -46,6 +47,7 @@ use Override;
     'status',
     'search_deadline_at',
     'handed_off_at',
+    'card_shown_at',
     'completed_at',
 ])]
 class SubtitleAuditBatch extends Model
@@ -93,6 +95,7 @@ class SubtitleAuditBatch extends Model
             'status' => SubtitleAuditBatchStatus::class,
             'search_deadline_at' => 'immutable_datetime',
             'handed_off_at' => 'immutable_datetime',
+            'card_shown_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];
     }

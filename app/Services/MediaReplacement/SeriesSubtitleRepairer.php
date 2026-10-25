@@ -7,6 +7,7 @@ namespace App\Services\MediaReplacement;
 use App\Enums\SubtitleAuditBatchStatus;
 use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Jobs\SearchSubtitleAuditEpisode;
+use App\Jobs\WatchSubtitleAuditBatch;
 use App\Models\ActionTypeConfig;
 use App\Models\SubtitleAuditBatch;
 use App\Models\User;
@@ -108,6 +109,12 @@ final readonly class SeriesSubtitleRepairer
 
                 dispatch(new SearchSubtitleAuditEpisode($subtitleAuditEpisode->id, $searchDeadline))->afterCommit();
             }
+
+            // Adopts the batch if the chat turn dies before it shows the card
+            // or hands the batch off.
+            dispatch(new WatchSubtitleAuditBatch($subtitleAuditBatch->id))
+                ->delay(now()->addSeconds(WatchSubtitleAuditBatch::DELAY_SECONDS))
+                ->afterCommit();
 
             return $subtitleAuditBatch;
         });

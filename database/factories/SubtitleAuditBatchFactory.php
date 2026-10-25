@@ -26,6 +26,7 @@ class SubtitleAuditBatchFactory extends Factory
             'status' => SubtitleAuditBatchStatus::Searching,
             'search_deadline_at' => now()->addMinutes(30),
             'handed_off_at' => null,
+            'card_shown_at' => null,
             'completed_at' => null,
         ];
     }
@@ -44,6 +45,15 @@ class SubtitleAuditBatchFactory extends Factory
             'status' => SubtitleAuditBatchStatus::Ready,
             'completed_at' => now(),
             'handed_off_at' => now(),
+        ]);
+    }
+
+    public function cardShown(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => SubtitleAuditBatchStatus::Ready,
+            'completed_at' => now(),
+            'card_shown_at' => now(),
         ]);
     }
 }

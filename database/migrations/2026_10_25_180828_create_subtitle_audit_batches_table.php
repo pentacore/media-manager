@@ -22,6 +22,7 @@ return new class extends Migration
             $blueprint->string('status')->default(SubtitleAuditBatchStatus::Searching->value);
             $blueprint->timestamp('search_deadline_at')->nullable();
             $blueprint->timestamp('handed_off_at')->nullable();
+            $blueprint->timestamp('card_shown_at')->nullable();
             $blueprint->timestamp('completed_at')->nullable();
             $blueprint->timestamps();
 

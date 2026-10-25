@@ -152,3 +152,68 @@ test('a notification from a settle inside an outer transaction waits for the com
     Notification::assertSentToTimes($this->admin, MediaReplacementStatusChanged::class, 1);
     expect($rolledBack->refresh()->status)->toBe(SubtitleAuditBatchStatus::Searching);
 });
+
+test('the card is claimed only for a ready batch nobody handed off', function (): void {
+    $subtitleAuditBatchSettler = resolve(SubtitleAuditBatchSettler::class);
+
+    $ready = SubtitleAuditBatch::factory()->ready()->create();
+    expect($subtitleAuditBatchSettler->claimCard($ready))->toBeTrue()
+        ->and($ready->refresh()->card_shown_at)->not->toBeNull()
+        ->and($ready->handed_off_at)->toBeNull();
+
+    $searching = SubtitleAuditBatch::factory()->create();
+    expect($subtitleAuditBatchSettler->claimCard($searching))->toBeFalse()
+        ->and($searching->refresh()->card_shown_at)->toBeNull();
+
+    $handedOff = SubtitleAuditBatch::factory()->handedOff()->create();
+    expect($subtitleAuditBatchSettler->claimCard($handedOff))->toBeFalse()
+        ->and($handedOff->refresh()->card_shown_at)->toBeNull();
+});
+
+test('adopting a batch nobody claimed hands it off and notifies once when it is ready', function (): void {
+    $subtitleAuditBatchSettler = resolve(SubtitleAuditBatchSettler::class);
+    $batch = SubtitleAuditBatch::factory()->ready()->create();
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->queued()->create();
+
+    $subtitleAuditBatchSettler->adopt($batch);
+    $subtitleAuditBatchSettler->adopt($batch);
+
+    expect($batch->refresh()->handed_off_at)->not->toBeNull()
+        ->and($batch->card_shown_at)->toBeNull()
+        ->and($subtitleAuditBatchSettler->claimCard($batch))->toBeFalse();
+    Notification::assertSentToTimes($this->admin, MediaReplacementStatusChanged::class, 1);
+    Notification::assertSentTo($this->admin, MediaReplacementStatusChanged::class, fn (MediaReplacementStatusChanged $notification): bool => str_contains(
+        (string) json_encode($notification->toArray($this->admin)),
+        'subtitle_audit_batch='.$batch->id,
+    ));
+});
+
+test('adopting a still searching batch hands it off so its completion notifies', function (): void {
+    $subtitleAuditBatchSettler = resolve(SubtitleAuditBatchSettler::class);
+    $batch = SubtitleAuditBatch::factory()->create();
+    $episode = SubtitleAuditEpisode::factory()->for($batch, 'batch')->create();
+
+    $subtitleAuditBatchSettler->adopt($batch);
+
+    expect($batch->refresh()->handed_off_at)->not->toBeNull();
+    Notification::assertNothingSent();
+
+    $episode->update(['outcome' => 'queued']);
+    $subtitleAuditBatchSettler->settle($batch);
+
+    Notification::assertSentToTimes($this->admin, MediaReplacementStatusChanged::class, 1);
+});
+
+test('adopting a batch whose card was shown or that was handed off does nothing', function (): void {
+    $subtitleAuditBatchSettler = resolve(SubtitleAuditBatchSettler::class);
+    $cardShown = SubtitleAuditBatch::factory()->cardShown()->create();
+    $handedOffAt = now()->subMinutes(5)->startOfSecond();
+    $handedOff = SubtitleAuditBatch::factory()->handedOff()->create(['handed_off_at' => $handedOffAt]);
+
+    $subtitleAuditBatchSettler->adopt($cardShown);
+    $subtitleAuditBatchSettler->adopt($handedOff);
+
+    expect($cardShown->refresh()->handed_off_at)->toBeNull()
+        ->and($handedOff->refresh()->handed_off_at?->equalTo($handedOffAt))->toBeTrue();
+    Notification::assertNothingSent();
+});

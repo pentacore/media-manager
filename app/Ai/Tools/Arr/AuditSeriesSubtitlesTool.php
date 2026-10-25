@@ -47,11 +47,22 @@ class AuditSeriesSubtitlesTool extends BaseTool
                 isset($args['season_number']) ? (int) $args['season_number'] : null,
             )->toArray();
         } catch (SeriesSubtitleAuditUnavailable $seriesSubtitleAuditUnavailable) {
-            return [
-                'error' => $seriesSubtitleAuditUnavailable->reason,
-                'message' => 'The series root folder has no anime/tv scope configured. Tell the user to set it in the Sonarr connection settings.',
-            ];
+            return self::unavailableResult($seriesSubtitleAuditUnavailable);
         }
+    }
+
+    /**
+     * What the model hears when a series cannot be audited; the repair tool
+     * answers the same.
+     *
+     * @return array{error: string, message: string}
+     */
+    public static function unavailableResult(SeriesSubtitleAuditUnavailable $seriesSubtitleAuditUnavailable): array
+    {
+        return [
+            'error' => $seriesSubtitleAuditUnavailable->reason,
+            'message' => 'The series root folder has no anime/tv scope configured. Tell the user to set it in the Sonarr connection settings.',
+        ];
     }
 
     /**
