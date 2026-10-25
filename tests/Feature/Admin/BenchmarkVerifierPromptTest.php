@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Decision\SecondOpinionCase;
 use App\Models\User;
 use App\Services\Actions\ActionDescription;
+use App\Services\Benchmark\VerifierCaseInput;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -112,4 +113,13 @@ test('the verifier preview is not found while AI is off', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     $this->postJson(route('admin.benchmarks.cases.verifier-prompt'), verifierPromptFields())->assertNotFound();
+});
+
+test('the preview keeps the surrounding spaces the saved case keeps', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $fields = verifierPromptFields(['rationale' => '  Emby reported the series removed.  ', 'action_label' => ' Delete series ', 'source_service' => ' emby ', 'event_type' => ' library.deleted ']);
+
+    $this->postJson(route('admin.benchmarks.cases.verifier-prompt'), $fields)
+        ->assertOk()
+        ->assertJsonPath('prompt', VerifierCaseInput::prompt(VerifierCaseInput::normalize($fields)));
 });
