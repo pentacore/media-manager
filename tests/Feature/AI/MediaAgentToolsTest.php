@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\Routing\RoutedToolGroups;
+use App\Ai\Routing\ToolGroupSource;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
@@ -61,24 +64,29 @@ test('both stuck-download prompts cap an inspection at 20 download ids per servi
         ->toContain('never call it once per download');
 });
 
-test('find and request tools are declared only with routing on', function (): void {
+test('find and request tools are declared only on routed turns', function (): void {
     $tools = fn (): array => collect((new MediaAgent)->tools())->map(fn (object $tool): string => $tool::class)->all();
 
-    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
 
     expect($tools())->not->toContain(FindToolsTool::class)->not->toContain(RequestToolsTool::class);
 
-    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    $chatToolRunContext = resolve(ChatToolRunContext::class);
+    $chatToolRunContext->routingActive = true;
+
+    expect($tools())->not->toContain(FindToolsTool::class)->not->toContain(RequestToolsTool::class);
+
+    $chatToolRunContext->routed = new RoutedToolGroups(['playback' => ToolGroupSource::Picked]);
 
     expect($tools())->toContain(FindToolsTool::class)->toContain(RequestToolsTool::class);
 });
 
-test('routing-on instructions mention FindToolsTool', function (): void {
-    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+test('the routing instructions appear only on routed turns', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
 
     expect((string) (new MediaAgent)->instructions())->not->toContain('FindToolsTool');
 
-    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    resolve(ChatToolRunContext::class)->routed = new RoutedToolGroups(['playback' => ToolGroupSource::Picked]);
 
     expect((string) (new MediaAgent)->instructions())->toContain('FindToolsTool')->toContain('RequestToolsTool');
 });

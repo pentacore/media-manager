@@ -12,6 +12,8 @@ use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
@@ -87,7 +89,7 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     use UsesFailoverChain;
 
     /**
-     * Appended to the instructions while chat tool routing is on.
+     * Appended to the instructions on routed chat turns.
      */
     private const string TOOL_GROUP_INSTRUCTIONS = <<<'PROMPT'
 **Tools you may not have loaded:** each turn carries only the tool groups it is likely to need. When a capability you need seems missing, call FindToolsTool with the need before answering. If an unloaded group has it, call RequestToolsTool with that group and a short reason, then end your turn: the user sees Load / No thanks buttons. Never tell the user the chat lacks a tool without searching first. If FindToolsTool finds nothing, say so plainly. When the user's message says tool groups were loaded, continue the request from before without asking again.
@@ -141,6 +143,14 @@ PROMPT;
         return true;
     }
 
+    /**
+     * Whether the chat turn in flight loads a routed subset of tool groups.
+     */
+    private function isRoutedTurn(): bool
+    {
+        return resolve(ChatToolRunContext::class)->routed instanceof RoutedToolGroups;
+    }
+
     public function instructions(): Stringable|string
     {
         $instructions = <<<'PROMPT'
@@ -186,7 +196,7 @@ Important rules:
 - If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant Action Rule isn't enabled (Admin → Action Rules).
 PROMPT;
 
-        if (resolve(AiSettings::class)->chatRoutingEnabled()) {
+        if ($this->isRoutedTurn()) {
             $instructions .= "\n\n".self::TOOL_GROUP_INSTRUCTIONS;
         }
 
@@ -256,7 +266,7 @@ PROMPT;
             resolve(ProposeWorkflowTool::class),
         ];
 
-        if (resolve(AiSettings::class)->chatRoutingEnabled()) {
+        if ($this->isRoutedTurn()) {
             $tools[] = resolve(FindToolsTool::class);
             $tools[] = resolve(RequestToolsTool::class);
         }
