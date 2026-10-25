@@ -249,6 +249,7 @@ final readonly class SecondOpinionVerifier
                 reason: is_string($reason) && trim($reason) !== '' ? Str::limit(trim($reason), 500) : null,
                 provider: $agentResponse->meta->provider ?? null,
                 model: $agentResponse->meta->model ?? null,
+                invocationId: $agentResponse->invocationId,
             );
         } catch (AiBudgetExceededException) {
             return SecondOpinionVerdict::failure(SecondOpinionVerdict::ENGINE_LLM, 'Skipped: the AI budget hard cap is reached.');

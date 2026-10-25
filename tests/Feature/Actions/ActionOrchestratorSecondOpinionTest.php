@@ -11,8 +11,10 @@ use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\AiUsageRecord;
 use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
@@ -186,3 +188,15 @@ test("a hold counts as the second opinion's only when approval was not otherwise
     'rule already requires approval' => [true, true, false],
     'unverified target already requires approval' => [false, false, false],
 ]);
+
+test('the stored verdict links the verifier invocation but the browser never sees it', function (): void {
+    secondOpinionRule('monitor_series', SecondOpinionMode::Hold);
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Justified.']]);
+
+    $actionRequest = secondOpinionDispatch();
+    $invocationId = $actionRequest->fresh()->second_opinion['invocation_id'] ?? null;
+
+    expect($invocationId)->toBeString()
+        ->and(AiUsageRecord::query()->where('invocation_id', $invocationId)->exists())->toBeTrue()
+        ->and(resolve(ActionRequestBrowserPayload::class)->description($actionRequest->fresh())['second_opinion'])->not->toHaveKey('invocation_id');
+});
