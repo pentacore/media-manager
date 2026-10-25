@@ -272,7 +272,7 @@ function openTitle(item: DiscoverTitle): void {
                 <button
                     v-if="query"
                     type="button"
-                    class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                    class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                     aria-label="Clear search"
                     @click="clearQuery"
                 >
@@ -285,7 +285,7 @@ function openTitle(item: DiscoverTitle): void {
                 </kbd>
             </form>
 
-            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+            <div class="mt-3 flex flex-wrap items-center gap-1.5 touch:gap-y-3">
                 <template v-if="can('manage-library')">
                     <button
                         v-for="s in SCOPES"
@@ -294,7 +294,7 @@ function openTitle(item: DiscoverTitle): void {
                         data-search-scope
                         :class="
                             cn(
-                                'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                                'touch-target inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
                                 scope === s.id
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

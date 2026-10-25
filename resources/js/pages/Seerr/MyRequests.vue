@@ -189,6 +189,7 @@ function confirmCancel(): void {
                             },
                         })
                     "
+                    class="touch-target"
                     preserve-scroll
                     >Previous</Link
                 >
@@ -208,6 +209,7 @@ function confirmCancel(): void {
                             },
                         })
                     "
+                    class="touch-target"
                     preserve-scroll
                     >Next</Link
                 >

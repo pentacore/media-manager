@@ -676,14 +676,14 @@ const rangeText = computed(() => {
         </PageHeader>
 
         <!-- Tabs -->
-        <div class="flex flex-wrap items-center gap-1.5">
+        <div class="flex flex-wrap items-center gap-1.5 touch:gap-y-3">
             <button
                 v-for="tab in TABS"
                 :key="tab.id"
                 type="button"
                 :class="
                     cn(
-                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'touch-target inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
                         filters.status === tab.id
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -757,7 +757,7 @@ const rangeText = computed(() => {
                     </div>
 
                     <div
-                        class="mt-auto flex items-center gap-2 pt-1.5 max-sm:flex-wrap"
+                        class="mt-auto flex items-center gap-2 pt-1.5 max-sm:flex-wrap touch:gap-3"
                     >
                         <template v-if="req.status === 1">
                             <Button

@@ -387,7 +387,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     :data-monitored-filter="opt[0]"
                     :class="
                         cn(
-                            'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
+                            'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors touch:h-10 touch:px-3',
                             monitoredFilter === opt[0]
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

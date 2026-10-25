@@ -42,7 +42,7 @@ onMounted(() => {
         <Link
             v-if="loaded && !loadFailed && pinnedTemplates.length === 0"
             :href="ChatTemplateController.index.url()"
-            class="text-[12.5px] text-muted-foreground hover:text-foreground"
+            class="touch-target text-[12.5px] text-muted-foreground hover:text-foreground"
             data-template-hint
             @click="closeChat()"
             >Save prompts you reuse as templates →</Link

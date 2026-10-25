@@ -147,7 +147,7 @@ function toggleClass(active: boolean): string {
                     ></Button
                 >
             </div>
-            <div class="flex flex-wrap items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5 touch:gap-y-3">
                 <button
                     type="button"
                     :class="toggleClass(view === 'month')"

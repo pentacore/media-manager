@@ -1192,7 +1192,7 @@ async function runQueueBulk(): Promise<void> {
         <!-- History tab -->
         <template v-if="activeTab === 'history'">
             <div
-                class="inline-flex h-7 w-fit items-center rounded-md border border-border bg-card p-0.5"
+                class="inline-flex h-7 w-fit items-center rounded-md border border-border bg-card p-0.5 touch:h-auto"
                 role="tablist"
                 aria-label="History service"
             >
@@ -1202,7 +1202,7 @@ async function runQueueBulk(): Promise<void> {
                     type="button"
                     :data-history-service-tab="service"
                     :class="[
-                        'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium transition-colors',
+                        'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium transition-colors touch:h-10 touch:px-3',
                         historyFilters.service === service
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
