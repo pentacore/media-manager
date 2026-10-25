@@ -90,6 +90,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     'update:open': [open: boolean];
+    /** Reka's close focus restore, for a parent that opened it from a menu. */
+    'close-auto-focus': [event: Event];
 }>();
 
 const phase = ref<Phase>('idle');
@@ -321,7 +323,11 @@ watch(
 
 <template>
     <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
-        <DialogContent class="max-w-2xl" data-replacement-dialog>
+        <DialogContent
+            class="max-w-2xl"
+            data-replacement-dialog
+            @close-auto-focus="(event) => emit('close-auto-focus', event)"
+        >
             <DialogHeader>
                 <DialogTitle>Replace file</DialogTitle>
                 <DialogDescription>

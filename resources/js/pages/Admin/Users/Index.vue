@@ -29,6 +29,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useConfirm } from '@/composables/useConfirm';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 
 interface RoleOption {
@@ -179,6 +180,8 @@ async function importFromEmby(): Promise<void> {
         title: 'Import every Emby user as a viewer account here?',
         description: 'Existing accounts and links are skipped.',
         confirmLabel: 'Import',
+        onCloseAutoFocus: (event) =>
+            returnFocusToPageHeaderMenu(event, '[data-users-import-emby]'),
     });
 
     // Re-check the guard: another import may have started while the dialog was open.

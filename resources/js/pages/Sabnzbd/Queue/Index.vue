@@ -39,7 +39,7 @@ import {
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
-import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, returnFocusToBulkMenu, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {
@@ -859,7 +859,15 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
             </BulkActionBar>
 
             <Dialog v-model:open="slotDeleteOpen">
-                <DialogContent>
+                <DialogContent
+                    @close-auto-focus="
+                        (event) =>
+                            returnFocusToBulkMenu(
+                                event,
+                                '[data-bulk-sab-action=delete]',
+                            )
+                    "
+                >
                     <DialogHeader>
                         <DialogTitle
                             >Delete {{ selectedSlotCount }}

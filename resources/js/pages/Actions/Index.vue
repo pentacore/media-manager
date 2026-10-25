@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import {
@@ -33,6 +33,8 @@ const props = defineProps<{
     statusCounts: Record<string, number>;
     filters: { status: string };
     preselect: number | null;
+    /** The deep-linked request when this page does not list it. */
+    preselectedRequest: ActionRequestRow | null;
 }>();
 
 defineOptions({
@@ -59,9 +61,22 @@ const {
     subscribe: subscribeLive,
 } = useActionQueueLive(props);
 
+/**
+ * A deep-linked request this page does not list (more than a page of newer
+ * requests, or another tab): the server sends it on its own, so the sheet or
+ * the pane can still show it.
+ */
+const offPageRequest = computed<ActionRequestRow | null>(() =>
+    props.preselectedRequest !== null &&
+    props.preselectedRequest.id === props.preselect
+        ? props.preselectedRequest
+        : null,
+);
+
 const selectedId = ref<number | null>(
     props.preselect !== null &&
-        visibleRequests.value.some((row) => row.id === props.preselect)
+        (visibleRequests.value.some((row) => row.id === props.preselect) ||
+            offPageRequest.value !== null)
         ? props.preselect
         : (visibleRequests.value[0]?.id ?? null),
 );
@@ -89,22 +104,45 @@ function forgetDeepLink(): void {
     url.searchParams.delete('request');
     router.replace({
         url: `${url.pathname}${url.search}${url.hash}`,
-        props: (current) => ({ ...current, preselect: null }),
+        props: (current) => ({
+            ...current,
+            preselect: null,
+            preselectedRequest: null,
+        }),
         preserveState: true,
         preserveScroll: true,
     });
 }
 
+/** The sheet has closed at least once since this page mounted. */
+let sheetClosed = false;
+
 watch(sheetOpen, (isOpen) => {
     if (!isOpen) {
+        sheetClosed = true;
         forgetDeepLink();
     }
 });
 
+// The forget is sticky: a visit already in flight when the sheet closed (the
+// approve's redirect back to its Referer, a counts reload) lands on the old
+// `?request=` URL and would put the deep link back. Drop it again.
+const page = usePage();
+
+watch(
+    () => page.url,
+    () => {
+        if (sheetClosed && !sheetOpen.value) {
+            forgetDeepLink();
+        }
+    },
+);
+
 watch(visibleRequests, (rows) => {
     if (
         selectedId.value === null ||
-        !rows.some((row) => row.id === selectedId.value)
+        (!rows.some((row) => row.id === selectedId.value) &&
+            selectedId.value !== offPageRequest.value?.id)
     ) {
         // The phone sheet never swaps to another action under the user's
         // thumb: when its row leaves the list, the sheet closes.
@@ -113,10 +151,24 @@ watch(visibleRequests, (rows) => {
     }
 });
 
+// Once the deep link is forgotten, an off-page selection has nothing left to
+// show: fall back to the first listed row, like a row that left the list.
+watch(offPageRequest, (row) => {
+    if (
+        row === null &&
+        selectedId.value !== null &&
+        !visibleRequests.value.some((listed) => listed.id === selectedId.value)
+    ) {
+        selectedId.value = visibleRequests.value[0]?.id ?? null;
+    }
+});
+
 const selected = computed<ActionRequestRow | null>(
     () =>
         visibleRequests.value.find((row) => row.id === selectedId.value) ??
-        null,
+        (offPageRequest.value?.id === selectedId.value
+            ? offPageRequest.value
+            : null),
 );
 
 const pendingOnPage = computed<number[]>(() =>
@@ -214,22 +266,26 @@ function setFilter(id: string): void {
     );
 }
 
+/**
+ * A review redirects back to the page it was sent from, which is the same URL,
+ * so `replace` changes nothing there. It matters when the deep-linked sheet
+ * closed while the visit was in flight: the redirect then lands on the old
+ * `?request=` URL, and must not push a second history entry for it.
+ */
+const reviewVisitOptions = { preserveScroll: true, replace: true } as const;
+
 function approve(id: number): void {
     forgetLiveStatuses([id]);
     router.post(
         ActionRequestController.approve.url(id),
         {},
-        { preserveScroll: true },
+        reviewVisitOptions,
     );
 }
 
 function reject(id: number): void {
     forgetLiveStatuses([id]);
-    router.post(
-        ActionRequestController.reject.url(id),
-        {},
-        { preserveScroll: true },
-    );
+    router.post(ActionRequestController.reject.url(id), {}, reviewVisitOptions);
 }
 
 async function retry(row: ActionRequestRow): Promise<void> {
@@ -252,7 +308,7 @@ async function retry(row: ActionRequestRow): Promise<void> {
     router.post(
         ActionRequestController.retry.url(row.id),
         {},
-        { preserveScroll: true },
+        reviewVisitOptions,
     );
 }
 

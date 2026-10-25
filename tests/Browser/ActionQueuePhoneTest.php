@@ -95,8 +95,9 @@ function actionQueuePhoneToastScript(int $actionRequestId, string $status): stri
 }
 
 /**
- * Records, on every DOM change, the title the Action Queue sheet shows and
- * whether an Approve that is not inert sits under any other title.
+ * Records, on every DOM change, the title the Action Queue sheet shows,
+ * whether an Approve that is not inert sits under any other title, and
+ * whether one is still clickable while the sheet slides out.
  */
 function actionQueuePhoneSheetWatchScript(): string
 {
@@ -104,6 +105,7 @@ function actionQueuePhoneSheetWatchScript(): string
         (() => {
             window.__mmSheetTitles = [];
             window.__mmOtherApproveClickable = false;
+            window.__mmClosingApproveClickable = false;
             const record = () => {
                 const sheet = document.querySelector('[data-action-sheet]');
                 if (!sheet) {
@@ -117,6 +119,9 @@ function actionQueuePhoneSheetWatchScript(): string
                 const approve = sheet.querySelector('[data-action-approve]');
                 if (approve && !approve.closest('[inert]') && !text.includes('Severance')) {
                     window.__mmOtherApproveClickable = true;
+                }
+                if (approve && !approve.closest('[inert]') && sheet.getAttribute('data-state') === 'closed') {
+                    window.__mmClosingApproveClickable = true;
                 }
             };
             record();
@@ -334,7 +339,9 @@ test('approving under the Pending tab closes the sheet instead of showing the ne
     $webpage->assertMissing('[data-action-sheet]')
         ->assertMissing(sprintf('[data-action-card="%d"]', $newer->id))
         ->assertScript('window.__mmSheetTitles.length > 0 && window.__mmSheetTitles.every((title) => title.includes("Severance"))', true)
-        ->assertScript('window.__mmOtherApproveClickable', false);
+        ->assertScript('window.__mmOtherApproveClickable', false)
+        // The sliding-out sheet still shows the approved action: it is inert.
+        ->assertScript('window.__mmClosingApproveClickable', false);
 
     // The action's card is gone, so focus lands on the page heading.
     $webpage->script(confirmDialogWaitUntilScript('document.activeElement?.tagName === "H1"'));

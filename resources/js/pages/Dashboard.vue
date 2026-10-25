@@ -686,8 +686,13 @@ onMounted(() => {
                                 {{ action.requested_by }}
                             </span>
                             <Link
-                                :href="ActionRequestController.index.url()"
-                                class="inline-flex h-6 items-center rounded-md border border-destructive/35 px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                                :href="
+                                    ActionRequestController.index.url({
+                                        query: { request: action.id },
+                                    })
+                                "
+                                class="touch-target inline-flex h-6 items-center rounded-md border border-destructive/35 px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                                :data-dashboard-review-action="action.id"
                             >
                                 Review
                             </Link>

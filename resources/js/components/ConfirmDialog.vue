@@ -61,6 +61,7 @@ onBeforeUnmount(() => settle(false));
                 request?.description ? {} : { 'aria-describedby': undefined }
             "
             @open-auto-focus="focusCancel"
+            @close-auto-focus="(event) => request?.onCloseAutoFocus?.(event)"
         >
             <DialogHeader>
                 <DialogTitle>{{ request?.title }}</DialogTitle>

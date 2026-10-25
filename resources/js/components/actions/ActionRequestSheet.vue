@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import {
     Sheet,
     SheetContent,
     SheetDescription,
     SheetTitle,
 } from '@/components/ui/sheet';
+import { useCan } from '@/composables/useCan';
 import { focusPageHeading } from '@/lib/bulk';
 import ActionRequestDetail from './ActionRequestDetail.vue';
 import { payloadTitle } from './actionRow';
@@ -35,6 +36,10 @@ const emit = defineEmits<{
  */
 const shownRow = ref<ActionRequestRow | null>(props.selected);
 
+// The default `pre` flush runs this once per update, after both `open` and
+// `selected` have their new values, so it never depends on which attribute
+// the page's template sets first (a `sync` watcher would see `selected`
+// change while `open` is still true, and freeze on the next action).
 watch(
     [open, () => props.selected],
     ([isOpen, row]) => {
@@ -42,14 +47,52 @@ watch(
             shownRow.value = row;
         }
     },
-    { flush: 'sync', immediate: true },
+    { immediate: true },
 );
+
+const { isAdmin } = useCan();
+
+/** What the bottom bar offers for the shown row, for the sheet's description. */
+const reviewHint = computed<string>(() => {
+    if (shownRow.value?.status === 'pending') {
+        return 'Approve or decline it at the bottom.';
+    }
+
+    if (shownRow.value?.status === 'failed' && isAdmin.value) {
+        return 'Retry it at the bottom.';
+    }
+
+    return '';
+});
+
+/**
+ * Reka would focus the first tabbable control, which for a pending action is
+ * the pinned "Approve & execute": a held Enter would approve it, and a screen
+ * reader would skip the title, the why and the warning. Start on the title.
+ */
+function focusTitle(event: Event): void {
+    event.preventDefault();
+
+    const sheet = document.querySelector<HTMLElement>('[data-action-sheet]');
+    const title =
+        sheet?.querySelector<HTMLElement>('[data-action-title]') ?? sheet;
+
+    if (!title) {
+        return;
+    }
+
+    if (!title.hasAttribute('tabindex')) {
+        title.setAttribute('tabindex', '-1');
+    }
+
+    title.focus({ preventScroll: true });
+}
 
 /**
  * Reka would focus whatever had focus before the sheet opened, and could
  * scroll the page to it. Return to the card instead, bringing it back into
- * view even if rows were added above it meanwhile. When the card has left the
- * list, focus goes to the page heading.
+ * view even if rows were added above it meanwhile. When the card has left the list,
+ * focus goes to the page heading.
  */
 function returnToList(event: Event): void {
     event.preventDefault();
@@ -61,8 +104,10 @@ function returnToList(event: Event): void {
                   `[data-action-card-open="${shownRow.value.id}"]`,
               );
 
-    if (card === null) {
-        focusPageHeading({ preventScroll: true });
+    // A card with no box (the viewport crossed `sm` while the sheet was open,
+    // hiding the card list) cannot take focus either.
+    if (card === null || card.getClientRects().length === 0) {
+        focusPageHeading();
 
         return;
     }
@@ -80,6 +125,7 @@ function returnToList(event: Event): void {
             side="right"
             class="w-full gap-0 overflow-y-auto p-0 sm:max-w-none"
             data-action-sheet
+            @open-auto-focus="focusTitle"
             @close-auto-focus="returnToList"
         >
             <SheetTitle class="sr-only">{{
@@ -87,7 +133,7 @@ function returnToList(event: Event): void {
             }}</SheetTitle>
             <SheetDescription class="sr-only">
                 Why this action was proposed, its target and its outcome.
-                Approve or decline it at the bottom.
+                {{ reviewHint }}
             </SheetDescription>
             <ActionRequestDetail
                 v-if="shownRow"

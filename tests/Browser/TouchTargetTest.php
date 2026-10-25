@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
+use App\Models\ActionRequest;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\BenchmarkSchedule;
@@ -246,4 +248,21 @@ test('a touch screen at desktop width gets the hit areas and the touch reveal', 
     $webpage->script(touchTargetLibraryLoadedScript('[data-movie-open-external]'));
     $webpage->assertScript('getComputedStyle(document.querySelector("[data-movie-open-external]")).opacity', '1')
         ->assertScript(touchTargetTappableScript('[data-movie-open-external]'), true);
+});
+
+test("the dashboard's per-action Review link is a 40 px target that opens that action's sheet on a phone", function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Severance"']);
+    $this->actingAs(User::factory()->member()->create());
+
+    $selector = sprintf('[data-dashboard-review-action="%d"]', $actionRequest->id);
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertScript(touchTargetTappableScript($selector), true)
+        ->assertAttribute($selector, 'href', route('actions.requests.index', ['request' => $actionRequest->id], absolute: false))
+        ->click($selector);
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet] [data-action-title]")'));
+
+    $webpage->assertSeeIn('[data-action-sheet] [data-action-title]', 'Severance')
+        ->assertNoSmoke();
 });

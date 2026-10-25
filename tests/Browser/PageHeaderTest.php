@@ -90,6 +90,27 @@ function pageHeaderInViewportScript(string $selector): string
     return "(() => { const element = document.querySelector({$encoded}); if (!element) { return false; } const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth; })()";
 }
 
+/**
+ * The ⋯ menu restores focus to its trigger as it unmounts after its exit
+ * animation; close a dialog it opened only once that is over and focus sits
+ * in the dialog, or the menu's late restore hides where the dialog sends it.
+ */
+function pageHeaderMenuGoneScript(): string
+{
+    return confirmDialogWaitUntilScript('!document.querySelector("[data-page-header-menu]") && !!document.activeElement?.closest("[role=\\"dialog\\"], [role=\\"alertdialog\\"]")');
+}
+
+/**
+ * Waits until the header's ⋯ has focus (a dialog's close focus runs as it
+ * unmounts), then reports whether it does.
+ */
+function pageHeaderFocusOnMoreScript(): string
+{
+    $condition = 'document.activeElement?.matches("[data-page-header-more]") === true';
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
 test('at phone width the series header keeps Add series on screen and moves the rest into the menu', function (): void {
     pageHeaderFakeSonarr(new class
     {
@@ -261,10 +282,12 @@ test('a bulk delete from the phone menu asks first; Cancel queues nothing and th
     $webpage->script(appHydratedScript());
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="clear-failed"]')
-        ->assertSeeIn('[data-confirm-dialog]', 'Permanently delete every failed Seerr request?')
-        ->click('[data-confirm-cancel]');
+        ->assertSeeIn('[data-confirm-dialog]', 'Permanently delete every failed Seerr request?');
+    $webpage->script(pageHeaderMenuGoneScript());
+    $webpage->keys('[data-confirm-cancel]', 'Escape');
 
     $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(pageHeaderFocusOnMoreScript(), true);
     Queue::assertNotPushed(ClearSeerrRequests::class);
 
     $webpage->click('[data-page-header-more]')
@@ -572,10 +595,12 @@ test("the phone menu's Import from Emby asks first; Cancel calls nothing and Imp
     $webpage->script(appHydratedScript());
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="import-emby"]')
-        ->assertSeeIn('[data-confirm-dialog]', 'Import every Emby user as a viewer account here?')
-        ->click('[data-confirm-cancel]');
+        ->assertSeeIn('[data-confirm-dialog]', 'Import every Emby user as a viewer account here?');
+    $webpage->script(pageHeaderMenuGoneScript());
+    $webpage->keys('[data-confirm-cancel]', 'Escape');
 
     $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(pageHeaderFocusOnMoreScript(), true);
     Http::assertNotSent(fn (Request $request): bool => str_ends_with($request->url(), '/Users'));
 
     $webpage->click('[data-page-header-more]')
@@ -631,10 +656,13 @@ test("the phone ⋯ menu's Delete asks first; Cancel keeps the conversation and 
     $webpage->script(appHydratedScript());
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="delete"]')
-        ->assertSeeIn('[role="dialog"]', 'Delete this conversation?')
-        ->click('Cancel');
+        ->assertSeeIn('[role="dialog"]', 'Delete this conversation?');
+    $webpage->script(pageHeaderMenuGoneScript());
+    $webpage->keys('[role="dialog"]', 'Escape');
 
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[role=\"dialog\"]")'));
+    $webpage->assertScript(pageHeaderFocusOnMoreScript(), true);
+
     expect(DB::table('agent_conversations')->where('id', $conversationId)->exists())->toBeTrue();
 
     $webpage->click('[data-page-header-more]')

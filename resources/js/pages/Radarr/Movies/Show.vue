@@ -522,6 +522,10 @@ function confirmDelete() {
         service="radarr"
         :connection-id="service_connection_id"
         :item-id="movie.id"
+        @close-auto-focus="
+            (event) =>
+                returnFocusToPageHeaderMenu(event, '[data-replacement-trigger]')
+        "
     />
 
     <InteractiveSearchDialog
@@ -530,5 +534,9 @@ function confirmDelete() {
         :connection-id="service_connection_id"
         :item-id="movie.id"
         :heading="movie.title"
+        @close-auto-focus="
+            (event) =>
+                returnFocusToPageHeaderMenu(event, '[data-interactive-search]')
+        "
     />
 </template>

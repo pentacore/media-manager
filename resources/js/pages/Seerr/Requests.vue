@@ -55,6 +55,7 @@ import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { jsonRequest } from '@/lib/http';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -487,6 +488,8 @@ async function clearByStatus(status: ClearableStatus): Promise<void> {
         description: `This covers ${CLEAR_DESCRIPTIONS[status]}. This cannot be undone.`,
         confirmLabel: CLEAR_LABELS[status],
         destructive: true,
+        onCloseAutoFocus: (event) =>
+            returnFocusToPageHeaderMenu(event, '[data-requests-clear-menu]'),
     });
 
     // Re-check the guard: another clear may have started while the dialog was open.

@@ -43,7 +43,13 @@ const overLimit = computed(() => props.count > props.max);
 const disabled = computed(
     () => props.busy || props.count === 0 || overLimit.value,
 );
-const compact = computed(() => slots.primary !== undefined);
+/**
+ * Read in render, never cached in a `computed`: slots are not reactive, so a
+ * cached value would miss a parent's conditional `#primary` coming or going.
+ */
+function isCompact(): boolean {
+    return slots.primary !== undefined;
+}
 </script>
 
 <template>
@@ -56,7 +62,7 @@ const compact = computed(() => slots.primary !== undefined);
         :class="
             cn(
                 'sticky bottom-4 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 shadow-lg',
-                compact &&
+                isCompact() &&
                     'max-sm:bottom-2 max-sm:h-14 max-sm:flex-nowrap max-sm:gap-2 max-sm:px-3 max-sm:py-0',
             )
         "
@@ -66,7 +72,8 @@ const compact = computed(() => slots.primary !== undefined);
             :class="
                 cn(
                     'text-[13px] font-medium',
-                    compact && 'max-sm:min-w-0 max-sm:flex-1 max-sm:truncate',
+                    isCompact() &&
+                        'max-sm:min-w-0 max-sm:flex-1 max-sm:truncate',
                 )
             "
             aria-live="polite"
@@ -77,7 +84,10 @@ const compact = computed(() => slots.primary !== undefined);
             v-if="overLimit"
             :id="overLimitId"
             :class="
-                cn('text-[12px] text-destructive', compact && 'max-sm:hidden')
+                cn(
+                    'text-[12px] text-destructive',
+                    isCompact() && 'max-sm:hidden',
+                )
             "
             data-bulk-over-limit
         >
@@ -88,7 +98,7 @@ const compact = computed(() => slots.primary !== undefined);
             :class="
                 cn(
                     'flex flex-wrap items-center gap-2',
-                    compact && 'max-sm:hidden',
+                    isCompact() && 'max-sm:hidden',
                 )
             "
             role="group"
@@ -98,7 +108,7 @@ const compact = computed(() => slots.primary !== undefined);
             <slot :disabled="disabled" />
         </div>
         <div
-            v-if="compact"
+            v-if="isCompact()"
             class="flex shrink-0 items-center gap-2 sm:hidden"
             data-bulk-compact
         >
@@ -144,7 +154,9 @@ const compact = computed(() => slots.primary !== undefined);
         <Button
             variant="ghost"
             size="sm"
-            :class="cn('ml-auto h-7 gap-1 text-xs', compact && 'max-sm:hidden')"
+            :class="
+                cn('ml-auto h-7 gap-1 text-xs', isCompact() && 'max-sm:hidden')
+            "
             :disabled="busy"
             data-bulk-clear
             @click="emit('clear')"

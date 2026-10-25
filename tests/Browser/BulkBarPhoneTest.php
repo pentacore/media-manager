@@ -37,6 +37,27 @@ function bulkBarPhoneHoldBulkScript(): string
     JS;
 }
 
+/**
+ * The ⋯ menu restores focus to its trigger as it unmounts; close the dialog
+ * only once the menu is gone and focus sits in the dialog, or that late
+ * restore would hide where the dialog sends focus.
+ */
+function bulkBarPhoneMenuGoneScript(): string
+{
+    return confirmDialogWaitUntilScript('!document.querySelector("[data-bulk-menu]") && !!document.activeElement?.closest("[role=\\"dialog\\"]")');
+}
+
+/**
+ * Waits until the bar's ⋯ has focus (the dialog's close focus runs as it
+ * unmounts), then reports whether it does.
+ */
+function bulkBarPhoneFocusOnMoreScript(): string
+{
+    $condition = 'document.activeElement?.matches("[data-bulk-more]") === true';
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
 function bulkBarPhoneHeightScript(): string
 {
     return 'Math.round(document.querySelector("[data-bulk-bar]").getBoundingClientRect().height)';
@@ -155,8 +176,9 @@ test('the SABnzbd and grab queue selections get the compact bar on a phone', fun
 
             return ($query['mode'] ?? null) === 'history'
                 ? Http::response(['history' => ['noofslots' => 0, 'slots' => []]])
-                : Http::response(['queue' => ['paused' => false, 'speed' => '1 M', 'sizeleft' => '1 GB', 'timeleft' => '0:10:00', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => 1, 'slots' => [
+                : Http::response(['queue' => ['paused' => false, 'speed' => '1 M', 'sizeleft' => '1 GB', 'timeleft' => '0:10:00', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => 2, 'slots' => [
                     ['nzo_id' => 'SABnzbd_nzo_1', 'filename' => 'Severance.S01E01.1080p', 'cat' => 'tv', 'size' => '1.0 GB', 'sizeleft' => '0.5 GB', 'percentage' => '50', 'timeleft' => '0:05:00', 'status' => 'Downloading', 'priority' => '0'],
+                    ['nzo_id' => 'SABnzbd_nzo_2', 'filename' => 'Andor.S01E02.1080p', 'cat' => 'tv', 'size' => '1.0 GB', 'sizeleft' => '1.0 GB', 'percentage' => '0', 'timeleft' => '0:10:00', 'status' => 'Queued', 'priority' => '0'],
                 ]]]);
         },
         'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [[
@@ -164,6 +186,11 @@ test('the SABnzbd and grab queue selections get the compact bar on a phone', fun
             'status' => 'downloading', 'trackedDownloadStatus' => 'ok', 'trackedDownloadState' => 'downloading', 'protocol' => 'usenet', 'downloadClient' => 'SABnzbd',
             'size' => 1_000_000_000, 'sizeleft' => 500_000_000, 'timeleft' => '00:05:00', 'statusMessages' => [], 'added' => '2026-09-29T10:00:00Z',
             'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'downloadId' => 'SABnzbd_nzo_41',
+        ], [
+            'id' => 42, 'title' => 'Severance.S01E02.1080p', 'series' => ['title' => 'Severance'], 'episode' => ['seasonNumber' => 1, 'episodeNumber' => 2, 'title' => 'Half Loop'],
+            'status' => 'downloading', 'trackedDownloadStatus' => 'ok', 'trackedDownloadState' => 'downloading', 'protocol' => 'usenet', 'downloadClient' => 'SABnzbd',
+            'size' => 1_000_000_000, 'sizeleft' => 800_000_000, 'timeleft' => '00:08:00', 'statusMessages' => [], 'added' => '2026-09-29T10:05:00Z',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'downloadId' => 'SABnzbd_nzo_42',
         ]]]),
         'sonarr.local:8989/*' => Http::response([]),
     ]);
@@ -180,13 +207,84 @@ test('the SABnzbd and grab queue selections get the compact bar on a phone', fun
         ->click('[data-bulk-menu] [data-bulk-menu-item="delete"]')
         ->assertVisible('[data-bulk-sab-delete-confirm]');
 
+    // Cancelling the dialog the ⋯ menu opened returns focus to the ⋯.
+    $webpage->script(bulkBarPhoneMenuGoneScript());
+    $webpage->keys('[data-bulk-sab-delete-confirm]', 'Escape');
+    $webpage->assertScript(bulkBarPhoneFocusOnMoreScript(), true);
+
+    // Select all on this page, from the ⋯ menu.
+    $webpage->click('[data-sab-card-select="SABnzbd_nzo_1"]')
+        ->assertCount('[data-bulk-bar]', 0)
+        ->click('[data-sab-card-select="SABnzbd_nzo_1"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->click('[data-bulk-more]')
+        ->click('[data-bulk-menu] [data-bulk-select-all-phone]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected');
+
     $webpage->navigate(route('media.library.activity.queue', absolute: false));
     $webpage->script(appHydratedScript());
     $webpage->click('[data-service-filter="sonarr"]')
         ->click('[data-queue-card-select="41"]')
         ->assertScript(bulkBarPhoneHeightScript(), 56)
         ->click('[data-bulk-queue-phone="remove"]')
-        ->assertVisible('[data-bulk-queue-confirm]')
+        ->assertVisible('[data-bulk-queue-confirm]');
+    $webpage->keys('[data-bulk-queue-confirm]', 'Escape');
+    $webpage->script(confirmDialogGoneScript());
+
+    $webpage->click('[data-bulk-more]')
+        ->click('[data-bulk-menu] [data-bulk-select-all-phone]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-more]')
+        ->click('[data-bulk-menu] [data-bulk-menu-item="blocklist"]')
+        ->assertSeeIn('[role="dialog"]', 'Remove and blocklist 2 releases?')
+        ->assertVisible('[data-bulk-queue-confirm]');
+    $webpage->script(bulkBarPhoneMenuGoneScript());
+    $webpage->keys('[data-bulk-queue-confirm]', 'Escape');
+    $webpage->assertScript(bulkBarPhoneFocusOnMoreScript(), true)
+        ->assertNoSmoke();
+});
+
+test('a phone bulk run keeps the scroll position when focus falls back to the heading', function (): void {
+    $pending = ActionRequest::factory()->count(16)->sequence(fn ($sequence): array => [
+        'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
+        'created_at' => now()->subMinutes($sequence->index),
+    ])->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(sprintf('document.querySelector("[data-action-card-open=\"%d\"]").scrollIntoView({ block: "center" })', $pending[15]->id));
+    $webpage->click(sprintf('[data-action-card-select="%d"]', $pending[15]->id))
+        ->click(sprintf('[data-action-card-select="%d"]', $pending[14]->id));
+    $webpage->script('(() => { window.__mmListScroll = window.scrollY; })()');
+    $webpage->assertScript('window.__mmListScroll > 300', true);
+
+    $webpage->click('[data-bulk-approve-phone]')
+        ->assertSee('2 approved');
+    $webpage->script(confirmDialogWaitUntilScript('document.activeElement === document.querySelector("h1")'));
+
+    $webpage->assertScript('window.scrollY > window.__mmListScroll - 120', true)
+        ->assertNoSmoke();
+});
+
+test('cancelling Reject from the phone bar menu returns focus to its ⋯', function (): void {
+    $pending = ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    foreach ($pending as $actionRequest) {
+        $webpage->click(sprintf('[data-action-card-select="%d"]', $actionRequest->id));
+    }
+
+    $webpage->click('[data-bulk-more]')
+        ->click('[data-bulk-menu] [data-bulk-menu-item="reject"]')
+        ->assertVisible('[data-bulk-reject-confirm]');
+    $webpage->script(bulkBarPhoneMenuGoneScript());
+    $webpage->keys('[data-bulk-reject-reason]', 'Escape');
+
+    $webpage->assertScript(bulkBarPhoneFocusOnMoreScript(), true)
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
         ->assertNoSmoke();
 });
 

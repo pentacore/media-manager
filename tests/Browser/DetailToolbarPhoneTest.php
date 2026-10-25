@@ -83,8 +83,19 @@ test('the movie toolbar keeps Monitor and Search on a phone and moves the rest i
         ->click('[data-page-header-item="interactive-search"]')
         ->assertVisible('[data-interactive-search-dialog]');
 
+    $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
     $webpage->keys('[data-interactive-search-dialog]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-interactive-search-dialog]")'));
+    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true);
+
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="replace"]')
+        ->assertVisible('[data-replacement-dialog]');
+    $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-replacement-dialog]")'));
+    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true);
+
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="delete"]')
         ->assertSeeIn('[data-delete-description]', 'Removes the movie from Radarr.');

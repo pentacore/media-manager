@@ -21,7 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
-import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, returnFocusToBulkMenu, submitBulk } from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
@@ -1154,7 +1154,15 @@ async function runQueueBulk(): Promise<void> {
                     }
                 "
             >
-                <DialogContent>
+                <DialogContent
+                    @close-auto-focus="
+                        (event) =>
+                            returnFocusToBulkMenu(
+                                event,
+                                '[data-bulk-queue-action=blocklist]',
+                            )
+                    "
+                >
                     <DialogHeader>
                         <DialogTitle>
                             {{

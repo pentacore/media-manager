@@ -41,7 +41,11 @@ const props = withDefaults(
     { seasonNumber: null, episodeId: null },
 );
 
-const emit = defineEmits<{ 'update:open': [open: boolean] }>();
+const emit = defineEmits<{
+    'update:open': [open: boolean];
+    /** Reka's close focus restore, for a parent that opened it from a menu. */
+    'close-auto-focus': [event: Event];
+}>();
 
 const COLUMNS: { key: SortKey; label: string }[] = [
     { key: 'title', label: 'Release' },
@@ -240,6 +244,7 @@ watch(
         <DialogContent
             class="max-h-[85vh] overflow-y-auto sm:max-w-5xl"
             data-interactive-search-dialog
+            @close-auto-focus="(event) => emit('close-auto-focus', event)"
         >
             <DialogHeader>
                 <DialogTitle>Interactive search — {{ heading }}</DialogTitle>

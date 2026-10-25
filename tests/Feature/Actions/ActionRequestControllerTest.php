@@ -278,6 +278,48 @@ test('the request query parameter preselects a row', function (): void {
         ->assertInertia(fn ($page) => $page->where('preselect', null));
 });
 
+test('a deep link to a request past the first page sends it as its own prop', function (): void {
+    $oldest = ActionRequest::factory()->create(['title' => 'Example oldest request', 'created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(29)->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('preselect', $oldest->id)
+            ->has('requests.data', 25)
+            ->where('preselectedRequest.id', $oldest->id)
+            ->where('preselectedRequest.title', 'Example oldest request')
+            ->where('preselectedRequest.status', 'pending')
+            ->where('requests.links', fn ($links): bool => collect($links)->every(fn (array $link): bool => ! str_contains((string) $link['url'], 'request=')))
+        );
+});
+
+test('a deep link to a listed or missing request sends no separate prop', function (): void {
+    $listed = ActionRequest::factory()->create();
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['request' => $listed->id]))
+        ->assertInertia(fn ($page) => $page->where('preselect', $listed->id)->where('preselectedRequest', null));
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['request' => $listed->id + 100]))
+        ->assertInertia(fn ($page) => $page->where('preselectedRequest', null));
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page->where('preselectedRequest', null));
+});
+
+test('viewers cannot reach a deep-linked request', function (): void {
+    $actionRequest = ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('actions.requests.index', ['request' => $actionRequest->id]))
+        ->assertForbidden();
+});
+
 // ---------- APPROVE ----------
 test('members can approve a pending request', function (): void {
     Queue::fake();
