@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\NotificationDestinationController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServerCheckController;
 use App\Http\Controllers\Admin\ServerController;
+use App\Http\Controllers\Admin\ServerIncidentController;
 use App\Http\Controllers\Admin\ServerWatcherController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\StatisticsController;
@@ -164,6 +165,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::get('statistics', StatisticsController::class)->name('statistics.index');
 
     Route::get('servers', [ServerController::class, 'index'])->name('servers.index');
+    Route::get('servers/incidents', ServerIncidentController::class)->name('servers.incidents.index');
     Route::post('servers', [ServerController::class, 'store'])->name('servers.store');
     Route::put('servers/watcher', ServerWatcherController::class)->name('servers.watcher.update');
     Route::get('servers/{server}', [ServerController::class, 'show'])->whereNumber('server')->name('servers.show');

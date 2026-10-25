@@ -215,6 +215,7 @@ dataset('mobile layout admin pages', [
     'jobs' => ['admin.jobs.index', '[data-jobs-refresh]'],
     'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
     'servers' => ['admin.servers.index', '[data-server-add]'],
+    'server incidents' => ['admin.servers.incidents.index', null],
 ]);
 
 test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
