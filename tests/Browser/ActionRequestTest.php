@@ -219,3 +219,17 @@ test('a batch filter shows only that batch and can be cleared', function (): voi
         ->assertMissing('[data-action-batch-filter]')
         ->assertCount('[data-action-row]', 3);
 });
+
+test('a status tab keeps the batch filter', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-test="tab-pending"]')
+        ->assertQueryStringHas('subtitle_audit_batch', '7')
+        ->assertQueryStringHas('status', 'pending')
+        ->assertPresent('[data-action-batch-filter]')
+        ->assertCount('[data-action-row]', 2);
+});

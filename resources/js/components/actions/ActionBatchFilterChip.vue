@@ -23,7 +23,7 @@ defineProps<{
                         query: status === '' ? {} : { status },
                     })
                 "
-                class="inline-flex items-center opacity-70 hover:opacity-100"
+                class="touch-target relative inline-flex items-center opacity-70 hover:opacity-100"
                 aria-label="Clear the batch filter"
                 preserve-scroll
                 data-action-batch-filter-clear
