@@ -14,7 +14,6 @@ use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\ToolResult as StreamedToolResult;
 
 test('MediaAgent delegates investigations and keeps the destructive tools', function (): void {
@@ -109,28 +108,26 @@ test('a streamed turn hands the media file inspector structured findings to the 
     expect((string) $toolResult->toolResult->result)->toContain('"automatic_candidate":"fp1"');
 });
 
-test('both structured sub-agents take streaming and middleware from one concern', function (string $agentClass): void {
+test('both structured sub-agents take their middleware from one concern', function (string $agentClass): void {
     expect(class_uses($agentClass))->toHaveKey(ActsAsStructuredSubAgent::class)
-        ->and(new ReflectionMethod($agentClass, 'stream')->getFileName())
-        ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php')
         ->and(new ReflectionMethod($agentClass, 'middleware')->getFileName())
         ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php');
 })->with([StuckDownloadInvestigatorAgent::class, MediaFileInspectorAgent::class]);
 
-test('a structured sub-agent streamed on its own answers with its findings as one text delta', function (): void {
+test('a streamed turn prompts a structured sub-agent without streaming its activity', function (): void {
     MediaFileInspectorAgent::fake([[
         'service' => 'sonarr', 'target' => 'series 42 S01E01', 'ambiguous' => false, 'choices' => [],
         'affected_files' => ['/tv/show.mkv'], 'subtitle_tracks' => ['eng'], 'candidate_fingerprints' => ['fp1'],
         'candidates' => ['1080p WEB'], 'automatic_candidate' => 'fp1',
     ]]);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'InspectMediaFile', arguments: ['task' => 'Inspect Show S01E01 on sonarr']),
+        'I found one replacement.',
+    ]);
 
-    $stream = (new MediaFileInspectorAgent)->stream('Inspect Show S01E01 on sonarr');
-    $events = iterator_to_array($stream, false);
+    $events = iterator_to_array((new MediaAgent)->stream('replace show s01e01'), false);
 
-    expect($events)->toHaveCount(1)
-        ->and($events[0])->toBeInstanceOf(TextDelta::class)
-        ->and(json_decode($events[0]->delta, true))->toMatchArray(['service' => 'sonarr', 'automatic_candidate' => 'fp1'])
-        ->and((string) $stream->text)->toBe($events[0]->delta);
+    expect(collect($events)->filter(fn (object $event): bool => $event instanceof StreamedToolResult && $event->preliminary))->toBeEmpty();
 
     MediaFileInspectorAgent::assertPromptedTimes(1);
 });

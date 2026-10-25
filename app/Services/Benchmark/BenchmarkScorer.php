@@ -22,7 +22,6 @@ use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Services\AiUsage\UsageColumns;
 use App\Support\UpstreamErrorText;
 use Laravel\Ai\Responses\AgentResponse;
-use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 use Throwable;
 
@@ -225,8 +224,8 @@ final readonly class BenchmarkScorer
 
             $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt);
 
-            $rawScore = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['score'] ?? null) : null;
-            $rationale = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['rationale'] ?? '') : '';
+            $rawScore = $agentResponse['score'] ?? null;
+            $rationale = $agentResponse['rationale'] ?? '';
 
             throw_unless(is_numeric($rawScore), RuntimeException::class, 'The judge returned no score.');
 
