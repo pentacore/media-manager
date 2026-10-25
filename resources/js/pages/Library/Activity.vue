@@ -1001,7 +1001,10 @@ async function runQueueBulk(): Promise<void> {
                                     "
                                 />
                                 <div class="min-w-0 flex-1">
-                                    <div class="font-medium break-all">
+                                    <div
+                                        class="font-medium break-words"
+                                        data-queue-card-title
+                                    >
                                         {{ row.title ?? '—' }}
                                     </div>
                                     <div

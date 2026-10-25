@@ -41,14 +41,14 @@ function downloadsPhoneFakeSabnzbd(): void
     ]);
 }
 
-function downloadsPhoneFakeSonarrQueue(): void
+function downloadsPhoneFakeSonarrQueue(string $seriesTitle = 'Severance'): void
 {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     Http::fake([
         'sonarr.local:8989/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
             ? Http::response('', 200)
             : Http::response(['records' => [[
-                'id' => 41, 'title' => 'Severance.S01E01.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP', 'series' => ['title' => 'Severance'],
+                'id' => 41, 'title' => 'Severance.S01E01.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP', 'series' => ['title' => $seriesTitle],
                 'episode' => ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Good News About Hell'],
                 'status' => 'downloading', 'trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'downloading',
                 'protocol' => 'usenet', 'downloadClient' => 'SABnzbd', 'size' => 1_000_000_000, 'sizeleft' => 500_000_000,
@@ -57,6 +57,17 @@ function downloadsPhoneFakeSonarrQueue(): void
             ]]]),
         'sonarr.local:8989/*' => Http::response([]),
     ]);
+}
+
+/**
+ * Whether the element's text wraps onto more than one line and every line
+ * break falls between words: no two adjacent letters sit on different lines.
+ */
+function downloadsPhoneWrapsBetweenWordsScript(string $selector): string
+{
+    $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
+
+    return "(() => { const node = [...document.querySelector({$encoded}).childNodes].find((child) => child.nodeType === Node.TEXT_NODE && child.textContent.trim() !== ''); const text = node.textContent; const range = document.createRange(); const tops = [...text].map((character, index) => { if (character.trim() === '') { return null; } range.setStart(node, index); range.setEnd(node, index + 1); return Math.round(range.getClientRects()[0].top); }); const lines = new Set(tops.filter((top) => top !== null)).size; const midWord = tops.some((top, index) => index > 0 && top !== null && tops[index - 1] !== null && top !== tops[index - 1]); return lines > 1 && !midWord; })()";
 }
 
 test('SABnzbd queue and history cards fit a phone and keep pause, resume, delete and retry reachable', function (): void {
@@ -86,6 +97,10 @@ test('SABnzbd queue and history cards fit a phone and keep pause, resume, delete
         ->click('[data-sab-history-card-delete="SABnzbd_nzo_failed1"]')
         ->assertVisible('[data-history-delete-dialog]')
         ->assertNoSmoke();
+
+    foreach ([['pause', 'SABnzbd_nzo_1'], ['resume', 'SABnzbd_nzo_2'], ['delete', 'SABnzbd_nzo_2']] as [$name, $nzoId]) {
+        Http::assertSent(fn (Request $request): bool => (downloadsPhoneQuery($request)['mode'] ?? null) === 'queue' && (downloadsPhoneQuery($request)['name'] ?? null) === $name && (downloadsPhoneQuery($request)['value'] ?? null) === $nzoId);
+    }
 
     Http::assertSent(fn (Request $request): bool => (downloadsPhoneQuery($request)['mode'] ?? null) === 'retry' && (downloadsPhoneQuery($request)['value'] ?? null) === 'SABnzbd_nzo_failed1');
 });
@@ -123,6 +138,28 @@ test('grab queue cards fit a phone and keep Open and the admin row menu reachabl
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/queue/41?'));
 });
 
+test('a long grab queue title wraps between words on a phone', function (): void {
+    downloadsPhoneFakeSonarrQueue('Example Extraordinarily Overcomplicated Documentary Miniseries Anthology Collection');
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()->assertNoSmoke();
+
+    $webpage->assertSeeIn('[data-queue-card="sonarr-41"] [data-queue-card-title]', 'Overcomplicated Documentary')
+        ->assertScript(downloadsPhoneWrapsBetweenWordsScript('[data-queue-card="sonarr-41"] [data-queue-card-title]'), true)
+        ->assertScript(phoneOverflowScript('main'), '');
+});
+
+test('a member sees grab queue cards with Open but without the admin menu or checkboxes', function (): void {
+    downloadsPhoneFakeSonarrQueue();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()->assertNoSmoke();
+
+    $webpage->assertVisible('[data-queue-card="sonarr-41"] [data-queue-card-open]')
+        ->assertCount('[data-queue-card-menu]', 0)
+        ->assertCount('[data-queue-card-select]', 0);
+});
+
 test('a picked service turns on the grab queue card checkboxes on a phone', function (): void {
     downloadsPhoneFakeSonarrQueue();
     $this->actingAs(User::factory()->admin()->create());
@@ -150,6 +187,7 @@ test('an empty SABnzbd queue and history say so once on a phone', function (): v
         ->assertSee('Queue is empty.')
         ->assertCount('[data-sab-cards]', 0)
         ->assertCount('[data-sab-history-cards]', 0)
+        ->assertScript('[...document.querySelectorAll("main thead")].map((head) => getComputedStyle(head).display).join(",")', 'none,none')
         ->assertScript(phoneOverflowScript('main'), '');
 });
 
