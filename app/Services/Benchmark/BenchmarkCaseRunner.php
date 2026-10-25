@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Benchmark;
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
@@ -27,6 +28,7 @@ use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -208,6 +210,7 @@ final readonly class BenchmarkCaseRunner
             AiTask::FileInspector => $this->asJson(resolve(MediaFileInspectorAgent::class)->prompt($prompt)),
             AiTask::StuckDownloadInvestigator => $this->asJson(resolve(StuckDownloadInvestigatorAgent::class)->prompt($prompt)),
             AiTask::PriceUpdater => $this->asText($this->promptPriceUpdater($benchmarkCase, $prompt)),
+            AiTask::DecisionVerifier => $this->asVerdict(resolve(DecisionVerifierAgent::class)->prompt($prompt)),
             default => throw new InvalidArgumentException(sprintf('The %s task cannot be benchmarked.', $benchmarkCase->task->value)),
         };
     }
@@ -294,6 +297,20 @@ final readonly class BenchmarkCaseRunner
         $title = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['title'] ?? '') : $agentResponse->text;
 
         return [$agentResponse, is_string($title) ? $title : ''];
+    }
+
+    /**
+     * @return array{0: AgentResponse, 1: string}
+     */
+    private function asVerdict(AgentResponse $agentResponse): array
+    {
+        $agrees = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['agrees'] ?? null) : null;
+
+        throw_unless(is_bool($agrees), RuntimeException::class, 'The verifier returned no verdict.');
+
+        $reason = $agentResponse['reason'] ?? '';
+
+        return [$agentResponse, (string) json_encode(['agrees' => $agrees, 'reason' => is_string($reason) ? $reason : ''], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
     }
 
     /**

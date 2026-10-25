@@ -45,5 +45,7 @@ test('candidate statistics of no finished result are empty', function (): void {
 test('a case is judged by its scoring type or its task default', function (): void {
     expect(BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->make()->isJudged())->toBeTrue()
         ->and(BenchmarkCase::factory()->make()->isJudged())->toBeFalse()
-        ->and(BenchmarkCase::factory()->forTask(AiTask::Title)->make(['scoring' => []])->isJudged())->toBeTrue();
+        ->and(BenchmarkCase::factory()->forTask(AiTask::Title)->make(['scoring' => []])->isJudged())->toBeTrue()
+        ->and(BenchmarkCase::factory()->expectingVerdict(true)->make()->isJudged())->toBeFalse()
+        ->and(BenchmarkCase::factory()->forTask(AiTask::DecisionVerifier)->make(['scoring' => []])->isJudged())->toBeFalse();
 });

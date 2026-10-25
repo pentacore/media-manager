@@ -73,6 +73,7 @@ const SCORING_LABELS: Record<string, string> = {
     actions: 'Actions',
     prices: 'Prices',
     judge: 'Judge',
+    verdict: 'Verdict',
 };
 
 const { confirm } = useConfirm();
@@ -214,6 +215,22 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
                                     v-if="benchmarkCase.webhook_event"
                                     data-benchmark-case-webhook-event
                                     >webhook event</Pill
+                                >
+                                <Pill
+                                    v-if="
+                                        benchmarkCase.expected_agrees !== null
+                                    "
+                                    :variant="
+                                        benchmarkCase.expected_agrees
+                                            ? 'ok'
+                                            : 'warn'
+                                    "
+                                    data-benchmark-case-verdict
+                                    >{{
+                                        benchmarkCase.expected_agrees
+                                            ? 'should agree'
+                                            : 'should disagree'
+                                    }}</Pill
                                 >
                             </div>
                         </TableCell>

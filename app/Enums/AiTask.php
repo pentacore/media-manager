@@ -79,7 +79,7 @@ enum AiTask: string
      */
     public function isBenchmarkable(): bool
     {
-        return ! in_array($this, [self::Failover, self::BenchmarkJudge, self::DecisionVerifier], true);
+        return ! in_array($this, [self::Failover, self::BenchmarkJudge], true);
     }
 
     /**
@@ -90,6 +90,7 @@ enum AiTask: string
         return match ($this) {
             self::Decision => BenchmarkScoringType::Actions,
             self::PriceUpdater => BenchmarkScoringType::Prices,
+            self::DecisionVerifier => BenchmarkScoringType::Verdict,
             default => BenchmarkScoringType::Judge,
         };
     }

@@ -399,6 +399,7 @@ test('no score detail ever uses the tool log key', function (BenchmarkCase $benc
     'actions' => fn (): BenchmarkCase => BenchmarkCase::factory()->expectingActions([])->create(),
     'prices' => fn (): BenchmarkCase => scorerPriceCase([]),
     'judge' => fn (): BenchmarkCase => BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(),
+    'verdict' => fn (): BenchmarkCase => BenchmarkCase::factory()->expectingVerdict(true)->create(),
 ]);
 
 test('the judge sees the prompt images and only the names of documents and earlier images', function (): void {
@@ -462,3 +463,46 @@ test('a judge that cannot take images fails the judge, not the result', function
         ->and($scores['score'])->toBeNull()
         ->and($scores['detail']['error'])->toContain('image input');
 });
+
+function scorerVerdict(bool $agrees, string $reason): string
+{
+    return (string) json_encode(['agrees' => $agrees, 'reason' => $reason]);
+}
+
+test('a verdict that matches the expected one passes with a full score and no judge', function (bool $expected): void {
+    BenchmarkJudgeAgent::fake()->preventStrayPrompts();
+
+    $scores = resolve(BenchmarkScorer::class)->score(BenchmarkCase::factory()->expectingVerdict($expected)->create(), scorerOutcome(output: scorerVerdict($expected, 'Fine.')));
+
+    expect($scores['score'])->toBe(1.0)
+        ->and($scores['passed'])->toBeTrue()
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::None)
+        ->and($scores['judge_cost_usd'])->toBe(0.0)
+        ->and($scores['detail'])->toBe(['expected_agrees' => $expected, 'agrees' => $expected, 'reason' => 'Fine.', 'error_kind' => null]);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+})->with(['should agree' => [true], 'should disagree' => [false]]);
+
+test('agreeing with an action that should be stopped is a missed verdict', function (): void {
+    $scores = resolve(BenchmarkScorer::class)->score(BenchmarkCase::factory()->expectingVerdict(false)->create(), scorerOutcome(output: scorerVerdict(true, 'Looks routine.')));
+
+    expect($scores['score'])->toBe(0.0)
+        ->and($scores['passed'])->toBeFalse()
+        ->and($scores['detail'])->toBe(['expected_agrees' => false, 'agrees' => true, 'reason' => 'Looks routine.', 'error_kind' => 'missed']);
+});
+
+test('objecting to an action that should run is a false alarm', function (): void {
+    $scores = resolve(BenchmarkScorer::class)->score(BenchmarkCase::factory()->expectingVerdict(true)->create(), scorerOutcome(output: scorerVerdict(false, 'Not justified.')));
+
+    expect($scores['score'])->toBe(0.0)
+        ->and($scores['passed'])->toBeFalse()
+        ->and($scores['detail']['error_kind'])->toBe('false_alarm');
+});
+
+test('an output without a boolean verdict scores zero as no verdict', function (string $output): void {
+    $scores = resolve(BenchmarkScorer::class)->score(BenchmarkCase::factory()->expectingVerdict(true)->create(), scorerOutcome(output: $output));
+
+    expect($scores['score'])->toBe(0.0)
+        ->and($scores['passed'])->toBeFalse()
+        ->and($scores['judge_status'])->toBe(BenchmarkJudgeStatus::None)
+        ->and($scores['detail'])->toMatchArray(['expected_agrees' => true, 'agrees' => null, 'error_kind' => 'no_verdict']);
+})->with(['not JSON' => ['agrees'], 'no agrees' => ['{"reason":"Unsure."}'], 'string agrees' => ['{"agrees":"true","reason":"Yes."}']]);

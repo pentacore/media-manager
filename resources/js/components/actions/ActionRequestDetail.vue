@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { AlertTriangle, Inbox, Sparkles } from '@lucide/vue';
+import { computed } from 'vue';
+import BenchmarkCaseController from '@/actions/App/Http/Controllers/Admin/BenchmarkCaseController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import {
     Field,
@@ -46,6 +48,17 @@ const emit = defineEmits<{
 }>();
 
 const { isAdmin } = useCan();
+const aiEnabled = computed(() => Boolean(usePage().props.ai?.enabled));
+
+/** A second opinion that reached a verdict can become a verifier benchmark case. */
+function canBenchmark(row: ActionRequestRow): boolean {
+    return (
+        isAdmin.value &&
+        aiEnabled.value &&
+        row.second_opinion != null &&
+        !row.second_opinion.failed
+    );
+}
 </script>
 
 <template>
@@ -211,6 +224,24 @@ const { isAdmin } = useCan();
                     v-if="selected.second_opinion"
                     :verdict="selected.second_opinion"
                 />
+
+                <Button
+                    v-if="canBenchmark(selected)"
+                    variant="outline"
+                    size="sm"
+                    class="w-fit"
+                    as-child
+                >
+                    <Link
+                        :href="
+                            BenchmarkCaseController.create.url({
+                                query: { action_request: selected.id },
+                            })
+                        "
+                        data-action-benchmark-verdict
+                        >Benchmark this second opinion</Link
+                    >
+                </Button>
 
                 <template v-if="selected.type === 'replace_media_file'">
                     <template v-if="!selected.details?.length">

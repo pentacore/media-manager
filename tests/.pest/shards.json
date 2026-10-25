@@ -30,10 +30,11 @@
         "Tests\\Browser\\ArrLibraryOutageTest": 5.1914,
         "Tests\\Browser\\AuditLogTest": 1.8204,
         "Tests\\Browser\\BazarrSubtitleCenterTest": 27.9917,
-        "Tests\\Browser\\BenchmarkCasesTest": 10.6701,
+        "Tests\\Browser\\BenchmarkCasesTest": 17.1706,
         "Tests\\Browser\\BenchmarkComparisonTest": 14.0025,
-        "Tests\\Browser\\BenchmarkRunsTest": 19.1821,
+        "Tests\\Browser\\BenchmarkRunsTest": 21.5619,
         "Tests\\Browser\\BenchmarkSchedulesTest": 7.177,
+        "Tests\\Browser\\BenchmarkVerifierTest": 12.2165,
         "Tests\\Browser\\ByteFormatTest": 2.518,
         "Tests\\Browser\\CalendarTest": 9.6565,
         "Tests\\Browser\\ChatModelOverrideTest": 8.5773,
@@ -74,7 +75,7 @@
         "Tests\\Browser\\SabnzbdBulkTest": 29.404,
         "Tests\\Browser\\SabnzbdDownloadsTest": 17.9967,
         "Tests\\Browser\\SearchTitleSheetTest": 1.6563,
-        "Tests\\Browser\\SecondOpinionTest": 7.1007,
+        "Tests\\Browser\\SecondOpinionTest": 8.0682,
         "Tests\\Browser\\SeerrDeletedTitleTest": 2.3379,
         "Tests\\Browser\\SeerrRequestEditTest": 1.3377,
         "Tests\\Browser\\SeerrRequestsOutageTest": 0.5725,
@@ -95,6 +96,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.207,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
-    "checksum": "da6395f9907c1a3a3522925df0b933b1",
-    "updated_at": "2026-10-25T12:31:05+01:00"
+    "checksum": "c525b1f3d4a9b7ee4e817c4fb600259c",
+    "updated_at": "2026-10-25T17:28:43+00:00"
 }

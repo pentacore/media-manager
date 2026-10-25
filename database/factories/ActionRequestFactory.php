@@ -37,7 +37,7 @@ class ActionRequestFactory extends Factory
     /**
      * A request carrying a stored second-opinion verdict.
      */
-    public function secondOpinion(bool $agrees, bool $failed = false, ?string $reason = 'Looks right.', string $engine = 'llm', string $mode = 'hold', ?float $confidence = null): static
+    public function secondOpinion(bool $agrees, bool $failed = false, ?string $reason = 'Looks right.', string $engine = 'llm', string $mode = 'hold', ?float $confidence = null, ?string $invocationId = null): static
     {
         return $this->state(fn (array $attributes): array => [
             'second_opinion' => [
@@ -49,6 +49,7 @@ class ActionRequestFactory extends Factory
                 'reason' => $reason,
                 'provider' => $engine === 'llm' ? 'openai' : null,
                 'model' => $engine === 'llm' ? 'gpt-5-mini' : null,
+                'invocation_id' => $invocationId,
             ],
         ]);
     }

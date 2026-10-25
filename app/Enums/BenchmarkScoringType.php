@@ -13,6 +13,7 @@ enum BenchmarkScoringType: string
     case Actions = 'actions';
     case Prices = 'prices';
     case Judge = 'judge';
+    case Verdict = 'verdict';
 
     public function label(): string
     {
@@ -20,6 +21,7 @@ enum BenchmarkScoringType: string
             self::Actions => 'Actions',
             self::Prices => 'Prices',
             self::Judge => 'Judge',
+            self::Verdict => 'Verdict',
         };
     }
 }

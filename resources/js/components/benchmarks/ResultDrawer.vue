@@ -33,6 +33,20 @@ const open = defineModel<boolean>('open', { default: false });
 
 const results = computed(() => props.detail?.results ?? []);
 
+const verdictErrorLabels = {
+    missed: { variant: 'danger', label: 'Missed' },
+    false_alarm: { variant: 'warn', label: 'False alarm' },
+    no_verdict: { variant: 'danger', label: 'No verdict' },
+} as const;
+
+function verdictText(agrees: boolean | null | undefined): string {
+    if (agrees === null || agrees === undefined) {
+        return '—';
+    }
+
+    return agrees ? 'Agree' : 'Disagree';
+}
+
 function jsonLine(value: unknown): string {
     return JSON.stringify(value);
 }
@@ -184,6 +198,54 @@ function toolBadgeVariant(
                             >
                                 {{ result.error }}
                             </p>
+
+                            <div
+                                v-if="'error_kind' in result.score_detail"
+                                class="flex flex-col gap-1 rounded-md border border-border bg-bg-elev p-2 text-[12.5px]"
+                            >
+                                <div
+                                    class="flex flex-wrap items-center gap-2"
+                                    data-benchmark-drawer-verdict
+                                >
+                                    <span
+                                        >Expected:
+                                        {{
+                                            verdictText(
+                                                result.score_detail
+                                                    .expected_agrees,
+                                            )
+                                        }}</span
+                                    >
+                                    <span
+                                        >Got:
+                                        {{
+                                            verdictText(
+                                                result.score_detail.agrees,
+                                            )
+                                        }}</span
+                                    >
+                                    <Pill
+                                        v-if="result.score_detail.error_kind"
+                                        :variant="
+                                            verdictErrorLabels[
+                                                result.score_detail.error_kind
+                                            ].variant
+                                        "
+                                        data-benchmark-drawer-verdict-error
+                                        >{{
+                                            verdictErrorLabels[
+                                                result.score_detail.error_kind
+                                            ].label
+                                        }}</Pill
+                                    >
+                                </div>
+                                <p
+                                    v-if="result.score_detail.reason"
+                                    data-benchmark-drawer-verdict-reason
+                                >
+                                    {{ result.score_detail.reason }}
+                                </p>
+                            </div>
 
                             <div v-if="result.output !== null">
                                 <h4

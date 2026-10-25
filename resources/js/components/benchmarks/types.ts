@@ -1,6 +1,6 @@
 import type { AiReasoningLevel, BenchmarkJudgeStatus } from '@/typefinder';
 
-export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge';
+export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge' | 'verdict';
 
 type JsonScalar = string | number | boolean | null;
 
@@ -79,6 +79,33 @@ export type BenchmarkActionKindOption = { value: string; label: string };
 
 export type BenchmarkDecisionSource = 'event' | 'text';
 
+/** A structured decision verifier case as stored: the action the approver sees. */
+export type BenchmarkVerifierInput = {
+    action_type: string;
+    action_label: string;
+    title: string;
+    description: string;
+    details: Array<{ label: string; value: string }>;
+    verified: boolean;
+    payload_json: string;
+    rationale: string;
+    source_service: string;
+    event_type: string | null;
+    event_payload_json: string;
+};
+
+/** The editable verifier case; a blank event type is sent as null. */
+export type BenchmarkVerifierForm = Omit<
+    BenchmarkVerifierInput,
+    'event_type'
+> & {
+    event_type: string;
+};
+
+export type BenchmarkVerifierSource = 'structured' | 'text';
+
+export type BenchmarkVerifierActionType = { value: string; label: string };
+
 export type BenchmarkCaseInput = {
     prompt?: string;
     history?: BenchmarkHistoryTurn[];
@@ -88,6 +115,7 @@ export type BenchmarkCaseInput = {
     event?: BenchmarkDecisionEvent | null;
     action_kind?: string | null;
     providers?: string[];
+    verifier?: BenchmarkVerifierInput | null;
 };
 
 export type BenchmarkCaseScoring = {
@@ -96,6 +124,7 @@ export type BenchmarkCaseScoring = {
     tolerance_percent?: number;
     rubric_note?: string | null;
     pass_threshold?: number;
+    expected_agrees?: boolean | null;
 };
 
 /** A saved case, or a draft built from an AI usage record (no id). */
@@ -133,6 +162,7 @@ export type BenchmarkCaseRow = {
     attachment_count: number;
     scripted: boolean;
     webhook_event: boolean;
+    expected_agrees: boolean | null;
     updated_at: string | null;
 };
 
@@ -249,6 +279,10 @@ export type BenchmarkMatrixCandidate = {
     latency_p50: number | null;
     latency_p95: number | null;
     tool_misses: number;
+    /** Verdicts that wrongly agreed; null when the task is not verdict-scored. */
+    missed: number | null;
+    /** Verdicts that wrongly disagreed; null when the task is not verdict-scored. */
+    false_alarms: number | null;
 };
 
 export type BenchmarkMatrixCell = {
@@ -267,6 +301,7 @@ export type BenchmarkMatrixCell = {
 export type BenchmarkMatrixTask = {
     task: string;
     task_label: string;
+    verdict: boolean;
     candidates: BenchmarkMatrixCandidate[];
     /** The most results any candidate has scored; only candidates at it can be best by score or pass rate. */
     max_scored: number;
@@ -324,6 +359,10 @@ export type BenchmarkResultDetail = {
             extra?: unknown[];
             mismatches?: unknown[];
             error?: string;
+            expected_agrees?: boolean;
+            agrees?: boolean | null;
+            reason?: string | null;
+            error_kind?: 'missed' | 'false_alarm' | 'no_verdict' | null;
         };
         error: string | null;
         tool_log: BenchmarkToolLogEntry[];
