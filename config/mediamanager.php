@@ -419,10 +419,15 @@ return [
         'report_interval_seconds' => (int) env('MEDIAMANAGER_MONITORING_REPORT_INTERVAL_SECONDS', 60),
         'silent_after_intervals' => (int) env('MEDIAMANAGER_MONITORING_SILENT_AFTER_INTERVALS', 3),
         'platform_gap_seconds' => (int) env('MEDIAMANAGER_MONITORING_PLATFORM_GAP_SECONDS', 180),
+        // The agent's longest retry wait on 5xx/network errors (the contract's 5 s → 5 min backoff, before jitter).
+        'agent_max_backoff_seconds' => (int) env('MEDIAMANAGER_MONITORING_AGENT_MAX_BACKOFF_SECONDS', 300),
         'incident_clear_streak' => (int) env('MEDIAMANAGER_MONITORING_INCIDENT_CLEAR_STREAK', 2),
+        'reopen_cooldown_minutes' => (int) env('MEDIAMANAGER_MONITORING_REOPEN_COOLDOWN_MINUTES', 30),
         'disk' => [
             'warning_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_WARNING_PERCENT', 85),
             'critical_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_CRITICAL_PERCENT', 95),
+            'clear_margin_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_CLEAR_MARGIN_PERCENT', 3),
+            'ignore_mounts' => (string) env('MEDIAMANAGER_MONITORING_DISK_IGNORE_MOUNTS', ''),
         ],
         'fill_rate' => [
             'window_minutes' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_WINDOW_MINUTES', 60),

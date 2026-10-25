@@ -11,12 +11,19 @@ use App\Models\ServerCheck;
 use App\Services\HostMonitoring\AgentReport;
 
 /**
- * Turns each enabled check's reported status into its `check:{uuid}` incident. An enabled check the report lacks is
- * held (the agent may not have fetched the new config yet); disabled and deleted checks are not observed, so the
- * engine's sweep resolves what they left open.
+ * Turns each enabled check's reported status into its `check:{uuid}` incident. A check raises only after two non-ok
+ * results in a row (a one-off failed db ping is noise), counted per check in `rule_state.check_pending`; an incident
+ * already open is refreshed by the next non-ok result at once. An enabled check the report lacks is held and keeps its
+ * count (the agent may not have fetched the new config yet); disabled and deleted checks are not observed, so the
+ * engine's sweep resolves what they left open and their counts are dropped.
  */
 final readonly class CheckStatusRule implements ReportRule
 {
+    private const string STATE_KEY = 'check_pending';
+
+    /** Consecutive non-ok results a check needs before it opens an incident. */
+    private const int RAISE_AFTER = 2;
+
     public function ownsKey(string $key): bool
     {
         return str_starts_with($key, 'check:');
@@ -28,16 +35,44 @@ final readonly class CheckStatusRule implements ReportRule
     public function evaluate(Server $server, AgentReport $agentReport): array
     {
         $results = array_column($agentReport->checks, null, 'id');
+        /** @var array<string, int> $pending */
+        $pending = $server->rule_state[self::STATE_KEY] ?? [];
+        /** @var array<string, int> $openKeys */
+        $openKeys = $server->incidents()->open()->where('key', 'like', 'check:%')->pluck('id', 'key')->all();
+        $nextPending = [];
+        $observations = [];
 
-        return $server->checks()
-            ->where('is_enabled', true)
-            ->orderBy('id')
-            ->get()
-            ->map(fn (ServerCheck $serverCheck): IncidentObservation => isset($results[$serverCheck->uuid])
-                ? $this->observe($serverCheck, $results[$serverCheck->uuid])
-                : IncidentObservation::hold($serverCheck->incidentKey()))
-            ->values()
-            ->all();
+        foreach ($server->checks()->where('is_enabled', true)->orderBy('id')->get() as $serverCheck) {
+            $key = $serverCheck->incidentKey();
+
+            if (! isset($results[$serverCheck->uuid])) {
+                if (isset($pending[$serverCheck->uuid])) {
+                    $nextPending[$serverCheck->uuid] = $pending[$serverCheck->uuid];
+                }
+
+                $observations[] = IncidentObservation::hold($key);
+
+                continue;
+            }
+
+            $result = $results[$serverCheck->uuid];
+
+            if ($result['status'] === HostCheckStatus::Ok) {
+                $observations[] = $this->observe($serverCheck, $result);
+
+                continue;
+            }
+
+            $nextPending[$serverCheck->uuid] = min(self::RAISE_AFTER, ($pending[$serverCheck->uuid] ?? 0) + 1);
+
+            $observations[] = $nextPending[$serverCheck->uuid] >= self::RAISE_AFTER || isset($openKeys[$key])
+                ? $this->observe($serverCheck, $result)
+                : IncidentObservation::hold($key);
+        }
+
+        $server->rule_state = [...$server->rule_state, self::STATE_KEY => $nextPending];
+
+        return $observations;
     }
 
     /**

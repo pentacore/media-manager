@@ -276,3 +276,16 @@ test('a disk with no space left gets no fill verdict', function (): void {
 
     expect($incident->fresh())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(1);
 });
+
+test('an ignored mount gets no fill incident and its open one resolves', function (): void {
+    config(['mediamanager.monitoring.disk.ignore_mounts' => '/mnt/user']);
+    $server = Server::factory()->enrolled()->create();
+    $incident = ServerIncident::factory()->for($server)->key('fill:/mnt/user')->create();
+    fillRateSamples($server, '/mnt/user', 30, 18 * FILL_RATE_GIB, 9 * FILL_RATE_GIB);
+
+    fillRateReport($server, [fillRateFilesystem('/mnt/user', 18 * FILL_RATE_GIB)]);
+    fillRateReport($server, [fillRateFilesystem('/mnt/user', 18 * FILL_RATE_GIB)]);
+
+    expect($incident->fresh()->status)->toBe(IncidentStatus::Resolved)
+        ->and(ServerIncident::query()->open()->exists())->toBeFalse();
+});

@@ -25,8 +25,14 @@ use Illuminate\Support\Facades\Log;
  * the moment the scheduler resumed, and the sweep skips a tick whose heartbeat is stale. An ingress outage (NPM in
  * front of the platform) stops every live agent at once: their last reports sit within two minutes of each other and
  * even the newest is overdue. The outside watcher reports that, so nothing opens here. Agents report at their own
- * offsets and cross the threshold on different ticks, so the test looks at the live fleet, not only the candidates.
- * A partial outage still alerts, because an agent that keeps reporting makes the newest report current.
+ * offsets and cross the threshold on different ticks, so the test looks at the live fleet, not only the candidates,
+ * on every tick. A partial outage still alerts, because an agent that keeps reporting makes the newest report current.
+ * The tick that sees an ingress episode end records that moment as an ingress resume, which counts like a scheduler
+ * resume.
+ *
+ * Agents back off on platform errors (up to `agent_max_backoff_seconds`, jittered), so after either kind of resume
+ * they come back at staggered times. An agent whose silence started before the resume is allowed that backoff plus
+ * one more interval on top of the usual threshold before it reads as silent.
  */
 final readonly class AgentSilentRule
 {
@@ -41,6 +47,9 @@ final readonly class AgentSilentRule
     /** Set while a mass silence is being suppressed, so the warning is logged once per episode. */
     private const string SUPPRESSION_CACHE_KEY = 'host-monitoring:silent-suppressed';
 
+    /** When the last ingress episode ended (a Unix timestamp). */
+    private const string INGRESS_RESUMED_CACHE_KEY = 'host-monitoring:ingress-resumed';
+
     public function __construct(private IncidentTracker $incidentTracker) {}
 
     /**
@@ -54,20 +63,11 @@ final readonly class AgentSilentRule
             return 0;
         }
 
-        $resumedAt = OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED);
         $servers = Server::query()
             ->select(['id', 'name', 'enrolled_at', 'last_report_at', 'report_interval_seconds'])
             ->whereNotNull('enrolled_at')
             ->withExists(['incidents as silent_incident_exists' => fn (Builder $incidents): Builder => $incidents->where('status', IncidentStatus::Open->value)->where('key', self::KEY)])
             ->get();
-        $silent = $servers->filter(fn (Server $server): bool => $this->isSilent($server, $resumedAt));
-
-        if ($silent->isEmpty()) {
-            Cache::forget(self::SUPPRESSION_CACHE_KEY);
-
-            return 0;
-        }
-
         $liveFleet = $this->liveFleet($servers);
 
         if ($this->ingressLooksDown($liveFleet)) {
@@ -81,9 +81,33 @@ final readonly class AgentSilentRule
             return 0;
         }
 
-        Cache::forget(self::SUPPRESSION_CACHE_KEY);
+        if (Cache::pull(self::SUPPRESSION_CACHE_KEY) !== null) {
+            Cache::forever(self::INGRESS_RESUMED_CACHE_KEY, now()->getTimestamp());
+        }
 
-        return $silent->sum(fn (Server $server): int => $this->raise($server->id, $resumedAt) ? 1 : 0);
+        $resumedAt = $this->resumedAt();
+
+        return $servers
+            ->filter(fn (Server $server): bool => $this->isSilent($server, $resumedAt))
+            ->sum(fn (Server $server): int => $this->raise($server->id, $resumedAt) ? 1 : 0);
+    }
+
+    /**
+     * The later of the scheduler's last resume and the end of the last ingress episode.
+     */
+    private function resumedAt(): ?CarbonImmutable
+    {
+        $schedulerResumedAt = OpsHeartbeat::recordedAt(OpsHeartbeat::SCHEDULER_RESUMED);
+        $ingressResumedAt = Cache::get(self::INGRESS_RESUMED_CACHE_KEY);
+        $ingressResumedAt = is_numeric($ingressResumedAt)
+            ? CarbonImmutable::createFromTimestamp((int) $ingressResumedAt, now()->getTimezone())
+            : null;
+
+        if (! $schedulerResumedAt instanceof CarbonImmutable || ! $ingressResumedAt instanceof CarbonImmutable) {
+            return $schedulerResumedAt ?? $ingressResumedAt;
+        }
+
+        return $schedulerResumedAt->max($ingressResumedAt);
     }
 
     /**
@@ -160,8 +184,9 @@ final readonly class AgentSilentRule
     }
 
     /**
-     * Silent once more than the allowed intervals passed since the last report (or enrollment), counting from the
-     * scheduler's resume when that is later: a platform outage is not the agent's silence.
+     * Silent once more than the allowed intervals passed since the last report (or enrollment). When a platform
+     * resume is later, the clock counts from the resume instead and also allows the agent's backoff and one more
+     * interval: a platform outage is not the agent's silence, and the agent may still be waiting out its retry.
      */
     private function isSilent(Server $server, ?CarbonImmutable $resumedAt): bool
     {
@@ -171,11 +196,14 @@ final readonly class AgentSilentRule
             return false;
         }
 
+        $allowedSeconds = $this->allowedSilenceSeconds($server);
+
         if ($resumedAt instanceof CarbonImmutable && $resumedAt->greaterThan($since)) {
             $since = $resumedAt;
+            $allowedSeconds += (int) config('mediamanager.monitoring.agent_max_backoff_seconds') + $server->report_interval_seconds;
         }
 
-        return now()->getTimestamp() - $since->getTimestamp() > $this->allowedSilenceSeconds($server);
+        return now()->getTimestamp() - $since->getTimestamp() > $allowedSeconds;
     }
 
     private function allowedSilenceSeconds(Server $server): int

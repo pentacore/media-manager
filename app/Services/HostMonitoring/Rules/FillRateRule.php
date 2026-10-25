@@ -9,6 +9,7 @@ use App\Models\Server;
 use App\Models\ServerFilesystemSample;
 use App\Models\ServerMetricSample;
 use App\Services\HostMonitoring\AgentReport;
+use App\Services\HostMonitoring\IgnoredMounts;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Number;
 
@@ -20,7 +21,7 @@ use Illuminate\Support\Number;
  * of the two: a single large write, routine on a media server, steepens one half only and cannot raise an alarm on its
  * own, at the cost of reporting an accelerating fill later. A mount that does not answer, has too little history or no
  * free space left (DiskUsageRule covers that) gets no verdict; an empty filesystem list (an agent fault) is skipped so
- * it cannot sweep every fill incident away.
+ * it cannot sweep every fill incident away. Ignored mounts (IgnoredMounts) are left out, so the sweep resolves theirs.
  */
 final readonly class FillRateRule implements ReportRule
 {
@@ -38,10 +39,11 @@ final readonly class FillRateRule implements ReportRule
             return null;
         }
 
-        $samplesByMount = $this->samplesByMount($server, $agentReport);
+        $filesystems = IgnoredMounts::reject($agentReport->filesystems);
+        $samplesByMount = $this->samplesByMount($server, $filesystems, $agentReport->receivedAt);
         $observations = [];
 
-        foreach ($agentReport->filesystems as $filesystem) {
+        foreach ($filesystems as $filesystem) {
             $key = sprintf('fill:%s', $filesystem['mount']);
 
             $observations[$key] = $filesystem['unresponsive']
@@ -53,13 +55,14 @@ final readonly class FillRateRule implements ReportRule
     }
 
     /**
-     * The window's 60 s samples of every responsive mount in the report, oldest first, in one query.
+     * The window's 60 s samples of every responsive mount given, oldest first, in one query.
      *
+     * @param  list<array{mount: string, device: ?string, fstype: ?string, unresponsive: bool, total_bytes: ?int, used_bytes: ?int, available_bytes: ?int}>  $filesystems
      * @return array<string, list<array{recorded_at: CarbonImmutable, available_bytes: int}>>
      */
-    private function samplesByMount(Server $server, AgentReport $agentReport): array
+    private function samplesByMount(Server $server, array $filesystems, CarbonImmutable $receivedAt): array
     {
-        $mounts = array_column(array_filter($agentReport->filesystems, static fn (array $filesystem): bool => ! $filesystem['unresponsive']), 'mount');
+        $mounts = array_column(array_filter($filesystems, static fn (array $filesystem): bool => ! $filesystem['unresponsive']), 'mount');
 
         if ($mounts === []) {
             return [];
@@ -69,7 +72,7 @@ final readonly class FillRateRule implements ReportRule
             ->where('server_id', $server->id)
             ->where('resolution', ServerMetricSample::MINUTE)
             ->whereIn('mount', $mounts)
-            ->where('recorded_at', '>=', $agentReport->receivedAt->subMinutes((int) config('mediamanager.monitoring.fill_rate.window_minutes')))
+            ->where('recorded_at', '>=', $receivedAt->subMinutes((int) config('mediamanager.monitoring.fill_rate.window_minutes')))
             ->oldest('recorded_at')
             ->get(['mount', 'recorded_at', 'available_bytes']);
         $samplesByMount = [];

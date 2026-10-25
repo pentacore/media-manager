@@ -9,6 +9,7 @@ use App\Models\ServerIncident;
 use App\Models\User;
 use App\Notifications\HostIncidentOpened;
 use App\Support\OpsHeartbeat;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,62 @@ beforeEach(function (): void {
 function silentRuleOpenSilentCount(): int
 {
     return ServerIncident::query()->open()->where('key', 'silent')->count();
+}
+
+/**
+ * Replays the platform from `$start` for `$seconds`: every minute the scheduler heartbeat and the silent sweep run,
+ * and each server reports every minute from its offset in seconds on (null: it never reports again). A report and a
+ * sweep at the same second run report first.
+ *
+ * @param  array<int, int|null>  $offsetsByServerId
+ */
+function silentRuleReplay(CarbonImmutable $start, array $offsetsByServerId, int $seconds): void
+{
+    $events = [];
+
+    for ($second = 0; $second <= $seconds; $second += 60) {
+        $events[] = [$second, 1, null];
+    }
+
+    foreach ($offsetsByServerId as $serverId => $offset) {
+        for ($second = $offset; $second !== null && $second <= $seconds; $second += 60) {
+            $events[] = [$second, 0, $serverId];
+        }
+    }
+
+    usort($events, static fn (array $left, array $right): int => [$left[0], $left[1]] <=> [$right[0], $right[1]]);
+
+    foreach ($events as [$second, $isSweep, $serverId]) {
+        test()->travelTo($start->addSeconds($second));
+
+        if ($isSweep === 0) {
+            Server::query()->whereKey($serverId)->update(['last_report_at' => now()]);
+
+            continue;
+        }
+
+        OpsHeartbeat::recordScheduler((int) config('mediamanager.monitoring.platform_gap_seconds'));
+        test()->artisan('servers:check-silent')->assertSuccessful();
+    }
+}
+
+/**
+ * Three agents that last reported within 40 seconds of now, then an ingress outage of `$outageSeconds` during which
+ * the scheduler keeps sweeping every minute.
+ *
+ * @return list<Server>
+ */
+function silentRuleIngressOutage(int $outageSeconds): array
+{
+    $servers = [
+        Server::factory()->reporting()->create(['name' => 'babel', 'last_report_at' => now()]),
+        Server::factory()->reporting()->create(['name' => 'turbo', 'last_report_at' => now()->subSeconds(20)]),
+        Server::factory()->reporting()->create(['name' => 'mailserver', 'last_report_at' => now()->subSeconds(40)]),
+    ];
+
+    silentRuleReplay(now()->addSeconds(60), [], $outageSeconds - 60);
+
+    return $servers;
 }
 
 test('an agent silent for more than three intervals opens a critical incident', function (): void {
@@ -92,10 +149,12 @@ test('after a platform outage the clock restarts from the resume', function (): 
     $this->artisan('servers:check-silent')->assertSuccessful();
     expect(silentRuleOpenSilentCount())->toBe(0);
 
-    $this->travel(3)->minutes();
-    $this->artisan('ops:record-heartbeat')->assertSuccessful();
-    $this->artisan('servers:check-silent')->assertSuccessful();
-    expect(silentRuleOpenSilentCount())->toBe(0);
+    foreach ([3, 3, 3] as $minutes) {
+        $this->travel($minutes)->minutes();
+        $this->artisan('ops:record-heartbeat')->assertSuccessful();
+        $this->artisan('servers:check-silent')->assertSuccessful();
+        expect(silentRuleOpenSilentCount())->toBe(0);
+    }
 
     $this->travel(1)->minutes();
     $this->artisan('ops:record-heartbeat')->assertSuccessful();
@@ -103,6 +162,58 @@ test('after a platform outage the clock restarts from the resume', function (): 
     expect(ServerIncident::query()->open()->sole())
         ->server_id->toBe($server->id)
         ->key->toBe('silent');
+});
+
+test('after a platform outage agents coming back at staggered times open no silent incidents', function (): void {
+    $servers = Server::factory()->reporting()->count(3)->create();
+    $this->travel(2)->hours();
+
+    silentRuleReplay(now(), [$servers[0]->id => 0, $servers[1]->id => 120, $servers[2]->id => 290], 900);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+});
+
+test('after a platform outage an agent that never comes back pages once the backoff grace has passed', function (): void {
+    $servers = Server::factory()->reporting()->count(3)->create();
+    $this->travel(2)->hours();
+    $resumedAt = now();
+
+    silentRuleReplay($resumedAt, [$servers[0]->id => 0, $servers[1]->id => 120, $servers[2]->id => null], 540);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+
+    silentRuleReplay($resumedAt->addSeconds(600), [$servers[0]->id => 0, $servers[1]->id => 0, $servers[2]->id => null], 0);
+
+    expect(ServerIncident::query()->open()->sole()->server_id)->toBe($servers[2]->id);
+});
+
+test('after an ingress outage agents coming back at staggered times open no silent incidents', function (): void {
+    [$babel, $turbo, $mailserver] = silentRuleIngressOutage(20 * 60);
+
+    silentRuleReplay(now()->addSeconds(30), [$babel->id => 0, $turbo->id => 120, $mailserver->id => 290], 900);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+});
+
+test('after an ingress outage an agent that never comes back pages once the backoff grace has passed', function (): void {
+    [$babel, $turbo, $mailserver] = silentRuleIngressOutage(20 * 60);
+    $ingressBackAt = now()->addSeconds(30);
+
+    silentRuleReplay($ingressBackAt, [$babel->id => 0, $turbo->id => 120, $mailserver->id => null], 570);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+
+    silentRuleReplay($ingressBackAt->addSeconds(630), [$babel->id => 0, $turbo->id => 0, $mailserver->id => null], 0);
+
+    expect(ServerIncident::query()->open()->sole()->server_id)->toBe($mailserver->id);
+});
+
+test('an ingress outage shorter than the silence threshold opens nothing when agents return on backoff', function (): void {
+    [$babel, $turbo, $mailserver] = silentRuleIngressOutage(150);
+
+    silentRuleReplay(now()->addSeconds(5), [$babel->id => 0, $turbo->id => 160, $mailserver->id => 145], 900);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
 });
 
 test('the sweep does nothing while the scheduler heartbeat is stale', function (): void {

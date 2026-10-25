@@ -109,15 +109,17 @@ test('the sweep clears only incidents the rules own', function (): void {
         ->and($otherServer->fresh()->clear_streak)->toBe(0);
 });
 
-test('one report opens incidents from every rule', function (): void {
+test('two reports in a row open incidents from every rule', function (): void {
     $server = Server::factory()->enrolled()->create();
     $check = ServerCheck::factory()->for($server)->create();
-
-    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody([
+    $body = AgentReportFixtures::agentReportBody([
         'metrics.filesystems' => [AgentReportFixtures::agentFilesystem('/mnt/backups', unresponsive: true)],
         'metrics.failed_units' => ['backup.service'],
         'checks' => [AgentReportFixtures::agentCheckResult($check->uuid, HostCheckStatus::Warn)],
-    ]));
+    ]);
+
+    AgentReportFixtures::dispatchReport($server, $body);
+    AgentReportFixtures::dispatchReport($server, $body);
 
     expect(ServerIncident::query()->open()->orderBy('key')->pluck('key')->all())
         ->toBe([$check->incidentKey(), 'disk:/mnt/backups', 'failed_units']);

@@ -6,6 +6,10 @@ use App\Enums\IncidentSeverity;
 use App\Enums\IncidentStatus;
 use App\Models\Server;
 use App\Models\ServerIncident;
+use App\Models\User;
+use App\Notifications\HostIncidentOpened;
+use App\Notifications\HostIncidentResolved;
+use Illuminate\Support\Facades\Notification;
 use Tests\Support\AgentReportFixtures;
 
 /**
@@ -179,4 +183,65 @@ test('a very long mount path opens an incident', function (): void {
         ->key->toBe('disk:'.$mount)
         ->severity->toBe(IncidentSeverity::Critical)
         ->and(mb_strlen(ServerIncident::query()->sole()->title))->toBe(255);
+});
+
+test('disk usage wobbling around 85% keeps one incident open and pushes once', function (): void {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $server = Server::factory()->enrolled()->create();
+
+    foreach ([86, 84, 84, 85, 83, 83, 86, 84, 84] as $percent) {
+        diskRuleReport($server, [diskRuleFilesystem('/', $percent, 100 - $percent)]);
+    }
+
+    expect(ServerIncident::query()->sole())->status->toBe(IncidentStatus::Open);
+    Notification::assertSentToTimes($admin, HostIncidentOpened::class, 1);
+    Notification::assertNotSentTo($admin, HostIncidentResolved::class);
+});
+
+test('a disk incident resolves once usage is at least three points below the warning threshold', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [diskRuleFilesystem('/', 86, 14)]);
+    diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
+    diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
+
+    expect(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Resolved);
+});
+
+test('usage just under the warning threshold opens nothing', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [diskRuleFilesystem('/', 84, 16)]);
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+});
+
+test('ignored mounts open no disk incident', function (): void {
+    config(['mediamanager.monitoring.disk.ignore_mounts' => ' /mnt/user , /mnt/disk*,']);
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [
+        diskRuleFilesystem('/', 99, 1),
+        diskRuleFilesystem('/mnt/user', 99, 1),
+        diskRuleFilesystem('/mnt/disk1', 99, 1),
+        diskRuleFilesystem('/mnt/disk12', 99, 1),
+        diskRuleFilesystem('/mnt/disks/scratch', 99, 1),
+    ]);
+
+    expect(ServerIncident::query()->open()->orderBy('key')->pluck('key')->all())->toBe(['disk:/', 'disk:/mnt/disks/scratch']);
+});
+
+test('an open disk incident on a mount that becomes ignored resolves after two reports', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    $filesystems = [diskRuleFilesystem('/mnt/disk1', 99, 1)];
+
+    diskRuleReport($server, $filesystems);
+    expect(ServerIncident::query()->open()->sole()->key)->toBe('disk:/mnt/disk1');
+
+    config(['mediamanager.monitoring.disk.ignore_mounts' => '/mnt/disk*']);
+    diskRuleReport($server, $filesystems);
+    diskRuleReport($server, $filesystems);
+
+    expect(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Resolved);
 });

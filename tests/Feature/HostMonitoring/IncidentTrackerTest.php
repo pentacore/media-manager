@@ -13,8 +13,12 @@ use App\Notifications\HostIncidentEscalated;
 use App\Notifications\HostIncidentOpened;
 use App\Notifications\HostIncidentResolved;
 use App\Services\HostMonitoring\IncidentTracker;
+use App\Services\Notifications\AdminNotifier;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Notification;
+use Mockery\MockInterface;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -146,14 +150,115 @@ test('clearing a key with nothing open returns null and sends nothing', function
     Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
 });
 
-test('a resolved key opens a fresh incident when it recurs', function (): void {
+test('a key that recurs after the reopen cooldown opens a fresh incident', function (): void {
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
     $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(31)->minutes();
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
 
     expect(ServerIncident::query()->count())->toBe(2)
         ->and(ServerIncident::query()->open()->count())->toBe(1);
     Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 2);
+});
+
+test('a key that recurs within the reopen cooldown reopens the resolved incident without a push', function (): void {
+    $this->freezeSecond();
+    $first = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', 'a');
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(29)->minutes();
+
+    $reopened = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 87% full', 'b');
+
+    expect($reopened->id)->toBe($first->id)
+        ->and(ServerIncident::query()->sole())
+        ->status->toBe(IncidentStatus::Open)
+        ->resolved_at->toBeNull()
+        ->clear_streak->toBe(0)
+        ->title->toBe('Disk / is 87% full')
+        ->detail->toBe('b')
+        ->last_seen_at->toEqual(now());
+    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 1);
+    Notification::assertNotSentTo($this->admin, HostIncidentEscalated::class);
+    Event::assertDispatchedTimes(ServerIncidentChanged::class, 3);
+});
+
+test('a reopen within the cooldown pushes only when the severity rises above the one already notified', function (): void {
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'w', null);
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Critical, 'c', null);
+
+    expect(ServerIncident::query()->sole())
+        ->status->toBe(IncidentStatus::Open)
+        ->severity->toBe(IncidentSeverity::Critical)
+        ->notified_severity->toBe(IncidentSeverity::Critical);
+    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 1);
+    Notification::assertSentToTimes($this->admin, HostIncidentEscalated::class, 1);
+
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Critical, 'c', null);
+
+    Notification::assertSentToTimes($this->admin, HostIncidentEscalated::class, 1);
+});
+
+test('a zero reopen cooldown always opens a fresh incident', function (): void {
+    config(['mediamanager.monitoring.reopen_cooldown_minutes' => 0]);
+
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+
+    expect(ServerIncident::query()->count())->toBe(2);
+    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 2);
+});
+
+test('the tracker locks the server row before it reads the incident', function (string $operation): void {
+    if ($operation === 'clear') {
+        $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    }
+
+    DB::enableQueryLog();
+
+    $operation === 'clear'
+        ? $this->tracker->clear($this->server, 'disk:/')
+        : $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+
+    $queries = array_column(DB::getQueryLog(), 'query');
+    $serverLock = array_find_key($queries, static fn (string $query): bool => str_contains($query, 'from "servers"') && str_contains($query, 'for update'));
+    $incidentRead = array_find_key($queries, static fn (string $query): bool => str_contains($query, 'from "server_incidents"'));
+
+    expect($serverLock)->toBeInt()
+        ->and($incidentRead)->toBeInt()
+        ->and($serverLock)->toBeLessThan($incidentRead);
+})->with(['observe', 'clear']);
+
+test('a notifier that throws is reported and neither the broadcast nor later incidents are lost', function (): void {
+    Exceptions::fake();
+    $this->mock(AdminNotifier::class, fn (MockInterface $mock) => $mock->shouldReceive('send')->twice()->andThrow(new RuntimeException('mail is down')));
+    $incidentTracker = resolve(IncidentTracker::class);
+
+    DB::transaction(function () use ($incidentTracker): void {
+        $incidentTracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
+        $incidentTracker->observe($this->server, 'oom', IncidentSeverity::Warning, 'Out-of-memory kills', null);
+    });
+
+    Event::assertDispatchedTimes(ServerIncidentChanged::class, 2);
+    Exceptions::assertReportedCount(2);
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'mail is down');
+});
+
+test('an observation whose transaction rolls back sends and broadcasts nothing', function (): void {
+    try {
+        DB::transaction(function (): void {
+            $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
+
+            throw new RuntimeException('later write failed');
+        });
+    } catch (RuntimeException) {
+    }
+
+    expect(ServerIncident::query()->exists())->toBeFalse();
+    Notification::assertNothingSent();
+    Event::assertNotDispatched(ServerIncidentChanged::class);
 });
 
 test('incidents are tracked per server and key', function (): void {

@@ -16,11 +16,17 @@ use App\Notifications\HostIncidentResolved;
 use App\Services\Notifications\AdminNotifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * The incident state machine for one server and key: open, escalate once, resolve after consecutive clears.
- * Callers hold the server row lock; the open incident row is locked here as well. Admins are notified and
- * the browser is told only when something worth a message changed, never for a detail-only update.
+ * Every call locks the server row and then the incident row in its own transaction, so two writers for one
+ * server queue up whoever called. Admins are notified and the browser is told only when something worth a
+ * message changed, never for a detail-only update.
+ *
+ * A key that recurs within `reopen_cooldown_minutes` of resolving reopens that incident silently instead of
+ * opening a new one, so a flapping problem pushes once; the reopen pushes only when its severity rises above
+ * the one admins were already told about.
  */
 final readonly class IncidentTracker
 {
@@ -36,9 +42,16 @@ final readonly class IncidentTracker
         $title = Str::limit($title, self::TITLE_LIMIT - 1, '…');
 
         return DB::transaction(function () use ($server, $key, $severity, $title, $detail, $context): ServerIncident {
+            $this->lockServer($server);
             $incident = $this->lockOpen($server, $key);
 
             if (! $incident instanceof ServerIncident) {
+                $recentlyResolved = $this->lockRecentlyResolved($server, $key);
+
+                if ($recentlyResolved instanceof ServerIncident) {
+                    return $this->reopen($server, $recentlyResolved, $severity, $title, $detail, $context);
+                }
+
                 $incident = ServerIncident::query()->create([
                     'server_id' => $server->id,
                     'key' => $key,
@@ -100,6 +113,7 @@ final readonly class IncidentTracker
         $requiredClears ??= (int) config('mediamanager.monitoring.incident_clear_streak');
 
         return DB::transaction(function () use ($server, $key, $requiredClears): ?ServerIncident {
+            $this->lockServer($server);
             $incident = $this->lockOpen($server, $key);
 
             if (! $incident instanceof ServerIncident) {
@@ -124,6 +138,70 @@ final readonly class IncidentTracker
         });
     }
 
+    /**
+     * Brings a recently resolved incident back as open with a fresh clear streak. Admins already got its opened (and
+     * resolved) push, so only a severity above the one they were told about is pushed, as an escalation.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function reopen(Server $server, ServerIncident $incident, IncidentSeverity $severity, string $title, ?string $detail, array $context): ServerIncident
+    {
+        $previous = $incident->severity;
+        $escalate = $severity->rank() > ($incident->notified_severity?->rank() ?? 0);
+
+        $incident->fill([
+            'status' => IncidentStatus::Open,
+            'resolved_at' => null,
+            'title' => $title,
+            'detail' => $detail,
+            'context' => $context,
+            'last_seen_at' => now(),
+            'clear_streak' => 0,
+            'severity' => $severity,
+        ]);
+
+        if ($severity->rank() > $previous->rank()) {
+            $incident->escalated_at ??= now();
+        }
+
+        if ($escalate) {
+            $incident->notified_severity = $severity;
+        }
+
+        $incident->save();
+
+        $this->afterCommit($server, $incident, $escalate ? HostIncidentEscalated::class : null);
+
+        return $incident;
+    }
+
+    private function lockServer(Server $server): void
+    {
+        Server::query()->whereKey($server->id)->lockForUpdate()->value('id');
+    }
+
+    /**
+     * The newest incident for the key resolved within the reopen cooldown; none when the cooldown is 0.
+     */
+    private function lockRecentlyResolved(Server $server, string $key): ?ServerIncident
+    {
+        $cooldownMinutes = (int) config('mediamanager.monitoring.reopen_cooldown_minutes');
+
+        if ($cooldownMinutes <= 0) {
+            return null;
+        }
+
+        return ServerIncident::query()
+            ->where('server_id', $server->id)
+            ->where('key', $key)
+            ->where('status', IncidentStatus::Resolved->value)
+            ->where('resolved_at', '>=', now()->subMinutes($cooldownMinutes))
+            ->latest('resolved_at')
+            ->latest('id')
+            ->lockForUpdate()
+            ->first();
+    }
+
     private function lockOpen(Server $server, string $key): ?ServerIncident
     {
         return ServerIncident::query()
@@ -136,7 +214,9 @@ final readonly class IncidentTracker
 
     /**
      * Queues the browser broadcast, and the admin notification when a class is given, to run once the
-     * transaction commits, so neither announces a state that rolled back.
+     * transaction commits, so neither announces a state that rolled back. The broadcast goes first and a
+     * failing channel (mail down) is reported, not thrown, so it cannot take the broadcast or the callbacks
+     * queued after this one down with it.
      *
      * @param  class-string<HostIncidentNotification>|null  $notification
      */
@@ -147,11 +227,17 @@ final readonly class IncidentTracker
         $serverIncidentChanged = new ServerIncidentChanged($incident);
 
         DB::afterCommit(function () use ($message, $serverIncidentChanged): void {
-            if ($message instanceof HostIncidentNotification) {
-                $this->adminNotifier->send($message);
+            event($serverIncidentChanged);
+
+            if (! $message instanceof HostIncidentNotification) {
+                return;
             }
 
-            event($serverIncidentChanged);
+            try {
+                $this->adminNotifier->send($message);
+            } catch (Throwable $throwable) {
+                report($throwable);
+            }
         });
     }
 }
