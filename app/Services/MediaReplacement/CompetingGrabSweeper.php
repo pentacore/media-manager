@@ -463,6 +463,7 @@ final readonly class CompetingGrabSweeper
                         implode(', ', array_map(static fn (string $title): string => sprintf('"%s"', $title), $removedTitles)),
                     ),
                 level: 'warning',
+                url: route('actions.requests.index', ['request' => $mediaReplacementAttempt->action_request_id], absolute: false),
             ));
         } catch (Throwable $throwable) {
             Log::warning('Could not notify admins about a removed competing grab.', [

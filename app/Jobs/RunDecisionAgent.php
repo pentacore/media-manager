@@ -767,6 +767,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             default => 'suggested',
         };
 
+        $queuedIds = $decisionRunContext->queuedActionRequestIds();
+
         resolve(AdminNotifier::class)->send(new DecisionAgentActed(
             disposition: $disposition,
             actionCount: $suggested + $acted,
@@ -774,6 +776,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             eventLabel: $this->service.' '.$this->eventType,
             heldBySecondOpinion: $decisionRunContext->heldBySecondOpinionCount(),
             rejectedBySecondOpinion: $decisionRunContext->rejectedCount(),
+            actionRequestId: count($queuedIds) === 1 ? $queuedIds[0] : null,
         ));
     }
 }

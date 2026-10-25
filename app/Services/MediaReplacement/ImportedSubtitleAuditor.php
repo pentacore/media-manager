@@ -327,6 +327,7 @@ final readonly class ImportedSubtitleAuditor
                 implode(', ', $missing),
                 $automaticCandidate === null ? 'operator' : 'automatic',
             ),
+            route('actions.requests.index', ['request' => $actionRequest->id], absolute: false),
         );
     }
 
@@ -467,7 +468,7 @@ final readonly class ImportedSubtitleAuditor
         ]);
     }
 
-    private function notify(ServiceConnection $serviceConnection, string $title, string $message): void
+    private function notify(ServiceConnection $serviceConnection, string $title, string $message, ?string $url = null): void
     {
         Log::info('Automatic subtitle check outcome.', [
             'service_connection_id' => $serviceConnection->id,
@@ -480,6 +481,7 @@ final readonly class ImportedSubtitleAuditor
             title: $title,
             message: $message,
             level: 'info',
+            url: $url ?? route('actions.requests.index', absolute: false),
         ));
     }
 

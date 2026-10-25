@@ -22,3 +22,19 @@ test('the push body carries the second-opinion line', function (): void {
     expect($decisionAgentActed->toPush(User::factory()->admin()->create())->body)
         ->toBe("Monitored.\nSecond opinion: 0 held, 2 rejected.");
 });
+
+test('a notification about one action request deep-links to it', function (): void {
+    $decisionAgentActed = new DecisionAgentActed('suggested', 1, 'Queued a monitor.', actionRequestId: 42);
+    $admin = User::factory()->admin()->create();
+
+    expect($decisionAgentActed->toArray($admin)['link'])->toBe('/actions/requests?request=42')
+        ->and($decisionAgentActed->toPush($admin)->url)->toBe(route('actions.requests.index', ['request' => 42]));
+});
+
+test('a notification about several action requests keeps the bare queue link', function (): void {
+    $decisionAgentActed = new DecisionAgentActed('mixed', 3, 'Queued three.');
+    $admin = User::factory()->admin()->create();
+
+    expect($decisionAgentActed->toArray($admin)['link'])->toBe('/actions/requests')
+        ->and($decisionAgentActed->toPush($admin)->url)->toBe(route('actions.requests.index'));
+});

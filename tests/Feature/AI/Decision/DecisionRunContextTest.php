@@ -122,3 +122,16 @@ test('a disagreement on a request that already needed approval is not counted as
     expect($decisionRunContext->heldBySecondOpinionCount())->toBe(0)
         ->and($decisionRunContext->suggestedCount())->toBe(1);
 });
+
+test('queuedActionRequestIds lists the queued requests but not the second-opinion rejections', function (): void {
+    $context = new DecisionRunContext(null, 3, 'sonarr');
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
+    $rejected = ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected]);
+
+    $context->recordDispatched($queued);
+    $context->recordDispatched($rejected);
+    $context->recordQueued(77, false);
+
+    expect($context->queuedActionRequestIds())->toBe([$queued->id, 77])
+        ->and($context->actionRequestIds())->toBe([$queued->id, $rejected->id, 77]);
+});

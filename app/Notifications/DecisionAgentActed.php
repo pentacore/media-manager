@@ -29,6 +29,8 @@ class DecisionAgentActed extends Notification
         public readonly ?string $eventLabel = null,
         public readonly int $heldBySecondOpinion = 0,
         public readonly int $rejectedBySecondOpinion = 0,
+        /** The one request this run queued, when it queued exactly one: the links open it. */
+        public readonly ?int $actionRequestId = null,
     ) {}
 
     /**
@@ -49,7 +51,7 @@ class DecisionAgentActed extends Notification
             'service' => 'system',
             'title' => $this->title(),
             'message' => $this->message(),
-            'link' => '/actions/requests',
+            'link' => $this->actionQueueUrl(absolute: false),
             'disposition' => $this->disposition,
             'action_count' => $this->actionCount,
             'event' => $this->eventLabel,
@@ -63,7 +65,18 @@ class DecisionAgentActed extends Notification
 
     public function toPush(object $notifiable): PushMessage
     {
-        return new PushMessage(severity: 'info', title: $this->title(), body: $this->message(), url: route('actions.requests.index'));
+        return new PushMessage(severity: 'info', title: $this->title(), body: $this->message(), url: $this->actionQueueUrl(absolute: true));
+    }
+
+    /**
+     * The Action Queue, opened on the run's request when it queued exactly
+     * one (`?request=<id>` opens it in the phone sheet), else the bare queue.
+     */
+    private function actionQueueUrl(bool $absolute): string
+    {
+        $parameters = $this->actionRequestId !== null ? ['request' => $this->actionRequestId] : [];
+
+        return route('actions.requests.index', $parameters, $absolute);
     }
 
     private function message(): string

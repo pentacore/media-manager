@@ -166,9 +166,11 @@ test('the run notification counts only queued actions and names the held and rej
 
     expect(ActionRequest::query()->pluck('status', 'type')->all())
         ->toBe(['monitor_series' => ActionRequestStatus::Pending, 'delete_series' => ActionRequestStatus::Rejected]);
+    $actionRequest = ActionRequest::query()->where('type', 'monitor_series')->sole();
     Notification::assertSentTo($admin, DecisionAgentActed::class, fn (DecisionAgentActed $decisionAgentActed): bool => $decisionAgentActed->actionCount === 1
         && $decisionAgentActed->heldBySecondOpinion === 1
-        && $decisionAgentActed->rejectedBySecondOpinion === 1);
+        && $decisionAgentActed->rejectedBySecondOpinion === 1
+        && $decisionAgentActed->actionRequestId === $actionRequest->id);
 });
 
 test('a run gives its proposals a deadline inside the job timeout', function (): void {
