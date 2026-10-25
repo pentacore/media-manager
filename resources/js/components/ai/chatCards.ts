@@ -1,7 +1,15 @@
-import type { ChatCard, ChoiceOption, ChoicesCard } from './types';
+import type {
+    ChatCard,
+    ChoiceOption,
+    ChoicesCard,
+    ToolRequestCard,
+} from './types';
 
 /** The SDK's name for `App\Ai\Tools\System\OfferChoicesTool`. */
 export const CHOICES_TOOL_NAME = 'OfferChoicesTool';
+
+/** The SDK's name for `App\Ai\Tools\System\RequestToolsTool`. */
+export const TOOL_REQUEST_NAME = 'RequestToolsTool';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
@@ -25,6 +33,33 @@ function choicesCard(
                     ? option.description
                     : null,
         })),
+    };
+}
+
+function toolRequestCard(
+    id: string,
+    request: Record<string, unknown>,
+): ToolRequestCard | null {
+    const groups = (Array.isArray(request.groups) ? request.groups : [])
+        .filter(isRecord)
+        .filter((group) => typeof group.group === 'string')
+        .map((group) => ({
+            group: group.group as string,
+            label:
+                typeof group.label === 'string'
+                    ? group.label
+                    : (group.group as string),
+        }));
+
+    if (groups.length === 0) {
+        return null;
+    }
+
+    return {
+        type: 'tool_request',
+        id,
+        groups,
+        reason: String(request.reason ?? ''),
     };
 }
 
@@ -55,6 +90,10 @@ export function cardFromToolResult(
 
     if (toolName === CHOICES_TOOL_NAME && isRecord(result.choices)) {
         return choicesCard(toolCallId, result.choices);
+    }
+
+    if (toolName === TOOL_REQUEST_NAME && isRecord(result.tool_request)) {
+        return toolRequestCard(toolCallId, result.tool_request);
     }
 
     if (result.queued === true && Number.isInteger(result.action_request_id)) {
@@ -95,4 +134,16 @@ export function inferChosenLabels(cards: ChatCard[], answer: string): string[] {
         .split(', ')
         .map((part) => part.trim())
         .filter((part) => labels.has(part));
+}
+
+/** The text a Load answer sends (also how a reloaded card's answer is read). */
+export function toolRequestAnswer(
+    card: ToolRequestCard,
+    load: boolean,
+): string {
+    const labels = card.groups.map((group) => group.label).join(' & ');
+
+    return load
+        ? `Loaded ${labels} — continue.`
+        : `Don't load ${labels} — continue without it.`;
 }

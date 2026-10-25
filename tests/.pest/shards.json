@@ -38,6 +38,7 @@
         "Tests\\Browser\\CalendarTest": 9.6565,
         "Tests\\Browser\\ChatModelOverrideTest": 8.5773,
         "Tests\\Browser\\ChatTemplatesTest": 29.1889,
+        "Tests\\Browser\\ChatToolGroupsTest": 15.4384,
         "Tests\\Browser\\ChatTurnsTest": 5.3757,
         "Tests\\Browser\\CommandPaletteTest": 8.7687,
         "Tests\\Browser\\ConfirmDialogTest": 39.0002,
@@ -94,6 +95,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.207,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
-    "checksum": "8949975904da8ac4cfbebc3ea1a0920c",
+    "checksum": "da6395f9907c1a3a3522925df0b933b1",
     "updated_at": "2026-10-25T12:31:05+01:00"
 }

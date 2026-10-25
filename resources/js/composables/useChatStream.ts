@@ -1,6 +1,12 @@
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { cardFromToolResult } from '@/components/ai/chatCards';
-import type { AnsweredBy, ChatCard, ChatOverride } from '@/components/ai/types';
+import type {
+    AnsweredBy,
+    ChatCard,
+    ChatOverride,
+    ToolGroupValue,
+    TurnToolGroups,
+} from '@/components/ai/types';
 import type { ChatToolCall } from '@/composables/useAiChat';
 import { csrfToken } from '@/lib/http';
 
@@ -21,6 +27,10 @@ interface StreamChatOptions extends StreamCallbacks {
     attachments?: File[];
     /** The model/reasoning a brand-new conversation starts with. */
     override?: ChatOverride;
+    /** Tool groups pinned in a brand-new chat; sent with its first turn only. */
+    pinnedToolGroups?: ToolGroupValue[];
+    /** Tool groups to load for this turn alone (the assistant's request). */
+    loadToolGroups?: ToolGroupValue[];
     /** Aborting it stops reading the stream and closes the request. */
     signal?: AbortSignal;
 }
@@ -33,6 +43,8 @@ export interface StreamChatResult {
     answeredBy?: AnsweredBy;
     /** The SDK invocation id the server named on RUN_FINISHED, when it did. */
     invocationId?: string;
+    /** The tool groups the server named on RUN_FINISHED, when it did. */
+    toolGroups?: TurnToolGroups;
     /** True when the caller aborted the stream before it finished. */
     stopped: boolean;
 }
@@ -73,6 +85,9 @@ function requestBody(options: StreamChatOptions): {
     // The server honours an override only on a conversation's first turn.
     const override =
         options.conversationId === null ? options.override : undefined;
+    const pinned =
+        options.conversationId === null ? options.pinnedToolGroups : undefined;
+    const load = options.loadToolGroups;
 
     if (!options.attachments?.length) {
         return {
@@ -81,6 +96,8 @@ function requestBody(options: StreamChatOptions): {
                 conversation_id: options.conversationId,
                 mode: options.mode,
                 ...(override ? { override } : {}),
+                ...(pinned?.length ? { pinned_tool_groups: pinned } : {}),
+                ...(load?.length ? { load_tool_groups: load } : {}),
             }),
             headers: { 'Content-Type': 'application/json' },
         };
@@ -101,6 +118,9 @@ function requestBody(options: StreamChatOptions): {
             }
         }
     }
+
+    pinned?.forEach((group) => form.append('pinned_tool_groups[]', group));
+    load?.forEach((group) => form.append('load_tool_groups[]', group));
 
     options.attachments.forEach((file) => form.append('attachments[]', file));
 
@@ -212,6 +232,7 @@ export function useChatStream(): UseChatStreamReturn {
         let conversationId = options.conversationId;
         let answeredBy: AnsweredBy | undefined;
         let invocationId: string | undefined;
+        let toolGroups: TurnToolGroups | undefined;
 
         const handle = (event: AgUiEvent): void => {
             switch (event.type) {
@@ -227,6 +248,14 @@ export function useChatStream(): UseChatStreamReturn {
                         event.answeredBy !== null
                     ) {
                         answeredBy = event.answeredBy as AnsweredBy;
+                    }
+
+                    if (
+                        event.type === 'RUN_FINISHED' &&
+                        (Array.isArray(event.toolGroups) ||
+                            event.toolGroups === 'all')
+                    ) {
+                        toolGroups = event.toolGroups as TurnToolGroups;
                     }
 
                     if (
@@ -377,6 +406,7 @@ export function useChatStream(): UseChatStreamReturn {
             conversationId,
             answeredBy,
             invocationId,
+            toolGroups,
             stopped: false,
         };
     }

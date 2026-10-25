@@ -9,6 +9,7 @@ use App\Models\ChatTemplate;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Support\Str;
 
 beforeEach(function (): void {
@@ -608,4 +609,38 @@ test('the fill dialog leaves out the preset model in an existing conversation', 
         ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
         ->assertVisible('[data-template-fill-dialog]')
         ->assertMissing('[data-template-preset]');
+});
+
+test('the template editor saves tool groups', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Indexer check']);
+    $this->actingAs($admin);
+
+    visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-template-tool-group="indexers"]')
+        ->click('[data-template-tool-group="indexers"]')
+        ->click('[data-template-save]')
+        ->assertSee('Template updated.');
+
+    expect($chatTemplate->fresh()->tool_groups)->toBe(['indexers']);
+
+    visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-template-tool-group="indexers"]', 'data-state', 'checked');
+});
+
+test("a template's tool groups are pinned when it is used", function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    ServiceConnection::factory()->prowlarr()->create();
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Indexer check', 'tool_groups' => ['indexers']]);
+    $this->actingAs($admin);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
 });

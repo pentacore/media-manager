@@ -6,11 +6,16 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Classification\Classifier;
 use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Routing\ToolGroup;
+use App\Ai\Routing\ToolGroupSource;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
+use App\Ai\Tools\Prowlarr\SearchIndexersTool;
+use App\Ai\Tools\System\FindToolsTool;
 use App\Ai\Tools\System\OfferChoicesTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Enums\ClassificationVerdict;
 use App\Models\AiProposedWorkflow;
@@ -67,9 +72,9 @@ test('confident groups are routed and filtering keeps core tools', function (): 
     $chatToolRouter = resolve(ChatToolRouter::class);
 
     $groups = $chatToolRouter->route('What is playing right now?', null);
-    $filtered = collect($chatToolRouter->filter([...(new MediaAgent)->tools()], $groups))->map(fn (object $tool): string => $tool::class);
+    $filtered = collect($chatToolRouter->filter([...(new MediaAgent)->tools()], $groups->groups()))->map(fn (object $tool): string => $tool::class);
 
-    expect($groups)->toBe([ToolGroup::Playback])
+    expect($groups?->groups())->toBe([ToolGroup::Playback])
         ->and($filtered)->toContain(NowPlayingTool::class, SearchMediaTool::class)
         ->and($filtered)->not->toContain(DeleteMediaTool::class);
 });
@@ -125,8 +130,34 @@ test('groups of tools called in the previous turn stay loaded', function (): voi
     ]);
     Classification::fake([routerGroupAnswers(['playback' => 0.6])]);
 
-    expect(resolve(ChatToolRouter::class)->route('yes do it', $conversationId))
+    expect(resolve(ChatToolRouter::class)->route('yes do it', $conversationId)?->groups())
         ->toContain(ToolGroup::LibraryChanges, ToolGroup::Playback);
+});
+
+test('a full-toolset turn with routing on has no find or request tools and no routing section', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    Classification::fake([routerGroupAnswers([])]);
+    MediaAgent::fake(['ok']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'hmm'])
+        ->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => ! in_array(FindToolsTool::class, routerPromptedToolClasses($agentPrompt), true)
+        && ! in_array(RequestToolsTool::class, routerPromptedToolClasses($agentPrompt), true)
+        && ! str_contains((string) $agentPrompt->agent->instructions(), 'FindToolsTool'));
+});
+
+test('a routed turn carries the find and request tools', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['ok']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
+        ->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => array_diff([FindToolsTool::class, RequestToolsTool::class], routerPromptedToolClasses($agentPrompt)) === []);
 });
 
 test('a routed chat turn only sends the routed tools to the agent', function (): void {
@@ -262,4 +293,175 @@ test('every tool media agent declares is core or in a routable group', function 
 
     expect(array_values(array_diff($declared, $routable)))->toBe([])
         ->and($keptWithNoGroups)->toContain(OfferChoicesTool::class);
+});
+
+/**
+ * Seeds a conversation with an older assistant reply and a newest one.
+ *
+ * @param  list<array<string, mixed>>  $latestToolCalls
+ * @param  list<array<string, mixed>>  $latestMeta
+ * @param  list<array<string, mixed>>  $olderToolCalls
+ */
+function routerSeedConversation(array $latestToolCalls, array $latestMeta = [], array $olderToolCalls = []): string
+{
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'T',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    foreach ([[$olderToolCalls, [], 1], [$latestToolCalls, $latestMeta, 0]] as [$toolCalls, $meta, $minutesAgo]) {
+        DB::table('agent_conversation_messages')->insert([
+            'id' => (string) Str::uuid7(),
+            'conversation_id' => $conversationId,
+            'participant_type' => $admin->getMorphClass(),
+            'participant_id' => $admin->id,
+            'agent' => MediaAgent::class,
+            'role' => 'assistant',
+            'content' => 'Reply',
+            'attachments' => '[]',
+            'steps' => json_encode([[
+                'content' => 'Reply',
+                'tool_calls' => $toolCalls,
+                'reasoning' => '',
+                'replay_blocks' => [],
+                'provider_tool_calls' => [],
+            ]]),
+            'usage' => '{}',
+            'meta' => json_encode($meta === [] ? new stdClass : $meta),
+            'status' => 'completed',
+            'created_at' => now()->subMinutes($minutesAgo),
+            'updated_at' => now()->subMinutes($minutesAgo),
+        ]);
+    }
+
+    return $conversationId;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function routerToolRequestCall(): array
+{
+    return ['id' => 'r1', 'name' => ChatToolRouter::TOOL_REQUEST_NAME, 'arguments' => [], 'result' => json_encode([
+        'tool_request' => [
+            'groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement']],
+            'reason' => 'x',
+        ],
+    ])];
+}
+
+test('pinned groups join a routed turn as pinned', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('What is playing?', null, pinned: [ToolGroup::Indexers]);
+
+    expect($routed?->sources)->toBe(['playback' => ToolGroupSource::Picked, 'indexers' => ToolGroupSource::Pinned]);
+});
+
+test('a pin for a group this install cannot use is dropped', function (): void {
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('What is playing?', null, pinned: [ToolGroup::Indexers]);
+
+    expect($routed?->sources)->toBe(['playback' => ToolGroupSource::Picked]);
+});
+
+test('pins change nothing when routing falls back to the full toolset', function (): void {
+    Classification::fake([routerGroupAnswers([])]);
+
+    expect(resolve(ChatToolRouter::class)->route('hmm', null, pinned: [ToolGroup::Indexers]))->toBeNull();
+});
+
+test('pinned wins over picked for the same group', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    Classification::fake([routerGroupAnswers(['indexers' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('indexer health?', null, pinned: [ToolGroup::Indexers]);
+
+    expect($routed?->sources)->toBe(['indexers' => ToolGroupSource::Pinned]);
+});
+
+test("approved groups need the latest reply's tool request", function (): void {
+    $conversationId = routerSeedConversation([routerToolRequestCall()]);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('go ahead', $conversationId, requestedLoads: [ToolGroup::SubtitlesReplacement, ToolGroup::Indexers]);
+
+    expect($routed?->sources)->toHaveKey('subtitles_replacement', ToolGroupSource::Assistant)
+        ->and($routed?->sources)->not->toHaveKey('indexers');
+});
+
+test('approved groups are ignored without a tool request in the latest reply', function (): void {
+    $conversationId = routerSeedConversation([], olderToolCalls: [routerToolRequestCall()]);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('go ahead', $conversationId, requestedLoads: [ToolGroup::SubtitlesReplacement]);
+
+    expect($routed?->sources)->not->toHaveKey('subtitles_replacement');
+});
+
+test('an assistant group keeps its source while it is used', function (): void {
+    $conversationId = routerSeedConversation(
+        [['id' => 'c1', 'name' => 'InspectMediaFile', 'arguments' => [], 'result' => '{}']],
+        ['tool_groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement', 'source' => 'assistant']]],
+    );
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+    $chatToolRouter = resolve(ChatToolRouter::class);
+
+    $routed = $chatToolRouter->route('and now?', $conversationId);
+
+    expect($routed?->sources['subtitles_replacement'])->toBe(ToolGroupSource::Assistant)
+        ->and($chatToolRouter->carriedOver($conversationId))->toBe(['subtitles_replacement' => ToolGroupSource::Assistant]);
+});
+
+test('routed telemetry counts pinned and approved groups as included', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    resolve(ChatToolRouter::class)->route('What is playing?', null, 'chat_turn:t9', pinned: [ToolGroup::Indexers]);
+
+    $rows = ClassificationOutcome::query()->where('subject_key', 'chat_turn:t9')->get()->keyBy('question');
+
+    expect($rows['indexers']->verdict)->toBe(ClassificationVerdict::Included);
+});
+
+test('routed tool groups round trip through their stored shape', function (): void {
+    $routed = new RoutedToolGroups(['indexers' => ToolGroupSource::Pinned, 'playback' => ToolGroupSource::Picked]);
+
+    expect($routed->toArray()[0])->toBe(['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'])
+        ->and(RoutedToolGroups::fromArray([...$routed->toArray(), ['group' => 'nope', 'source' => 'picked'], ['group' => 'playback', 'source' => 'bad']])?->sources)
+        ->toBe(['playback' => ToolGroupSource::Picked, 'indexers' => ToolGroupSource::Pinned])
+        ->and(RoutedToolGroups::fromArray('all'))->toBeNull();
+});
+
+test('pins persist across a full-toolset fallback turn', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    config()->set('mediamanager.ai.enabled', true);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'T',
+        'pinned_tool_groups' => '["indexers"]',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    Classification::fake([routerGroupAnswers([]), routerGroupAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['one', 'two']);
+
+    $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'hmm', 'conversation_id' => $conversationId])->assertOk();
+    $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'what is playing', 'conversation_id' => $conversationId])->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => $agentPrompt->prompt === 'what is playing'
+        && array_diff([SearchIndexersTool::class, NowPlayingTool::class], routerPromptedToolClasses($agentPrompt)) === []);
 });

@@ -22,6 +22,7 @@ import type { ChatTemplate, TemplateAction } from '@/components/chat-templates';
 import { useAiChat } from '@/composables/useAiChat';
 import type { AgentStep } from '@/composables/useAiChat';
 import { useChatTemplates } from '@/composables/useChatTemplates';
+import { useChatToolGroups } from '@/composables/useChatToolGroups';
 import { useChatTurns } from '@/composables/useChatTurns';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils';
 import ChatComposer from './ChatComposer.vue';
 import ChatHeader from './ChatHeader.vue';
 import ChatMessageBubble from './ChatMessageBubble.vue';
+import ChatToolStrip from './ChatToolStrip.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
 import type {
     AnsweredBy,
@@ -146,6 +148,8 @@ const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
     };
 });
 
+const toolGroups = useChatToolGroups();
+
 const {
     messages,
     sending,
@@ -161,12 +165,21 @@ const {
     approveWorkflow,
     declineWorkflow,
     choose,
+    answerToolRequest,
     reviewAction,
 } = useChatTurns({
     mode,
     override,
     answeredBy: effectiveAnsweredBy,
+    pinnedToolGroups: toolGroups.pinned,
     scrollToBottom,
+});
+
+/** A turn has settled: the server may have carried groups over or pinned. */
+watch(sending, (isSending, wasSending) => {
+    if (wasSending && !isSending && activeConversationId.value !== null) {
+        void toolGroups.refresh(activeConversationId.value);
+    }
 });
 
 onMounted(async () => {
@@ -255,7 +268,11 @@ async function applyTemplate(template: ChatTemplate): Promise<void> {
 
     try {
         const text = await renderWithoutValues(template);
-        deliverTemplate(text, template.auto_send ? 'send' : 'insert', template);
+        void deliverTemplate(
+            text,
+            template.auto_send ? 'send' : 'insert',
+            template,
+        );
     } catch (cause) {
         toast.error(
             cause instanceof Error
@@ -273,7 +290,7 @@ function onTemplateRendered(text: string, action: TemplateAction): void {
         return;
     }
 
-    deliverTemplate(text, action, template);
+    void deliverTemplate(text, action, template);
 }
 
 /**
@@ -291,18 +308,21 @@ const templatePresetApplies = computed(
 /**
  * Send rendered text, or put it in the composer while a turn is in flight or
  * a workflow proposal is pending. A template's model preset fills the picker
- * when it starts a new chat.
+ * when it starts a new chat; its tool groups are pinned on any chat, before
+ * the text is sent.
  */
-function deliverTemplate(
+async function deliverTemplate(
     text: string,
     action: TemplateAction,
     template: ChatTemplate,
-): void {
+): Promise<void> {
     fillTemplate.value = null;
 
     if (templatePresetApplies.value && template.preset !== null) {
         override.value = { ...template.preset };
     }
+
+    await toolGroups.pinMany(template.tool_groups);
 
     if (action === 'send' && !sending.value && !hasPendingWorkflow.value) {
         void sendUserMessage({ text, pendingFiles: [] });
@@ -364,6 +384,7 @@ watch(
             messages.value = [];
             olderCursor.value = null;
             setOverride(emptyOverride());
+            toolGroups.loadFor(null);
         }
 
         // A first turn just created this conversation with the override
@@ -431,6 +452,7 @@ async function openConversation(id: string): Promise<void> {
         inferChoices();
         olderCursor.value = data.next_cursor;
         setOverride(data.override);
+        toolGroups.loadFor(data);
 
         // Persisted messages carry no workflow payload, so an unresolved
         // proposal would lose its approve/decline buttons on reload. Reattach
@@ -536,6 +558,7 @@ function newConversation(): void {
     olderCursor.value = null;
     error.value = null;
     setOverride(emptyOverride());
+    toolGroups.loadFor(null);
     composerRef.value?.focus();
 }
 </script>
@@ -616,10 +639,14 @@ function newConversation(): void {
                 :streaming="sending && streamingIndex === index"
                 :busy="sending"
                 :is-latest-assistant="latestAssistant === m"
+                :show-turn-tools="toolGroups.showTurnLines.value"
                 :reviewing-action-ids="reviewingActionIds"
                 @approve="approveWorkflow(m)"
                 @decline="declineWorkflow(m)"
                 @choose="(labels) => choose(m, labels)"
+                @answer-tool-request="
+                    (card, load) => answerToolRequest(m, card, load)
+                "
                 @review="reviewAction"
             />
 
@@ -631,6 +658,19 @@ function newConversation(): void {
             </div>
             <StepLivenessBanner v-if="sending" :step="pendingStep" />
         </div>
+
+        <ChatToolStrip
+            v-if="toolGroups.loaded.value"
+            :routing-enabled="toolGroups.routingEnabled.value"
+            :options="toolGroups.options.value"
+            :pinned="toolGroups.pinned.value"
+            :carried-over="toolGroups.carriedOver.value"
+            :show-turn-lines="toolGroups.showTurnLines.value"
+            :disabled="sending || loading"
+            @pin="toolGroups.pin"
+            @unpin="toolGroups.unpin"
+            @toggle-lines="toolGroups.toggleTurnLines"
+        />
 
         <ChatComposer
             ref="composer"

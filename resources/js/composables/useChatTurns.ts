@@ -2,15 +2,21 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, onUnmounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import { inferChosenLabels } from '@/components/ai/chatCards';
+import {
+    inferChosenLabels,
+    toolRequestAnswer,
+} from '@/components/ai/chatCards';
 import type {
     ActionRequestCard,
+    ToolRequestCard,
     AnsweredBy,
     ChatCard,
     ChatMessage,
     ChatMode,
     ChatOverride,
     ComposerSubmission,
+    ToolGroupValue,
+    TurnToolGroups,
     WorkflowProposal,
 } from '@/components/ai/types';
 import { useAiChat } from '@/composables/useAiChat';
@@ -25,6 +31,8 @@ export type UseChatTurnsOptions = {
     override: Ref<ChatOverride>;
     /** Who answers the next turn, shown under a reply until the server says. */
     answeredBy: ComputedRef<AnsweredBy | null>;
+    /** Groups pinned in a new chat; sent with its first turn. */
+    pinnedToolGroups?: Ref<ToolGroupValue[]>;
     /** Scrolls the panel's thread to its end once the DOM has updated. */
     scrollToBottom: () => Promise<void>;
 };
@@ -58,6 +66,12 @@ export type UseChatTurnsReturn = {
     declineWorkflow: (message: ChatMessage) => void;
     /** Sends a choices card's picked labels as the user's answer. */
     choose: (message: ChatMessage, labels: string[]) => void;
+    /** Answers the assistant's tool request: load the groups or decline. */
+    answerToolRequest: (
+        message: ChatMessage,
+        card: ToolRequestCard,
+        load: boolean,
+    ) => void;
     /** Approves or rejects a queued action card through the bulk review. */
     reviewAction: (
         card: ActionRequestCard,
@@ -78,6 +92,7 @@ export function useChatTurns({
     mode,
     override,
     answeredBy: effectiveAnsweredBy,
+    pinnedToolGroups,
     scrollToBottom,
 }: UseChatTurnsOptions): UseChatTurnsReturn {
     let nextMessageUid = 0;
@@ -138,6 +153,10 @@ export function useChatTurns({
                 ...(activeConversationId.value === null
                     ? { override: override.value }
                     : {}),
+                ...(activeConversationId.value === null &&
+                pinnedToolGroups?.value.length
+                    ? { pinned_tool_groups: pinnedToolGroups.value }
+                    : {}),
                 ...extraBody,
             }),
         });
@@ -165,6 +184,7 @@ export function useChatTurns({
             answered_by?: AnsweredBy | null;
             invocation_id?: string | null;
             cards?: ChatCard[];
+            tool_groups?: TurnToolGroups;
         };
 
         if (
@@ -184,6 +204,7 @@ export function useChatTurns({
             answered_by: data.answered_by ?? null,
             invocation_id: data.invocation_id ?? null,
             cards: data.cards ?? [],
+            tool_groups: data.tool_groups ?? null,
         });
 
         if (data.conversation_id) {
@@ -199,6 +220,7 @@ export function useChatTurns({
     async function sendStreamingTurn(
         bodyMessage: string,
         files: File[],
+        loadToolGroups?: ToolGroupValue[],
     ): Promise<void> {
         // Read the element back out of the reactive array so mutations to `.text`
         // during streaming go through Vue's proxy and re-render the bubble.
@@ -229,6 +251,8 @@ export function useChatTurns({
             mode: mode.value,
             attachments: files,
             override: override.value,
+            pinnedToolGroups: pinnedToolGroups?.value,
+            loadToolGroups,
             signal: streamAbortController.signal,
             onText: (accumulated) => {
                 assistantMessage.text = accumulated;
@@ -287,6 +311,7 @@ export function useChatTurns({
 
         assistantMessage.answered_by = result.answeredBy ?? answeredBy;
         assistantMessage.invocation_id = result.invocationId ?? null;
+        assistantMessage.tool_groups = result.toolGroups ?? null;
 
         // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
         // existing conversation it echoes what we sent, for a brand-new one it is
@@ -412,6 +437,7 @@ export function useChatTurns({
             sendStreamingTurn(
                 submission.text,
                 submission.pendingFiles.map((p) => p.file),
+                submission.loadToolGroups,
             ),
         );
     }
@@ -453,11 +479,23 @@ export function useChatTurns({
         messages.value.forEach((message, index) => {
             const next = messages.value[index + 1];
 
-            if (
-                message.chosen === undefined &&
-                next?.role === 'user' &&
-                message.cards?.some((card) => card.type === 'choices')
-            ) {
+            if (message.chosen !== undefined || next?.role !== 'user') {
+                return;
+            }
+
+            const toolRequest = message.cards?.find(
+                (card) => card.type === 'tool_request',
+            );
+
+            if (toolRequest) {
+                if (next.text === toolRequestAnswer(toolRequest, true)) {
+                    message.chosen = ['load'];
+                } else if (
+                    next.text === toolRequestAnswer(toolRequest, false)
+                ) {
+                    message.chosen = ['decline'];
+                }
+            } else if (message.cards?.some((card) => card.type === 'choices')) {
                 message.chosen = inferChosenLabels(message.cards, next.text);
             }
         });
@@ -471,6 +509,30 @@ export function useChatTurns({
 
         message.chosen = labels;
         void sendUserMessage({ text: labels.join(', '), pendingFiles: [] });
+    }
+
+    /**
+     * Answer the assistant's tool request. Load also asks the server to carry
+     * the groups for this one turn; the server only honours it when the latest
+     * reply requested exactly those groups.
+     */
+    function answerToolRequest(
+        message: ChatMessage,
+        card: ToolRequestCard,
+        load: boolean,
+    ): void {
+        if (sending.value) {
+            return;
+        }
+
+        message.chosen = [load ? 'load' : 'decline'];
+        void sendUserMessage({
+            text: toolRequestAnswer(card, load),
+            pendingFiles: [],
+            ...(load
+                ? { loadToolGroups: card.groups.map((group) => group.group) }
+                : {}),
+        });
     }
 
     /** Action request ids whose approve/reject request is in flight. */
@@ -537,6 +599,7 @@ export function useChatTurns({
         approveWorkflow,
         declineWorkflow,
         choose,
+        answerToolRequest,
         reviewAction,
     };
 }
