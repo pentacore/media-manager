@@ -7,22 +7,10 @@ parameters:
 			path: app/Actions/Fortify/CreateNewUser.php
 
 		-
-			message: '#^Method App\\Ai\\Agents\\MediaFileInspectorAgent\:\:stream\(\) has parameter \$provider with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Ai/Agents/MediaFileInspectorAgent.php
-
-		-
 			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
 			identifier: arrayValues.list
 			count: 1
 			path: app/Ai/Agents/PriceFetcherAgent.php
-
-		-
-			message: '#^Method App\\Ai\\Agents\\StuckDownloadInvestigatorAgent\:\:stream\(\) has parameter \$provider with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Ai/Agents/StuckDownloadInvestigatorAgent.php
 
 		-
 			message: '#^Expression on left side of \?\? is not nullable\.$#'
