@@ -8,11 +8,13 @@ use App\Ai\Routing\ToolPayload;
 use App\Enums\AiTask;
 use App\Models\AiTaskModel;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 
 test('an all-OpenAI/Anthropic chain defers non-core tools behind one ToolSearch', function (): void {
     config()->set('ai.default', 'openai');
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
     AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
 
     $tools = [...(new MediaAgent)->tools()];

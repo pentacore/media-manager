@@ -69,3 +69,22 @@ test('reads stored tool calls and skips one still awaiting approval', function (
         ['type' => 'choices', 'id' => 'call_2', 'question' => 'Which?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null]]],
     ]);
 });
+
+test('a tool request result becomes a tool_request card', function (): void {
+    $result = ['tool_request' => ['groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement']], 'reason' => 'Needs the file'], 'instruction' => 'x'];
+    $chatCardExtractor = resolve(ChatCardExtractor::class);
+    $expected = [['type' => 'tool_request', 'id' => 'call_9', 'groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement']], 'reason' => 'Needs the file']];
+
+    $live = $chatCardExtractor->fromToolResults([['id' => 'call_9', 'name' => 'RequestToolsTool', 'result' => $result]]);
+    $stored = $chatCardExtractor->fromToolResults([['id' => 'call_9', 'name' => 'RequestToolsTool', 'result' => json_encode($result)]]);
+
+    expect($live)->toBe($expected)
+        ->and($stored)->toBe($expected)
+        ->and($chatCardExtractor->hydrate($stored))->toBe($expected);
+});
+
+test('a refused tool request yields no card', function (): void {
+    $cards = resolve(ChatCardExtractor::class)->fromToolResults([['id' => 'c', 'name' => 'RequestToolsTool', 'result' => json_encode(['error' => 'already_loaded'])]]);
+
+    expect($cards)->toBe([]);
+});

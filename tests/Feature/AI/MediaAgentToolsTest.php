@@ -10,6 +10,8 @@ use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\StuckImportVerdictTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
+use App\Ai\Tools\System\FindToolsTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Settings\AiSettings;
 
 test('media agent delegates stuck-download investigation and keeps the acting tools', function (): void {
@@ -57,4 +59,26 @@ test('both stuck-download prompts cap an inspection at 20 download ids per servi
         ->and($mediaAgent)->toContain('at most 20 download_ids per call')
         ->toContain('calls of up to 20 per service')
         ->toContain('never call it once per download');
+});
+
+test('find and request tools are declared only with routing on', function (): void {
+    $tools = fn (): array => collect((new MediaAgent)->tools())->map(fn (object $tool): string => $tool::class)->all();
+
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+
+    expect($tools())->not->toContain(FindToolsTool::class)->not->toContain(RequestToolsTool::class);
+
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+
+    expect($tools())->toContain(FindToolsTool::class)->toContain(RequestToolsTool::class);
+});
+
+test('routing-on instructions mention FindToolsTool', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+
+    expect((string) (new MediaAgent)->instructions())->not->toContain('FindToolsTool');
+
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+
+    expect((string) (new MediaAgent)->instructions())->toContain('FindToolsTool')->toContain('RequestToolsTool');
 });
