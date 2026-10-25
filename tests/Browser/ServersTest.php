@@ -186,6 +186,19 @@ test('the watcher url saves and shows only its last four characters', function (
     expect(resolve(MonitoringSettings::class)->uptimeKumaPushUrl())->toBeNull();
 });
 
+test('a watcher url from the environment cannot be removed from the page and says where it comes from', function (): void {
+    config()->set('mediamanager.monitoring.uptime_kuma_push_url', 'https://kuma.test/api/push/fromenvq7w1');
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.servers.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-watcher-hint]', 'comes from the environment')
+        ->assertSeeIn('[data-watcher-hint]', '…q7w1')
+        ->assertSeeIn('[data-watcher-environment-note]', 'MEDIAMANAGER_UPTIME_KUMA_PUSH_URL')
+        ->assertMissing('[data-watcher-clear]')
+        ->assertDontSee('fromenvq7w1');
+});
+
 test('the enrollment dialog fits a phone screen', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $server = Server::factory()->create(['name' => 'a-server-with-a-rather-long-name']);

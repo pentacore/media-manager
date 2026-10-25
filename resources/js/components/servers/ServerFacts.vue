@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Pill, TimeStamp } from '@/components/mm';
 import { formatBytes, formatCount } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { formatPercent, formatUptime } from './format';
 import type { LatestReport, ServerDetail } from './types';
 
@@ -13,6 +14,20 @@ const props = defineProps<{
 const load = computed(() =>
     props.latest ? props.latest.load.map((v) => v.toFixed(2)).join(' · ') : '—',
 );
+
+/** Whether the platform refused the agent's latest report: rejected after the last accepted one, or none got through. */
+const latestReportRejected = computed(() => {
+    const rejectedAt = props.server.last_report_error_at;
+
+    if (!rejectedAt) {
+        return false;
+    }
+
+    return (
+        !props.server.last_report_at ||
+        Date.parse(rejectedAt) > Date.parse(props.server.last_report_at)
+    );
+});
 
 const runningContainers = computed(
     () =>
@@ -27,6 +42,28 @@ const runningContainers = computed(
         class="rounded-xl border border-border bg-card p-5 text-[13px]"
         data-server-facts
     >
+        <p
+            v-if="server.last_report_error && server.last_report_error_at"
+            :class="
+                cn(
+                    'mb-4 break-words',
+                    latestReportRejected
+                        ? 'text-warning'
+                        : 'text-muted-foreground',
+                )
+            "
+            :data-server-report-error="latestReportRejected ? 'latest' : 'past'"
+        >
+            {{
+                latestReportRejected
+                    ? "The platform is rejecting this agent's reports"
+                    : 'Last rejected report'
+            }}
+            (<TimeStamp :iso="server.last_report_error_at" live />):
+            <span class="font-mono-tabular">{{
+                server.last_report_error
+            }}</span>
+        </p>
         <template v-if="server.last_report_at">
             <dl class="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
                 <div class="min-w-0">

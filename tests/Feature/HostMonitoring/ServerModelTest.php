@@ -106,7 +106,7 @@ test('status reads pending, ok, incident and silent', function (): void {
     ServerIncident::factory()->for($silent)->open()->key('disk:/')->create();
     ServerIncident::factory()->for($resolvedOnly)->resolved()->key('disk:/')->create();
 
-    $statuses = Server::query()->withStatus()->get()->mapWithKeys(fn (Server $server): array => [$server->name => $server->status()]);
+    $statuses = Server::query()->withStatus()->orderBy('id')->get()->mapWithKeys(fn (Server $server): array => [$server->name => $server->status()]);
 
     expect($statuses->all())->toBe([
         'pending' => ServerStatus::Pending,
@@ -116,4 +116,11 @@ test('status reads pending, ok, incident and silent', function (): void {
         'silent' => ServerStatus::Silent,
         'resolved-only' => ServerStatus::Ok,
     ]);
+});
+
+test('an enrolled server that never got a report through reads silent once its silent incident opens', function (): void {
+    $server = Server::factory()->enrolled()->create();
+    ServerIncident::factory()->for($server)->open()->key('silent')->create();
+
+    expect(Server::query()->withStatus()->findOrFail($server->id)->status())->toBe(ServerStatus::Silent);
 });

@@ -67,3 +67,35 @@ test('a non-url is rejected', function (string $value): void {
 
     expect(resolve(MonitoringSettings::class)->uptimeKumaPushUrl())->toBeNull();
 })->with(['not a url', 'ftp://kuma.test/push/abc123', 'https://kuma.test/'.str_repeat('a', 2040)]);
+
+test('removing the url while it comes from the environment changes nothing and says where to remove it', function (): void {
+    config()->set('mediamanager.monitoring.uptime_kuma_push_url', 'https://kuma.test/api/push/fromenv1');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('admin.servers.index'))
+        ->put(route('admin.servers.watcher.update'), ['clear' => true])
+        ->assertRedirect(route('admin.servers.index'))
+        ->assertInertiaFlash('toast', ['type' => 'info', 'message' => 'The push URL is set by MEDIAMANAGER_UPTIME_KUMA_PUSH_URL in the environment. Remove it there.']);
+
+    expect(resolve(MonitoringSettings::class)->uptimeKumaPushUrl())->toBe('https://kuma.test/api/push/fromenv1')
+        ->and(ActivityLog::query()->where('action', 'settings.updated')->exists())->toBeFalse();
+});
+
+test('a saved url wins over the environment one and removing it falls back to it', function (): void {
+    config()->set('mediamanager.monitoring.uptime_kuma_push_url', 'https://kuma.test/api/push/fromenv1');
+    $monitoringSettings = resolve(MonitoringSettings::class);
+
+    expect($monitoringSettings->pushUrlSource())->toBe(MonitoringSettings::SOURCE_ENVIRONMENT);
+
+    $monitoringSettings->setUptimeKumaPushUrl('https://kuma.test/api/push/saved222');
+
+    expect($monitoringSettings->uptimeKumaPushUrl())->toBe('https://kuma.test/api/push/saved222')
+        ->and($monitoringSettings->pushUrlSource())->toBe(MonitoringSettings::SOURCE_SAVED);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.servers.watcher.update'), ['clear' => true])
+        ->assertSessionHasNoErrors();
+
+    expect($monitoringSettings->uptimeKumaPushUrl())->toBe('https://kuma.test/api/push/fromenv1')
+        ->and($monitoringSettings->pushUrlSource())->toBe(MonitoringSettings::SOURCE_ENVIRONMENT);
+});

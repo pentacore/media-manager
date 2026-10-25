@@ -53,6 +53,8 @@ class ServerController extends Controller
             'watcher' => [
                 'push_url_set' => $pushUrlHint !== null,
                 'push_url_hint' => $pushUrlHint,
+                'push_url_source' => $monitoringSettings->pushUrlSource(),
+                'environment_push_url_set' => $monitoringSettings->hasEnvironmentPushUrl(),
             ],
         ]);
     }
@@ -148,7 +150,7 @@ class ServerController extends Controller
     }
 
     /**
-     * @return array{id: int, uuid: string, name: string, hostname: ?string, os: ?string, kernel: ?string, arch: ?string, agent_version: ?string, agent_outdated: bool, status: string, status_label: string, enrolled_at: ?string, last_report_at: ?string, report_interval_seconds: int, uptime_seconds: ?int, enrollment_expires_at: ?string}
+     * @return array{id: int, uuid: string, name: string, hostname: ?string, os: ?string, kernel: ?string, arch: ?string, agent_version: ?string, agent_outdated: bool, status: string, status_label: string, enrolled_at: ?string, last_report_at: ?string, report_interval_seconds: int, uptime_seconds: ?int, enrollment_expires_at: ?string, last_report_error: ?string, last_report_error_at: ?string}
      */
     private function facts(Server $server): array
     {
@@ -172,6 +174,8 @@ class ServerController extends Controller
             'report_interval_seconds' => $server->report_interval_seconds,
             'uptime_seconds' => is_numeric($uptimeSeconds) ? (int) $uptimeSeconds : null,
             'enrollment_expires_at' => $server->enrollment_expires_at?->toIso8601String(),
+            'last_report_error' => $server->last_report_error,
+            'last_report_error_at' => $server->last_report_error_at?->toIso8601String(),
         ];
     }
 

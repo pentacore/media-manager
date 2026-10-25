@@ -6,7 +6,9 @@ use App\Enums\QueueLane;
 use App\Jobs\ProcessAgentReport;
 use App\Models\Server;
 use App\Models\ServerCheck;
+use App\Services\HostMonitoring\ReportRejection;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\MessageBag;
 use Illuminate\Testing\TestResponse;
 use Tests\Support\AgentReportFixtures;
 
@@ -230,4 +232,42 @@ test('reports are limited per server on the report route', function (): void {
         ->assertTooManyRequests()
         ->assertHeader('Retry-After');
     $this->postJson(route('agent.report'), AgentReportFixtures::agentReportBody(), AgentReportFixtures::agentBearer($serverB))->assertOk();
+});
+
+test('a rejected report records a summary of why on the server without the payload', function (): void {
+    $this->freezeSecond();
+    $server = Server::factory()->reporting()->create();
+    $lastReportAt = $server->last_report_at;
+
+    agentReportTestPost(
+        AgentReportFixtures::agentReportBody([
+            'metrics.filesystems.0.used_bytes' => -1,
+            'metrics.cpu_percent' => 'secret-cpu-value',
+            'host.hostname' => null,
+        ]),
+        AgentReportFixtures::agentBearer($server),
+    )->assertUnprocessable();
+
+    $server->refresh();
+
+    expect($server->last_report_error_at?->equalTo(now()))->toBeTrue()
+        ->and($server->last_report_error)->toStartWith('The host.hostname field is required.')
+        ->and($server->last_report_error)->toEndWith('(and 2 more errors)')
+        ->and($server->last_report_error)->not->toContain('secret-cpu-value')
+        ->and($server->last_report_at?->equalTo($lastReportAt))->toBeTrue();
+});
+
+test('a rejection summary is cut to fit its column', function (): void {
+    $summary = ReportRejection::summary(new MessageBag(['schema' => [str_repeat('a', 1000)], 'host' => ['b']]));
+
+    expect(mb_strlen($summary))->toBe(500)
+        ->and($summary)->toEndWith('… (and 1 more error)');
+});
+
+test('an accepted report keeps the last rejection for the server page', function (): void {
+    $server = Server::factory()->enrolled()->create(['last_report_error' => 'The schema field is required.', 'last_report_error_at' => now()->subMinute()]);
+
+    agentReportTestPost(AgentReportFixtures::agentReportBody(), AgentReportFixtures::agentBearer($server))->assertOk();
+
+    expect($server->fresh()->last_report_error)->toBe('The schema field is required.');
 });

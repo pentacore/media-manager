@@ -393,3 +393,33 @@ test('a check can be paused and removed', function (): void {
 
     expect(ServerCheck::query()->count())->toBe(0);
 });
+
+test("the server page says when the platform is rejecting the agent's reports", function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->enrolled()->create([
+        'name' => 'drifted',
+        'last_report_error' => 'The metrics.cpu percent field must be a number.',
+        'last_report_error_at' => now()->subMinutes(2),
+    ]);
+
+    visit(route('admin.servers.show', $server, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-server-report-error="latest"]')
+        ->assertSeeIn('[data-server-report-error]', "The platform is rejecting this agent's reports")
+        ->assertSeeIn('[data-server-report-error]', 'The metrics.cpu percent field must be a number.')
+        ->assertSeeIn('[data-server-facts]', 'The agent has not reported yet.');
+});
+
+test('an older rejection stays on the server page as history', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = serverShowReportingServer([
+        'last_report_error' => 'The schema field is required.',
+        'last_report_error_at' => now()->subHour(),
+    ]);
+
+    visit(route('admin.servers.show', $server, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-server-report-error="past"]')
+        ->assertSeeIn('[data-server-report-error]', 'Last rejected report')
+        ->assertSeeIn('[data-server-report-error]', 'The schema field is required.');
+});

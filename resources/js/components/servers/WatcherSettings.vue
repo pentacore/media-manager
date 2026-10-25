@@ -13,7 +13,7 @@ import type { WatcherState } from './types';
  * minute. The saved URL carries the monitor's token, so the page only ever
  * receives its last four characters.
  */
-defineProps<{
+const props = defineProps<{
     watcher: WatcherState;
 }>();
 
@@ -22,8 +22,9 @@ const { confirm } = useConfirm();
 async function clear(): Promise<void> {
     const confirmed = await confirm({
         title: 'Remove the push URL?',
-        description:
-            'Nothing outside this platform will notice when it stops working.',
+        description: props.watcher.environment_push_url_set
+            ? 'The URL set by MEDIAMANAGER_UPTIME_KUMA_PUSH_URL in the environment takes over.'
+            : 'Nothing outside this platform will notice when it stops working.',
         confirmLabel: 'Remove',
         destructive: true,
     });
@@ -68,7 +69,11 @@ async function clear(): Promise<void> {
                 <template #label>
                     <Field
                         label="Push URL"
-                        hint="Leave empty to keep the saved URL."
+                        :hint="
+                            watcher.push_url_source === 'environment'
+                                ? 'A saved URL replaces the environment one.'
+                                : 'Leave empty to keep the saved URL.'
+                        "
                     />
                 </template>
                 <div class="min-w-0 space-y-2">
@@ -84,7 +89,16 @@ async function clear(): Promise<void> {
                         class="text-[12px] text-muted-foreground"
                         data-watcher-hint
                     >
-                        <template v-if="watcher.push_url_set">
+                        <template
+                            v-if="watcher.push_url_source === 'environment'"
+                        >
+                            The URL in use comes from the environment and ends
+                            in
+                            <span class="font-mono-tabular text-foreground">{{
+                                watcher.push_url_hint
+                            }}</span>
+                        </template>
+                        <template v-else-if="watcher.push_url_set">
                             Saved URL ends in
                             <span class="font-mono-tabular text-foreground">{{
                                 watcher.push_url_hint
@@ -92,13 +106,23 @@ async function clear(): Promise<void> {
                         </template>
                         <template v-else>No push URL saved.</template>
                     </p>
+                    <p
+                        v-if="watcher.push_url_source === 'environment'"
+                        class="text-[12px] text-muted-foreground"
+                        data-watcher-environment-note
+                    >
+                        Set by
+                        <span class="font-mono-tabular break-all"
+                            >MEDIAMANAGER_UPTIME_KUMA_PUSH_URL</span
+                        >; to stop the pings, remove it from the environment.
+                    </p>
                     <InputError :message="errors.push_url" />
                 </div>
             </SettingsRow>
 
             <div class="flex flex-wrap justify-end gap-2">
                 <Button
-                    v-if="watcher.push_url_set"
+                    v-if="watcher.push_url_source === 'saved'"
                     type="button"
                     variant="outline"
                     size="sm"

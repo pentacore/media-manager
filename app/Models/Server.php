@@ -35,6 +35,8 @@ use Override;
  * @property CarbonImmutable|null $enrolled_at
  * @property CarbonImmutable|null $last_report_at
  * @property array<string, mixed>|null $last_report
+ * @property string|null $last_report_error
+ * @property CarbonImmutable|null $last_report_error_at
  * @property array<string, mixed> $rule_state
  * @property int $config_version
  * @property int $report_interval_seconds
@@ -66,6 +68,8 @@ use Override;
     'enrolled_at',
     'last_report_at',
     'last_report',
+    'last_report_error',
+    'last_report_error_at',
     'rule_state',
     'config_version',
     'report_interval_seconds',
@@ -98,6 +102,7 @@ class Server extends Model
             'enrolled_at' => 'immutable_datetime',
             'last_report_at' => 'immutable_datetime',
             'last_report' => 'array',
+            'last_report_error_at' => 'immutable_datetime',
             'rule_state' => 'array',
         ];
     }
@@ -155,13 +160,15 @@ class Server extends Model
     }
 
     /**
-     * Requires the withStatus() scope on the query that loaded this server, or loadStatus() on it.
+     * Requires the withStatus() scope on the query that loaded this server, or loadStatus() on it. An enrolled server
+     * whose reports never got through (every one rejected) is silent once the sweep says so, not pending forever.
      */
     public function status(): ServerStatus
     {
         return match (true) {
-            ! $this->isEnrolled() || $this->last_report_at === null => ServerStatus::Pending,
+            ! $this->isEnrolled() => ServerStatus::Pending,
             (bool) $this->silent_incident_exists => ServerStatus::Silent,
+            $this->last_report_at === null => ServerStatus::Pending,
             (int) $this->open_incidents_count > 0 => ServerStatus::Incident,
             default => ServerStatus::Ok,
         };

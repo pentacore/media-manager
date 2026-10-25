@@ -47,7 +47,7 @@ test('the index lists servers with status, version and open incidents', function
             ->where('servers.meta.per_page', 25)
             ->has('servers.links')
             ->where('latestAgentVersion', '0.3.0')
-            ->where('watcher', ['push_url_set' => false, 'push_url_hint' => null]));
+            ->where('watcher', ['push_url_set' => false, 'push_url_hint' => null, 'push_url_source' => null, 'environment_push_url_set' => false]));
 });
 
 test('the index shows only the last four characters of the watcher url', function (): void {
@@ -56,10 +56,21 @@ test('the index shows only the last four characters of the watcher url', functio
     $response = $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.servers.index'))
         ->assertInertia(fn ($page) => $page
-            ->where('watcher', ['push_url_set' => true, 'push_url_hint' => '…z9k2'])
+            ->where('watcher', ['push_url_set' => true, 'push_url_hint' => '…z9k2', 'push_url_source' => 'saved', 'environment_push_url_set' => false])
             ->where('latestAgentVersion', null));
 
     expect($response->getContent())->not->toContain('secretz9k2');
+});
+
+test('the index says when the watcher url comes from the environment', function (): void {
+    config()->set('mediamanager.monitoring.uptime_kuma_push_url', 'https://kuma.test/api/push/fromenvq7w1');
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.servers.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('watcher', ['push_url_set' => true, 'push_url_hint' => '…q7w1', 'push_url_source' => 'environment', 'environment_push_url_set' => true]));
+
+    expect($response->getContent())->not->toContain('fromenvq7w1');
 });
 
 test('adding a server flashes enrollment instructions once and stores only a hash', function (): void {

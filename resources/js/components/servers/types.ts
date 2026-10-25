@@ -47,6 +47,9 @@ export interface EnrollmentInstructions {
 export interface WatcherState {
     push_url_set: boolean;
     push_url_hint: string | null;
+    /** Where the URL in use comes from: saved through this form, or MEDIAMANAGER_UPTIME_KUMA_PUSH_URL. */
+    push_url_source: 'saved' | 'environment' | null;
+    environment_push_url_set: boolean;
 }
 
 /** A `{value, label}` pair for an enum select. */
@@ -73,6 +76,9 @@ export interface ServerDetail {
     report_interval_seconds: number;
     uptime_seconds: number | null;
     enrollment_expires_at: string | null;
+    /** Why the platform last refused a report (a validation summary, no payload). */
+    last_report_error: string | null;
+    last_report_error_at: string | null;
 }
 
 /** One filesystem of the latest report; its byte and percent fields are null while it is unresponsive. */
