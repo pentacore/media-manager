@@ -12,10 +12,10 @@ import {
 } from '@/components/benchmarks';
 import type {
     BenchmarkCasePayload,
+    BenchmarkAttachmentEntry,
     BenchmarkExpectedAction,
     BenchmarkExpectedPrice,
     BenchmarkFixture,
-    BenchmarkHistoryTurn,
     BenchmarkScoringKind,
     BenchmarkTaskOption,
 } from '@/components/benchmarks';
@@ -70,6 +70,28 @@ function normalizePrice(
     };
 }
 
+/** Saved attachments of a turn (`null` = the final prompt), then draft copies. */
+function turnEntries(turn: number | null): BenchmarkAttachmentEntry[] {
+    return [
+        ...(props.case?.attachments ?? [])
+            .filter((attachment) => attachment.turn === turn)
+            .map((attachment): BenchmarkAttachmentEntry => ({
+                kind: 'saved',
+                id: attachment.id,
+                name: attachment.name,
+                size: attachment.size,
+            })),
+        ...(props.draft?.draft_attachments ?? [])
+            .filter((attachment) => attachment.turn === turn)
+            .map((attachment): BenchmarkAttachmentEntry => ({
+                kind: 'draft',
+                chatAttachmentId: attachment.chat_attachment_id,
+                name: attachment.name,
+                size: attachment.size,
+            })),
+    ];
+}
+
 const initialTask = source?.task ?? props.tasks[0]?.value ?? 'chat';
 
 const form = useForm({
@@ -79,8 +101,13 @@ const form = useForm({
     notes: source?.notes ?? '',
     input: {
         prompt: source?.input.prompt ?? '',
-        history: [...(source?.input.history ?? [])] as BenchmarkHistoryTurn[],
+        history: (source?.input.history ?? []).map((turn, index) => ({
+            ...turn,
+            attachments: turnEntries(index),
+        })),
         mode: source?.input.mode ?? '',
+        conversation: source?.input.conversation ?? 'context',
+        attachments: turnEntries(null),
         event_key: source?.input.event_key ?? '',
         providers: [...(source?.input.providers ?? [])],
     },
@@ -159,8 +186,12 @@ form.transform((data) => {
     const input: Record<string, unknown> = { prompt: data.input.prompt };
 
     if (data.task === 'chat') {
-        input.history = data.input.history;
+        input.history = data.input.history.map(({ role, content }) => ({
+            role,
+            content,
+        }));
         input.mode = data.input.mode === '' ? null : data.input.mode;
+        input.conversation = data.input.conversation;
     }
 
     if (data.task === 'decision') {
@@ -194,7 +225,35 @@ form.transform((data) => {
         scoring.pass_threshold = numberOrNull(data.scoring.pass_threshold);
     }
 
-    return {
+    const keep: Record<string, number[]> = {};
+    const drafts: Record<string, number[]> = {};
+    const files: Record<string, File[]> = {};
+
+    if (data.task === 'chat') {
+        const turns: Array<[string, BenchmarkAttachmentEntry[]]> = [
+            ...data.input.history.map(
+                (turn, index): [string, BenchmarkAttachmentEntry[]] => [
+                    String(index),
+                    turn.role === 'user' ? turn.attachments : [],
+                ],
+            ),
+            ['final', data.input.attachments],
+        ];
+
+        for (const [key, entries] of turns) {
+            for (const entry of entries) {
+                if (entry.kind === 'saved') {
+                    (keep[key] ??= []).push(entry.id);
+                } else if (entry.kind === 'draft') {
+                    (drafts[key] ??= []).push(entry.chatAttachmentId);
+                } else {
+                    (files[key] ??= []).push(entry.file);
+                }
+            }
+        }
+    }
+
+    const body = {
         task: data.task,
         name: data.name,
         tags: data.tags,
@@ -206,6 +265,15 @@ form.transform((data) => {
         source_prompt_tokens: data.source_prompt_tokens,
         source_completion_tokens: data.source_completion_tokens,
         source_truncated: data.source_truncated,
+        ...(data.task === 'chat'
+            ? { keep_attachment_ids: keep, draft_attachment_ids: drafts }
+            : {}),
+    };
+
+    return {
+        payload: JSON.stringify(body),
+        attachments: files,
+        ...(editing ? { _method: 'put' } : {}),
     };
 });
 
@@ -216,13 +284,12 @@ function save(): void {
         return;
     }
 
-    if (props.case?.id !== undefined) {
-        form.put(BenchmarkCaseController.update.url(props.case.id));
-
-        return;
-    }
-
-    form.post(BenchmarkCaseController.store.url());
+    form.post(
+        props.case?.id !== undefined
+            ? BenchmarkCaseController.update.url(props.case.id)
+            : BenchmarkCaseController.store.url(),
+        { forceFormData: true },
+    );
 }
 
 const selectClass =

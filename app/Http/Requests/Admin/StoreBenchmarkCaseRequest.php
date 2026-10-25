@@ -39,6 +39,8 @@ class StoreBenchmarkCaseRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $this->nestFlatAttachmentFiles();
+
         $payload = $this->input('payload');
 
         if (! is_string($payload)) {
@@ -49,6 +51,26 @@ class StoreBenchmarkCaseRequest extends FormRequest
 
         if (is_array($decoded)) {
             $this->merge(Arr::except($decoded, ['attachments', 'payload']));
+        }
+    }
+
+    /**
+     * Some multipart readers (the browser-test HTTP server) keep a nested file name such
+     * as `attachments[final][0]` as one flat key where PHP would nest it; nest it here.
+     */
+    private function nestFlatAttachmentFiles(): void
+    {
+        $nested = [];
+
+        foreach ($this->files->all() as $name => $file) {
+            if (preg_match('/^attachments\[([^\]]+)\]\[\d*\]$/', (string) $name, $matches) === 1) {
+                $nested[$matches[1]][] = $file;
+                $this->files->remove($name);
+            }
+        }
+
+        if ($nested !== []) {
+            $this->files->set('attachments', $nested);
         }
     }
 }

@@ -9,7 +9,12 @@ use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
+use App\Models\ChatAttachment;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -221,4 +226,86 @@ test('switching away from the actions scoring clears an invalid expected-action 
         ->fill('[data-benchmark-prompt]', 'Prompt')
         ->click('[data-benchmark-save]')
         ->assertSee('Benchmark case created.');
+});
+
+test('an admin attaches files to a chat case, removes one and saves it as scripted', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'chat')
+        ->fill('[data-benchmark-name]', 'Stuck screenshot')
+        ->fill('[data-benchmark-prompt]', 'What does this error mean?')
+        ->click('[data-benchmark-history-add]')
+        ->fill('[data-benchmark-history-content]', 'Here is my first screenshot.')
+        ->attach('[data-benchmark-attachments="final"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/stuck-log.txt'))
+        ->attach('[data-benchmark-attachments="0"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/stuck-log.txt'))
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment]', 'stuck-log.txt')
+        ->assertSeeIn('[data-benchmark-attachments="0"] [data-benchmark-attachment]', 'stuck-log.txt')
+        ->click('[data-benchmark-attachments="0"] [data-benchmark-attachment-remove]')
+        ->assertMissing('[data-benchmark-attachments="0"] [data-benchmark-attachment]')
+        ->select('[data-benchmark-replay-mode]', 'scripted')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+
+    $benchmarkCase = BenchmarkCase::query()->sole();
+    $benchmarkCaseAttachment = BenchmarkCaseAttachment::query()->sole();
+    expect($benchmarkCase->isScripted())->toBeTrue()
+        ->and($benchmarkCase->input['history'])->toBe([['role' => 'user', 'content' => 'Here is my first screenshot.']])
+        ->and($benchmarkCaseAttachment->turn)->toBeNull()
+        ->and($benchmarkCaseAttachment->original_name)->toBe('stuck-log.txt');
+    Storage::disk('local')->assertExists($benchmarkCaseAttachment->path);
+});
+
+test('scripted mode greys out the recorded replies and saving keeps the attachments', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['name' => 'Dune chat', 'input' => [
+        'prompt' => 'And the sequel?', 'mode' => null, 'conversation' => 'context',
+        'history' => [['role' => 'user', 'content' => 'Is Dune in the library?'], ['role' => 'assistant', 'content' => 'Yes.']],
+    ]]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment]', 'screenshot.png')
+        ->assertMissing('[data-benchmark-history-ignored]')
+        ->select('[data-benchmark-replay-mode]', 'scripted')
+        ->assertSeeIn('[data-benchmark-history-ignored]', 'ignored in this mode')
+        ->fill('[data-benchmark-name]', 'Dune chat, scripted')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case updated.');
+
+    expect($benchmarkCase->fresh()->isScripted())->toBeTrue()
+        ->and($attachment->fresh()?->turn)->toBeNull();
+    Storage::disk('local')->assertExists($attachment->path);
+});
+
+test('a captured chat turn shows its attachment as a pending copy and copies it on save', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    $chatAttachment = ChatAttachment::factory()->create(['conversation_id' => $conversationId]);
+    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => $turnAt, 'updated_at' => $turnAt]);
+    DB::table('agent_conversation_messages')->insert([
+        'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+        'role' => 'user', 'content' => 'What does this error mean?', 'steps' => '[]', 'usage' => '[]', 'meta' => '[]',
+        'attachments' => json_encode([['type' => 'stored-image', 'name' => null, 'path' => $chatAttachment->path, 'disk' => 'local']]),
+        'created_at' => $turnAt, 'updated_at' => $turnAt,
+    ]);
+    $record = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class, 'kind' => AiUsageKind::Text, 'conversation_id' => $conversationId, 'created_at' => $turnAt,
+        'prompt_text' => "What does this error mean?\n\nAttachments: screenshot.png",
+    ]);
+
+    visit(route('admin.benchmarks.cases.create', ['from_usage' => $record->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertValue('[data-benchmark-prompt]', 'What does this error mean?')
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment-pending]', 'copied on save')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+
+    expect(Storage::disk('local')->get(BenchmarkCaseAttachment::query()->sole()->path))->toBe('png-bytes');
 });

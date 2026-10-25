@@ -3,17 +3,25 @@ import { Plus, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import type { BenchmarkHistoryTurn } from './types';
+import { cn } from '@/lib/utils';
+import CaseAttachmentList from './CaseAttachmentList.vue';
+import type {
+    BenchmarkAttachmentEntry,
+    BenchmarkConversationMode,
+    BenchmarkHistoryTurnForm,
+} from './types';
 
 type InputState = {
     prompt: string;
-    history: BenchmarkHistoryTurn[];
+    history: BenchmarkHistoryTurnForm[];
     mode: string;
+    conversation: BenchmarkConversationMode;
+    attachments: BenchmarkAttachmentEntry[];
     event_key: string;
     providers: string[];
 };
 
-defineProps<{
+const props = defineProps<{
     task: string;
     eventKeys: string[];
     /** Server validation errors keyed like `input.prompt`. */
@@ -49,15 +57,39 @@ function toggleProvider(provider: string, checked: boolean): void {
         : input.value.providers.filter((current) => current !== provider);
 }
 
+function isIgnored(turn: BenchmarkHistoryTurnForm): boolean {
+    return input.value.conversation === 'scripted' && turn.role === 'assistant';
+}
+
 function addHistoryTurn(): void {
     input.value.history = [
         ...input.value.history,
-        { role: 'user', content: '' },
+        { role: 'user', content: '', attachments: [] },
     ];
 }
 
 function removeHistoryTurn(index: number): void {
     input.value.history = input.value.history.filter((_, i) => i !== index);
+}
+
+/** The first server error under any of the attachment fields of a turn. */
+function attachmentError(key: string): string | undefined {
+    const fields = [
+        `attachments.${key}`,
+        `keep_attachment_ids.${key}`,
+        `draft_attachment_ids.${key}`,
+    ];
+    const match = Object.entries(props.errors).find(
+        ([field, message]) =>
+            message &&
+            fields.some(
+                (name) => field === name || field.startsWith(`${name}.`),
+            ),
+    );
+
+    return (
+        match?.[1] ?? (key === 'final' ? props.errors.attachments : undefined)
+    );
 }
 
 const selectClass =
@@ -81,24 +113,49 @@ const textareaClass =
             <InputError :message="errors['input.prompt']" />
         </label>
 
+        <CaseAttachmentList
+            v-if="task === 'chat'"
+            v-model="input.attachments"
+            turn-key="final"
+            :error="attachmentError('final')"
+        />
+
         <div
             v-if="task === 'chat'"
             class="grid gap-3"
             data-benchmark-chat-input
         >
-            <label class="grid gap-1.5 text-[12.5px] font-medium sm:max-w-xs">
-                Mode
-                <select
-                    v-model="input.mode"
-                    :class="selectClass"
-                    data-benchmark-mode
-                >
-                    <option value="">Current setting</option>
-                    <option value="executive">Executive</option>
-                    <option value="advisory">Advisory</option>
-                </select>
-                <InputError :message="errors['input.mode']" />
-            </label>
+            <div class="grid gap-3 sm:grid-cols-2">
+                <label class="grid gap-1.5 text-[12.5px] font-medium">
+                    Mode
+                    <select
+                        v-model="input.mode"
+                        :class="selectClass"
+                        data-benchmark-mode
+                    >
+                        <option value="">Current setting</option>
+                        <option value="executive">Executive</option>
+                        <option value="advisory">Advisory</option>
+                    </select>
+                    <InputError :message="errors['input.mode']" />
+                </label>
+                <label class="grid gap-1.5 text-[12.5px] font-medium">
+                    Replay mode
+                    <select
+                        v-model="input.conversation"
+                        :class="selectClass"
+                        data-benchmark-replay-mode
+                    >
+                        <option value="context">
+                            Recorded replies as context
+                        </option>
+                        <option value="scripted">
+                            Candidate answers every turn
+                        </option>
+                    </select>
+                    <InputError :message="errors['input.conversation']" />
+                </label>
+            </div>
 
             <div class="grid gap-2">
                 <div class="flex items-center justify-between">
@@ -117,7 +174,12 @@ const textareaClass =
                 <div
                     v-for="(turn, index) in input.history"
                     :key="index"
-                    class="grid gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[120px_1fr_auto]"
+                    :class="
+                        cn(
+                            'grid gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[120px_1fr_auto]',
+                            isIgnored(turn) && 'opacity-60',
+                        )
+                    "
                     data-benchmark-history-row
                 >
                     <select
@@ -132,14 +194,28 @@ const textareaClass =
                         <textarea
                             v-model="turn.content"
                             rows="2"
+                            :readonly="isIgnored(turn)"
                             :class="textareaClass"
                             data-benchmark-history-content
                         />
+                        <p
+                            v-if="isIgnored(turn)"
+                            class="text-[12px] text-muted-foreground"
+                            data-benchmark-history-ignored
+                        >
+                            ignored in this mode
+                        </p>
                         <InputError
                             :message="
                                 errors[`input.history.${index}.content`] ??
                                 errors[`input.history.${index}.role`]
                             "
+                        />
+                        <CaseAttachmentList
+                            v-if="turn.role === 'user'"
+                            v-model="turn.attachments"
+                            :turn-key="String(index)"
+                            :error="attachmentError(String(index))"
                         />
                     </div>
                     <Button
