@@ -44,6 +44,9 @@ class ServerCheckController extends Controller
 
     /**
      * The request forces `type` to the stored type, so only the params and the enabled flag change.
+     * Params are assigned only when they differ by value: jsonb hands them back in its own key order and with whole
+     * floats as integers, and the array cast compares strictly, so re-saving equal params would still count as a
+     * change, bump config_version and write an audit row.
      */
     public function update(StoreServerCheckRequest $storeServerCheckRequest, Server $server, ServerCheck $serverCheck, AuditLogger $auditLogger): RedirectResponse
     {
@@ -54,7 +57,11 @@ class ServerCheckController extends Controller
         DB::transaction(function () use ($server, $serverCheck, $validated, $auditLogger): void {
             $before = ['params' => $serverCheck->params, 'is_enabled' => $serverCheck->is_enabled];
 
-            $serverCheck->params = $this->params($serverCheck->type, $validated['params']);
+            $params = $this->params($serverCheck->type, $validated['params']);
+
+            if (! $this->sameParams($params, $serverCheck->params)) {
+                $serverCheck->params = $params;
+            }
 
             if (array_key_exists('is_enabled', $validated)) {
                 $serverCheck->is_enabled = (bool) $validated['is_enabled'];
@@ -127,7 +134,33 @@ class ServerCheckController extends Controller
     }
 
     /**
-     * Only the type's own keys are kept, blanks are dropped (the agent applies its defaults) and numbers are stored as numbers.
+     * Same keys and values, in any key order; numbers compare by value, so a stored `26` equals a submitted `26.0`.
+     *
+     * @param  array<string, mixed>  $params
+     * @param  array<string, mixed>  $stored
+     */
+    private function sameParams(array $params, array $stored): bool
+    {
+        ksort($stored);
+
+        if (array_keys($params) !== array_keys($stored)) {
+            return false;
+        }
+
+        foreach ($params as $key => $value) {
+            $storedValue = $stored[$key];
+            $bothNumbers = (is_int($value) || is_float($value)) && (is_int($storedValue) || is_float($storedValue));
+
+            if ($bothNumbers ? (float) $value !== (float) $storedValue : $value !== $storedValue) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Only the type's own keys are kept (key-sorted), blanks are dropped (the agent applies its defaults) and numbers are stored as numbers.
      *
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
@@ -146,6 +179,8 @@ class ServerCheckController extends Controller
                 default => $value,
             };
         }
+
+        ksort($known);
 
         return $known;
     }

@@ -11,11 +11,12 @@ use App\Models\User;
 /**
  * jsonb stores object keys in its own order and a whole float as an integer, so params are compared key-sorted.
  *
+ * @param  ServerCheck|array<string, mixed>|null  $serverCheck
  * @return array<string, mixed>
  */
-function sortedServerCheckParams(?ServerCheck $serverCheck): array
+function sortedServerCheckParams(ServerCheck|array|null $serverCheck): array
 {
-    $params = $serverCheck?->params ?? [];
+    $params = is_array($serverCheck) ? $serverCheck : $serverCheck?->params ?? [];
     ksort($params);
 
     return $params;
@@ -94,10 +95,30 @@ test('params are validated per type', function (string $type, array $params, str
     'source with a newline' => ['mount_present', ['path' => '/mnt/backups', 'source' => "nas:/backups\nx"], 'params.source'],
     'pattern with a slash' => ['file_freshness', ['path' => '/b', 'pattern' => '../*.sql', 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
     'pattern with a newline' => ['file_freshness', ['path' => '/b', 'pattern' => "*.sql\n*.gz", 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'path with a unicode line separator' => ['mountpoint_protected', ['path' => "/mnt/backups\u{2028}x"], 'params.path'],
+    'path with a next-line control' => ['mountpoint_protected', ['path' => "/mnt/backups\u{85}x"], 'params.path'],
+    'path with invalid utf-8' => ['mountpoint_protected', ['path' => "/mnt/\xFFbackups"], 'params.path'],
+    'source with invalid utf-8' => ['mount_present', ['path' => '/mnt/backups', 'source' => "nas:/\xC3("], 'params.source'],
+    'pattern with a unicode paragraph separator' => ['file_freshness', ['path' => '/b', 'pattern' => "*.sql\u{2029}*.gz", 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'pattern with an unclosed bracket' => ['file_freshness', ['path' => '/b', 'pattern' => 'backup-[0-9*.sql', 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'pattern with a stray closing bracket' => ['file_freshness', ['path' => '/b', 'pattern' => 'backup-0-9]*.sql', 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'pattern with an empty class' => ['file_freshness', ['path' => '/b', 'pattern' => 'backup-[]*.sql', 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'pattern with a trailing escape' => ['file_freshness', ['path' => '/b', 'pattern' => 'backup\\', 'warn_hours' => 1, 'crit_hours' => 2], 'params.pattern'],
+    'timeout above the agent cap' => ['db_ping', ['engine' => 'mysql', 'host' => 'db', 'port' => 3306, 'timeout_seconds' => 10], 'params.timeout_seconds'],
     'path as an array' => ['mountpoint_protected', ['path' => ['/mnt']], 'params.path'],
     'missing params' => ['mountpoint_protected', [], 'params'],
     'unknown type' => ['shell', ['path' => '/mnt'], 'type'],
 ]);
+
+test('well-formed file globs are accepted', function (string $pattern): void {
+    $server = Server::factory()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.servers.checks.store', $server), ['type' => 'file_freshness', 'params' => ['path' => '/mnt/backups', 'pattern' => $pattern, 'warn_hours' => 1, 'crit_hours' => 2]])
+        ->assertSessionHasNoErrors();
+
+    expect(ServerCheck::query()->sole()->params['pattern'])->toBe($pattern);
+})->with(['*', '*.tar.gz', 'backup-[0-9]*.sql', 'db_[^x]?.dump', 'nightly-[a-z0-9].gz', 'literal\\[name\\].txt', 'säkerhetskopia-*.zip']);
 
 test('hostnames and ip addresses are accepted as a database host', function (string $host): void {
     $server = Server::factory()->create();
@@ -132,6 +153,13 @@ test('editing, toggling and deleting are audited and bump the config version', f
         ->and($server->fresh()?->config_version)->toBe($version + 1)
         ->and(ActivityLog::query()->where('action', 'server_check.updated')->sole()->description)
         ->toBe('Updated check "File freshness: /mnt/nightly" on server "babel".');
+
+    /** @var array{params: array{from: array<string, mixed>, to: array<string, mixed>}} $changes */
+    $changes = ActivityLog::query()->where('action', 'server_check.updated')->sole()->metadata['changes'];
+
+    expect(array_keys($changes))->toBe(['params'])
+        ->and(sortedServerCheckParams($changes['params']['from']))->toBe(['crit_hours' => 48, 'path' => '/mnt/backups/daily', 'pattern' => '*.tar.gz', 'warn_hours' => 26])
+        ->and(sortedServerCheckParams($changes['params']['to']))->toBe(['crit_hours' => 24, 'path' => '/mnt/nightly', 'warn_hours' => 12]);
 
     $this->patch(route('admin.servers.checks.toggle', [$server, $serverCheck]), ['is_enabled' => false])
         ->assertSessionHas('inertia.flash_data.toast.message', 'Check paused.');
@@ -174,13 +202,15 @@ test('editing validates against the existing check type', function (): void {
     expect(sortedServerCheckParams($serverCheck->fresh()))->toBe(['engine' => 'postgres', 'host' => '127.0.0.1', 'port' => 5432]);
 });
 
-test('saving an unchanged check writes no audit row and keeps the config version', function (): void {
+test('saving an unchanged check writes no audit row and keeps the config version', function (string $state, array $params): void {
     $server = Server::factory()->create();
-    $serverCheck = ServerCheck::factory()->for($server)->mountpointProtected()->create();
+    $serverCheck = ServerCheck::factory()->for($server)->{$state}()->create();
     $version = $server->fresh()?->config_version;
     $this->actingAs(User::factory()->admin()->create());
 
-    $this->put(route('admin.servers.checks.update', [$server, $serverCheck]), ['params' => ['path' => '/mnt/backups']])
+    // Posted the way the form sends them: in CHECK_FIELDS order, numbers as strings, blanks for unset optional fields.
+    $this->put(route('admin.servers.checks.update', [$server, $serverCheck]), ['is_enabled' => true, 'params' => $params])
+        ->assertSessionHasNoErrors()
         ->assertSessionHas('inertia.flash_data.toast.message', 'Check saved.');
 
     $this->patch(route('admin.servers.checks.toggle', [$server, $serverCheck]), ['is_enabled' => true])
@@ -188,7 +218,11 @@ test('saving an unchanged check writes no audit row and keeps the config version
 
     expect(ActivityLog::query()->count())->toBe(0)
         ->and($server->fresh()?->config_version)->toBe($version);
-});
+})->with([
+    'mountpoint_protected' => ['mountpointProtected', ['path' => '/mnt/backups']],
+    'file_freshness' => ['fileFreshness', ['path' => '/mnt/backups/daily', 'pattern' => '*.tar.gz', 'warn_hours' => '26', 'crit_hours' => '48']],
+    'db_ping' => ['dbPing', ['engine' => 'postgres', 'host' => '127.0.0.1', 'port' => '5432', 'timeout_seconds' => '']],
+]);
 
 test('toggling needs is_enabled', function (): void {
     $server = Server::factory()->create();

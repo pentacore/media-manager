@@ -86,7 +86,7 @@ class StoreServerCheckRequest extends FormRequest
             'params.path.regex' => 'The path must start with / and fit on one line.',
             'params.mount.regex' => 'The mount must start with / and fit on one line.',
             'params.source.regex' => 'The source must fit on one line.',
-            'params.pattern.regex' => 'The pattern is a file name glob on one line, without /.',
+            'params.pattern.regex' => 'The pattern is a file name glob on one line, without / and with every [ closed by a ].',
             'params.crit_hours.gte' => 'The critical hours must be at least the warn hours.',
         ];
     }

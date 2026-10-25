@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import type { DbPingEngine, StoreServerCheckRequest } from '@/typefinder';
 import { CHECK_FIELDS, checkParams } from './checkFields';
+import type { CheckField } from './checkFields';
 import type { EnumOption, HostCheckType, ServerCheckRow } from './types';
 
 const props = defineProps<{
@@ -78,6 +79,22 @@ function changeType(value: AcceptableValue): void {
 
 function changeEngine(value: AcceptableValue): void {
     form.params.engine = typeof value === 'string' ? value : null;
+}
+
+function numberInputMode(field: CheckField): 'numeric' | 'decimal' | undefined {
+    if (field.kind !== 'number') {
+        return undefined;
+    }
+
+    return field.integer ? 'numeric' : 'decimal';
+}
+
+function numberStep(field: CheckField): '1' | 'any' | undefined {
+    if (field.kind !== 'number') {
+        return undefined;
+    }
+
+    return field.integer ? '1' : 'any';
 }
 
 function submit(): void {
@@ -184,10 +201,8 @@ function submit(): void {
                         :id="`check-param-${field.key}`"
                         :model-value="form.params[field.key] ?? ''"
                         :type="field.kind === 'number' ? 'number' : 'text'"
-                        :inputmode="
-                            field.kind === 'number' ? 'decimal' : undefined
-                        "
-                        :step="field.kind === 'number' ? 'any' : undefined"
+                        :inputmode="numberInputMode(field)"
+                        :step="numberStep(field)"
                         :placeholder="field.placeholder"
                         :required="field.required"
                         autocomplete="off"

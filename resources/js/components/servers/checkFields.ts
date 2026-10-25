@@ -6,6 +6,8 @@ export interface CheckField {
     label: string;
     kind: 'text' | 'number' | 'engine';
     required: boolean;
+    /** A whole-number field (port, timeout); the hour fields take decimals. */
+    integer?: boolean;
     placeholder?: string;
     hint?: string;
 }
@@ -95,6 +97,7 @@ export const CHECK_FIELDS: Record<HostCheckType, CheckField[]> = {
             key: 'port',
             label: 'Port',
             kind: 'number',
+            integer: true,
             required: true,
             placeholder: '5432',
         },
@@ -102,9 +105,10 @@ export const CHECK_FIELDS: Record<HostCheckType, CheckField[]> = {
             key: 'timeout_seconds',
             label: 'Timeout (seconds)',
             kind: 'number',
+            integer: true,
             required: false,
             placeholder: '5',
-            hint: 'Default 5',
+            hint: 'Default 5, at most 9',
         },
     ],
     mountpoint_protected: [

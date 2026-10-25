@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\HostCheckStatus;
+use App\Models\ActivityLog;
 use App\Models\Server;
 use App\Models\ServerCheck;
 use App\Models\ServerFilesystemSample;
@@ -248,6 +249,8 @@ test('an admin adds a file freshness check with per-type fields', function (): v
         ->click('[role="option"]:has-text("File freshness")')
         ->assertMissing('[data-check-field="fstype"]')
         ->assertSeeIn('[data-check-field="pattern"]', 'Default *')
+        ->assertAttribute('[data-check-field="warn_hours"] input', 'inputmode', 'decimal')
+        ->assertAttribute('[data-check-field="warn_hours"] input', 'step', 'any')
         ->fill('[data-check-field="path"] input', '/mnt/backups')
         ->fill('[data-check-field="pattern"] input', '*.tar.gz')
         ->fill('[data-check-field="warn_hours"] input', '26')
@@ -276,7 +279,9 @@ test('a database ping check picks its engine', function (): void {
     $webpage->click('[data-check-add]')
         ->click('[data-check-type]')
         ->click('[role="option"]:has-text("Database ping")')
-        ->assertSeeIn('[data-check-field="timeout_seconds"]', 'Default 5')
+        ->assertSeeIn('[data-check-field="timeout_seconds"]', 'Default 5, at most 9')
+        ->assertAttribute('[data-check-field="port"] input', 'inputmode', 'numeric')
+        ->assertAttribute('[data-check-field="port"] input', 'step', '1')
         ->click('[data-check-field="engine"] [role="combobox"]')
         ->click('[role="option"]:has-text("MySQL")')
         ->fill('[data-check-field="host"] input', 'db.lan')
@@ -338,6 +343,24 @@ test('an existing check opens pre-filled with its type locked and saves', functi
         ->assertValue('[data-check-field="path"] input', '')
         ->assertScript('document.querySelector("[data-check-type]").disabled', false);
 });
+
+test('saving an untouched check leaves the agent config alone', function (string $state): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+    $serverCheck = ServerCheck::factory()->for($server)->{$state}()->create();
+    $version = $server->fresh()?->config_version;
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->click(sprintf('[data-check-row="%d"] [data-check-edit]', $serverCheck->id))
+        ->click('[data-check-save]')
+        ->assertSee('Check saved.')
+        ->assertMissing('[data-check-dialog]');
+
+    expect($server->fresh()?->config_version)->toBe($version)
+        ->and(ActivityLog::query()->where('action', 'server_check.updated')->count())->toBe(0);
+})->with(['fileFreshness', 'dbPing']);
 
 test('a check can be paused and removed', function (): void {
     $this->actingAs(User::factory()->admin()->create());
