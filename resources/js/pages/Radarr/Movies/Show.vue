@@ -17,7 +17,7 @@ import {
     SearchButton,
 } from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
-import { Pill, Poster, StatusPill } from '@/components/mm';
+import { PageHeader, Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -29,6 +29,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
@@ -161,23 +162,24 @@ function confirmDelete() {
     <Head :title="movie.title" />
 
     <div class="flex flex-col gap-6 p-5">
-        <div class="flex items-center justify-between">
-            <Button
-                as-child
-                variant="ghost"
-                size="sm"
-                class="h-8 text-xs"
-                data-movie-back
-            >
-                <Link :href="MovieController.index.url()">
-                    <ArrowLeft class="size-3.5" />
-                    Back to movies
-                </Link>
-            </Button>
-            <div class="flex items-center gap-2">
+        <PageHeader align="center" primary-first>
+            <template #title>
+                <Button
+                    as-child
+                    variant="ghost"
+                    size="sm"
+                    class="h-8 text-xs sm:flex"
+                    data-movie-back
+                >
+                    <Link :href="MovieController.index.url()">
+                        <ArrowLeft class="size-3.5" />
+                        Back to movies
+                    </Link>
+                </Button>
+            </template>
+            <template v-if="can('manage-library')" #primaryAction>
                 <div
-                    v-if="can('manage-library')"
-                    class="flex items-center gap-2"
+                    class="flex flex-wrap items-center gap-2 sm:flex-nowrap"
                     data-movie-actions
                 >
                     <MonitorButton
@@ -196,7 +198,7 @@ function confirmDelete() {
                     <Button
                         variant="outline"
                         size="sm"
-                        class="h-8 text-xs"
+                        class="h-8 text-xs max-sm:hidden"
                         data-interactive-search
                         @click="interactiveOpen = true"
                     >
@@ -211,12 +213,10 @@ function confirmDelete() {
                         :current-id="movie.quality_profile_id"
                     />
                 </div>
+            </template>
+            <template v-if="can('manage-library')" #secondaryActions>
                 <Button
-                    v-if="
-                        movie.title_slug &&
-                        can('manage-library') &&
-                        connection.url
-                    "
+                    v-if="movie.title_slug && connection.url"
                     as-child
                     variant="outline"
                     size="sm"
@@ -233,7 +233,7 @@ function confirmDelete() {
                     </a>
                 </Button>
                 <Button
-                    v-if="movie.has_file && can('manage-library')"
+                    v-if="movie.has_file"
                     variant="outline"
                     size="sm"
                     class="h-8 text-xs"
@@ -243,63 +243,91 @@ function confirmDelete() {
                     <Replace class="size-3.5" />
                     Replace file
                 </Button>
-                <template v-if="can('manage-library')">
-                    <Dialog v-model:open="deleteDialogOpen">
-                        <DialogTrigger as-child>
+                <Dialog v-model:open="deleteDialogOpen">
+                    <DialogTrigger as-child>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            class="h-8 text-xs"
+                            data-delete-trigger
+                        >
+                            <Trash2 class="size-3.5" />
+                            Delete
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete {{ movie.title }}?</DialogTitle>
+                            <DialogDescription data-delete-description>
+                                Removes the movie from Radarr. Cannot be undone.
+                                Deletion may require approval in the Action
+                                Queue.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div class="flex items-center gap-2 py-2">
+                            <Checkbox id="delete_files" v-model="deleteFiles" />
+                            <label
+                                for="delete_files"
+                                class="text-[13px] leading-none"
+                            >
+                                Also delete files from disk
+                            </label>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                @click="deleteDialogOpen = false"
+                            >
+                                Cancel
+                            </Button>
                             <Button
                                 variant="destructive"
-                                size="sm"
-                                class="h-8 text-xs"
-                                data-delete-trigger
+                                data-delete-confirm
+                                :disabled="deleting"
+                                @click="confirmDelete"
                             >
-                                <Trash2 class="size-3.5" />
-                                Delete
+                                Confirm
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle
-                                    >Delete {{ movie.title }}?</DialogTitle
-                                >
-                                <DialogDescription data-delete-description>
-                                    Removes the movie from Radarr. Cannot be
-                                    undone. Deletion may require approval in the
-                                    Action Queue.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div class="flex items-center gap-2 py-2">
-                                <Checkbox
-                                    id="delete_files"
-                                    v-model="deleteFiles"
-                                />
-                                <label
-                                    for="delete_files"
-                                    class="text-[13px] leading-none"
-                                >
-                                    Also delete files from disk
-                                </label>
-                            </div>
-                            <DialogFooter>
-                                <Button
-                                    variant="outline"
-                                    @click="deleteDialogOpen = false"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    variant="destructive"
-                                    data-delete-confirm
-                                    :disabled="deleting"
-                                    @click="confirmDelete"
-                                >
-                                    Confirm
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-                </template>
-            </div>
-        </div>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </template>
+            <template v-if="can('manage-library')" #menu>
+                <DropdownMenuItem
+                    data-page-header-item="interactive-search"
+                    @select="interactiveOpen = true"
+                >
+                    Interactive search
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    v-if="movie.title_slug && connection.url"
+                    as-child
+                    data-page-header-item="open-radarr"
+                >
+                    <a
+                        :href="`${connection.url}/movie/${movie.title_slug}`"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink class="size-3.5" />Open in Radarr
+                    </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    v-if="movie.has_file"
+                    data-page-header-item="replace"
+                    @select="replaceDialogOpen = true"
+                >
+                    <Replace class="size-3.5" />Replace file
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    class="text-destructive focus:text-destructive"
+                    data-page-header-item="delete"
+                    @select="deleteDialogOpen = true"
+                >
+                    <Trash2 class="size-3.5" />Delete
+                </DropdownMenuItem>
+            </template>
+        </PageHeader>
 
         <div class="rounded-xl border border-border bg-card p-6">
             <div class="flex flex-col gap-6 md:flex-row">

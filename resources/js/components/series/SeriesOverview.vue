@@ -89,7 +89,7 @@ const { can } = useCan();
                             {{ series.runtime ? `${series.runtime} min` : '-' }}
                         </div>
                     </div>
-                    <div v-if="can('manage-library')">
+                    <div v-if="can('manage-library')" class="max-sm:col-span-2">
                         <div
                             class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                         >
