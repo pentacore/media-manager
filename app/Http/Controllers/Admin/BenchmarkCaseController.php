@@ -8,6 +8,7 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Benchmark\WriteToolDetector;
+use App\Ai\Decision\DecisionPrompt;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
 use App\Http\Controllers\Controller;
@@ -263,7 +264,7 @@ class BenchmarkCaseController extends Controller
     private function attributes(array $validated): array
     {
         $aiTask = AiTask::from($validated['task']);
-        $input = ['prompt' => $validated['input']['prompt']];
+        $input = ['prompt' => (string) ($validated['input']['prompt'] ?? '')];
 
         if ($aiTask === AiTask::Chat) {
             $input['history'] = array_map(static fn (array $turn): array => ['role' => $turn['role'], 'content' => $turn['content']], $validated['input']['history'] ?? []);
@@ -272,7 +273,16 @@ class BenchmarkCaseController extends Controller
         }
 
         if ($aiTask === AiTask::Decision) {
-            $input['event_key'] = $validated['input']['event_key'] ?? null;
+            $event = $validated['input']['event'] ?? null;
+
+            if (is_array($event)) {
+                $input['prompt'] = DecisionPrompt::build($event['service'], $event['event_type'], DecisionPrompt::payloadFromJson($event['payload_json']) ?? []);
+                $input['event'] = ['service' => $event['service'], 'event_type' => $event['event_type'], 'payload_json' => $event['payload_json']];
+                $input['action_kind'] = $validated['input']['action_kind'] ?? null;
+                $input['event_key'] = DecisionAgentSettings::eventKey($event['service'], $event['event_type']);
+            } else {
+                $input['event_key'] = $validated['input']['event_key'] ?? null;
+            }
         }
 
         if ($aiTask === AiTask::PriceUpdater) {

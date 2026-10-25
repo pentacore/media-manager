@@ -45,3 +45,15 @@ test('an empty payload is shown as an empty list, as production sends it', funct
     expect(DecisionPrompt::build('sonarr', 'Health', []))
         ->toContain("<untrusted_webhook_payload>\n[]\n</untrusted_webhook_payload>");
 });
+
+test('a payload is read back from its JSON text only when it is an object', function (string $json, ?array $expected): void {
+    expect(DecisionPrompt::payloadFromJson($json))->toBe($expected);
+})->with([
+    'object keeps its key order' => ['{"zeta": 1, "10": "ten", "alpha": 2}', ['zeta' => 1, 10 => 'ten', 'alpha' => 2]],
+    'empty object' => ['{}', []],
+    'list' => ['[1, 2]', null],
+    'empty list' => ['[]', null],
+    'scalar' => ['"text"', null],
+    'null' => ['null', null],
+    'invalid' => ['{bad', null],
+]);

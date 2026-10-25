@@ -7,6 +7,7 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\TitleAgent;
+use App\Ai\Decision\DecisionPrompt;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
@@ -49,6 +50,24 @@ function benchmarkCasePayload(array $overrides = []): array
         'fixtures' => [],
         'scoring' => ['type' => 'judge', 'rubric_note' => null, 'pass_threshold' => 7],
     ], $overrides);
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function benchmarkDecisionEventPayload(array $overrides = []): array
+{
+    return benchmarkCasePayload(array_replace_recursive([
+        'task' => 'decision',
+        'name' => 'Grab decision',
+        'input' => [
+            'prompt' => '',
+            'event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{"series": {"id": 7}}'],
+            'action_kind' => 'library_change',
+        ],
+        'scoring' => ['type' => 'actions', 'expected' => []],
+    ], $overrides));
 }
 
 function benchmarkTextUsage(string $agent, ?string $prompt, array $attributes = []): AiUsageRecord
@@ -435,7 +454,81 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     'rubric note too long' => [['scoring' => ['rubric_note' => str_repeat('a', 2001)]], 'scoring.rubric_note'],
     'fixture arguments as a list' => [['fixtures' => [['tool' => 'x', 'arguments' => ['dune', 'arrival'], 'result' => '']]], 'fixtures.0.arguments'],
     'expected arguments as a list' => [['task' => 'decision', 'scoring' => ['type' => 'actions', 'expected' => [['tool' => 'ProposeActionTool', 'arguments' => ['retry']]]]], 'scoring.expected.0.arguments'],
+    'event on a title case' => [['input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{}']]], 'input.event'],
+    'unknown event service' => [['task' => 'decision', 'input' => ['event' => ['service' => 'emby', 'event_type' => 'Grab', 'payload_json' => '{}']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.service'],
+    'event type missing' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => '', 'payload_json' => '{}']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.event_type'],
+    'event type too long' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => str_repeat('a', 101), 'payload_json' => '{}']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.event_type'],
+    'payload as a list' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '[1, 2]']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.payload_json'],
+    'payload not JSON' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{bad']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.payload_json'],
+    'payload too long' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => sprintf('{"a": "%s"}', str_repeat('a', 65_536))]], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.payload_json'],
+    'unknown action kind' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{}'], 'action_kind' => 'nope'], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.action_kind'],
 ]);
+
+test('a decision case from a webhook event derives its prompt and event key on save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkDecisionEventPayload())
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.benchmarks.cases.index'));
+
+    expect(BenchmarkCase::query()->sole()->input)->toEqual([
+        'prompt' => DecisionPrompt::build('sonarr', 'Grab', ['series' => ['id' => 7]]),
+        'event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{"series": {"id": 7}}'],
+        'action_kind' => 'library_change',
+        'event_key' => 'sonarr:Grab',
+    ]);
+});
+
+test('the derived prompt keeps the payload key order through a reload and a re-save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $payloadJson = '{"zeta": 1, "10": "ten", "alpha": {"b": 1, "a": 2}}';
+    $expected = DecisionPrompt::build('sonarr', 'Grab', json_decode($payloadJson, true));
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkDecisionEventPayload(['input' => ['event' => ['payload_json' => $payloadJson]]]))
+        ->assertSessionHasNoErrors();
+    $benchmarkCase = BenchmarkCase::query()->sole();
+
+    expect($benchmarkCase->input['prompt'])->toBe($expected)
+        ->and(strpos($expected, '"zeta"'))->toBeLessThan(strpos($expected, '"alpha"'))
+        ->and(strpos($expected, '"b"'))->toBeLessThan(strpos($expected, '"a"'));
+
+    $this->put(route('admin.benchmarks.cases.update', $benchmarkCase), benchmarkDecisionEventPayload(['input' => ['event' => $benchmarkCase->fresh()->input['event']]]))
+        ->assertSessionHasNoErrors();
+
+    expect($benchmarkCase->fresh()->input['prompt'])->toBe($expected);
+});
+
+test('an empty payload object saves and derives the production prompt', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkDecisionEventPayload(['input' => ['event' => ['payload_json' => '{}']]]))
+        ->assertSessionHasNoErrors();
+
+    expect(BenchmarkCase::query()->sole()->input['prompt'])->toBe(DecisionPrompt::build('sonarr', 'Grab', []));
+});
+
+test('a free-text decision case keeps its prompt and event key on update', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->create(['input' => ['prompt' => 'Download stuck at 99% for two days', 'event_key' => 'sonarr:Grab']]);
+
+    $this->put(route('admin.benchmarks.cases.update', $benchmarkCase), benchmarkCasePayload([
+        'task' => 'decision', 'name' => 'Renamed',
+        'input' => ['prompt' => 'Download stuck at 99% for two days', 'event_key' => 'sonarr:Grab', 'action_kind' => 'library_change'],
+        'scoring' => ['type' => 'actions', 'expected' => []],
+    ]))->assertSessionHasNoErrors();
+
+    expect($benchmarkCase->fresh()->input)->toEqual(['prompt' => 'Download stuck at 99% for two days', 'event_key' => 'sonarr:Grab']);
+});
+
+test('an empty event in the JSON body is rejected field by field', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $body = benchmarkDecisionEventPayload();
+    $body['input']['prompt'] = 'x';
+    $body['input']['event'] = new stdClass;
+
+    $this->post(route('admin.benchmarks.cases.store'), ['payload' => json_encode($body)])
+        ->assertSessionHasErrors(['input.event.service', 'input.event.event_type', 'input.event.payload_json']);
+});
 
 test('empty tool arguments are accepted as an empty object', function (): void {
     $this->actingAs(User::factory()->admin()->create());
