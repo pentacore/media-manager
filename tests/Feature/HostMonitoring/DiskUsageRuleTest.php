@@ -7,6 +7,7 @@ use App\Enums\IncidentStatus;
 use App\Models\Server;
 use App\Models\ServerIncident;
 use App\Models\User;
+use App\Notifications\HostIncidentEscalated;
 use App\Notifications\HostIncidentOpened;
 use App\Notifications\HostIncidentResolved;
 use Illuminate\Support\Facades\Notification;
@@ -203,6 +204,47 @@ test('a disk incident resolves once usage is at least three points below the war
     $server = Server::factory()->enrolled()->create();
 
     diskRuleReport($server, [diskRuleFilesystem('/', 86, 14)]);
+    diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
+    diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
+
+    expect(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Resolved);
+});
+
+test('a not-responding incident clears once the mount answers inside the hold band', function (): void {
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [AgentReportFixtures::agentFilesystem('/mnt/backups', unresponsive: true)]);
+    diskRuleReport($server, [diskRuleFilesystem('/mnt/backups', 84, 16)]);
+
+    expect(ServerIncident::query()->sole())->status->toBe(IncidentStatus::Open)->clear_streak->toBe(1);
+
+    diskRuleReport($server, [diskRuleFilesystem('/mnt/backups', 84, 16)]);
+
+    expect(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Resolved);
+});
+
+test('a critical usage incident steps down to a warning with a fresh title inside the hold band', function (): void {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    $server = Server::factory()->enrolled()->create();
+
+    diskRuleReport($server, [diskRuleFilesystem('/', 96, 4)]);
+    diskRuleReport($server, [diskRuleFilesystem('/', 84, 16)]);
+
+    expect(ServerIncident::query()->sole())
+        ->status->toBe(IncidentStatus::Open)
+        ->severity->toBe(IncidentSeverity::Warning)
+        ->title->toBe('Disk / is 84% full')
+        ->context->toMatchArray(['percent' => 84]);
+
+    diskRuleReport($server, [diskRuleFilesystem('/', 83, 17)]);
+
+    expect(ServerIncident::query()->sole())
+        ->status->toBe(IncidentStatus::Open)
+        ->severity->toBe(IncidentSeverity::Warning);
+    Notification::assertSentToTimes($admin, HostIncidentOpened::class, 1);
+    Notification::assertNotSentTo($admin, HostIncidentEscalated::class);
+
     diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
     diskRuleReport($server, [diskRuleFilesystem('/', 82, 18)]);
 
