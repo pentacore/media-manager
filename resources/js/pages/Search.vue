@@ -279,7 +279,7 @@ function openTitle(item: DiscoverTitle): void {
                     <X class="size-3.5" />
                 </button>
                 <kbd
-                    class="font-mono-tabular flex items-center gap-0.5 rounded border border-border bg-card px-1 py-px text-[10px] text-muted-foreground"
+                    class="font-mono-tabular flex items-center gap-0.5 rounded border border-border bg-card px-1 py-px text-[10px] text-muted-foreground max-sm:hidden"
                 >
                     <Command class="size-2.5" />K
                 </kbd>
@@ -457,7 +457,7 @@ function openTitle(item: DiscoverTitle): void {
                             :href="sonarrSeriesUrl(series.title_slug)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                            class="touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
                         >
                             <ExternalLink class="size-3" />
                         </a>
@@ -499,7 +499,7 @@ function openTitle(item: DiscoverTitle): void {
                             :href="radarrMovieUrl(movie.title_slug)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                            class="touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
                         >
                             <ExternalLink class="size-3" />
                         </a>

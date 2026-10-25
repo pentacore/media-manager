@@ -756,11 +756,14 @@ const rangeText = computed(() => {
                         />
                     </div>
 
-                    <div class="mt-auto flex items-center gap-2 pt-1.5">
+                    <div
+                        class="mt-auto flex items-center gap-2 pt-1.5 max-sm:flex-wrap"
+                    >
                         <template v-if="req.status === 1">
                             <Button
                                 size="sm"
                                 class="h-7 flex-1 text-xs"
+                                data-request-approve
                                 @click="approveRequest(req)"
                             >
                                 <Check class="size-3.5" />Approve
@@ -780,7 +783,7 @@ const rangeText = computed(() => {
                             :href="tmdbUrl(req)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="TMDB"
                         >
                             <Database class="size-3.5" />
@@ -790,7 +793,7 @@ const rangeText = computed(() => {
                             :href="tvdbUrl(req)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="TVDB"
                         >
                             <Tv class="size-3.5" />
@@ -800,7 +803,7 @@ const rangeText = computed(() => {
                             :href="seerrUrl(req)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Seerr"
                         >
                             <ExternalLink class="size-3.5" />
@@ -808,7 +811,7 @@ const rangeText = computed(() => {
                         <button
                             v-if="isAdmin"
                             type="button"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Edit profile / root folder"
                             data-request-edit
                             @click="openEdit(req)"
@@ -818,7 +821,7 @@ const rangeText = computed(() => {
                         <button
                             v-if="isAdmin"
                             type="button"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Retry"
                             @click="retryRequest(req)"
                         >
@@ -827,7 +830,7 @@ const rangeText = computed(() => {
                         <button
                             v-if="isAdmin"
                             type="button"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
                             title="Delete"
                             data-request-delete
                             @click="deleteRequest(req)"
