@@ -140,7 +140,9 @@ class ActionOrchestrator
      * view of the triggering event.
      *
      * Second opinion: when the type's rule sets one (anything but Off), an
-     * independent verifier checks the proposal before it is stored. A
+     * independent verifier checks the proposal before it is stored (the run's
+     * event can override the type's mode, engine, threshold and verifier model,
+     * see SecondOpinionVerifier::policyFor()). A
      * disagreement under Hold forces approval; under Reject the request is
      * created already Rejected and never runs. A failed check always holds,
      * never rejects. The verdict is stored on the request, and the returned
@@ -201,7 +203,8 @@ class ActionOrchestrator
             }
         }
 
-        $secondOpinionMode = $config->second_opinion;
+        $secondOpinionPolicy = $this->secondOpinionVerifier->policyFor($type, $config->second_opinion, $decisionRunContext?->eventKey());
+        $secondOpinionMode = $secondOpinionPolicy->mode;
         $secondOpinionVerdict = $secondOpinionMode === SecondOpinionMode::Off
             ? null
             : $this->secondOpinionVerifier->verify(new SecondOpinionCase(
@@ -213,7 +216,7 @@ class ActionOrchestrator
                 sourceService: $sourceService,
                 eventType: $decisionRunContext?->eventType,
                 eventPayload: $decisionRunContext->eventPayload ?? [],
-            ), $decisionRunContext?->deadline);
+            ), $decisionRunContext?->deadline, $secondOpinionPolicy);
 
         // A second opinion can only tighten the gate: hold or reject, never
         // release. It caused a hold only when nothing else required approval.
@@ -240,7 +243,7 @@ class ActionOrchestrator
                 'reason' => 'second_opinion_rejected',
                 'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict->reason ?? 'no reason given.'),
             ] : null,
-            'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode),
+            'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode, $secondOpinionPolicy->overrideEventKey()),
         ]);
 
         $actionRequest->heldBySecondOpinion = $heldBySecondOpinion;
