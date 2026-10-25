@@ -209,3 +209,44 @@ test("an episode's interactive search names the episode in its heading", functio
         ->assertSeeIn('[data-interactive-search-dialog]', 'Interactive search — S01E01 Example Pilot Episode')
         ->assertNoSmoke();
 });
+
+test('the series page opens the replace dialog for the episode in the link', function (): void {
+    seriesSectionsFakeSonarr();
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false))
+        ->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]')
+        ->assertSeeIn('[data-replacement-dialog]', 'Replace file')
+        ->assertNoSmoke();
+});
+
+test('a malformed replace link opens nothing', function (): void {
+    seriesSectionsFakeSonarr();
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 'abc'], absolute: false))
+        ->assertSee('Example Series Title')
+        ->assertMissing('[data-replacement-dialog]')
+        ->assertNoSmoke();
+});
+
+test('a processed webhook reload does not reopen a closed replace dialog', function (): void {
+    seriesSectionsFakeSonarr();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false))
+        ->assertPresent('[data-replacement-dialog]');
+    $webpage->script(appHydratedScript());
+    $webpage->script(seriesSectionsReloadRecorderScript());
+    $webpage->script("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-replacement-dialog]') === null"));
+
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
+        'id' => 7002, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
+        'event_type' => 'Download', 'processed_at' => '2026-10-12T10:00:00.000000Z',
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript("window.__seriesSectionsReloads.includes('series,episodes')"));
+
+    $webpage->assertMissing('[data-replacement-dialog]')
+        ->assertNoSmoke();
+});

@@ -321,7 +321,12 @@ watch(
 
 <template>
     <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
-        <DialogContent class="max-w-2xl" data-replacement-dialog>
+        <DialogContent
+            class="max-w-2xl"
+            data-replacement-dialog
+            :data-replacement-season="seasonNumber"
+            :data-replacement-episode="episodeNumber"
+        >
             <DialogHeader>
                 <DialogTitle>Replace file</DialogTitle>
                 <DialogDescription>

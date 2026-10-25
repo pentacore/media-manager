@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { Head, usePage } from '@inertiajs/vue3';
+import { onMounted, ref, watch } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { InteractiveSearchDialog } from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
@@ -70,6 +70,40 @@ function openReplaceDialog(episode: Episode): void {
     };
     replaceDialogOpen.value = true;
 }
+
+/**
+ * Opens the replace dialog for the episode named by a `replace_season` /
+ * `replace_episode` link (the chat's "Pick release"). Runs on mount and on
+ * every URL change, so a link followed while already on this series works;
+ * unrelated prop reloads keep the URL and so never reopen it.
+ */
+const page = usePage();
+
+watch(
+    () => page.url,
+    (url) => {
+        const query = new URL(url, 'http://localhost').searchParams;
+        const season = query.get('replace_season');
+        const episode = query.get('replace_episode');
+
+        if (
+            season === null ||
+            episode === null ||
+            !/^\d+$/.test(season) ||
+            !/^\d+$/.test(episode) ||
+            Number(episode) < 1
+        ) {
+            return;
+        }
+
+        replaceTarget.value = {
+            seasonNumber: Number(season),
+            episodeNumber: Number(episode),
+        };
+        replaceDialogOpen.value = true;
+    },
+    { immediate: true },
+);
 
 const interactiveOpen = ref(false);
 const interactive = ref<{
