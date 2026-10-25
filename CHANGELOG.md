@@ -1,3 +1,5 @@
+## [1.50.1](https://github.com/pentacore/media-manager/compare/v1.50.0...v1.50.1) (2026-10-25)
+
 # [1.50.0](https://github.com/pentacore/media-manager/compare/v1.49.1...v1.50.0) (2026-10-25)
 
 
