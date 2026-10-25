@@ -49,6 +49,10 @@ Broadcast::channel('admin.ai-prices', fn (User $user): bool => $user->role === U
 // are operator detail, not member-facing.
 Broadcast::channel('admin.media-replacement', fn (User $user): bool => $user->role === UserRole::Admin);
 
+// Host monitoring: agent reports and incident changes. Admin-only — the servers
+// pages are gated the same way and the payload names hosts and their problems.
+Broadcast::channel('admin.servers', fn (User $user): bool => $user->can(Abilities::ADMIN));
+
 // Per-conversation AI chat liveness — agent step updates ("Calling Sonarr…")
 // for the duration of a single in-flight chat turn. Caller must own the
 // conversation row. Auth allows subscription to archived conversations so

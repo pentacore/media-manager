@@ -26,6 +26,7 @@ enum SettingsGroup: string
     case AiFreeUsagePools = 'ai_free_usage_pools';
     case AiModelPrices = 'ai_model_prices';
     case AiModels = 'ai_models';
+    case Monitoring = 'monitoring';
 
     public function label(): string
     {
@@ -39,6 +40,7 @@ enum SettingsGroup: string
             self::AiFreeUsagePools => 'AI free usage pool',
             self::AiModelPrices => 'AI model price',
             self::AiModels => 'AI models',
+            self::Monitoring => 'Monitoring',
         };
     }
 
@@ -55,6 +57,7 @@ enum SettingsGroup: string
             self::MediaReplacement => ['ai.media_replacement'],
             self::BazarrAutomation => ['bazarr.automation'],
             self::Webhooks => ['webhooks.'],
+            self::Monitoring => ['monitoring.'],
             self::NotificationDestinations, self::AiFreeUsagePools, self::AiModelPrices, self::AiModels => [],
         };
     }

@@ -34,10 +34,17 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
     }
 
     /**
-     * Prevent sensitive request details from being logged by Telescope.
+     * Prevent sensitive request details from being logged by Telescope. Agent credentials (the bearer token, the
+     * enrollment token and the agent token it is exchanged for, in the request and in the enrollment response) and the outside watcher's push URL, whose token is
+     * part of the URL, are hidden in every environment: Telescope is only registered locally, where a real agent
+     * may still report.
      */
     protected function hideSensitiveRequestDetails(): void
     {
+        Telescope::hideRequestHeaders(['authorization']);
+        Telescope::hideRequestParameters(['enrollment_token', 'agent_token', 'push_url']);
+        Telescope::hideResponseParameters(['agent_token']);
+
         if ($this->app->environment('local')) {
             return;
         }

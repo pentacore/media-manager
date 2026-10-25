@@ -12,6 +12,7 @@ use App\Events\WebhookReceived;
 use App\Jobs\ReconcileBazarrConnection;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
+use App\Models\Server;
 use App\Services\Whisparr\WhisparrItemIndex;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
@@ -85,6 +86,17 @@ class AppServiceProvider extends ServiceProvider
             fn (Request $request): Limit => Limit::perMinute(max(1, (int) config('mediamanager.webhooks.rate_limit_per_minute', 300)))
                 ->by((string) $request->ip()),
         );
+        // Enrollment is limited per IP; reports per server, which agent.token puts on the request (it runs before this throttle).
+        RateLimiter::for('agent', function (Request $request): Limit {
+            if ($request->route()?->getName() === 'agent.enroll') {
+                return Limit::perMinute(max(1, (int) config('mediamanager.monitoring.enroll_rate_limit_per_minute', 10)))->by('enroll:'.$request->ip());
+            }
+
+            $server = $request->attributes->get('server');
+
+            return Limit::perMinute(max(1, (int) config('mediamanager.monitoring.report_rate_limit_per_minute', 30)))
+                ->by('report:'.($server instanceof Server ? $server->id : $request->ip()));
+        });
         // Named so it gets its own bucket: an unnamed `throttle:N,1` keys
         // solely on the user id, shared across every other unnamed throttle
         // in the app (heartbeat, password update, notification tests, ...),

@@ -78,6 +78,9 @@
         "Tests\\Browser\\SeerrRequestEditTest": 1.3377,
         "Tests\\Browser\\SeerrRequestsOutageTest": 0.5725,
         "Tests\\Browser\\SeriesShowSectionsTest": 4.7882,
+        "Tests\\Browser\\ServerIncidentsTest": 5.5889,
+        "Tests\\Browser\\ServerShowTest": 23.9094,
+        "Tests\\Browser\\ServersTest": 14.1274,
         "Tests\\Browser\\ServiceHealthRunChecksTest": 2.3937,
         "Tests\\Browser\\SettingsRowTest": 2.944,
         "Tests\\Browser\\SharedPagePropsTest": 2.0212,
@@ -91,6 +94,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.207,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
-    "checksum": "3f6e23dc1b8151305d727eaf2e9272f5",
-    "updated_at": "2026-10-25T11:03:06+00:00"
+    "checksum": "8949975904da8ac4cfbebc3ea1a0920c",
+    "updated_at": "2026-10-25T12:31:05+01:00"
 }

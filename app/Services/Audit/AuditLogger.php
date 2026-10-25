@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\NotificationDestination;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\MonitoringSettings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
@@ -26,13 +27,15 @@ final readonly class AuditLogger
     /**
      * Secret fields per audited subject beyond the key-name rule, keyed by the
      * subject's morph class or settings group. Discord and generic webhook
-     * destination URLs are credentials even though the key is just `url`.
+     * destination URLs are credentials even though the key is just `url`; so is the Uptime Kuma push URL
+     * (its token is in the path).
      *
      * @var array<string, list<string>>
      */
     public const array SUBJECT_SECRET_FIELDS = [
         'notification_destinations' => ['config.url'],
         NotificationDestination::class => ['config.url'],
+        'monitoring' => [MonitoringSettings::UPTIME_KUMA_PUSH_URL_KEY],
     ];
 
     /**
