@@ -41,10 +41,39 @@ export type BenchmarkHistoryTurn = {
     content: string;
 };
 
+export type BenchmarkConversationMode = 'context' | 'scripted';
+
+export type BenchmarkCaseAttachment = {
+    id: number;
+    turn: number | null;
+    name: string;
+    mime_type: string;
+    size: number;
+};
+
+export type BenchmarkDraftAttachment = {
+    chat_attachment_id: number;
+    turn: number | null;
+    name: string;
+    mime_type: string;
+    size: number;
+};
+
+/** One row of a turn's attachment list in the form. */
+export type BenchmarkAttachmentEntry =
+    | { kind: 'saved'; id: number; name: string; size: number }
+    | { kind: 'draft'; chatAttachmentId: number; name: string; size: number }
+    | { kind: 'new'; file: File; name: string; size: number };
+
+export type BenchmarkHistoryTurnForm = BenchmarkHistoryTurn & {
+    attachments: BenchmarkAttachmentEntry[];
+};
+
 export type BenchmarkCaseInput = {
     prompt?: string;
     history?: BenchmarkHistoryTurn[];
     mode?: string | null;
+    conversation?: BenchmarkConversationMode | null;
     event_key?: string | null;
     providers?: string[];
 };
@@ -71,6 +100,8 @@ export type BenchmarkCasePayload = {
     source_prompt_tokens?: number | null;
     source_completion_tokens?: number | null;
     source_truncated?: boolean;
+    attachments?: BenchmarkCaseAttachment[];
+    draft_attachments?: BenchmarkDraftAttachment[];
 };
 
 export type BenchmarkTaskOption = {
@@ -87,6 +118,8 @@ export type BenchmarkCaseRow = {
     fixture_count: number;
     scoring_type: BenchmarkScoringKind | null;
     source_invocation_id: string | null;
+    attachment_count: number;
+    scripted: boolean;
     updated_at: string | null;
 };
 
@@ -247,6 +280,12 @@ export type BenchmarkToolLogEntry = {
     refused?: true;
 };
 
+export type BenchmarkTranscriptTurn = {
+    role: 'user' | 'assistant';
+    content: string;
+    attachments: string[];
+};
+
 export type BenchmarkResultDetail = {
     case_id: number | null;
     case_name: string;
@@ -275,6 +314,7 @@ export type BenchmarkResultDetail = {
         };
         error: string | null;
         tool_log: BenchmarkToolLogEntry[];
+        transcript: BenchmarkTranscriptTurn[];
         latency_ms: number | null;
         cost_usd: number;
     }>;

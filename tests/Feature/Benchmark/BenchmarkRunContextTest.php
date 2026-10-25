@@ -180,3 +180,17 @@ test('stop restores normal resolution', function (): void {
         ->and($benchmarkRunContext->history())->toBe([])
         ->and([$resolvedSelection->provider, $resolvedSelection->model])->toBe(['openai', 'gpt-tier-chat']);
 });
+
+test('set history replaces the replayed history of the active run', function (): void {
+    $benchmarkRunContext = benchmarkContextStart(AiTask::Chat, null, [new UserMessage('Recorded question')]);
+    $transcript = [new UserMessage('Scripted question'), new AssistantMessage('Candidate reply')];
+
+    $benchmarkRunContext->setHistory($transcript);
+
+    expect($benchmarkRunContext->history())->toBe($transcript)
+        ->and([...(new MediaAgent)->messages()])->toBe($transcript);
+});
+
+test('set history refuses an inactive context', function (): void {
+    expect(fn () => resolve(BenchmarkRunContext::class)->setHistory([]))->toThrow(LogicException::class);
+});

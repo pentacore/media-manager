@@ -187,3 +187,17 @@ test('the chat agent replays stored history valid for the failover provider too'
     'gemini primary, mistral failover' => ['gemini', 'mistral', true],
     'mistral primary, gemini failover' => ['mistral', 'gemini', true],
 ]);
+
+test('assistant messages record the chat mode they ran in', function (): void {
+    MediaAgent::fake(['Hello']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'Hi', 'mode' => 'advisory'])->assertOk();
+
+    $meta = json_decode((string) DB::table('agent_conversation_messages')
+        ->where('conversation_id', $response->json('conversation_id'))
+        ->where('role', 'assistant')
+        ->value('meta'), true);
+
+    expect($meta['mode'])->toBe('advisory');
+});

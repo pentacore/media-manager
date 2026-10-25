@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Services\Benchmark\BenchmarkEstimator;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-candidate', 'input_per_mtok' => 2, 'output_per_mtok' => 8]);
@@ -110,4 +112,40 @@ test('a dated model variant is priced at its base model rate', function (): void
     );
 
     expect($estimate['rows'][0])->toMatchArray(['usd' => 0.008, 'priced' => true]);
+});
+
+test('a scripted chat case multiplies its token allowance by its user turns', function (): void {
+    $scripted = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'Then add it.', 'conversation' => 'scripted',
+        'history' => [['role' => 'user', 'content' => 'a'], ['role' => 'assistant', 'content' => 'b'], ['role' => 'user', 'content' => 'c']],
+    ]]);
+
+    $estimate = resolve(BenchmarkEstimator::class)->estimate(collect([$scripted]), [estimatorSelection('openai', 'gpt-candidate')], estimatorSelection('openai', 'gpt-judge'));
+
+    // 3 user turns: 6 000 prompt × $2 + 1 500 completion × $8 per Mtok; judge (1 500 + 2 × 1 500) × $1 + 300 × $4 per Mtok.
+    expect($estimate['rows'][0]['usd'])->toBe(0.024)
+        ->and($estimate['judge_usd'])->toBe(0.0057);
+});
+
+test('attachments add a flat allowance per image and a size-based one per document', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->create(['size' => 10_000]);
+
+    $estimate = resolve(BenchmarkEstimator::class)->estimate(collect([$benchmarkCase]), [estimatorSelection('openai', 'gpt-candidate')], null);
+
+    // 2 000 + 1 000 for the image + 2 500 for 10 000 bytes = 5 500 prompt × $2 + 500 × $8 per Mtok.
+    expect($estimate['rows'][0]['usd'])->toBe(0.015);
+});
+
+test('a large document counts at most twenty thousand tokens', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'Read this log']]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->create(['size' => 500_000]);
+
+    $estimate = resolve(BenchmarkEstimator::class)->estimate(collect([$benchmarkCase]), [estimatorSelection('openai', 'gpt-candidate')], null);
+
+    // 2 000 + 20 000 = 22 000 prompt × $2 + 500 × $8 per Mtok.
+    expect($estimate['rows'][0]['usd'])->toBe(0.048);
 });

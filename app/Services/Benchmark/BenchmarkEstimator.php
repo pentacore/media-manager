@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Benchmark;
 
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkResult;
 use App\Services\AiUsage\ModelPriceLookup;
 use Illuminate\Support\Collection;
@@ -13,7 +14,9 @@ use Illuminate\Support\Collection;
  * The pre-run cost estimate: per case × candidate, the case's source token
  * counts (a per-case default for hand-written cases) at the candidate's
  * catalog price, plus a judge allowance for every judged result. Unpriced
- * models contribute $0 and are listed so the form can flag them.
+ * models contribute $0 and are listed so the form can flag them. A scripted
+ * case multiplies its tokens by its number of user turns, and attachments add
+ * flat allowances: a fixed one per image, a size-based one (capped) per document.
  */
 final readonly class BenchmarkEstimator
 {
@@ -25,6 +28,12 @@ final readonly class BenchmarkEstimator
     private const int JUDGE_PROMPT_TOKENS = 1_500;
 
     private const int JUDGE_COMPLETION_TOKENS = 300;
+
+    private const int IMAGE_ATTACHMENT_TOKENS = 1_000;
+
+    private const int DOCUMENT_TOKEN_CAP = 20_000;
+
+    private const int BYTES_PER_TOKEN = 4;
 
     public function __construct(private ModelPriceLookup $modelPriceLookup) {}
 
@@ -43,9 +52,22 @@ final readonly class BenchmarkEstimator
         $judgeUsd = 0.0;
         $judgeUsed = false;
 
+        $attachmentsByCase = BenchmarkCaseAttachment::query()
+            ->whereIn('benchmark_case_id', $cases->map(static fn (BenchmarkCase $benchmarkCase): int => $benchmarkCase->id)->all())
+            ->get()
+            ->groupBy('benchmark_case_id');
+
         foreach ($cases as $case) {
-            $promptTokens = $case->source_prompt_tokens ?? self::DEFAULT_PROMPT_TOKENS;
-            $completionTokens = $case->source_completion_tokens ?? self::DEFAULT_COMPLETION_TOKENS;
+            $turns = $case->isScripted() ? count($case->userTurns()) : 1;
+            $promptTokens = ($case->source_prompt_tokens ?? self::DEFAULT_PROMPT_TOKENS) * $turns;
+            $completionTokens = ($case->source_completion_tokens ?? self::DEFAULT_COMPLETION_TOKENS) * $turns;
+
+            foreach ($attachmentsByCase->get($case->id, []) as $attachment) {
+                $promptTokens += $attachment->isImage()
+                    ? self::IMAGE_ATTACHMENT_TOKENS
+                    : min(self::DOCUMENT_TOKEN_CAP, (int) ceil($attachment->size / self::BYTES_PER_TOKEN));
+            }
+
             $judged = $case->isJudged();
 
             foreach ($candidates as $index => $candidate) {

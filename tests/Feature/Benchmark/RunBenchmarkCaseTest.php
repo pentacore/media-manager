@@ -18,17 +18,22 @@ use App\Models\ActionRequest;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Benchmark\BenchmarkRunLauncher;
+use App\Services\Benchmark\CaseAttachmentMissing;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
@@ -929,4 +934,200 @@ test('the job waits for a slot without burning tries but fails on its first exce
         ->and($payload['retryUntil'])->toBe(now()->addHours(12)->getTimestamp())
         ->and(new ReflectionClass(RunBenchmarkCase::class)->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)
         ->toBeGreaterThan(12 * 3600);
+});
+
+test('history user turns carry their attachments to the candidate', function (): void {
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $chatCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'What does this error mean?',
+        'history' => [['role' => 'user', 'content' => 'Here is the log.'], ['role' => 'assistant', 'content' => 'Thanks.']],
+    ]]);
+    BenchmarkCaseAttachment::factory()->for($chatCase)->text()->forTurn(0)->create();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $chatCase, 0)->create();
+    $seen = [];
+    MediaAgent::fake([function () use (&$seen): string {
+        $seen = array_map(
+            static fn (Message $message): array => $message instanceof UserMessage ? $message->attachments->map(static fn (File $file): ?string => $file->name())->all() : [],
+            resolve(BenchmarkRunContext::class)->history(),
+        );
+
+        return 'A stalled import.';
+    }]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($seen)->toBe([['download.log'], []]);
+});
+
+test('a candidate that cannot read images fails the result with its provider error and the run still completes', function (): void {
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $chatCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    BenchmarkCaseAttachment::factory()->for($chatCase)->image()->create();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $chatCase, 0)->create();
+    MediaAgent::fake(fn (): never => throw new RuntimeException('This model does not support image input.'));
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('This model does not support image input.')
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+function jobScriptedCase(): BenchmarkCase
+{
+    return BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'Then add it.',
+        'conversation' => 'scripted',
+        'history' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?'],
+            ['role' => 'assistant', 'content' => 'RECORDED REPLY'],
+            ['role' => 'user', 'content' => 'And the sequel?'],
+        ],
+    ]]);
+}
+
+test('a scripted result stores the candidate transcript next to the tool log', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake(['Yes.', 'Missing.', 'Queued.']);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkResult->output)->toBe('Queued.')
+        ->and($benchmarkResult->score_detail['tool_log'])->toBe([])
+        ->and($benchmarkResult->score_detail['transcript'])->toHaveCount(6)
+        ->and($benchmarkResult->score_detail['transcript'][1])->toBe(['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []]);
+});
+
+test('a scripted result whose middle turn fails keeps the earlier turns and names the turn', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake([
+        fn (): TextResponse => new TextResponse('Yes.', new TextUsage(100_000, 10_000), new Meta('openai', 'gpt-candidate')),
+        fn (): never => throw new RuntimeException('provider down'),
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('Turn 2 of 3 failed: provider down')
+        ->and($benchmarkResult->output)->toBe('Yes.')
+        ->and($benchmarkResult->prompt_tokens)->toBe(100_000)
+        ->and((float) $benchmarkResult->cost_usd)->toBe(0.28)
+        ->and($benchmarkResult->score_detail)->toBe(['tool_log' => [], 'transcript' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+            ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+            ['role' => 'user', 'content' => 'And the sequel?', 'attachments' => []],
+        ]])
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('a re-judge keeps the stored transcript, dropping malformed entries', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $kept = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['error' => 'judge overloaded', 'tool_log' => [], 'transcript' => [...$kept, 'garbage', ['role' => 'system', 'content' => 'x']]],
+    ]);
+    jobFakeJudge(9);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($kept);
+});
+
+test('re-judging a result whose case was deleted keeps the stored transcript', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $transcript = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['tool_log' => [], 'transcript' => $transcript],
+    ]);
+    $benchmarkResult->benchmarkCase->delete();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($benchmarkResult->score_detail['error'])->toBe('Case was deleted')
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($transcript);
+});
+
+test('a failed re-judge keeps the stored transcript', function (): void {
+    Exceptions::fake();
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $transcript = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['tool_log' => [], 'transcript' => $transcript],
+    ]);
+    BenchmarkJudgeAgent::fake([fn (): never => throw new RuntimeException('judge overloaded')]);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($benchmarkResult->score_detail['error'])->toBe('judge overloaded')
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($transcript);
+});
+
+test('a scripted result that fails on its first turn stores no output', function (): void {
+    Exceptions::fake();
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake([fn (): never => throw new RuntimeException('provider down')]);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('Turn 1 of 3 failed: provider down')
+        ->and($benchmarkResult->output)->toBeNull();
+});
+
+test('a missing case attachment fails the result without being reported', function (): void {
+    Exceptions::fake();
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    Storage::disk('local')->delete($attachment->path);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
+    Exceptions::assertNotReported(CaseAttachmentMissing::class);
 });

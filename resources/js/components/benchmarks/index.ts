@@ -1,4 +1,5 @@
 export { default as CandidateRows } from './CandidateRows.vue';
+export { default as CaseAttachmentList } from './CaseAttachmentList.vue';
 export { default as CaseInputFields } from './CaseInputFields.vue';
 export { default as CaseSelector } from './CaseSelector.vue';
 export * from './compare';

@@ -15,12 +15,14 @@ use App\Enums\AiTask;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Services\AiUsage\UsageColumns;
 use App\Support\UpstreamErrorText;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Responses\AgentResponse;
 use RuntimeException;
 use Throwable;
@@ -207,6 +209,8 @@ final readonly class BenchmarkScorer
         $scoring = $benchmarkCase->scoring;
         $threshold = (int) ($scoring['pass_threshold'] ?? self::DEFAULT_PASS_THRESHOLD);
 
+        $benchmarkCase->loadMissing('attachments');
+
         $judgePrompt = DefaultRubrics::judgePrompt(
             $benchmarkCase->task,
             (string) ($benchmarkCase->input['prompt'] ?? ''),
@@ -215,6 +219,8 @@ final readonly class BenchmarkScorer
             $caseOutcome->output,
             isset($scoring['rubric_note']) && is_string($scoring['rubric_note']) ? $scoring['rubric_note'] : null,
             $benchmarkCase->task === AiTask::Chat ? AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')) : null,
+            attachments: $this->attachmentLines($benchmarkCase),
+            transcript: $benchmarkCase->isScripted() ? $caseOutcome->transcript : [],
         );
 
         $agentResponse = null;
@@ -222,7 +228,7 @@ final readonly class BenchmarkScorer
         try {
             $this->aiBudgetGuard->enforce();
 
-            $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt);
+            $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt, attachments: $this->judgeImages($benchmarkCase));
 
             $rawScore = $agentResponse['score'] ?? null;
             $rationale = $agentResponse['rationale'] ?? '';
@@ -282,6 +288,41 @@ final readonly class BenchmarkScorer
         }
 
         return $history;
+    }
+
+    /**
+     * The case's attachments by turn (the final prompt last), then id.
+     *
+     * @return list<array{label: string, name: string, mime_type: string}>
+     */
+    private function attachmentLines(BenchmarkCase $benchmarkCase): array
+    {
+        return $benchmarkCase->attachments
+            ->sortBy([
+                static fn (BenchmarkCaseAttachment $left, BenchmarkCaseAttachment $right): int => ($left->turn ?? PHP_INT_MAX) <=> ($right->turn ?? PHP_INT_MAX),
+                ['id', 'asc'],
+            ])
+            ->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): array => [
+                'label' => $benchmarkCaseAttachment->turnLabel(),
+                'name' => $benchmarkCaseAttachment->original_name,
+                'mime_type' => $benchmarkCaseAttachment->mime_type,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The final prompt's images, the only files the judge receives.
+     *
+     * @return list<File>
+     */
+    private function judgeImages(BenchmarkCase $benchmarkCase): array
+    {
+        return $benchmarkCase->attachmentsFor(null)
+            ->filter(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): bool => $benchmarkCaseAttachment->isImage())
+            ->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): File => $benchmarkCaseAttachment->toSdkFile())
+            ->values()
+            ->all();
     }
 
     /**

@@ -1,3 +1,23 @@
+# [1.51.0](https://github.com/pentacore/media-manager/compare/v1.50.1...v1.51.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **benchmark:** keep transcripts on re-judge, budget scripted runs, tidy capture and attachment UX ([2ee40f0](https://github.com/pentacore/media-manager/commit/2ee40f002f3162d4fbf13835e10cc9b7c51de672))
+
+
+### Features
+
+* **benchmark:** capture chat turns with their attachments ([fc12383](https://github.com/pentacore/media-manager/commit/fc12383fd2884ae2550fe539f832346cc6b4646c))
+* **benchmark:** edit chat case attachments and replay mode ([32bf82d](https://github.com/pentacore/media-manager/commit/32bf82da8bf336e2f1e01f7dcdff866c5e79f4f3))
+* **benchmark:** estimate scripted and attachment cases ([f03652d](https://github.com/pentacore/media-manager/commit/f03652d7c7c3c391905722bd0d6f554b6bd790b7))
+* **benchmark:** judge attachments and scripted transcripts ([4f6b128](https://github.com/pentacore/media-manager/commit/4f6b1283d6016d3fe0d82068942c8383a43a68cc))
+* **benchmark:** run scripted multi-turn chat cases ([395c1ff](https://github.com/pentacore/media-manager/commit/395c1ff01383b5a76404444d5157f6b73c79b3d8))
+* **benchmark:** save chat case attachments from the case form ([267fbac](https://github.com/pentacore/media-manager/commit/267fbac182ddbf676f75abbd6374761e105799c5))
+* **benchmark:** send case attachments to the candidate ([bd122c6](https://github.com/pentacore/media-manager/commit/bd122c63c6d38597b541fe42fe7cbf1874a71880))
+* **benchmark:** show scripted transcripts and case badges ([f1e2b35](https://github.com/pentacore/media-manager/commit/f1e2b35d3fdeb4a5fb1cf4b59c981c78cc0a11dd))
+* **benchmark:** store attachments on benchmark cases ([0f740c7](https://github.com/pentacore/media-manager/commit/0f740c746ad588783cb953c5170a466908d733e1))
+
 ## [1.50.1](https://github.com/pentacore/media-manager/compare/v1.50.0...v1.50.1) (2026-10-25)
 
 # [1.50.0](https://github.com/pentacore/media-manager/compare/v1.49.1...v1.50.0) (2026-10-25)

@@ -6,8 +6,10 @@ namespace App\Concerns;
 
 use App\Enums\AiMode;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkConversationMode;
 use App\Enums\BenchmarkScoringType;
 use App\Models\AiToolInvocation;
+use App\Models\BenchmarkCaseAttachment;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -21,6 +23,8 @@ use Illuminate\Validation\Validator;
  */
 trait BenchmarkCaseValidationRules
 {
+    use ChatAttachmentValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -39,6 +43,7 @@ trait BenchmarkCaseValidationRules
             'input.history.*.role' => ['required', Rule::in(['user', 'assistant'])],
             'input.history.*.content' => ['required', 'string', 'max:20000'],
             'input.mode' => ['nullable', AiMode::validationRule()],
+            'input.conversation' => ['nullable', BenchmarkConversationMode::validationRule()],
             'input.event_key' => ['nullable', 'string', Rule::in(DecisionAgentSettings::availableEventKeys())],
             'input.providers' => [Rule::requiredIf(fn (): bool => $this->input('task') === AiTask::PriceUpdater->value), 'array'],
             'input.providers.*' => ['string'],
@@ -66,6 +71,15 @@ trait BenchmarkCaseValidationRules
             'source_prompt_tokens' => ['nullable', 'integer', 'min:0'],
             'source_completion_tokens' => ['nullable', 'integer', 'min:0'],
             'source_truncated' => ['nullable', 'boolean'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => ['array'],
+            'attachments.*.*' => ['file', $this->chatAttachmentFileRule()],
+            'keep_attachment_ids' => ['nullable', 'array'],
+            'keep_attachment_ids.*' => ['array'],
+            'keep_attachment_ids.*.*' => ['integer'],
+            'draft_attachment_ids' => ['nullable', 'array'],
+            'draft_attachment_ids.*' => ['array'],
+            'draft_attachment_ids.*.*' => ['integer'],
         ];
     }
 
@@ -108,6 +122,72 @@ trait BenchmarkCaseValidationRules
                     }
                 }
             },
+            function (Validator $validator): void {
+                $isChat = $this->input('task') === AiTask::Chat->value;
+                $history = $this->input('input.history');
+                $history = is_array($history) ? $history : [];
+
+                foreach ($this->attachmentTurnMaps() as $map => $turns) {
+                    foreach (array_keys($turns) as $key) {
+                        $key = (string) $key;
+
+                        if (! $isChat) {
+                            $validator->errors()->add($map, 'Only chat cases can carry attachments.');
+
+                            continue;
+                        }
+
+                        $isUserTurn = ctype_digit($key) && is_array($history[(int) $key] ?? null) && ($history[(int) $key]['role'] ?? null) === 'user';
+
+                        if ($key !== BenchmarkCaseAttachment::FINAL_TURN_KEY && ! $isUserTurn) {
+                            $validator->errors()->add(sprintf('%s.%s', $map, $key), 'Attachments belong to the prompt or a user turn.');
+                        }
+                    }
+                }
+            },
+            function (Validator $validator): void {
+                $totals = [];
+
+                foreach ($this->attachmentTurnMaps() as $turns) {
+                    foreach ($turns as $key => $items) {
+                        $totals[(string) $key] = ($totals[(string) $key] ?? 0) + (is_array($items) ? count($items) : 0);
+                    }
+                }
+
+                foreach ($totals as $key => $total) {
+                    if ($total > 3) {
+                        $validator->errors()->add(sprintf('attachments.%s', $key), 'A turn can carry at most 3 attachments.');
+                    }
+                }
+            },
+            function (Validator $validator): void {
+                if ($this->input('task') !== AiTask::Chat->value || $this->input('input.conversation') !== BenchmarkConversationMode::Scripted->value) {
+                    return;
+                }
+
+                $history = $this->input('input.history');
+                $userTurns = count(array_filter(is_array($history) ? $history : [], static fn (mixed $message): bool => is_array($message) && ($message['role'] ?? null) === 'user'));
+
+                if ($userTurns + 1 > 10) {
+                    $validator->errors()->add('input.conversation', 'A scripted case can have at most 10 user turns, including the prompt.');
+                }
+            },
         ];
+    }
+
+    /**
+     * The three per-turn attachment maps of the request, by field name.
+     *
+     * @return array<string, array<array-key, mixed>>
+     */
+    private function attachmentTurnMaps(): array
+    {
+        $maps = [
+            'attachments' => $this->allFiles()['attachments'] ?? [],
+            'keep_attachment_ids' => $this->input('keep_attachment_ids'),
+            'draft_attachment_ids' => $this->input('draft_attachment_ids'),
+        ];
+
+        return array_map(static fn (mixed $map): array => is_array($map) ? $map : [], $maps);
     }
 }
