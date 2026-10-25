@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Plus, Trash2 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { SegmentedControl } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,21 @@ const props = defineProps<{
 
 const input = defineModel<InputState>({ required: true });
 
-/** Canonical Laravel AI provider ids the price updater can be asked to refresh. */
+// An event type outside the catalog has no event key; the free-text select
+// would otherwise keep a value the server rejects.
+watch(
+    () => input.value.decision_source,
+    (source) => {
+        if (
+            source === 'text' &&
+            input.value.event_key !== '' &&
+            !props.eventKeys.includes(input.value.event_key)
+        ) {
+            input.value.event_key = '';
+        }
+    },
+);
+
 const DECISION_SOURCES: Array<{
     value: BenchmarkDecisionSource;
     label: string;
@@ -49,6 +63,7 @@ const DECISION_SOURCES: Array<{
     { value: 'text', label: 'Free-text prompt' },
 ];
 
+/** Canonical Laravel AI provider ids the price updater can be asked to refresh. */
 const PRICE_PROVIDERS = [
     'openai',
     'anthropic',

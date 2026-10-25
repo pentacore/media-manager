@@ -10,6 +10,7 @@ use App\Enums\ClassificationVerdict;
 use App\Models\AgentDecision;
 use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
+use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\DecisionCaseCapture;
@@ -117,7 +118,45 @@ test('a payload cut at 8000 characters keeps the recorded prompt as free text an
 
     expect($draft['input'])->toEqual(['prompt' => $usage->prompt_text, 'event_key' => 'sonarr:Grab'])
         ->and($draft['source_truncated'])->toBeTrue()
-        ->and($warnings)->toBe(['The event payload could not be recovered in full, so the case keeps the recorded prompt as free text.']);
+        ->and($warnings)->toBe([
+            'The event payload could not be recovered in full, so the case keeps the recorded prompt as free text.',
+            'The gate scope of this run was not recorded; the case runs with the full toolset.',
+        ]);
+});
+
+test('a payload whose pretty text is over the case limit is stored compact and still saves', function (): void {
+    $payload = ['items' => array_fill(0, 3000, ['a' => 1])];
+    expect(strlen(DecisionPrompt::payloadJson($payload)))->toBeLessThanOrEqual(65536);
+
+    ['usage' => $usage] = captureDecisionRun($payload);
+    ['draft' => $draft] = resolve(CaseDraftFromUsage::class)->draft($usage);
+    $payloadJson = $draft['input']['event']['payload_json'];
+
+    expect(strlen(json_encode($payload, JSON_PRETTY_PRINT)))->toBeGreaterThan(65536)
+        ->and(strlen($payloadJson))->toBeLessThanOrEqual(65536)
+        ->and($payloadJson)->not->toContain("\n")
+        ->and($draft['input']['prompt'])->toBe(DecisionPrompt::build('sonarr', 'Grab', DecisionPrompt::payloadFromJson($payloadJson)));
+
+    $this->actingAs(User::factory()->admin()->create());
+    $body = [
+        'task' => 'decision', 'name' => 'Big payload', 'tags' => [], 'notes' => null, 'fixtures' => [],
+        'scoring' => ['type' => 'actions', 'expected' => []],
+        'input' => ['prompt' => '', 'event' => $draft['input']['event'], 'action_kind' => null],
+    ];
+
+    $this->post(route('admin.benchmarks.cases.store'), ['payload' => json_encode($body)])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.benchmarks.cases.index'));
+});
+
+test('a payload too large even compact keeps the recorded prompt as free text and warns', function (): void {
+    ['usage' => $usage] = captureDecisionRun(['blob' => str_repeat('a', 70000)]);
+
+    ['draft' => $draft, 'warnings' => $warnings] = resolve(CaseDraftFromUsage::class)->draft($usage);
+
+    expect($draft['input'])->toEqual(['prompt' => $usage->prompt_text, 'event_key' => 'sonarr:Grab'])
+        ->and($draft['source_truncated'])->toBeTrue()
+        ->and($warnings)->toContain('The event payload is too large to store as an event; the case keeps the recorded prompt.');
 });
 
 test('an empty production payload captures as an empty object and rebuilds the same prompt', function (): void {

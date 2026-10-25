@@ -43,7 +43,13 @@ let previewRequest = 0;
 const refreshPreview = useDebounceFn(async (): Promise<void> => {
     const request = ++previewRequest;
 
-    if (parseJsonObject(event.value.payload_json, PAYLOAD_MESSAGES).error) {
+    if (
+        event.value.event_type.trim() === '' ||
+        parseJsonObject(event.value.payload_json, PAYLOAD_MESSAGES).error
+    ) {
+        preview.value = '';
+        previewError.value = null;
+
         return;
     }
 

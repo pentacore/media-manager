@@ -65,8 +65,13 @@ PROMPT;
         return is_array($payload) ? $payload : null;
     }
 
+    /** The longest payload text a case can store, in characters. */
+    public const int MAX_STORED_PAYLOAD_CHARS = 65536;
+
     /**
-     * The payload as the JSON text a case stores; an empty payload is an object.
+     * The payload as the JSON text a case stores; an empty payload is an
+     * object, and a payload too long to store pretty-printed is stored compact
+     * (build() pretty-prints from the decoded array, so the prompt is the same).
      *
      * @param  array<string, mixed>  $payload
      */
@@ -76,7 +81,13 @@ PROMPT;
             return '{}';
         }
 
-        return (string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $json = (string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        if (mb_strlen($json) <= self::MAX_STORED_PAYLOAD_CHARS) {
+            return $json;
+        }
+
+        return (string) json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     /**

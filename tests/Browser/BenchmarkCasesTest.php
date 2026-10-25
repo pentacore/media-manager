@@ -390,3 +390,35 @@ test('a payload that is not a JSON object shows an inline error and blocks the s
 
     expect(BenchmarkCase::query()->count())->toBe(0);
 });
+
+test('a fresh decision case shows no preview error until an event type is typed', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->assertMissing('[data-benchmark-prompt-preview-error]')
+        ->assertScript("document.querySelector('[data-benchmark-prompt-preview]').textContent.trim()", '')
+        ->fill('[data-benchmark-event-type]', 'Grab')
+        ->assertSeeIn('[data-benchmark-prompt-preview]', 'Event type: Grab')
+        ->assertMissing('[data-benchmark-prompt-preview-error]');
+});
+
+test('switching an off-catalog event case to free text saves without an event key error', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->create(['name' => 'Custom event', 'input' => [
+        'prompt' => DecisionPrompt::build('sonarr', 'CustomThing', ['a' => 1]),
+        'event' => ['service' => 'sonarr', 'event_type' => 'CustomThing', 'payload_json' => '{"a": 1}'],
+        'action_kind' => null,
+        'event_key' => 'sonarr:CustomThing',
+    ]]);
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-benchmark-decision-source="text"]')
+        ->assertValue('[data-benchmark-event-key]', '')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case updated.');
+
+    expect($benchmarkCase->fresh()->input)->not->toHaveKey('event');
+});

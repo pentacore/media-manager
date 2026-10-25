@@ -23,6 +23,8 @@ final readonly class DecisionCaseCapture
 
     public const string PAYLOAD_WARNING = 'The event payload could not be recovered in full, so the case keeps the recorded prompt as free text.';
 
+    public const string PAYLOAD_TOO_LARGE_WARNING = 'The event payload is too large to store as an event; the case keeps the recorded prompt.';
+
     public function capture(AiUsageRecord $aiUsageRecord, string $prompt): DecisionCaseDraft
     {
         $decision = AgentDecision::query()->with('webhookEvent')->where('invocation_id', $aiUsageRecord->invocation_id)->latest('id')->first();
@@ -41,14 +43,18 @@ final readonly class DecisionCaseCapture
         $eventKey = DecisionAgentSettings::eventKey($service, $eventType);
         $eventLabel = sprintf('%s %s', $service, $eventType);
 
-        if ($payloadJson === null || $payload === null) {
+        $tooLarge = $payloadJson !== null && mb_strlen($payloadJson) > DecisionPrompt::MAX_STORED_PAYLOAD_CHARS;
+
+        if ($payloadJson === null || $payload === null || $tooLarge) {
             $input = ['prompt' => $prompt];
 
             if (in_array($eventKey, DecisionAgentSettings::availableEventKeys(), true)) {
                 $input['event_key'] = $eventKey;
             }
 
-            return new DecisionCaseDraft($input, [self::PAYLOAD_WARNING], true, $eventLabel);
+            $warning = $tooLarge ? self::PAYLOAD_TOO_LARGE_WARNING : self::PAYLOAD_WARNING;
+
+            return new DecisionCaseDraft($input, [$warning, self::SCOPE_WARNING], true, $eventLabel);
         }
 
         $warnings = [];
