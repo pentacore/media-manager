@@ -43,6 +43,7 @@ type TaskRow = {
     has_reasoning: boolean;
     allow_auto: boolean;
     allow_tiers: boolean;
+    accepts_event_scopes: boolean;
     tiers: TierForm[];
     inherited: ResolvedSummary;
     resolved: ResolvedSummary;
@@ -50,11 +51,13 @@ type TaskRow = {
 };
 
 type EventOverride = {
+    task: AiTask;
     event_key: string;
     enabled: boolean;
     tiers: TierForm[];
     inherited: ResolvedSummary;
     resolved: ResolvedSummary;
+    warning: string | null;
 };
 
 type BenchmarkPrefill = {
@@ -105,6 +108,7 @@ const form = useForm({
     ) as Record<string, { tiers: TierForm[] }>,
     failover: { ...props.failover },
     event_overrides: props.eventOverrides.map((row) => ({
+        task: row.task,
         event_key: row.event_key,
         tiers: row.tiers.map((tier) => ({ ...tier })),
     })),
@@ -206,6 +210,7 @@ function overrideInherited(
 
 function addOverride(eventKey: string): void {
     form.event_overrides.push({
+        task: 'decision',
         event_key: eventKey,
         tiers: [
             {
