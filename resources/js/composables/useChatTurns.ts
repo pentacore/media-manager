@@ -488,11 +488,13 @@ export function useChatTurns({
             );
 
             if (toolRequest) {
-                message.chosen = [
-                    next.text === toolRequestAnswer(toolRequest, true)
-                        ? 'load'
-                        : 'decline',
-                ];
+                if (next.text === toolRequestAnswer(toolRequest, true)) {
+                    message.chosen = ['load'];
+                } else if (
+                    next.text === toolRequestAnswer(toolRequest, false)
+                ) {
+                    message.chosen = ['decline'];
+                }
             } else if (message.cards?.some((card) => card.type === 'choices')) {
                 message.chosen = inferChosenLabels(message.cards, next.text);
             }

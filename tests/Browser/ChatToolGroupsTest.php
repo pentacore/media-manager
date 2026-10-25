@@ -251,7 +251,7 @@ test('pinning in an existing conversation is saved and survives a reload', funct
         ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
 });
 
-test('the admin transcript shows each reply\'s tools', function (): void {
+test("the admin transcript shows each reply's tools", function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = chatToolGroupsConversation($admin, [], withReply: true);
     $this->actingAs($admin);
@@ -339,6 +339,15 @@ test('an older tool request card cannot be answered', function (): void {
         ->assertSeeIn('[data-chat-thread]', 'Fine, moving on.')
         ->assertDisabled('[data-tool-request-load]')
         ->assertDisabled('[data-tool-request-decline]');
+
+    $conversationId = DB::table('agent_conversations')->latest('created_at')->value('id');
+
+    $reloaded = $webpage->refresh()->assertNoSmoke();
+    $reloaded->script(appHydratedScript());
+    $reloaded->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertPresent('[data-tool-request-decline]')
+        ->assertMissing('[data-tool-request-chosen]');
 });
 
 test('using a template in an existing conversation adds its tool groups and keeps the pins', function (): void {
