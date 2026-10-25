@@ -38,15 +38,25 @@ class ToolGroupCatalogue
      */
     public function available(): array
     {
+        return array_values(array_filter(
+            ToolGroup::cases(),
+            fn (ToolGroup $toolGroup): bool => $this->declaredToolClasses($toolGroup) !== [],
+        ));
+    }
+
+    /**
+     * The group's tool classes MediaAgent declares on this install.
+     *
+     * @return list<class-string>
+     */
+    private function declaredToolClasses(ToolGroup $toolGroup): array
+    {
         $declared = array_map(
             static fn (object $tool): string => $tool::class,
             [...(new MediaAgent)->tools()],
         );
 
-        return array_values(array_filter(
-            ToolGroup::cases(),
-            static fn (ToolGroup $toolGroup): bool => array_intersect($toolGroup->toolClasses(), $declared) !== [],
-        ));
+        return array_values(array_intersect($toolGroup->toolClasses(), $declared));
     }
 
     /**
@@ -87,7 +97,7 @@ class ToolGroupCatalogue
     {
         $tools = [];
 
-        foreach ($toolGroup->toolClasses() as $class) {
+        foreach ($this->declaredToolClasses($toolGroup) as $class) {
             $tool = resolve($class);
             $description = (string) $tool->description();
             $score = $this->score($words, $this->haystack($tool, $description));
