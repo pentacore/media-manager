@@ -32,7 +32,7 @@ test('a group becomes available once its service is connected', function (): voi
     $this->actingAs(User::factory()->admin()->create())
         ->getJson(route('ai.chat.tool-groups'))
         ->assertOk()
-        ->assertJsonPath('groups.6.available', true);
+        ->assertJsonPath('groups', fn (array $groups): bool => collect($groups)->firstWhere('value', 'indexers')['available'] === true);
 });
 
 test('reports routing off', function (): void {

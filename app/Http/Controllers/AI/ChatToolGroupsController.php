@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
-use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ToolGroup;
+use App\Ai\Routing\ToolGroupCatalogue;
 use App\Http\Controllers\Controller;
 use App\Settings\AiSettings;
 use Illuminate\Http\JsonResponse;
@@ -16,19 +16,16 @@ use Illuminate\Http\JsonResponse;
  */
 class ChatToolGroupsController extends Controller
 {
-    public function __invoke(AiSettings $aiSettings): JsonResponse
+    public function __invoke(AiSettings $aiSettings, ToolGroupCatalogue $catalogue): JsonResponse
     {
-        $declared = array_map(
-            static fn (object $tool): string => $tool::class,
-            [...(new MediaAgent)->tools()],
-        );
+        $available = $catalogue->available();
 
         return response()->json([
             'routing_enabled' => $aiSettings->chatRoutingEnabled(),
-            'groups' => array_map(static fn (ToolGroup $toolGroup): array => [
+            'groups' => array_map(fn (ToolGroup $toolGroup): array => [
                 'value' => $toolGroup->value,
                 'label' => $toolGroup->label(),
-                'available' => array_intersect($toolGroup->toolClasses(), $declared) !== [],
+                'available' => in_array($toolGroup, $available, true),
             ], ToolGroup::cases()),
         ]);
     }
