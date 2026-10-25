@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
+use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
@@ -199,3 +201,60 @@ test('a verifier payload that is not a JSON object blocks the save', function ()
 
     expect(BenchmarkCase::query()->count())->toBe(0);
 });
+
+test('an admin benchmarks a reviewed second opinion from the action queue', function (): void {
+    $admin = User::factory()->admin()->create();
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'label' => 'Delete series']);
+    $actionRequest = ActionRequest::factory()->described()->secondOpinion(agrees: true, reason: 'Looks routine.')->create([
+        'origin' => 'agent',
+        'type' => 'delete_series',
+        'source_service' => 'emby',
+        'status' => ActionRequestStatus::Rejected,
+        'approved_by' => $admin->id,
+        'payload' => ['series_id' => 7, 'agent_rationale' => 'Emby reported the series removed.'],
+        'result' => ['success' => false, 'rejection_reason' => 'Wrong series.'],
+    ]);
+    $this->actingAs($admin);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->click('[data-action-benchmark-verdict]')
+        ->assertPathIs(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertValue('[data-benchmark-task]', 'decision_verifier')
+        ->assertValue('[data-verifier-title]', 'Delete series "Severance (2022)"')
+        ->assertValue('[data-verifier-rationale]', 'Emby reported the series removed.')
+        ->assertChecked('[data-verdict-expected="disagree"]')
+        ->assertSeeIn('[data-verifier-prompt-preview]', 'Severance (2022)')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.');
+
+    expect(BenchmarkCase::query()->sole()->scoring)->toEqual(['type' => 'verdict', 'expected_agrees' => false]);
+});
+
+test('an unreviewed second opinion opens with the verdict left to choose', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $actionRequest = ActionRequest::factory()->described()->secondOpinion(agrees: false, reason: 'Wrong series.')->create(['origin' => 'agent', 'status' => ActionRequestStatus::Pending]);
+
+    visit(route('admin.benchmarks.cases.create', ['action_request' => $actionRequest->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-draft-warnings]', 'No person has reviewed this action')
+        ->assertNotChecked('[data-verdict-expected="agree"]')
+        ->assertNotChecked('[data-verdict-expected="disagree"]');
+});
+
+test('the benchmark link needs an admin, AI and a second opinion that reached a verdict', function (string $role, bool $failed, bool $aiEnabled): void {
+    config()->set('mediamanager.ai.enabled', $aiEnabled);
+    $actionRequest = ActionRequest::factory()->described()->secondOpinion(agrees: false, failed: $failed)->create(['origin' => 'agent', 'status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->{$role}()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertVisible('[data-action-second-opinion]')
+        ->assertMissing('[data-action-benchmark-verdict]');
+})->with([
+    'a member' => ['member', false, true],
+    'a failed check' => ['admin', true, true],
+    'AI turned off' => ['admin', false, false],
+]);
