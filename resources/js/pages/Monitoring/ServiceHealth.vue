@@ -301,7 +301,9 @@ function barHeight(bucket: MetricBucket): number {
         </PageHeader>
 
         <!-- Stat cards -->
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div
+            class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-2 xl:grid-cols-4"
+        >
             <StatCard
                 label="Healthy"
                 :value="`${healthyCount} / ${mergedConnections.length}`"
@@ -335,7 +337,7 @@ function barHeight(bucket: MetricBucket): number {
         <!-- Service strip -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div
-                class="flex items-center justify-between border-b border-border px-4 py-3"
+                class="flex items-center justify-between border-b border-border px-4 py-3 max-sm:flex-wrap max-sm:gap-1"
             >
                 <span
                     class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
@@ -361,10 +363,10 @@ function barHeight(bucket: MetricBucket): number {
                     class="border-b border-border px-4 py-3 last:border-b-0"
                 >
                     <div
-                        class="grid grid-cols-1 items-center gap-4 sm:grid-cols-[200px_minmax(0,1fr)_120px_120px_120px]"
+                        class="grid grid-cols-2 items-center gap-x-4 gap-y-3 sm:grid-cols-[200px_minmax(0,1fr)_120px_120px_120px] sm:gap-4"
                         data-health-row
                     >
-                        <div>
+                        <div class="max-sm:order-1 max-sm:min-w-0">
                             <div class="flex items-center gap-2">
                                 <span
                                     v-if="
@@ -401,7 +403,7 @@ function barHeight(bucket: MetricBucket): number {
 
                         <!-- 60-min strip from service_metrics -->
                         <div
-                            class="flex h-7 items-end gap-px"
+                            class="flex h-7 items-end gap-px max-sm:order-3 max-sm:col-span-2 max-sm:min-w-0 max-sm:justify-end max-sm:overflow-hidden"
                             :title="`Per-minute health, oldest left → newest right`"
                             aria-hidden="true"
                         >
@@ -414,7 +416,7 @@ function barHeight(bucket: MetricBucket): number {
                             />
                         </div>
 
-                        <div>
+                        <div class="max-sm:order-4">
                             <div
                                 class="text-[10.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                             >
@@ -439,7 +441,7 @@ function barHeight(bucket: MetricBucket): number {
                             </div>
                         </div>
 
-                        <div>
+                        <div class="max-sm:order-5">
                             <div
                                 class="text-[10.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                             >
@@ -461,7 +463,9 @@ function barHeight(bucket: MetricBucket): number {
                             </div>
                         </div>
 
-                        <div class="flex justify-end">
+                        <div
+                            class="flex justify-end max-sm:order-2 max-sm:self-start"
+                        >
                             <StatusPill
                                 v-if="connection.is_active"
                                 :status="connection.health_status"
@@ -493,7 +497,7 @@ function barHeight(bucket: MetricBucket): number {
                         <div
                             v-for="(disk, idx) in disksFor(connection.id)"
                             :key="`${connection.id}-disk-${idx}-${disk.path}`"
-                            class="flex items-center gap-2 text-[11.5px] text-muted-foreground"
+                            class="flex items-center gap-2 text-[11.5px] text-muted-foreground max-sm:flex-wrap max-sm:gap-y-0.5"
                         >
                             <HardDrive class="size-3.5" />
                             <span

@@ -343,7 +343,9 @@ onMounted(() => {
         </PageHeader>
 
         <!-- Stat Cards -->
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div
+            class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-2 xl:grid-cols-4"
+        >
             <StatCard
                 label="Services online"
                 :value="`${healthyServices} / ${totalServices}`"

@@ -461,7 +461,9 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
 
         <template v-else>
             <!-- Stats -->
-            <div class="grid gap-4 md:grid-cols-4">
+            <div
+                class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-4"
+            >
                 <StatCard
                     label="Speed"
                     :value="queue.speed ?? '—'"
