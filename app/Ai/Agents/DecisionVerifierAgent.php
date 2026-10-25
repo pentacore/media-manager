@@ -29,9 +29,30 @@ class DecisionVerifierAgent implements Agent, HasMiddleware, HasProviderOptions,
     use RunsAsAiTask;
     use UsesFailoverChain;
 
+    private ?string $eventKey = null;
+
     public function aiTask(): AiTask
     {
         return AiTask::DecisionVerifier;
+    }
+
+    /**
+     * Scope the agent to the webhook event the checked proposal came from.
+     */
+    public function forEvent(?string $eventKey): static
+    {
+        $this->eventKey = $eventKey;
+
+        return $this;
+    }
+
+    /**
+     * The webhook event the checked proposal came from, so the verifier's
+     * event override picks its model.
+     */
+    protected function aiTaskEventKey(): ?string
+    {
+        return $this->eventKey;
     }
 
     /**

@@ -86,7 +86,7 @@ final class TaskModelResolver
             );
         }
 
-        $scope = $aiTask === AiTask::Decision && $eventKey !== null ? $eventKey : AiTaskModel::DEFAULT_SCOPE;
+        $scope = $aiTask->acceptsEventScopes() && $eventKey !== null ? $eventKey : AiTaskModel::DEFAULT_SCOPE;
         $tierPick = $this->pick($aiTask, $scope);
 
         return new ResolvedSelection(

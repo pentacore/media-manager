@@ -32,7 +32,7 @@ test('the decision verifier task follows chat, takes tiers and is benchmarked by
         ->and(AiTask::DecisionVerifier->hasReasoning())->toBeTrue()
         ->and(AiTask::DecisionVerifier->isBenchmarkable())->toBeTrue()
         ->and(AiTask::DecisionVerifier->benchmarkScoringType())->toBe(BenchmarkScoringType::Verdict)
-        ->and(AiTask::DecisionVerifier->acceptsEventScopes())->toBeFalse()
+        ->and(AiTask::DecisionVerifier->acceptsEventScopes())->toBeTrue()
         ->and(AiTask::Failover->isBenchmarkable())->toBeFalse()
         ->and(AiTask::BenchmarkJudge->isBenchmarkable())->toBeFalse()
         ->and(BenchmarkScoringType::Verdict->value)->toBe('verdict')

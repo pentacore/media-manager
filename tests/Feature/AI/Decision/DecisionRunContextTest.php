@@ -122,3 +122,8 @@ test('a disagreement on a request that already needed approval is not counted as
     expect($decisionRunContext->heldBySecondOpinionCount())->toBe(0)
         ->and($decisionRunContext->suggestedCount())->toBe(1);
 });
+
+test('eventKey joins the lower-cased service and the event type', function (): void {
+    expect(new DecisionRunContext(null, 3, 'Sonarr', eventType: 'Download')->eventKey())->toBe('sonarr:Download')
+        ->and(new DecisionRunContext(null, 3, 'sonarr')->eventKey())->toBeNull();
+});

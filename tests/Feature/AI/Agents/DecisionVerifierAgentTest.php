@@ -5,7 +5,10 @@ declare(strict_types=1);
 use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\TaskModelResolver;
+use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
+use App\Models\AiTaskModel;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 
 test('the verifier answers with a structured verdict', function (): void {
@@ -33,4 +36,14 @@ test('without its own selection the verifier follows the chat model', function (
     $chat = $taskModelResolver->resolve(AiTask::Chat);
 
     expect([$resolvedSelection->provider, $resolvedSelection->model])->toBe([$chat->provider, $chat->model]);
+});
+
+test('the verifier resolves its model for the event it checks', function (): void {
+    AiTaskModel::factory()->task(AiTask::DecisionVerifier)->selecting('openai', 'gpt-verifier')->create();
+    AiTaskModel::factory()->event('sonarr:Download', AiTask::DecisionVerifier)->selecting('openai', 'gpt-download-verifier')->reasoning(AiReasoningLevel::None)->create();
+
+    expect((new DecisionVerifierAgent)->forEvent('sonarr:Download')->modelSelection()->model)->toBe('gpt-download-verifier')
+        ->and((new DecisionVerifierAgent)->forEvent('sonarr:Download')->providerOptions(Lab::OpenAI)['reasoning']['effort'])->toBe('none')
+        ->and((new DecisionVerifierAgent)->forEvent('radarr:Grab')->modelSelection()->model)->toBe('gpt-verifier')
+        ->and((new DecisionVerifierAgent)->forEvent(null)->modelSelection()->model)->toBe('gpt-verifier');
 });
