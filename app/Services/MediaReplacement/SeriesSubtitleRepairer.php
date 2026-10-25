@@ -10,6 +10,8 @@ use App\Jobs\SearchSubtitleAuditEpisode;
 use App\Models\ActionTypeConfig;
 use App\Models\SubtitleAuditBatch;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -19,8 +21,16 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class SeriesSubtitleRepairer
 {
-    /** A searching batch younger than this blocks a new repair of the same series. */
-    public const int IN_PROGRESS_MINUTES = 30;
+    /**
+     * The search window: three minutes per missing episode (the searches run
+     * one after another on a single worker), at least 30 minutes and at most
+     * 12 hours. A searching batch blocks a new repair until it passes.
+     */
+    public const int SEARCH_MINUTES_PER_EPISODE = 3;
+
+    public const int MIN_SEARCH_MINUTES = 30;
+
+    public const int MAX_SEARCH_MINUTES = 720;
 
     private const int LOCK_SECONDS = 10;
 
@@ -43,15 +53,20 @@ final readonly class SeriesSubtitleRepairer
         );
 
         // The lock makes the in-progress check and the create one step, so two
-        // simultaneous repairs of one series cannot both pass the check.
-        return Cache::lock(
-            sprintf('subtitle-audit-repair:%d:%d', $seriesSubtitleAudit->serviceConnectionId, $seriesSubtitleAudit->seriesId),
-            self::LOCK_SECONDS,
-        )->block(self::LOCK_WAIT_SECONDS, function () use ($seriesSubtitleAudit, $user, $missing): SubtitleAuditBatch {
-            throw_if($this->batchInProgress($seriesSubtitleAudit), SeriesSubtitleRepairRefused::class, 'batch_in_progress');
+        // simultaneous repairs of one series cannot both pass the check. A
+        // repair still holding it after the wait is one in progress.
+        try {
+            return Cache::lock(
+                sprintf('subtitle-audit-repair:%d:%d', $seriesSubtitleAudit->serviceConnectionId, $seriesSubtitleAudit->seriesId),
+                self::LOCK_SECONDS,
+            )->block(self::LOCK_WAIT_SECONDS, function () use ($seriesSubtitleAudit, $user, $missing): SubtitleAuditBatch {
+                throw_if($this->batchInProgress($seriesSubtitleAudit), SeriesSubtitleRepairRefused::class, 'batch_in_progress');
 
-            return $this->createBatch($seriesSubtitleAudit, $user, $missing);
-        });
+                return $this->createBatch($seriesSubtitleAudit, $user, $missing);
+            });
+        } catch (LockTimeoutException) {
+            throw new SeriesSubtitleRepairRefused('batch_in_progress');
+        }
     }
 
     private function batchInProgress(SeriesSubtitleAudit $seriesSubtitleAudit): bool
@@ -60,7 +75,7 @@ final readonly class SeriesSubtitleRepairer
             ->where('service_connection_id', $seriesSubtitleAudit->serviceConnectionId)
             ->where('series_id', $seriesSubtitleAudit->seriesId)
             ->where('status', SubtitleAuditBatchStatus::Searching)
-            ->where('created_at', '>=', now()->subMinutes(self::IN_PROGRESS_MINUTES))
+            ->where('search_deadline_at', '>', now())
             ->exists();
     }
 
@@ -69,7 +84,9 @@ final readonly class SeriesSubtitleRepairer
      */
     private function createBatch(SeriesSubtitleAudit $seriesSubtitleAudit, User $user, array $missing): SubtitleAuditBatch
     {
-        return DB::transaction(function () use ($seriesSubtitleAudit, $user, $missing): SubtitleAuditBatch {
+        $searchDeadline = $this->searchDeadline(count($missing));
+
+        return DB::transaction(function () use ($seriesSubtitleAudit, $user, $missing, $searchDeadline): SubtitleAuditBatch {
             $subtitleAuditBatch = SubtitleAuditBatch::query()->create([
                 'user_id' => $user->id,
                 'service_connection_id' => $seriesSubtitleAudit->serviceConnectionId,
@@ -77,6 +94,7 @@ final readonly class SeriesSubtitleRepairer
                 'series_title' => $seriesSubtitleAudit->seriesTitle,
                 'season_number' => $seriesSubtitleAudit->seasonNumber,
                 'status' => SubtitleAuditBatchStatus::Searching,
+                'search_deadline_at' => $searchDeadline,
             ]);
 
             foreach ($missing as $episode) {
@@ -88,10 +106,18 @@ final readonly class SeriesSubtitleRepairer
                     'outcome' => SubtitleAuditEpisodeOutcome::Searching,
                 ]);
 
-                dispatch(new SearchSubtitleAuditEpisode($subtitleAuditEpisode->id))->afterCommit();
+                dispatch(new SearchSubtitleAuditEpisode($subtitleAuditEpisode->id, $searchDeadline))->afterCommit();
             }
 
             return $subtitleAuditBatch;
         });
+    }
+
+    private function searchDeadline(int $missingCount): CarbonImmutable
+    {
+        return now()->addMinutes(min(
+            self::MAX_SEARCH_MINUTES,
+            max(self::MIN_SEARCH_MINUTES, $missingCount * self::SEARCH_MINUTES_PER_EPISODE),
+        ));
     }
 }

@@ -14,7 +14,9 @@ use App\Services\MediaReplacement\SeriesSubtitleAudit;
 use App\Services\MediaReplacement\SeriesSubtitleAuditEpisode;
 use App\Services\MediaReplacement\SeriesSubtitleRepairer;
 use App\Services\MediaReplacement\SeriesSubtitleRepairRefused;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Queue::fake();
@@ -129,10 +131,12 @@ test('a repair is refused when replace_media_file is not configured', function (
 });
 
 test('a repair is refused while a batch for the series is still searching', function (): void {
+    // Created long ago, but a large batch's search window is still open.
     SubtitleAuditBatch::factory()->create([
         'service_connection_id' => $this->connection->id,
         'series_id' => 42,
-        'created_at' => now()->subMinutes(10),
+        'created_at' => now()->subHours(2),
+        'search_deadline_at' => now()->addMinutes(20),
     ]);
 
     $reason = repairRefusalReason(fn (): SubtitleAuditBatch => resolve(SeriesSubtitleRepairer::class)
@@ -158,11 +162,12 @@ test('a ready batch or another series does not block a new repair', function ():
     Queue::assertPushed(SearchSubtitleAuditEpisode::class, 2);
 });
 
-test('a searching batch older than 30 minutes does not block a new repair', function (): void {
+test('a searching batch past its search deadline does not block a new repair', function (): void {
     SubtitleAuditBatch::factory()->create([
         'service_connection_id' => $this->connection->id,
         'series_id' => 42,
         'created_at' => now()->subMinutes(31),
+        'search_deadline_at' => now()->subMinute(),
     ]);
 
     $subtitleAuditBatch = resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, repairEpisodes()), $this->user);
@@ -170,4 +175,50 @@ test('a searching batch older than 30 minutes does not block a new repair', func
     expect(SubtitleAuditBatch::query()->count())->toBe(2)
         ->and($subtitleAuditBatch->episodes()->count())->toBe(2);
     Queue::assertPushed(SearchSubtitleAuditEpisode::class, 2);
+});
+
+test('a repair is refused when another repair of the series holds the lock past the wait', function (): void {
+    Sleep::fake(syncWithCarbon: true);
+    Cache::lock(sprintf('subtitle-audit-repair:%d:42', $this->connection->id), 10)->get();
+
+    $reason = repairRefusalReason(fn (): SubtitleAuditBatch => resolve(SeriesSubtitleRepairer::class)
+        ->start(repairAudit($this->connection, repairEpisodes()), $this->user));
+
+    expect($reason)->toBe('batch_in_progress')
+        ->and(SubtitleAuditBatch::query()->count())->toBe(0);
+    Queue::assertNotPushed(SearchSubtitleAuditEpisode::class);
+});
+
+test('the search deadline scales with the missing episode count', function (int $missingCount, int $expectedMinutes): void {
+    $this->freezeSecond();
+
+    $episodes = array_map(
+        static fn (int $number): SeriesSubtitleAuditEpisode => new SeriesSubtitleAuditEpisode(1000 + $number, 1, $number, SeriesSubtitleAuditEpisode::STATUS_MISSING, ['eng']),
+        range(1, $missingCount),
+    );
+
+    $subtitleAuditBatch = resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, $episodes), $this->user);
+
+    expect($subtitleAuditBatch->fresh()->search_deadline_at->getTimestamp())->toBe(now()->addMinutes($expectedMinutes)->getTimestamp());
+})->with([
+    'a small batch gets the 30 minute floor' => [2, 30],
+    'three minutes per episode' => [50, 150],
+    'a huge batch is capped at 12 hours' => [1000, 720],
+]);
+
+test('every queued search retries until the batch deadline', function (): void {
+    $this->freezeSecond();
+
+    $subtitleAuditBatch = resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, repairEpisodes()), $this->user);
+    $deadline = $subtitleAuditBatch->fresh()->search_deadline_at;
+
+    Queue::assertPushed(SearchSubtitleAuditEpisode::class, 2);
+    Queue::assertPushed(
+        SearchSubtitleAuditEpisode::class,
+        fn (SearchSubtitleAuditEpisode $searchSubtitleAuditEpisode): bool => $searchSubtitleAuditEpisode->retryUntil()->getTimestamp() === $deadline->getTimestamp(),
+    );
+    Queue::assertNotPushed(
+        SearchSubtitleAuditEpisode::class,
+        fn (SearchSubtitleAuditEpisode $searchSubtitleAuditEpisode): bool => $searchSubtitleAuditEpisode->retryUntil()->getTimestamp() !== $deadline->getTimestamp(),
+    );
 });

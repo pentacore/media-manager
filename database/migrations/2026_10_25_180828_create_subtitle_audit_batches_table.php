@@ -20,6 +20,7 @@ return new class extends Migration
             $blueprint->string('series_title');
             $blueprint->unsignedInteger('season_number')->nullable();
             $blueprint->string('status')->default(SubtitleAuditBatchStatus::Searching->value);
+            $blueprint->timestamp('search_deadline_at')->nullable();
             $blueprint->timestamp('handed_off_at')->nullable();
             $blueprint->timestamp('completed_at')->nullable();
             $blueprint->timestamps();

@@ -23,6 +23,7 @@ use Override;
  * @property string $series_title
  * @property int|null $season_number
  * @property SubtitleAuditBatchStatus $status
+ * @property CarbonImmutable|null $search_deadline_at
  * @property CarbonImmutable|null $handed_off_at
  * @property CarbonImmutable|null $completed_at
  * @property CarbonImmutable|null $created_at
@@ -43,6 +44,7 @@ use Override;
     'series_title',
     'season_number',
     'status',
+    'search_deadline_at',
     'handed_off_at',
     'completed_at',
 ])]
@@ -89,6 +91,7 @@ class SubtitleAuditBatch extends Model
     {
         return [
             'status' => SubtitleAuditBatchStatus::class,
+            'search_deadline_at' => 'immutable_datetime',
             'handed_off_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];

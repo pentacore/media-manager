@@ -24,6 +24,7 @@ class SubtitleAuditBatchFactory extends Factory
             'series_title' => fake()->words(3, true),
             'season_number' => null,
             'status' => SubtitleAuditBatchStatus::Searching,
+            'search_deadline_at' => now()->addMinutes(30),
             'handed_off_at' => null,
             'completed_at' => null,
         ];

@@ -9,6 +9,7 @@ use App\Jobs\Middleware\LimitSubtitleAuditSearchConcurrency;
 use App\Models\SubtitleAuditEpisode;
 use App\Services\MediaReplacement\SubtitleAuditBatchSettler;
 use App\Services\MediaReplacement\SubtitleAuditEpisodeSearcher;
+use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -21,9 +22,11 @@ use Throwable;
 /**
  * Runs one series subtitle audit episode's release search.
  *
- * Unlimited tries bounded by retryUntil(): the concurrency middleware releases
- * the job while both of the connection's search slots are busy, and every
- * release counts as an attempt. Two exceptions (or the window running out)
+ * Unlimited tries bounded by retryUntil(), the batch's search deadline: the
+ * concurrency middleware releases the job while both of the connection's
+ * search slots are busy, and every release counts as an attempt. The deadline
+ * scales with the batch size, so a long batch searched one episode at a time
+ * does not expire its tail unsearched. Two exceptions (or the deadline passing)
  * fail the job, and failed() then fails the still-searching episode. The
  * searcher skips a row that already has an outcome, so a retry is safe.
  */
@@ -35,9 +38,10 @@ final class SearchSubtitleAuditEpisode implements ShouldQueue
 {
     use Queueable;
 
-    private const int MAX_WAIT_MINUTES = 30;
-
-    public function __construct(public readonly int $subtitleAuditEpisodeId) {}
+    public function __construct(
+        public readonly int $subtitleAuditEpisodeId,
+        public readonly CarbonImmutable $searchDeadline,
+    ) {}
 
     /**
      * @return list<object>
@@ -49,7 +53,7 @@ final class SearchSubtitleAuditEpisode implements ShouldQueue
 
     public function retryUntil(): DateTimeInterface
     {
-        return now()->addMinutes(self::MAX_WAIT_MINUTES);
+        return $this->searchDeadline;
     }
 
     /**

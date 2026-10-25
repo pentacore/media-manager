@@ -51,8 +51,9 @@ beforeEach(function (): void {
     ]);
 });
 
-test('the job waits for a search slot on the default lane and gives up after its window', function (): void {
-    $job = new SearchSubtitleAuditEpisode($this->episode->id);
+test('the job waits for a search slot on the default lane and gives up at the batch deadline', function (): void {
+    $deadline = now()->addMinutes(90);
+    $job = new SearchSubtitleAuditEpisode($this->episode->id, $deadline);
     $reflection = new ReflectionClass($job);
 
     expect($reflection->isFinal())->toBeTrue()
@@ -63,7 +64,7 @@ test('the job waits for a search slot on the default lane and gives up after its
         ->and($reflection->getAttributes(Backoff::class)[0]->newInstance()->backoff)->toBe(30)
         ->and($job->middleware())->toHaveCount(1)
         ->and($job->middleware()[0])->toBeInstanceOf(LimitSubtitleAuditSearchConcurrency::class)
-        ->and($job->retryUntil()->getTimestamp())->toBe(now()->addMinutes(30)->getTimestamp())
+        ->and($job->retryUntil()->getTimestamp())->toBe($deadline->getTimestamp())
         ->and($job->serviceConnectionId())->toBe($this->connection->id);
 });
 
@@ -88,7 +89,7 @@ test('a search that keeps throwing marks the episode failed and settles the batc
         ->once()
         ->withArgs(fn (SubtitleAuditBatch $batch): bool => $batch->id === $this->batch->id);
 
-    $job = new SearchSubtitleAuditEpisode($this->episode->id);
+    $job = new SearchSubtitleAuditEpisode($this->episode->id, now()->addMinutes(30));
 
     expect(fn () => $job->handle(resolve(SubtitleAuditEpisodeSearcher::class)))->toThrow(RequestException::class)
         ->and($this->episode->fresh()->outcome)->toBe(SubtitleAuditEpisodeOutcome::Searching);
@@ -104,7 +105,7 @@ test('a search that keeps throwing marks the episode failed and settles the batc
 test('a failed job leaves an episode that already has an outcome alone', function (): void {
     $this->episode->update(['outcome' => SubtitleAuditEpisodeOutcome::NothingFound]);
 
-    new SearchSubtitleAuditEpisode($this->episode->id)->failed(new RuntimeException('late'));
+    new SearchSubtitleAuditEpisode($this->episode->id, now()->addMinutes(30))->failed(new RuntimeException('late'));
 
     expect($this->episode->fresh()->outcome)->toBe(SubtitleAuditEpisodeOutcome::NothingFound)
         ->and($this->episode->fresh()->failure_reason)->toBeNull();
@@ -115,7 +116,7 @@ test('a job whose episode row is gone does nothing', function (): void {
     $episodeId = $this->episode->id;
     $this->episode->delete();
 
-    $job = new SearchSubtitleAuditEpisode($episodeId);
+    $job = new SearchSubtitleAuditEpisode($episodeId, now()->addMinutes(30));
     $job->handle(resolve(SubtitleAuditEpisodeSearcher::class));
     $job->failed(new RuntimeException('gone'));
 
@@ -124,7 +125,7 @@ test('a job whose episode row is gone does nothing', function (): void {
 });
 
 test('the job is released when both search slots for the connection are taken', function (): void {
-    $searchSubtitleAuditEpisode = new SearchSubtitleAuditEpisode($this->episode->id)->withFakeQueueInteractions();
+    $searchSubtitleAuditEpisode = new SearchSubtitleAuditEpisode($this->episode->id, now()->addMinutes(30))->withFakeQueueInteractions();
     $ran = false;
     $funnel = fn (Closure $inside): mixed => Cache::funnel(sprintf('subtitle-audit-search:%d', $this->connection->id))
         ->limit(2)
@@ -143,7 +144,7 @@ test('the job is released when both search slots for the connection are taken', 
 });
 
 test('the job runs when a search slot for the connection is free', function (): void {
-    $searchSubtitleAuditEpisode = new SearchSubtitleAuditEpisode($this->episode->id)->withFakeQueueInteractions();
+    $searchSubtitleAuditEpisode = new SearchSubtitleAuditEpisode($this->episode->id, now()->addMinutes(30))->withFakeQueueInteractions();
     $ran = false;
 
     Cache::funnel(sprintf('subtitle-audit-search:%d', $this->connection->id))
