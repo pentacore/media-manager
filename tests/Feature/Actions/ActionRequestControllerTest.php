@@ -14,6 +14,7 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use App\Services\Actions\ActionRequestBrowserPayload;
 use App\Services\Actions\ActionRequestReviewer;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -310,6 +311,29 @@ test('a deep link to a listed or missing request sends no separate prop', functi
     $this->actingAs($member)
         ->get(route('actions.requests.index'))
         ->assertInertia(fn ($page) => $page->where('preselectedRequest', null));
+});
+
+test('a partial reload that does not name the deep-linked request does not read it', function (): void {
+    $oldest = ActionRequest::factory()->create(['created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(25)->create();
+    $member = User::factory()->member()->create();
+    $version = $this->actingAs($member)->get(route('actions.requests.index'))->viewData('page')['version'];
+
+    DB::enableQueryLog();
+    $this->actingAs($member)
+        ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => (string) $version, 'X-Inertia-Partial-Component' => 'Actions/Index', 'X-Inertia-Partial-Data' => 'statusCounts'])
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertJsonMissingPath('props.preselectedRequest');
+
+    expect(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'where "action_requests"."id" = ?'))->all())->toBe([]);
+    DB::disableQueryLog();
+
+    $this->actingAs($member)
+        ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => (string) $version, 'X-Inertia-Partial-Component' => 'Actions/Index', 'X-Inertia-Partial-Data' => 'preselectedRequest'])
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertJsonPath('props.preselectedRequest.id', $oldest->id);
 });
 
 test('viewers cannot reach a deep-linked request', function (): void {

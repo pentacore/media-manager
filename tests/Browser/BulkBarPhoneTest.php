@@ -324,7 +324,8 @@ function bulkBarPhoneLastControlsReachableScript(array $selectors): string
 }
 
 test('on a long phone list the bar is pinned to the screen bottom and the last card stays tappable', function (): void {
-    $pending = ActionRequest::factory()->count(20)->sequence(fn ($sequence): array => [
+    // 30 requests: a second page, so the pagination row follows the bar.
+    $pending = ActionRequest::factory()->count(30)->sequence(fn ($sequence): array => [
         'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
         'created_at' => now()->subMinutes($sequence->index),
     ])->create(['status' => ActionRequestStatus::Pending]);
@@ -336,7 +337,8 @@ test('on a long phone list the bar is pinned to the screen bottom and the last c
         ->assertSeeIn('[data-bulk-count]', '1 selected')
         ->assertScript(bulkBarPhonePinnedScript(), true)
         ->assertScript(bulkBarPhoneHeightScript(), 56)
-        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-action-card-select]', '[data-action-card-open]']), true)
+        ->assertPresent('[data-action-pagination]')
+        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-action-card-select]', '[data-action-card-open]', '[data-action-pagination] button']), true)
         ->assertScript(bulkBarPhonePinnedScript(), true)
         ->click(sprintf('[data-action-card-select="%d"]', $pending[19]->id))
         ->assertSeeIn('[data-bulk-count]', '2 selected')
@@ -354,8 +356,13 @@ test('on a long SABnzbd queue the phone bar is pinned and the last card keeps it
         'sab.local:8080/api*' => function (Request $request) use ($slots) {
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
+            // A failed history with more than one page: its cards' Retry and
+            // Delete and the pager follow the queue's bar in the DOM.
             return ($query['mode'] ?? null) === 'history'
-                ? Http::response(['history' => ['noofslots' => 0, 'slots' => []]])
+                ? Http::response(['history' => ['noofslots' => 60, 'slots' => [
+                    ['nzo_id' => 'SABnzbd_nzo_h1', 'name' => 'Andor.S01E01.1080p', 'category' => 'tv', 'status' => 'Failed', 'fail_message' => 'Example failure'],
+                    ['nzo_id' => 'SABnzbd_nzo_h2', 'name' => 'Andor.S01E02.1080p', 'category' => 'tv', 'status' => 'Failed', 'fail_message' => 'Example failure'],
+                ]]])
                 : Http::response(['queue' => ['paused' => false, 'speed' => '1 M', 'sizeleft' => '6 GB', 'timeleft' => '0:10:00', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => count($slots), 'slots' => $slots]]);
         },
     ]);
@@ -365,7 +372,8 @@ test('on a long SABnzbd queue the phone bar is pinned and the last card keeps it
     $webpage->script(appHydratedScript());
     $webpage->click('[data-sab-card-select="SABnzbd_nzo_1"]')
         ->assertScript(bulkBarPhonePinnedScript(), true)
-        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-sab-card-select]', '[data-sab-card-delete]']), true)
+        ->assertPresent('[data-history-next]')
+        ->assertScript(bulkBarPhoneLastControlsReachableScript(['[data-sab-card-select]', '[data-sab-card-delete]', '[data-sab-history-card-retry]', '[data-sab-history-card-delete]', '[data-history-next]']), true)
         ->assertScript(bulkBarPhonePinnedScript(), true)
         ->assertNoSmoke();
 });

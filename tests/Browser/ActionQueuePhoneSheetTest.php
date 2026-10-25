@@ -65,6 +65,26 @@ function actionQueueSheetHoldPostScript(): string
 }
 
 /**
+ * Counts every POST the page sends (Inertia visits go through XMLHttpRequest)
+ * in `window.__mmPosts`, without holding them.
+ */
+function actionQueueSheetCountPostsScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmPosts = 0;
+            const open = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, ...rest) {
+                if (String(method).toUpperCase() === 'POST') {
+                    window.__mmPosts++;
+                }
+                return open.call(this, method, ...rest);
+            };
+        })()
+    JS;
+}
+
+/**
  * The focused element is neither the sheet's review buttons nor anything
  * else that Enter would activate.
  */
@@ -111,12 +131,16 @@ test('the sheet opens on its title, so Enter never approves', function (): void 
     $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
     $webpage->script(actionQueueSheetOpenScript());
 
-    $webpage->assertScript(actionQueueSheetFocusOnTitleScript(), true)
+    // Enter goes to whatever the sheet focused on opening (`:focus` does not
+    // move focus): it must not approve.
+    $webpage->script(actionQueueSheetCountPostsScript());
+    $webpage->keys(':focus', 'Enter');
+    $webpage->script(actionQueueSheetTwoFramesScript());
+    $webpage->assertScript('window.__mmPosts', 0)
+        ->assertVisible('[data-action-sheet] [data-action-approve]')
+        ->assertScript(actionQueueSheetFocusOnTitleScript(), true)
         ->assertScript('document.querySelector("[data-action-sheet] [data-action-title]").textContent.includes("Severance")', true)
         ->assertScript('document.getElementById(document.querySelector("[data-action-sheet]").getAttribute("aria-describedby"))?.textContent.includes("Approve or decline it at the bottom.") ?? false', true);
-    $webpage->keys('[data-action-sheet] [data-action-title]', 'Enter');
-    $webpage->script(actionQueueSheetTwoFramesScript());
-    $webpage->assertVisible('[data-action-sheet] [data-action-approve]');
 
     expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Pending);
 });
@@ -129,10 +153,12 @@ test('a deep-linked sheet opens on its title, so Enter never approves', function
     $webpage->script(appHydratedScript());
     $webpage->script(actionQueueSheetOpenScript());
 
-    $webpage->assertScript(actionQueueSheetFocusOnTitleScript(), true);
-    $webpage->keys('[data-action-sheet] [data-action-title]', 'Enter');
+    $webpage->script(actionQueueSheetCountPostsScript());
+    $webpage->keys(':focus', 'Enter');
     $webpage->script(actionQueueSheetTwoFramesScript());
-    $webpage->assertVisible('[data-action-sheet] [data-action-approve]');
+    $webpage->assertScript('window.__mmPosts', 0)
+        ->assertVisible('[data-action-sheet] [data-action-approve]')
+        ->assertScript(actionQueueSheetFocusOnTitleScript(), true);
 
     expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Pending);
 });
@@ -252,5 +278,34 @@ test('closing the sheet keeps the card clear of the pinned phone bulk bar', func
     $webpage->script(confirmDialogWaitUntilScript(sprintf('document.activeElement === %s', $card)));
 
     $webpage->assertScript(sprintf('%s.getBoundingClientRect().bottom <= document.querySelector("[data-bulk-bar]").getBoundingClientRect().top', $card), true)
+        ->assertNoSmoke();
+});
+
+test('a live status change reaches an off-page deep-linked request in the open sheet', function (): void {
+    $oldest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true, 'title' => 'Monitor series "Severance"', 'created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(29)->sequence(fn ($sequence): array => [
+        'title' => sprintf('Monitor series "Example Show %02d"', $sequence->index),
+        'created_at' => now()->subMinutes($sequence->index),
+    ])->create(['status' => ActionRequestStatus::Completed]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', ['request' => $oldest->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueSheetOpenScript());
+    $webpage->assertVisible('[data-action-sheet] [data-action-approve]');
+
+    // Another admin approves it elsewhere.
+    $oldest->forceFill(['status' => ActionRequestStatus::Approved])->save();
+    $oldest->refresh();
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $oldest->id, 'status' => 'approved', 'result' => null,
+        'updated_at' => $oldest->updated_at->toISOString(),
+        'status_version' => $oldest->status_version,
+    ], 3));
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-action-sheet] [data-action-approve]")'));
+
+    $webpage->assertMissing('[data-action-sheet] [data-action-approve]')
+        ->assertVisible('[data-action-sheet]')
+        ->assertSeeIn('[data-action-sheet] [data-action-title]', 'Severance')
         ->assertNoSmoke();
 });

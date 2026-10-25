@@ -71,7 +71,8 @@ class ActionRequestController extends Controller
             'statusCounts' => $this->statusCounts(),
             'filters' => ['status' => $status],
             'preselect' => $preselect > 0 ? $preselect : null,
-            'preselectedRequest' => $this->preselectedOffPage($request, $preselect, $lengthAwarePaginator->getCollection()),
+            // Lazy: the live status-count reloads skip it unless they name it.
+            'preselectedRequest' => fn (): ?array => $this->preselectedOffPage($request, $preselect, $lengthAwarePaginator->getCollection()),
         ]);
     }
 
