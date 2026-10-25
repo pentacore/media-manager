@@ -85,26 +85,34 @@ function resolved(eventKey: string): ResolvedSummary | undefined {
 }
 
 function addOverride(eventKey: string): void {
-    overrides.value.push({
-        task: props.task,
-        event_key: eventKey,
-        tiers: [
-            {
-                provider: null,
-                model: null,
-                reasoning: null,
-                min_pool_percent: null,
-                min_pool_tokens: null,
-            },
-        ],
-    });
+    overrides.value = [
+        ...overrides.value,
+        {
+            task: props.task,
+            event_key: eventKey,
+            tiers: [
+                {
+                    provider: null,
+                    model: null,
+                    reasoning: null,
+                    min_pool_percent: null,
+                    min_pool_tokens: null,
+                },
+            ],
+        },
+    ];
 }
 
+/**
+ * Removing a row shifts every later row's index in the shared flat list, so
+ * every `event_overrides.N.*` error is stale for both sections.
+ */
 function removeOverride(eventKey: string): void {
     overrides.value = overrides.value.filter(
         (override) =>
             override.task !== props.task || override.event_key !== eventKey,
     );
+    emit('structure-change', 'event_overrides');
 }
 </script>
 
@@ -147,7 +155,7 @@ function removeOverride(eventKey: string): void {
             </div>
             <TierListEditor
                 v-model="override.tiers"
-                :label="override.event_key"
+                :label="`${taskLabel} ${override.event_key}`"
                 :models="models"
                 :reasoning-levels="reasoningLevels"
                 :model-capabilities="modelCapabilities"

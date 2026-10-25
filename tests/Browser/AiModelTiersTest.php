@@ -284,3 +284,39 @@ test('an event override that inherits shows which list its tier came from', func
         ->assertSeeIn('[data-event-override="sonarr:Download"] [data-tier-live]', 'tier 2 of 2')
         ->assertSeeIn('[data-event-override="sonarr:Download"] [data-override-resolved]', 'openai · gpt-5-nano');
 });
+
+test('removing an event override clears its errors so they never land on the next override', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-add-event-override] button')
+        ->click('[data-event-option="sonarr:Download"]')
+        ->click('[data-event-override="sonarr:Download"] [data-tier-add]')
+        ->click('[data-decision-verifier-add-event-override] button')
+        ->click('[data-decision-verifier-event-option="sonarr:Download"]')
+        ->click('[data-decision-verifier-event-override="sonarr:Download"] [data-tier-add]')
+        ->click('[data-decision-verifier-event-override="sonarr:Download"] [data-tier-row="0"] [data-model-select] button')
+        ->click('[role="option"][aria-label="gpt-5-nano"]')
+        ->click('Save models')
+        ->assertSeeIn('[data-event-override="sonarr:Download"] [data-tier-row="0"]', 'Pick a model for this tier.')
+        ->assertDontSeeIn('[data-decision-verifier-event-override="sonarr:Download"]', 'Pick a model for this tier.')
+        ->click('[data-event-override="sonarr:Download"] [data-remove-override]')
+        ->assertMissing('[data-event-override="sonarr:Download"]')
+        ->assertDontSeeIn('[data-decision-verifier-event-override="sonarr:Download"]', 'Pick a model for this tier.');
+});
+
+test('the model pickers of event overrides are named by task and event', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-add-event-override] button')
+        ->click('[data-event-option="sonarr:Download"]')
+        ->click('[data-decision-verifier-add-event-override] button')
+        ->click('[data-decision-verifier-event-option="sonarr:Download"]')
+        ->assertPresent('[data-event-override="sonarr:Download"] [aria-label="Decision agent sonarr:Download model"]')
+        ->assertPresent('[data-decision-verifier-event-override="sonarr:Download"] [aria-label="Decision verifier sonarr:Download model"]');
+});
