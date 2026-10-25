@@ -311,7 +311,7 @@ test('a tool that reports an error renders a failed chip', function (): void {
         ->assertMissing('[data-tool-chip="done"]');
 });
 
-test('a running sub-agent shows its output under the tool chip', function (): void {
+test('a structured sub-agent finishes as a done tool chip without streamed activity', function (): void {
     StuckDownloadInvestigatorAgent::fake([[
         'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
         'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
@@ -332,7 +332,8 @@ test('a running sub-agent shows its output under the tool chip', function (): vo
         ->type('textarea[placeholder^="Ask"]', 'why is it stuck?')
         ->click('Send')
         ->assertSee('It is not an upgrade; I can remove it.')
-        ->assertSeeIn('[data-tool-chip="done"] [data-tool-activity]', 'waiting for manual action');
+        ->assertVisible('[data-tool-chip="done"]')
+        ->assertNotPresent('[data-tool-activity]');
 });
 
 test('a stored failed turn renders as a failed reply when reopened', function (): void {

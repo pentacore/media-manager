@@ -34,9 +34,8 @@ use Laravel\Ai\Promptable;
 #[RepairToolCalls]
 final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddleware, HasProviderOptions, HasStructuredOutput, HasTools
 {
-    use ActsAsStructuredSubAgent, Promptable {
-        ActsAsStructuredSubAgent::stream insteadof Promptable;
-    }
+    use ActsAsStructuredSubAgent;
+    use Promptable;
     use RunsAsAiTask;
     use UsesFailoverChain;
 

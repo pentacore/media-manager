@@ -18,7 +18,7 @@ use LogicException;
  * While active, TaskModelResolver pins the case task to the candidate (and
  * BenchmarkJudge to the judge), AiSettings drops the failover provider,
  * ReplayBenchmarkTools answers every tool call from the fixtures, MediaAgent
- * replays the case history and usage rows carry the run id.
+ * replays the case history and usage rows carry the run id (unless it does not bill the run).
  */
 final class BenchmarkRunContext
 {
@@ -37,10 +37,12 @@ final class BenchmarkRunContext
 
     private ?AiMode $mode = null;
 
+    private bool $billsRun = true;
+
     /**
      * @param  list<Message>  $history
      */
-    public function start(int $runId, AiTask $aiTask, ResolvedSelection $candidate, ?ResolvedSelection $judge, FixtureBook $fixtureBook, array $history = [], ?AiMode $aiMode = null): void
+    public function start(int $runId, AiTask $aiTask, ResolvedSelection $candidate, ?ResolvedSelection $judge, FixtureBook $fixtureBook, array $history = [], ?AiMode $aiMode = null, bool $billsRun = true): void
     {
         $this->runId = $runId;
         $this->task = $aiTask;
@@ -49,6 +51,7 @@ final class BenchmarkRunContext
         $this->fixtureBook = $fixtureBook;
         $this->history = $history;
         $this->mode = $aiMode;
+        $this->billsRun = $billsRun;
     }
 
     public function stop(): void
@@ -60,6 +63,7 @@ final class BenchmarkRunContext
         $this->fixtureBook = null;
         $this->history = [];
         $this->mode = null;
+        $this->billsRun = true;
     }
 
     public function active(): bool
@@ -70,6 +74,17 @@ final class BenchmarkRunContext
     public function runId(): ?int
     {
         return $this->runId;
+    }
+
+    /**
+     * The run usage rows are billed to: the run while one is active and
+     * billing, else null. A neutral re-judge scores a run's stored outputs
+     * without adding to that run's cost, so it starts the context with
+     * billsRun false.
+     */
+    public function billedRunId(): ?int
+    {
+        return $this->billsRun ? $this->runId : null;
     }
 
     public function task(): ?AiTask

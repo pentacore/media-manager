@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkScoringType;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkCaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -81,5 +82,16 @@ class BenchmarkCase extends Model
     public function results(): HasMany
     {
         return $this->hasMany(BenchmarkResult::class);
+    }
+
+    /**
+     * Whether the blind LLM judge scores this case: its own scoring type, or
+     * its task's default when it names none.
+     */
+    public function isJudged(): bool
+    {
+        $scoringType = BenchmarkScoringType::tryFrom((string) ($this->scoring['type'] ?? '')) ?? $this->task->benchmarkScoringType();
+
+        return $scoringType === BenchmarkScoringType::Judge;
     }
 }

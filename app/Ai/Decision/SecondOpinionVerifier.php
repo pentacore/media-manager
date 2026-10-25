@@ -20,7 +20,6 @@ use App\Support\UpstreamErrorText;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 use Throwable;
 
@@ -239,8 +238,8 @@ final readonly class SecondOpinionVerifier
 
             $agentResponse = $decisionVerifierAgent->prompt($secondOpinionCase->toPrompt(), timeout: $timeout);
 
-            $agrees = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['agrees'] ?? null) : null;
-            $reason = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['reason'] ?? null) : null;
+            $agrees = $agentResponse['agrees'] ?? null;
+            $reason = $agentResponse['reason'] ?? null;
 
             throw_unless(is_bool($agrees), RuntimeException::class, 'The verifier returned no verdict.');
 

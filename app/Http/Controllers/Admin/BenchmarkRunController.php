@@ -9,17 +9,19 @@ use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkResultStatus;
+use App\Enums\BenchmarkRunStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\EstimateBenchmarkRunRequest;
 use App\Http\Requests\Admin\StoreBenchmarkRunRequest;
 use App\Models\BenchmarkCase;
-use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\BenchmarkEstimator;
 use App\Services\Benchmark\BenchmarkMatrix;
+use App\Services\Benchmark\BenchmarkResultDetails;
 use App\Services\Benchmark\BenchmarkRunLauncher;
 use App\Services\Benchmark\BenchmarkTierCandidates;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,6 +34,8 @@ class BenchmarkRunController extends Controller
 {
     private const int PER_PAGE = 25;
 
+    private const int COMPARE_OPTIONS = 20;
+
     /** How far the confirmed estimate may drift from a fresh one, in USD. */
     private const float ESTIMATE_TOLERANCE_USD = 0.01;
 
@@ -39,6 +43,7 @@ class BenchmarkRunController extends Controller
     {
         $lengthAwarePaginator = BenchmarkRun::query()
             ->with(['creator:id,name', 'schedule:id,name'])
+            ->withExists(['results as has_finished_results' => fn (Builder $builder): Builder => $builder->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])])
             ->latest()
             ->latest('id')
             ->paginate(self::PER_PAGE)
@@ -58,6 +63,8 @@ class BenchmarkRunController extends Controller
                     'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
+                    'comparable' => in_array($benchmarkRun->status, [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap], true)
+                        || ($benchmarkRun->status === BenchmarkRunStatus::Cancelled && (bool) $benchmarkRun->getAttribute('has_finished_results')),
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
@@ -180,7 +187,8 @@ class BenchmarkRunController extends Controller
                 ],
             ],
             'matrix' => BenchmarkMatrix::for($benchmarkRun),
-            'resultDetail' => Inertia::optional(fn (): array => $this->resultDetail($benchmarkRun, $request->integer('result'))),
+            'compareOptions' => $benchmarkRun->isComparable() ? $this->compareOptions($benchmarkRun) : [],
+            'resultDetail' => Inertia::optional(fn (): array => BenchmarkResultDetails::for($benchmarkRun->results()->findOrFail($request->integer('result')))),
         ]);
     }
 
@@ -234,6 +242,43 @@ class BenchmarkRunController extends Controller
     }
 
     /**
+     * Finished runs that share a task with this one, newest first; the
+     * schedule's previous finished run leads the list.
+     *
+     * @return list<array{id: int, name: string, created_at: string|null, previous_scheduled: bool}>
+     */
+    private function compareOptions(BenchmarkRun $benchmarkRun): array
+    {
+        $tasks = $benchmarkRun->results()->distinct()->pluck('case_task');
+        $previous = $benchmarkRun->benchmark_schedule_id === null ? null : BenchmarkRun::query()
+            ->comparable()
+            ->where('benchmark_schedule_id', $benchmarkRun->benchmark_schedule_id)
+            ->where('id', '<', $benchmarkRun->id)
+            ->latest('id')
+            ->first(['id', 'name', 'created_at']);
+
+        $others = BenchmarkRun::query()
+            ->comparable()
+            ->whereKeyNot(array_filter([$benchmarkRun->id, $previous?->id]))
+            ->whereHas('results', fn (Builder $builder): Builder => $builder->whereIn('case_task', $tasks))
+            ->latest('id')
+            ->limit(self::COMPARE_OPTIONS - ($previous instanceof BenchmarkRun ? 1 : 0))
+            ->get(['id', 'name', 'created_at']);
+
+        $option = static fn (BenchmarkRun $run, bool $previousScheduled): array => [
+            'id' => $run->id,
+            'name' => $run->name,
+            'created_at' => $run->created_at?->toIso8601String(),
+            'previous_scheduled' => $previousScheduled,
+        ];
+
+        return [
+            ...($previous instanceof BenchmarkRun ? [$option($previous, true)] : []),
+            ...$others->map(static fn (BenchmarkRun $run): array => $option($run, false))->all(),
+        ];
+    }
+
+    /**
      * @param  list<int>  $caseIds
      * @return Collection<int, BenchmarkCase>
      */
@@ -246,54 +291,6 @@ class BenchmarkRunController extends Controller
             ->filter()
             ->unique('id')
             ->values();
-    }
-
-    /**
-     * Every candidate's result for the clicked result's case, with the case's
-     * scoring and prompt when the case still exists.
-     *
-     * @return array<string, mixed>
-     */
-    private function resultDetail(BenchmarkRun $benchmarkRun, int $resultId): array
-    {
-        $clicked = $benchmarkRun->results()->findOrFail($resultId);
-
-        $siblings = $benchmarkRun->results()
-            ->where('case_task', $clicked->case_task)
-            ->when(
-                $clicked->benchmark_case_id === null,
-                static fn ($query) => $query->whereNull('benchmark_case_id')->where('case_name', $clicked->case_name),
-                static fn ($query) => $query->where('benchmark_case_id', $clicked->benchmark_case_id),
-            )
-            ->orderBy('candidate_index')
-            ->get();
-
-        $benchmarkCase = $clicked->benchmarkCase;
-
-        return [
-            'case_id' => $clicked->benchmark_case_id,
-            'case_name' => $clicked->case_name,
-            'case_task' => $clicked->case_task,
-            'scoring' => $benchmarkCase?->scoring,
-            'prompt' => $benchmarkCase?->input['prompt'] ?? null,
-            'results' => $siblings->map(static fn (BenchmarkResult $benchmarkResult): array => [
-                'result_id' => $benchmarkResult->id,
-                'candidate_index' => $benchmarkResult->candidate_index,
-                'status' => $benchmarkResult->status->value,
-                'output' => $benchmarkResult->output,
-                'intended_actions' => $benchmarkResult->intended_actions,
-                'score' => $benchmarkResult->score,
-                'passed' => $benchmarkResult->passed,
-                'judge_status' => $benchmarkResult->judge_status->value,
-                'judge_stale' => $benchmarkResult->isJudgeStale(),
-                'stale' => $benchmarkResult->isRunStale(),
-                'score_detail' => collect($benchmarkResult->score_detail ?? [])->except('tool_log')->all(),
-                'error' => $benchmarkResult->error,
-                'tool_log' => $benchmarkResult->score_detail['tool_log'] ?? [],
-                'latency_ms' => $benchmarkResult->latency_ms,
-                'cost_usd' => (float) $benchmarkResult->cost_usd + (float) $benchmarkResult->judge_cost_usd,
-            ])->all(),
-        ];
     }
 
     /**

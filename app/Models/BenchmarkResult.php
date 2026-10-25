@@ -10,9 +10,11 @@ use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Override;
 
 /**
@@ -44,6 +46,7 @@ use Override;
  * @property CarbonImmutable|null $updated_at
  * @property-read BenchmarkRun $run
  * @property-read BenchmarkCase|null $benchmarkCase
+ * @property-read Collection<int, BenchmarkNeutralJudgement> $neutralJudgements
  *
  * @method static BenchmarkResultFactory factory($count = null, $state = [])
  * @method static Builder<static>|BenchmarkResult newModelQuery()
@@ -198,6 +201,14 @@ class BenchmarkResult extends Model
     private function staleBefore(): CarbonImmutable
     {
         return now()->subSeconds(self::CLAIM_STALE_AFTER_SECONDS);
+    }
+
+    /**
+     * @return HasMany<BenchmarkNeutralJudgement, $this>
+     */
+    public function neutralJudgements(): HasMany
+    {
+        return $this->hasMany(BenchmarkNeutralJudgement::class);
     }
 
     /**

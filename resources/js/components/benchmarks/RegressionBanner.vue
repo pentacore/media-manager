@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { TriangleAlert } from '@lucide/vue';
+import BenchmarkComparisonController from '@/actions/App/Http/Controllers/Admin/BenchmarkComparisonController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import { formatPercent } from './format';
 import type { BenchmarkRegression } from './types';
@@ -8,6 +9,7 @@ import type { BenchmarkRegression } from './types';
 defineProps<{
     regressions: BenchmarkRegression[];
     baseline: { id: number; name: string } | null;
+    runId: number;
 }>();
 
 const METRIC_LABELS: Record<
@@ -65,6 +67,20 @@ function metricsText(regression: BenchmarkRegression): string {
                     >{{ baseline.name }}</Link
                 >
                 <template v-else>an earlier run</template>
+                <Link
+                    v-if="baseline"
+                    :href="
+                        BenchmarkComparisonController.show.url({
+                            query: {
+                                runs: `${baseline.id},${runId}`,
+                                baseline: baseline.id,
+                            },
+                        })
+                    "
+                    class="ml-2 text-[12.5px] font-normal text-primary hover:underline"
+                    data-benchmark-compare-baseline
+                    >Compare with baseline</Link
+                >
             </span>
         </div>
         <ul class="grid gap-1">

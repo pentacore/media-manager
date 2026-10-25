@@ -11,11 +11,11 @@ use Laravel\Ai\Responses\StructuredAgentResponse;
 test('the verifier answers with a structured verdict', function (): void {
     DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'The event concerns another series.']]);
 
-    $agentResponse = (new DecisionVerifierAgent)->prompt('case file');
+    $structuredAgentResponse = (new DecisionVerifierAgent)->prompt('case file');
 
-    expect($agentResponse)->toBeInstanceOf(StructuredAgentResponse::class)
-        ->and($agentResponse['agrees'])->toBeFalse()
-        ->and($agentResponse['reason'])->toBe('The event concerns another series.');
+    expect($structuredAgentResponse)->toBeInstanceOf(StructuredAgentResponse::class)
+        ->and($structuredAgentResponse['agrees'])->toBeFalse()
+        ->and($structuredAgentResponse['reason'])->toBe('The event concerns another series.');
 });
 
 test('the verifier runs as its own task and ends its middleware with the benchmark replay', function (): void {

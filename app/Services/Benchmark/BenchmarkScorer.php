@@ -22,7 +22,6 @@ use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Services\AiUsage\UsageColumns;
 use App\Support\UpstreamErrorText;
 use Laravel\Ai\Responses\AgentResponse;
-use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 use Throwable;
 
@@ -218,13 +217,15 @@ final readonly class BenchmarkScorer
             $benchmarkCase->task === AiTask::Chat ? AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')) : null,
         );
 
+        $agentResponse = null;
+
         try {
             $this->aiBudgetGuard->enforce();
 
             $agentResponse = resolve(BenchmarkJudgeAgent::class)->prompt($judgePrompt);
 
-            $rawScore = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['score'] ?? null) : null;
-            $rationale = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['rationale'] ?? '') : '';
+            $rawScore = $agentResponse['score'] ?? null;
+            $rationale = $agentResponse['rationale'] ?? '';
 
             throw_unless(is_numeric($rawScore), RuntimeException::class, 'The judge returned no score.');
 
@@ -237,7 +238,7 @@ final readonly class BenchmarkScorer
                 'passed' => null,
                 'detail' => ['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)],
                 'judge_status' => BenchmarkJudgeStatus::Failed,
-                'judge_cost_usd' => 0.0,
+                'judge_cost_usd' => $agentResponse instanceof AgentResponse ? $this->judgeCost($agentResponse) : 0.0,
             ];
         }
 

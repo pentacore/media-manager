@@ -1,12 +1,18 @@
 export { default as CandidateRows } from './CandidateRows.vue';
 export { default as CaseInputFields } from './CaseInputFields.vue';
 export { default as CaseSelector } from './CaseSelector.vue';
+export * from './compare';
+export { default as CompareCaseGrid } from './CompareCaseGrid.vue';
+export { default as CompareOutputsDialog } from './CompareOutputsDialog.vue';
+export { default as CompareRunBar } from './CompareRunBar.vue';
+export { default as CompareTaskTable } from './CompareTaskTable.vue';
 export { default as EstimateSummary } from './EstimateSummary.vue';
 export { default as ExpectedActionsEditor } from './ExpectedActionsEditor.vue';
 export { default as FixtureEditor } from './FixtureEditor.vue';
 export * from './format';
 export * from './jsonObject';
 export { default as JudgeScoringFields } from './JudgeScoringFields.vue';
+export { default as NeutralJudgePanel } from './NeutralJudgePanel.vue';
 export { default as PriceExpectationsEditor } from './PriceExpectationsEditor.vue';
 export { default as RegressionBanner } from './RegressionBanner.vue';
 export { default as ResultDrawer } from './ResultDrawer.vue';
