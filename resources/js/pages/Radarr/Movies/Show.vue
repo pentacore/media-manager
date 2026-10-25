@@ -6,6 +6,7 @@ import {
     ExternalLink,
     HardDrive,
     Replace,
+    Search,
     Trash2,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
@@ -34,6 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { formatBytes } from '@/lib/format';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 import type { UpstreamList } from '@/types';
 
@@ -255,7 +257,14 @@ function confirmDelete() {
                             Delete
                         </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent
+                        @close-auto-focus="
+                            returnFocusToPageHeaderMenu(
+                                $event,
+                                '[data-delete-trigger]',
+                            )
+                        "
+                    >
                         <DialogHeader>
                             <DialogTitle>Delete {{ movie.title }}?</DialogTitle>
                             <DialogDescription data-delete-description>
@@ -297,7 +306,7 @@ function confirmDelete() {
                     data-page-header-item="interactive-search"
                     @select="interactiveOpen = true"
                 >
-                    Interactive search
+                    <Search class="size-3.5" />Interactive search
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     v-if="movie.title_slug && connection.url"

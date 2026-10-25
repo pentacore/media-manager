@@ -19,6 +19,7 @@ import {
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { useCan } from '@/composables/useCan';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { sonarrSeriesUrl } from './seriesHelpers';
 import type { SeriesDetail } from './types';
 
@@ -121,7 +122,14 @@ function confirmDelete() {
                         Delete
                     </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent
+                    @close-auto-focus="
+                        returnFocusToPageHeaderMenu(
+                            $event,
+                            '[data-delete-trigger]',
+                        )
+                    "
+                >
                     <DialogHeader>
                         <DialogTitle> Delete {{ series.title }}? </DialogTitle>
                         <DialogDescription data-delete-description>

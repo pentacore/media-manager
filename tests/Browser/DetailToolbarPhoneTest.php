@@ -27,7 +27,7 @@ function detailToolbarPhoneFakes(): void
         'sonarr.local:8989/api/v3/release*' => Http::response([]),
         'sonarr.local:8989/*' => Http::response([]),
         'radarr.local:7878/api/v3/movie/10*' => Http::response([
-            'id' => 10, 'title' => 'Dune', 'titleSlug' => 'dune-2021', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1,
+            'id' => 10, 'title' => 'Dune: An Example Movie Title Long Enough To Wrap', 'titleSlug' => 'dune-2021', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1,
             'sizeOnDisk' => 12_000_000_000, 'images' => $poster, 'overview' => 'An example overview.', 'runtime' => 155, 'status' => 'released',
             'movieFile' => ['id' => 10, 'relativePath' => 'Dune.2021.Bluray-1080p.mkv', 'size' => 12_000_000_000, 'quality' => ['quality' => ['name' => 'Bluray-1080p']]],
         ]),
@@ -35,6 +35,27 @@ function detailToolbarPhoneFakes(): void
         'radarr.local:7878/api/v3/release*' => Http::response([]),
         'radarr.local:7878/*' => Http::response([]),
     ]);
+}
+
+/**
+ * Waits until the focused element matches the selector (the dialog's close
+ * focus runs as it unmounts), then reports whether it does.
+ */
+function detailToolbarFocusScript(string $selector): string
+{
+    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector));
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
+/**
+ * The ⋯ menu restores focus to its trigger as it unmounts after its exit
+ * animation; close the dialog only once that is over and focus sits in the
+ * dialog, or the menu's late restore hides where the dialog sends focus.
+ */
+function detailToolbarMenuGoneCondition(): string
+{
+    return '!document.querySelector("[data-page-header-menu]") && !!document.activeElement?.closest("[role=\\"dialog\\"]")';
 }
 
 beforeEach(function (): void {
@@ -66,12 +87,16 @@ test('the movie toolbar keeps Monitor and Search on a phone and moves the rest i
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-interactive-search-dialog]")'));
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="delete"]')
-        ->assertSeeIn('[data-delete-description]', 'Removes the movie from Radarr.')
+        ->assertSeeIn('[data-delete-description]', 'Removes the movie from Radarr.');
+
+    $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
+    $webpage->keys('[data-delete-confirm]', 'Escape');
+    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true)
         ->assertNoSmoke();
 });
 
 test('the series toolbar keeps Monitor and Search on a phone and moves Open in Sonarr and Delete into its menu', function (): void {
-    $this->actingAs(User::factory()->admin()->create());
+    $this->actingAs(User::factory()->member()->create());
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
@@ -80,11 +105,18 @@ test('the series toolbar keeps Monitor and Search on a phone and moves Open in S
         ->assertVisible('[data-series-actions] [data-monitor-toggle]')
         ->assertVisible('[data-series-actions] [data-search-now]')
         ->assertMissing('[data-series-open-sonarr]')
+        ->assertMissing('[data-delete-trigger]')
         ->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript('(() => { const trigger = document.querySelector("[data-quality-profile-trigger]"); return trigger.getBoundingClientRect().right <= trigger.closest(".grid > div").getBoundingClientRect().right; })()', true)
         ->click('[data-page-header-more]')
+        ->assertAttribute('[data-page-header-item="open-sonarr"]', 'href', 'http://sonarr.local:8989/series/severance')
         ->assertAttribute('[data-page-header-item="open-sonarr"]', 'target', '_blank')
         ->click('[data-page-header-item="delete"]')
-        ->assertSeeIn('[data-delete-description]', 'Removes the series from Sonarr.')
+        ->assertSeeIn('[data-delete-description]', 'Removes the series from Sonarr.');
+
+    $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
+    $webpage->keys('[data-delete-confirm]', 'Escape');
+    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true)
         ->assertNoSmoke();
 });
 
@@ -93,10 +125,13 @@ test("an episode row's Interactive search and Replace stay reachable on a phone"
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->click('Season 1');
+    $webpage->click('[data-season-card="1"] button');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-episode-actions=\"71\"]")'));
 
     $webpage->assertScript(phoneOverflowScript('main'), '')
+        ->assertVisible('[data-episode-actions="71"] [data-monitor-toggle]')
+        ->assertVisible('[data-episode-actions="71"] [data-search-now]')
+        ->assertVisible('[data-replacement-trigger]')
         ->assertVisible('[data-episode-actions="71"] [data-interactive-search]')
         ->click('[data-episode-actions="71"] [data-interactive-search]')
         ->assertVisible('[data-interactive-search-dialog]');
@@ -127,7 +162,13 @@ test('at desktop width the detail toolbars keep every action inline', function (
         ->assertMissing('[data-page-header-more]');
 
     $webpage->navigate(route('media.series.show', ['id' => 7], absolute: false));
+    $webpage->script(appHydratedScript());
     $webpage->assertVisible('[data-series-open-sonarr]')
         ->assertVisible('[data-delete-trigger]')
-        ->assertMissing('[data-page-header-more]');
+        ->assertMissing('[data-page-header-more]')
+        ->click('[data-delete-trigger]')
+        ->assertSeeIn('[data-delete-description]', 'Removes the series from Sonarr.');
+
+    $webpage->keys('[data-delete-confirm]', 'Escape');
+    $webpage->assertScript(detailToolbarFocusScript('[data-delete-trigger]'), true);
 });
