@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\SubtitleAuditBatchSettler;
 use App\Services\MediaReplacement\SubtitleAuditBatchWaiter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Sleep;
 
@@ -121,4 +122,33 @@ test('the waiter returns true as soon as the batch is ready and false at the dea
 
     expect($subtitleAuditBatchWaiter->waitForReady($stuck, 5))->toBeFalse()
         ->and($sleeps)->toBe(5);
+});
+
+test('a notification from a settle inside an outer transaction waits for the commit', function (): void {
+    $subtitleAuditBatchSettler = resolve(SubtitleAuditBatchSettler::class);
+
+    $committed = SubtitleAuditBatch::factory()->create(['handed_off_at' => now()]);
+    SubtitleAuditEpisode::factory()->for($committed, 'batch')->queued()->create();
+
+    DB::transaction(function () use ($subtitleAuditBatchSettler, $committed): void {
+        $subtitleAuditBatchSettler->settle($committed);
+        Notification::assertNothingSent();
+    });
+
+    Notification::assertSentToTimes($this->admin, MediaReplacementStatusChanged::class, 1);
+
+    $rolledBack = SubtitleAuditBatch::factory()->create(['handed_off_at' => now()]);
+    SubtitleAuditEpisode::factory()->for($rolledBack, 'batch')->queued()->create();
+
+    try {
+        DB::transaction(function () use ($subtitleAuditBatchSettler, $rolledBack): void {
+            $subtitleAuditBatchSettler->settle($rolledBack);
+
+            throw new RuntimeException('rollback');
+        });
+    } catch (RuntimeException) {
+    }
+
+    Notification::assertSentToTimes($this->admin, MediaReplacementStatusChanged::class, 1);
+    expect($rolledBack->refresh()->status)->toBe(SubtitleAuditBatchStatus::Searching);
 });

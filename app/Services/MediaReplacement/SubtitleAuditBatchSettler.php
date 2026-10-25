@@ -53,13 +53,13 @@ class SubtitleAuditBatchSettler
         $subtitleAuditBatch->refresh();
 
         if ($shouldNotify) {
-            $this->adminNotifier->send(new MediaReplacementStatusChanged(
+            DB::afterCommit(fn () => $this->adminNotifier->send(new MediaReplacementStatusChanged(
                 service: 'sonarr',
                 title: sprintf('Subtitle audit: %s', $subtitleAuditBatch->series_title),
                 message: $this->summary($subtitleAuditBatch),
                 level: 'info',
                 url: route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id], absolute: false),
-            ));
+            )));
         }
     }
 
