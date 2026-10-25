@@ -47,6 +47,33 @@ export type ModelOptions = {
     reasoningProviders: string[];
 };
 
+/**
+ * A routable tool group's key. Mirrors `App\Ai\Routing\ToolGroup`, which
+ * sits outside `App\Enums`, so typefinder emits no enum for it.
+ */
+export type ToolGroupValue = string;
+
+/** Why a tool group was loaded for a turn. */
+export type ToolGroupSource =
+    'pinned' | 'assistant' | 'carried_over' | 'picked';
+
+/** One routed tool group a turn carried, with its label and why it loaded. */
+export type TurnToolGroup = {
+    group: ToolGroupValue;
+    label: string;
+    source: ToolGroupSource;
+};
+
+/** The groups a reply had: a list, `'all'` (routing on, but the turn had the full toolset) or null (routing off or unknown). */
+export type TurnToolGroups = TurnToolGroup[] | 'all' | null;
+
+/** One entry of `GET ai/chat/tool-groups`. */
+export type ToolGroupOption = {
+    value: ToolGroupValue;
+    label: string;
+    available: boolean;
+};
+
 export interface WorkflowProposal {
     id: string;
     rationale: string;
@@ -81,9 +108,18 @@ export type ChatCard =
           /** An ActionRequestStatus, or 'changed' once a review lost a race. */
           status: string;
           requires_approval: boolean;
+      }
+    | {
+          type: 'tool_request';
+          /** The tool call id of the assistant's RequestToolsTool call. */
+          id: string;
+          groups: Array<{ group: ToolGroupValue; label: string }>;
+          reason: string;
       };
 
 export type ChoicesCard = Extract<ChatCard, { type: 'choices' }>;
+
+export type ToolRequestCard = Extract<ChatCard, { type: 'tool_request' }>;
 
 export type ActionRequestCard = Extract<ChatCard, { type: 'action_request' }>;
 
@@ -116,4 +152,6 @@ export interface PendingFile {
 export interface ComposerSubmission {
     text: string;
     pendingFiles: PendingFile[];
+    /** Tool groups to load for just this turn (the assistant's request). */
+    loadToolGroups?: ToolGroupValue[];
 }

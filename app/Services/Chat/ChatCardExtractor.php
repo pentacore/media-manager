@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Chat;
 
 use App\Ai\Tools\System\OfferChoicesTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Models\ActionRequest;
 use Laravel\Ai\Tools\ToolNameResolver;
 
 /**
- * Derives the cards shown under an assistant reply (choice buttons and
- * inline approvals) from stored or live tool results. The frontend parses
+ * Derives the cards shown under an assistant reply (choice buttons, tool-group
+ * requests and inline approvals) from stored or live tool results. The frontend parses
  * the same JSON from the AG-UI stream, so the shapes are a contract.
  */
 class ChatCardExtractor
@@ -28,6 +29,7 @@ class ChatCardExtractor
     {
         $cards = [];
         $choicesToolName = ToolNameResolver::resolve(new OfferChoicesTool);
+        $toolRequestName = ToolNameResolver::resolve(new RequestToolsTool);
 
         foreach ($toolResults as $toolResult) {
             $result = $toolResult['result'] ?? null;
@@ -42,6 +44,16 @@ class ChatCardExtractor
 
             if (($toolResult['name'] ?? null) === $choicesToolName && is_array($result['choices'] ?? null)) {
                 $cards[] = $this->choicesCard((string) ($toolResult['id'] ?? ''), $result['choices']);
+
+                continue;
+            }
+
+            if (($toolResult['name'] ?? null) === $toolRequestName && is_array($result['tool_request'] ?? null)) {
+                $card = $this->toolRequestCard((string) ($toolResult['id'] ?? ''), $result['tool_request']);
+
+                if ($card !== null) {
+                    $cards[] = $card;
+                }
 
                 continue;
             }
@@ -125,6 +137,33 @@ class ChatCardExtractor
                 ])
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $toolRequest
+     * @return array<string, mixed>|null
+     */
+    private function toolRequestCard(string $id, array $toolRequest): ?array
+    {
+        $groups = collect(is_array($toolRequest['groups'] ?? null) ? $toolRequest['groups'] : [])
+            ->filter(fn (mixed $group): bool => is_array($group) && is_string($group['group'] ?? null))
+            ->map(fn (array $group): array => [
+                'group' => $group['group'],
+                'label' => is_string($group['label'] ?? null) ? $group['label'] : $group['group'],
+            ])
+            ->values()
+            ->all();
+
+        if ($groups === []) {
+            return null;
+        }
+
+        return [
+            'type' => 'tool_request',
+            'id' => $id,
+            'groups' => $groups,
+            'reason' => (string) ($toolRequest['reason'] ?? ''),
         ];
     }
 }

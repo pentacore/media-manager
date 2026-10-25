@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\RoutedToolGroups;
+use App\Ai\Routing\ToolGroup;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\RenameConversationRequest;
 use App\Http\Requests\AI\UpdateConversationModelRequest;
+use App\Http\Requests\AI\UpdateConversationToolGroupsRequest;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatCardExtractor;
+use App\Services\Chat\ChatTurnGuard;
 use App\Services\Chat\ConversationModelOverride;
+use App\Services\Chat\ConversationToolPins;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +60,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, ConversationToolPins $conversationToolPins, ChatToolRouter $chatToolRouter, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -102,6 +108,7 @@ class ConversationController extends Controller
                     'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                     'failed' => $storedMessage->status === MessageStatus::Failed,
                     'cards' => $entry['cards'],
+                    'tool_groups' => $storedMessage->role === 'assistant' ? RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null) : null,
                     'answered_by' => $storedMessage->role === 'assistant' ? [
                         'provider' => $storedMessage->meta['provider'] ?? null,
                         'model' => $storedMessage->meta['model'] ?? null,
@@ -124,6 +131,7 @@ class ConversationController extends Controller
             'title' => (string) $row->title,
             'updated_at' => $row->updated_at,
             'override' => $conversationModelOverride->forConversation($conversation),
+            ...$this->toolGroupState($conversation, $conversationToolPins, $chatToolRouter),
             'messages' => $messages,
             'next_cursor' => $cursorPaginator->nextCursor()?->encode(),
         ]);
@@ -203,6 +211,71 @@ class ConversationController extends Controller
                 'reasoning_label' => $resolvedSelection->reasoning->label(),
             ],
         ]);
+    }
+
+    /**
+     * The conversation's pinned tool groups and the groups the next turn
+     * would carry over from the last reply; the chat strip reads it after
+     * each completed turn.
+     */
+    public function toolGroups(
+        Request $request,
+        ChatTurnGuard $chatTurnGuard,
+        ConversationToolPins $conversationToolPins,
+        ChatToolRouter $chatToolRouter,
+        string $conversation,
+    ): JsonResponse {
+        if (! $chatTurnGuard->conversationIsAvailable($conversation, $request->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        return response()->json($this->toolGroupState($conversation, $conversationToolPins, $chatToolRouter));
+    }
+
+    /**
+     * Replace the conversation's pinned tool groups.
+     */
+    public function updateToolGroups(
+        UpdateConversationToolGroupsRequest $updateConversationToolGroupsRequest,
+        ChatTurnGuard $chatTurnGuard,
+        ConversationToolPins $conversationToolPins,
+        string $conversation,
+    ): JsonResponse {
+        if (! $chatTurnGuard->conversationIsAvailable($conversation, $updateConversationToolGroupsRequest->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $validated = $updateConversationToolGroupsRequest->validated();
+
+        $conversationToolPins->persist($conversation, array_map(ToolGroup::from(...), $validated['groups']));
+
+        return response()->json([
+            'pinned_tool_groups' => array_map(
+                fn (ToolGroup $toolGroup): string => $toolGroup->value,
+                $conversationToolPins->forConversation($conversation),
+            ),
+        ]);
+    }
+
+    /**
+     * @return array{pinned_tool_groups: list<string>, carried_over_tool_groups: list<array{group: string, label: string, source: string}>}
+     */
+    private function toolGroupState(string $conversation, ConversationToolPins $conversationToolPins, ChatToolRouter $chatToolRouter): array
+    {
+        $carriedOver = [];
+
+        foreach ($chatToolRouter->carriedOver($conversation) as $value => $toolGroupSource) {
+            $toolGroup = ToolGroup::from($value);
+            $carriedOver[] = ['group' => $toolGroup->value, 'label' => $toolGroup->label(), 'source' => $toolGroupSource->value];
+        }
+
+        return [
+            'pinned_tool_groups' => array_map(
+                fn (ToolGroup $toolGroup): string => $toolGroup->value,
+                $conversationToolPins->forConversation($conversation),
+            ),
+            'carried_over_tool_groups' => $carriedOver,
+        ];
     }
 
     private function conversationBelongsTo(string $conversationId, ?User $user): bool

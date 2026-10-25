@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Concerns;
 
+use App\Ai\Routing\ToolGroup;
 use App\Enums\ChatTemplateVariableType;
 use App\Models\ChatTemplate;
 use App\Services\Chat\ChatTemplateDefinition;
@@ -46,6 +47,8 @@ trait ChatTemplateValidationRules
             'pinned' => ['required', 'boolean'],
             'preset' => ['nullable', 'array:provider,model,reasoning'],
             ...$this->selectionRules('preset'),
+            'tool_groups' => ['nullable', 'array', 'max:20'],
+            'tool_groups.*' => ['distinct', Rule::enum(ToolGroup::class)],
         ];
     }
 

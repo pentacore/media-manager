@@ -10,6 +10,7 @@ use App\Http\Controllers\AI\ChatTemplateLibraryController;
 use App\Http\Controllers\AI\ChatTemplateOptionsController;
 use App\Http\Controllers\AI\ChatTemplatePreviewController;
 use App\Http\Controllers\AI\ChatTemplateRenderController;
+use App\Http\Controllers\AI\ChatToolGroupsController;
 use App\Http\Controllers\AI\ConversationController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,18 +24,25 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::get('chat/pending-workflow', [ChatController::class, 'pendingWorkflow'])->name('chat.pending-workflow');
         Route::get('chat/attachments/{chatAttachment}', ChatAttachmentController::class)->name('chat.attachments.show');
         Route::get('chat/model-options', ChatModelOptionsController::class)->name('chat.model-options');
+        Route::get('chat/tool-groups', ChatToolGroupsController::class)->name('chat.tool-groups');
 
         Route::get('conversations', [ConversationController::class, 'index'])
             ->name('conversations.index');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])
             ->whereUuid('conversation')
             ->name('conversations.show');
+        Route::get('conversations/{conversation}/tool-groups', [ConversationController::class, 'toolGroups'])
+            ->whereUuid('conversation')
+            ->name('conversations.tool-groups.show');
         Route::patch('conversations/{conversation}', [ConversationController::class, 'rename'])
             ->whereUuid('conversation')
             ->name('conversations.rename');
         Route::patch('conversations/{conversation}/model', [ConversationController::class, 'updateModel'])
             ->whereUuid('conversation')
             ->name('conversations.model');
+        Route::put('conversations/{conversation}/tool-groups', [ConversationController::class, 'updateToolGroups'])
+            ->whereUuid('conversation')
+            ->name('conversations.tool-groups');
 
         Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
         Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');

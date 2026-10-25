@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Routing\ToolGroup;
 use App\Enums\AiTask;
 use App\Enums\ClassificationVerdict;
@@ -13,6 +14,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
@@ -24,6 +26,8 @@ use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Laravel\Ai\Responses\Data\ToolCall;
 
@@ -416,4 +420,88 @@ test('send returns an action_request card for a queued destructive tool', functi
     expect($response->json('cards.0.id'))->toBe($actionRequest->id)
         ->and($response->json('cards.0.title'))->toBe($actionRequest->title)
         ->and($actionRequest->title)->not->toBeNull();
+});
+
+test('a routed turn stores and returns its tool groups', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([chatRouterAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?', 'pinned_tool_groups' => ['indexers']])
+        ->assertOk();
+
+    $expected = [
+        ['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'],
+        ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'pinned'],
+    ];
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($response->json('tool_groups'))->toBe($expected)
+        ->and($meta['tool_groups'])->toBe($expected);
+});
+
+test('a turn with routing off records no tool groups', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Hi.']);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Hello'])
+        ->assertOk();
+
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($response->json('tool_groups'))->toBeNull()
+        ->and($meta)->not->toHaveKey('tool_groups');
+});
+
+test('a load click continues with the approved group', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'T',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('agent_conversation_messages')->insert([
+        'id' => (string) Str::uuid7(),
+        'conversation_id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'agent' => MediaAgent::class,
+        'role' => 'assistant',
+        'content' => 'Shall I load it?',
+        'attachments' => '[]',
+        'steps' => json_encode([[
+            'content' => 'Shall I load it?',
+            'tool_calls' => [['id' => 'r1', 'name' => 'RequestToolsTool', 'arguments' => [], 'result' => json_encode([
+                'tool_request' => ['groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement']], 'reason' => 'x'],
+            ])]],
+            'reasoning' => '',
+            'replay_blocks' => [],
+            'provider_tool_calls' => [],
+        ]]),
+        'usage' => '{}',
+        'meta' => json_encode(new stdClass),
+        'status' => 'completed',
+        'created_at' => now()->subMinute(),
+        'updated_at' => now()->subMinute(),
+    ]);
+    Classification::fake([chatRouterAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['Inspecting now.']);
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'Load it', 'conversation_id' => $conversationId, 'load_tool_groups' => ['subtitles_replacement']])
+        ->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => collect($agentPrompt->tools ?? [])
+        ->flatMap(fn (object $tool): array => $tool instanceof ToolSearch ? $tool->tools : [$tool])
+        ->contains(fn (object $tool): bool => $tool instanceof MediaFileInspectorAgent));
+
+    expect(collect($response->json('tool_groups'))->firstWhere('group', 'subtitles_replacement')['source'])->toBe('assistant');
 });
