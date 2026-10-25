@@ -611,7 +611,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                 </td>
                                 <td class="px-3 py-2.5 text-right">
                                     <div
-                                        class="flex justify-end gap-1 touch:gap-2"
+                                        class="flex justify-end gap-1 touch:gap-3"
                                     >
                                         <Button
                                             v-if="slot.status === 'Paused'"
@@ -975,7 +975,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     class="px-3 py-2.5 text-right"
                                 >
                                     <div
-                                        class="flex justify-end gap-1 touch:gap-2"
+                                        class="flex justify-end gap-1 touch:gap-3"
                                     >
                                         <Button
                                             v-if="slot.status === 'Failed'"

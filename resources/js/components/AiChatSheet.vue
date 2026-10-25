@@ -37,25 +37,31 @@ const {
 /** Below `sm` the sheet stays full-width, so the pixel width doesn't apply. */
 const isResizable = useMediaQuery('(min-width: 640px)');
 
+/** A touch screen has an on-screen keyboard, at any width (a phone in landscape). */
+const isCoarsePointer = useMediaQuery('(pointer: coarse)');
+
 const { height: visibleHeight, offsetTop: visibleTop } = useVisualViewport();
 
 /**
- * From `sm` the sheet is resizable and as tall as the window. Below `sm` it
- * is full width and fills the *visible* viewport, so the on-screen keyboard
- * shrinks it and the composer stays above the keyboard.
+ * From `sm` the sheet is resizable; below `sm` it is full width. Below `sm`,
+ * and on any touch screen, it fills the *visible* viewport, so the on-screen
+ * keyboard shrinks it and the composer stays above the keyboard. A desktop
+ * with a mouse keeps the window-tall sheet.
  */
 const contentStyle = computed(() => {
-    if (isResizable.value) {
-        return { width: `${width.value}px` };
+    const size = isResizable.value ? { width: `${width.value}px` } : {};
+    const followsKeyboard = !isResizable.value || isCoarsePointer.value;
+
+    if (!followsKeyboard || visibleHeight.value === null) {
+        return isResizable.value ? size : undefined;
     }
 
-    return visibleHeight.value === null
-        ? undefined
-        : {
-              top: `${visibleTop.value}px`,
-              bottom: 'auto',
-              height: `${visibleHeight.value}px`,
-          };
+    return {
+        ...size,
+        top: `${visibleTop.value}px`,
+        bottom: 'auto',
+        height: `${visibleHeight.value}px`,
+    };
 });
 </script>
 

@@ -296,7 +296,7 @@ function checkVersion(connection: Connection) {
                             </td>
                             <td class="px-3 py-2.5 text-right">
                                 <div
-                                    class="inline-flex items-center gap-1 touch:gap-2"
+                                    class="inline-flex items-center gap-1 touch:gap-3"
                                 >
                                     <Button
                                         as-child

@@ -2,6 +2,7 @@
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
 import { computed, nextTick, onMounted, onUnmounted } from 'vue';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import AppLogo from '@/components/AppLogo.vue';
 import AppVersion from '@/components/AppVersion.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -133,6 +134,7 @@ const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
                         as="button"
                         type="button"
                         title="Open AI assistant (⌘J)"
+                        data-sidebar-ai-chat-open
                         @click="openChat()"
                     >
                         <Sparkles />
@@ -143,16 +145,30 @@ const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
                             ⌘J
                         </kbd>
                     </SidebarMenuButton>
-                    <SidebarMenuButton
-                        v-else
-                        as="button"
-                        type="button"
-                        data-sidebar-ai-chat
-                        @click="openChatFromMobile"
-                    >
-                        <Sparkles />
-                        <span>AI Assistant</span>
-                    </SidebarMenuButton>
+                    <template v-else>
+                        <!-- The sidebar is a sheet up to 768 px, but the
+                             header's AI entry opens the chat sheet only below
+                             sm: from sm both navigate to the chat page. -->
+                        <SidebarMenuButton
+                            as="button"
+                            type="button"
+                            class="sm:hidden"
+                            data-sidebar-ai-chat
+                            @click="openChatFromMobile"
+                        >
+                            <Sparkles />
+                            <span>AI Assistant</span>
+                        </SidebarMenuButton>
+                        <SidebarMenuButton as-child class="max-sm:hidden">
+                            <Link
+                                :href="AIChatController.index.url()"
+                                data-sidebar-ai-chat-link
+                            >
+                                <Sparkles />
+                                <span>AI Assistant</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </template>
                 </SidebarMenuItem>
             </SidebarMenu>
             <NavUser />

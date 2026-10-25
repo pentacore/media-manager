@@ -48,7 +48,7 @@ test('release cards fit a phone and Grab sends the release', function (): void {
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->click('Season 1')
+    $webpage->click('[data-season-card="1"] button')
         ->click('[data-season-actions="1"] [data-interactive-search]');
     $webpage->script(interactiveSearchPhoneOpenScript());
 
@@ -70,7 +70,7 @@ test('the phone sort strip reorders the release cards', function (): void {
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->click('Season 1')
+    $webpage->click('[data-season-card="1"] button')
         ->click('[data-season-actions="1"] [data-interactive-search]');
     $webpage->script(interactiveSearchPhoneOpenScript());
 
@@ -86,7 +86,9 @@ test('at desktop width the interactive search keeps its release table', function
     $this->actingAs(User::factory()->member()->create());
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->assertNoSmoke();
-    $webpage->click('Season 1')
+    // SeriesSeasonCard re-keys its trigger on mount: click only once hydrated.
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-season-card="1"] button')
         ->click('[data-season-actions="1"] [data-interactive-search]');
     $webpage->script(interactiveSearchPhoneOpenScript());
 

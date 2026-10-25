@@ -405,8 +405,10 @@ function currentFilter(): string {
                         :name="totalsView.topUser.name"
                         :size="32"
                     />
-                    <div>
-                        <div class="text-[15px] font-semibold">
+                    <div class="max-sm:min-w-0">
+                        <div
+                            class="text-[15px] font-semibold max-sm:break-words"
+                        >
                             {{ totalsView.topUser.name }}
                         </div>
                         <div
@@ -599,6 +601,12 @@ function currentFilter(): string {
                         <Pill v-if="activity.media_type">{{
                             activity.media_type
                         }}</Pill>
+                        <span
+                            v-else
+                            class="text-fg-subtle"
+                            :data-watch-card-no-type="activity.id"
+                            >—</span
+                        >
                     </div>
                     <div
                         class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground"

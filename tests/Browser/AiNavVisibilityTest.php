@@ -94,9 +94,11 @@ test('an AI-enabled admin gets an AI Assistant button that opens the chat sheet 
         ->resize(390, 844)
         ->assertNoSmoke()
         ->click('[data-sidebar="trigger"]')
-        ->assertSeeIn('[data-sidebar="footer"]', 'AI Assistant')
+        ->assertSeeIn('[data-sidebar-ai-chat]', 'AI Assistant')
         ->assertCount('[data-sidebar="footer"] button:has-text("AI Assistant")', 1)
-        ->assertCount('[data-sidebar="footer"] a:has-text("AI Assistant")', 0)
+        // The chat-page link is the entry from sm up (to the sidebar's 768 px
+        // breakpoint); below sm it is display:none.
+        ->assertMissing('[data-sidebar-ai-chat-link]')
         // No ⌘J hint on mobile: there is no keyboard to press it with.
         ->assertCount('[data-sidebar="footer"] kbd', 0)
         ->click('[data-sidebar-ai-chat]');

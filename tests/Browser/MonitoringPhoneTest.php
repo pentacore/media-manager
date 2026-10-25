@@ -30,7 +30,7 @@ function monitoringPhoneFakes(): void
                 : Http::response(['queue' => ['paused' => false, 'speed' => '10.2 M', 'sizeleft' => '12.5 GB', 'timeleft' => '1:20:00', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => 0, 'slots' => []]]);
         },
         'emby.local:8096/Sessions*' => Http::response([
-            ['Id' => 's1', 'UserName' => 'Alice', 'UserId' => 'emby-1', 'Client' => 'Emby Theater For Windows', 'DeviceName' => 'An Extremely Long Living Room Device Name', 'NowPlayingItem' => ['Id' => 'i1', 'Name' => 'An Extremely Long Example Movie Title That Wraps Badly', 'Type' => 'Movie', 'RunTimeTicks' => 66_000_000_000], 'PlayState' => ['PositionTicks' => 6_000_000_000, 'IsPaused' => false]],
+            ['Id' => 's1', 'UserName' => 'Alice', 'UserId' => 'emby-1', 'Client' => 'Emby.Theater.For.Windows.Example.Build.With.A.Long.Name', 'DeviceName' => 'An Extremely Long Living Room Device Name', 'NowPlayingItem' => ['Id' => 'i1', 'Name' => 'Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.HEVC.Atmos-EXAMPLEGROUP', 'Type' => 'Movie', 'RunTimeTicks' => 66_000_000_000], 'PlayState' => ['PositionTicks' => 6_000_000_000, 'IsPaused' => false]],
         ]),
         'emby.local:8096/*' => Http::response([]),
     ]);
@@ -83,6 +83,7 @@ test('watch history is cards on a phone and its filters stay on screen', functio
     monitoringPhoneFakes();
     $member = User::factory()->member()->create();
     $activity = EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'play_position' => 6_000_000_000, 'duration_ticks' => 66_000_000_000]);
+    $untyped = EmbyActivity::factory()->create(['media_type' => '', 'media_title' => 'An Example Title Without A Media Type', 'series_title' => null]);
     $this->actingAs($member);
 
     $webpage = visit(route('monitoring.watch-history', absolute: false))->on()->mobile()->assertNoSmoke();
@@ -90,6 +91,8 @@ test('watch history is cards on a phone and its filters stay on screen', functio
     $webpage->assertVisible(sprintf('[data-watch-card="%d"]', $activity->id))
         ->assertSeeIn(sprintf('[data-watch-card="%d"]', $activity->id), 'Wraps Badly')
         ->assertMissing(sprintf('[data-watch-row="%d"]', $activity->id))
+        // Like the table's Type column, a card without a media type says so.
+        ->assertSeeIn(sprintf('[data-watch-card="%d"] [data-watch-card-no-type="%d"]', $untyped->id, $untyped->id), '—')
         ->assertScript('(() => { const filters = document.querySelector("[data-page-header-filters]").getBoundingClientRect(); return filters.left >= 0 && filters.right <= window.innerWidth; })()', true)
         ->assertScript(phoneOverflowScript('main'), '');
 });

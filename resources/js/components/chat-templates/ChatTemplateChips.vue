@@ -33,7 +33,7 @@ onMounted(() => {
             v-for="template in pinnedTemplates"
             :key="template.id"
             type="button"
-            class="rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-bg-hover"
+            class="rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-bg-hover touch:min-h-10"
             :data-template-chip="template.id"
             @click="emit('pick', template)"
         >

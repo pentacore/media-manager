@@ -7,6 +7,7 @@ use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
+use App\Models\ChatTemplate;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -272,17 +273,120 @@ test('a conversation with a long title truncates in the phone sheet header', fun
         ->click('[data-conversation-rename]')
         ->assertVisible('[data-slot="sheet-content"] [data-chat-rename-input]')
         ->assertScript(phoneOverflowScript('[data-slot="sheet-content"]'), '')
-        ->assertScript('(() => { const rect = (selector) => document.querySelector("[data-slot=\"sheet-content\"] " + selector).getBoundingClientRect(); const options = rect("[data-chat-options]"); return rect("[data-chat-rename-save]").right <= options.left && rect("[data-chat-rename-cancel]").right <= options.left && options.right <= rect("[data-sheet-close]").left; })()', true);
+        ->assertScript('(() => { const rect = (selector) => document.querySelector("[data-slot=\"sheet-content\"] " + selector).getBoundingClientRect(); const options = rect("[data-chat-options]"); return rect("[data-chat-rename-save]").right <= options.left && rect("[data-chat-rename-cancel]").right <= options.left && options.right <= rect("[data-sheet-close]").left; })()', true)
+        // Two 28 px targets need 12 px between them, or Cancel's 40 px hit
+        // area takes taps inside Save's.
+        ->assertScript('(() => { const rect = (selector) => document.querySelector("[data-slot=\\"sheet-content\\"] " + selector).getBoundingClientRect(); return rect("[data-chat-rename-cancel]").left - rect("[data-chat-rename-save]").right >= 12; })()', true);
 });
 
 test('at desktop width the header links to the chat page and the sheet keeps its model chip', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
     $webpage->assertAttribute('[data-header-ai-chat]', 'href', '/ai/chat')
         ->assertMissing('[data-header-ai-chat-sheet]')
-        ->click('AI Assistant');
+        ->click('[data-sidebar-ai-chat-open]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"] [data-chat-input]")'));
     $webpage->assertVisible('[data-chat-model-chip]')
         ->assertMissing('[data-chat-options]');
+});
+
+test('the phone chat sheet keeps the chosen mode when it is reopened', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(chatSheetPhoneOpenScript());
+    $webpage->click('[data-chat-options]')
+        ->click('[data-chat-menu-mode="advisory"]')
+        ->assertAttribute('[data-chat-menu-mode="advisory"]', 'aria-pressed', 'true');
+    $webpage->keys('[data-chat-options-panel]', 'Escape');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-chat-options-panel]")'));
+
+    $webpage->click('[data-slot="sheet-content"] [data-sheet-close]');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-chat-input]")'));
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(chatSheetPhoneOpenScript());
+
+    $webpage->click('[data-chat-options]')
+        ->assertAttribute('[data-chat-menu-mode="advisory"]', 'aria-pressed', 'true')
+        ->assertAttribute('[data-chat-menu-mode="executive"]', 'aria-pressed', 'false')
+        ->assertNoSmoke();
+});
+
+test('in phone landscape the chat sheet still follows the visual viewport', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(chatSheetPhoneOpenScript());
+
+    // A phone turned to landscape: at least sm wide, still a touch screen.
+    $webpage->resize(812, 375);
+    $webpage->assertScript('matchMedia("(pointer: coarse)").matches && innerWidth >= 640', true);
+    $webpage->script('(() => { Object.defineProperty(window.visualViewport, "height", { configurable: true, get: () => 200 }); window.visualViewport.dispatchEvent(new Event("resize")); })()');
+    $webpage->script(confirmDialogWaitUntilScript('Math.round(document.querySelector("[data-slot=\\"sheet-content\\"]").getBoundingClientRect().height) === 200'));
+
+    $webpage->assertScript('Math.round(document.querySelector("[data-slot=\\"sheet-content\\"]").getBoundingClientRect().height)', 200)
+        ->assertScript('document.querySelector("[data-slot=\\"sheet-content\\"] [data-chat-input]").getBoundingClientRect().bottom <= 200', true);
+});
+
+test('pinned chat templates are 40 px targets in the phone chat sheet', function (): void {
+    $admin = User::factory()->admin()->create();
+    $first = ChatTemplate::factory()->for($admin)->pinned()->create(['name' => 'Stuck downloads']);
+    $second = ChatTemplate::factory()->for($admin)->pinned()->create(['name' => 'Missing subtitles']);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(chatSheetPhoneOpenScript());
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('!!document.querySelector("[data-template-chip=\\"%d\\"]")', $second->id)));
+
+    foreach ([$first, $second] as $chatTemplate) {
+        $chip = sprintf('document.querySelector("[data-template-chip=\\"%d\\"]")', $chatTemplate->id);
+        $webpage->assertScript(sprintf('(() => { const chip = %s; const rect = chip.getBoundingClientRect(); const hits = (y) => chip.contains(document.elementFromPoint(rect.left + rect.width / 2, y)); return rect.height >= 40 && hits(rect.top + 1) && hits(rect.bottom - 1); })()', $chip), true);
+    }
+
+    $webpage->click(sprintf('[data-template-chip="%d"]', $first->id))
+        ->assertScript('document.querySelector("[data-slot=\\"sheet-content\\"] [data-chat-input]").value.includes("stuck downloads")', true)
+        ->assertNoSmoke();
+});
+
+test("a member's or viewer's phone has neither AI chat entry", function (string $role): void {
+    $this->actingAs($role === 'member' ? User::factory()->member()->create() : User::factory()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertVisible('[data-sidebar="trigger"]')
+        ->assertCount('[data-header-ai-chat-sheet]', 0)
+        ->assertCount('[data-header-ai-chat]', 0)
+        ->click('[data-sidebar="trigger"]')
+        ->assertPresent('[data-sidebar="sidebar"][data-mobile="true"]')
+        ->assertCount('[data-sidebar-ai-chat]', 0)
+        ->assertCount('[data-sidebar-ai-chat-link]', 0)
+        ->assertNoSmoke();
+})->with(['member', 'viewer']);
+
+test('between sm and the sidebar breakpoint both AI entries open the chat page', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->resize(700, 900);
+    $webpage->script(appHydratedScript());
+    $webpage->assertVisible('[data-header-ai-chat]')
+        ->assertAttribute('[data-header-ai-chat]', 'href', '/ai/chat')
+        ->assertMissing('[data-header-ai-chat-sheet]')
+        ->click('[data-sidebar="trigger"]')
+        ->assertPresent('[data-sidebar="sidebar"][data-mobile="true"]')
+        ->assertMissing('[data-sidebar-ai-chat]')
+        ->assertAttribute('[data-sidebar-ai-chat-link]', 'href', '/ai/chat')
+        ->click('[data-sidebar-ai-chat-link]');
+    $webpage->script(confirmDialogWaitUntilScript('location.pathname === "/ai/chat"'));
+
+    $webpage->assertScript('location.pathname', '/ai/chat')
+        ->assertNoSmoke();
 });

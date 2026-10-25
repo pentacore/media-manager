@@ -341,7 +341,7 @@ function remainingTicks(session: Session): number {
                             >
                         </div>
                         <div
-                            class="text-[17px] leading-tight font-semibold break-words"
+                            class="text-[17px] leading-tight font-semibold max-sm:break-words"
                         >
                             {{ session.now_playing?.name ?? 'Unknown' }}
                         </div>
@@ -363,7 +363,7 @@ function remainingTicks(session: Session): number {
                             }}</span>
                             <span class="text-[12px] text-fg-subtle">·</span>
                             <span
-                                class="text-[12px] break-words text-fg-subtle"
+                                class="text-[12px] text-fg-subtle max-sm:min-w-0 max-sm:break-words"
                             >
                                 {{ session.client ?? '—'
                                 }}<span v-if="session.device_name">

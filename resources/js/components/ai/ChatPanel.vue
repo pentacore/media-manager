@@ -56,6 +56,7 @@ const {
     setActiveConversation,
     loadConversation,
     startNewConversation,
+    sheetMode,
 } = useAiChat();
 
 const page = usePage();
@@ -68,7 +69,9 @@ const loading = ref(false);
 const olderCursor = ref<string | null>(null);
 const loadingEarlier = ref(false);
 let lastScrollTop = 0;
-const mode = ref<ChatMode>('executive');
+// The sheet's panel unmounts on close; its mode is kept in useAiChat so a
+// reopened sheet keeps the admin's choice.
+const mode = props.variant === 'sheet' ? sheetMode : ref<ChatMode>('executive');
 
 function emptyOverride(): ChatOverride {
     return { provider: null, model: null, reasoning: null };

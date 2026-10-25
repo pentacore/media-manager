@@ -102,7 +102,7 @@ function onRenameKey(event: KeyboardEvent): void {
         <div
             :class="
                 cn(
-                    'flex items-center gap-2.5 max-sm:min-w-0',
+                    'flex items-center gap-2.5 max-sm:min-w-0 touch:gap-3',
                     renaming ? 'max-sm:flex-1' : 'max-sm:shrink-0',
                 )
             "

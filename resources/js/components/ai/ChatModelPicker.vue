@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import ChatModelOptions from './ChatModelOptions.vue';
+import { effectiveModel, isOverridden } from './chatOverride';
 import type { ChatOverride, ModelOptions } from './types';
 
 const props = defineProps<{
@@ -20,17 +21,11 @@ const emit = defineEmits<{
     (e: 'change', value: ChatOverride): void;
 }>();
 
-const overridden = computed(
-    () => override.value.model !== null || override.value.reasoning !== null,
-);
+const overridden = computed(() => isOverridden(override.value));
 
-const effectiveProvider = computed(
-    () => override.value.provider ?? props.options?.defaults.provider ?? '',
-);
-
-const effectiveModel = computed(
-    () => override.value.model ?? props.options?.defaults.model ?? '',
-);
+const effective = computed(() => effectiveModel(override.value, props.options));
+const effectiveProvider = computed(() => effective.value.provider);
+const effectiveModelName = computed(() => effective.value.model);
 
 const effectiveReasoningLabel = computed(() => {
     if (override.value.reasoning === null) {
@@ -54,7 +49,7 @@ const effectiveReasoningLabel = computed(() => {
                 :data-overridden="overridden ? 'true' : 'false'"
                 :title="
                     options
-                        ? `${effectiveProvider} · ${effectiveModel} · ${effectiveReasoningLabel}`
+                        ? `${effectiveProvider} · ${effectiveModelName} · ${effectiveReasoningLabel}`
                         : undefined
                 "
                 data-chat-model-chip
@@ -69,7 +64,7 @@ const effectiveReasoningLabel = computed(() => {
             >
                 <span class="truncate">
                     <template v-if="options">
-                        {{ effectiveModel }} · {{ effectiveReasoningLabel }}
+                        {{ effectiveModelName }} · {{ effectiveReasoningLabel }}
                     </template>
                     <template v-else>Default model</template>
                 </span>

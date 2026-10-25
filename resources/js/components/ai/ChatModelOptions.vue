@@ -4,6 +4,7 @@ import ModelSelect from '@/components/ai/ModelSelect.vue';
 import ReasoningSelect from '@/components/ai/ReasoningSelect.vue';
 import { Button } from '@/components/ui/button';
 import type { AiReasoningLevel } from '@/typefinder';
+import { effectiveModel, isOverridden } from './chatOverride';
 import type { ChatOverride, ModelOptions } from './types';
 
 /**
@@ -21,22 +22,16 @@ const emit = defineEmits<{
     (e: 'change', value: ChatOverride): void;
 }>();
 
-const overridden = computed(
-    () => override.value.model !== null || override.value.reasoning !== null,
-);
+const overridden = computed(() => isOverridden(override.value));
 
-const effectiveProvider = computed(
-    () => override.value.provider ?? props.options?.defaults.provider ?? '',
-);
-
-const effectiveModel = computed(
-    () => override.value.model ?? props.options?.defaults.model ?? '',
-);
+const effective = computed(() => effectiveModel(override.value, props.options));
+const effectiveProvider = computed(() => effective.value.provider);
+const effectiveModelName = computed(() => effective.value.model);
 
 const capability = computed(
     () =>
         props.options?.modelCapabilities[
-            `${effectiveProvider.value}|${effectiveModel.value}`
+            `${effectiveProvider.value}|${effectiveModelName.value}`
         ] ?? null,
 );
 

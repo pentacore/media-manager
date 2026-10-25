@@ -13,17 +13,17 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Every visible control in `main` whose tappable area — its box or its
+ * Every visible control in $root (default `main`) whose tappable area — its box or its
  * touch-target ::after, measured with elementFromPoint from its centre — is
  * under 40 px in either direction, as "tag[hook] "text" Npx". Inline text
  * links are exempt. Empty when every control is a 40 px target.
  */
-function phoneJobsSmallTargetsScript(): string
+function phoneJobsSmallTargetsScript(string $root = 'main'): string
 {
-    return <<<'JS'
+    return str_replace('__ROOT__', $root, <<<'JS'
         (() => {
             const offenders = [];
-            const controls = document.querySelectorAll('main a[href], main button, main [role="button"], main [role="checkbox"], main [role="switch"], main [role="tab"], main [role="combobox"], main select');
+            const controls = document.querySelectorAll(['a[href]', 'button', '[role="button"]', '[role="checkbox"]', '[role="switch"]', '[role="tab"]', '[role="combobox"]', 'select'].map((control) => `__ROOT__ ${control}`).join(', '));
             for (const element of controls) {
                 const style = getComputedStyle(element);
                 if (element.closest('[aria-hidden="true"], .sr-only') || style.visibility !== 'visible' || style.pointerEvents === 'none') {
@@ -50,7 +50,7 @@ function phoneJobsSmallTargetsScript(): string
             }
             return offenders.slice(0, 15).join(' | ');
         })()
-    JS;
+    JS);
 }
 
 function phoneJobsTouchFakes(): void
@@ -146,4 +146,29 @@ test('the calendar month grid and the grab queue history tabs are 40 px targets 
     $webpage->click('[data-activity-tab="history"]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-history-service-tab]")'));
     $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+});
+
+test("the series detail's episode rows are 40 px targets on a phone", function (): void {
+    $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-season-card="1"] button');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-season-actions=\\"1\\"]") && !document.querySelector("main [data-slot=\\"skeleton\\"]") && !!document.querySelector("[data-episode-actions]")'));
+
+    $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+});
+
+test('the open action sheet and the chat sheet are 40 px targets on a phone', function (): void {
+    $actionRequest = ActionRequest::query()->where('status', ActionRequestStatus::Pending)->firstOrFail();
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet]") && document.querySelector("[data-action-sheet]").getAnimations().length === 0'));
+    $webpage->assertScript(phoneJobsSmallTargetsScript('[data-action-sheet]'), '');
+
+    $webpage->click('[data-action-sheet] [data-sheet-close]');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-action-sheet]")'));
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\\"sheet-content\\"] [data-chat-input]")'));
+    $webpage->assertScript(phoneJobsSmallTargetsScript('[data-slot="sheet-content"]'), '');
 });
