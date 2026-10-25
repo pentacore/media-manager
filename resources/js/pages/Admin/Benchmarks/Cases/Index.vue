@@ -210,6 +210,11 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
                                     data-benchmark-case-scripted
                                     >scripted</Pill
                                 >
+                                <Pill
+                                    v-if="benchmarkCase.webhook_event"
+                                    data-benchmark-case-webhook-event
+                                    >webhook event</Pill
+                                >
                             </div>
                         </TableCell>
                         <TableCell>

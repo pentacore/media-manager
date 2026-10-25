@@ -9,6 +9,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
 use App\Http\Controllers\Controller;
@@ -64,6 +65,7 @@ class BenchmarkCaseController extends Controller
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
                     'attachment_count' => $benchmarkCase->attachments_count ?? 0,
                     'scripted' => $benchmarkCase->isScripted(),
+                    'webhook_event' => is_array($benchmarkCase->input['event'] ?? null),
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
@@ -252,6 +254,12 @@ class BenchmarkCaseController extends Controller
             'draftWarnings' => $warnings,
             'tasks' => $this->taskOptions(),
             'eventKeys' => DecisionAgentSettings::availableEventKeys(),
+            'decisionServices' => DecisionAgentSettings::eventServices(),
+            'actionKinds' => collect(DecisionActionKind::cases())
+                ->reject(static fn (DecisionActionKind $kind): bool => $kind === DecisionActionKind::Other)
+                ->map(static fn (DecisionActionKind $kind): array => ['value' => $kind->value, 'label' => $kind->label()])
+                ->values()
+                ->all(),
             'writeTools' => $this->writeToolNames(),
             'defaultRubrics' => $this->defaultRubrics(),
         ]);

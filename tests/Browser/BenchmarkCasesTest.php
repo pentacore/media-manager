@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Decision\DecisionPrompt;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
@@ -100,6 +101,7 @@ test('a decision case takes expected write actions from the tool list', function
     visit(route('admin.benchmarks.cases.create', absolute: false))
         ->assertNoSmoke()
         ->select('[data-benchmark-task]', 'decision')
+        ->click('[data-benchmark-decision-source="text"]')
         ->assertVisible('[data-benchmark-event-key]')
         ->assertVisible('[data-expected-empty]')
         ->click('[data-expected-add]')
@@ -325,4 +327,66 @@ test('the case list badges attachments and scripted cases', function (): void {
         ->assertSeeIn(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-scripted]', $chat->id), 'scripted')
         ->assertMissing(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-attachments]', $title->id))
         ->assertMissing(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-scripted]', $title->id));
+});
+
+test('a decision case is built from a webhook event with a scope and a prompt preview', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $payloadJson = '{"series": {"id": 7, "title": "Dune"}, "eventType": "Grab"}';
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->assertAttribute('[data-benchmark-decision-source="event"]', 'aria-pressed', 'true')
+        ->assertMissing('[data-benchmark-prompt]')
+        ->select('[data-benchmark-event-service]', 'radarr')
+        ->fill('[data-benchmark-event-type]', 'Grab')
+        ->fill('[data-benchmark-event-payload]', $payloadJson)
+        ->select('[data-benchmark-action-kind]', 'library_change')
+        ->assertSeeIn('[data-benchmark-prompt-preview]', 'Service: radarr')
+        ->assertSeeIn('[data-benchmark-prompt-preview]', '"title": "Dune"')
+        ->fill('[data-benchmark-name]', 'Radarr grab')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case created.')
+        ->assertSeeIn('[data-benchmark-case-row] [data-benchmark-case-webhook-event]', 'webhook event');
+
+    $input = BenchmarkCase::query()->sole()->input;
+
+    expect($input['event'])->toEqual(['service' => 'radarr', 'event_type' => 'Grab', 'payload_json' => $payloadJson])
+        ->and($input['action_kind'])->toBe('library_change')
+        ->and($input['event_key'])->toBe('radarr:Grab')
+        ->and($input['prompt'])->toBe(DecisionPrompt::build('radarr', 'Grab', ['series' => ['id' => 7, 'title' => 'Dune'], 'eventType' => 'Grab']));
+});
+
+test('an existing free-text decision case opens on the free-text source and saves unchanged', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->create(['name' => 'Old decision', 'input' => ['prompt' => 'Download stuck at 99% for two days', 'event_key' => 'sonarr:Grab']]);
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-benchmark-decision-source="text"]', 'aria-pressed', 'true')
+        ->assertValue('[data-benchmark-prompt]', 'Download stuck at 99% for two days')
+        ->assertValue('[data-benchmark-event-key]', 'sonarr:Grab')
+        ->assertMissing('[data-benchmark-event-payload]')
+        ->fill('[data-benchmark-name]', 'Renamed decision')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case updated.')
+        ->assertMissing('[data-benchmark-case-webhook-event]');
+
+    expect($benchmarkCase->fresh()->input)->toEqual(['prompt' => 'Download stuck at 99% for two days', 'event_key' => 'sonarr:Grab']);
+});
+
+test('a payload that is not a JSON object shows an inline error and blocks the save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->fill('[data-benchmark-event-type]', 'Grab')
+        ->fill('[data-benchmark-event-payload]', '[1, 2]')
+        ->fill('[data-benchmark-name]', 'Bad payload')
+        ->assertSeeIn('[data-benchmark-event-payload-error]', 'The payload must be a JSON object.')
+        ->click('[data-benchmark-save]')
+        ->assertVisible('[data-benchmark-blocked]');
+
+    expect(BenchmarkCase::query()->count())->toBe(0);
 });

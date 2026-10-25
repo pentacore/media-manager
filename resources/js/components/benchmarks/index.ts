@@ -7,6 +7,7 @@ export { default as CompareCaseGrid } from './CompareCaseGrid.vue';
 export { default as CompareOutputsDialog } from './CompareOutputsDialog.vue';
 export { default as CompareRunBar } from './CompareRunBar.vue';
 export { default as CompareTaskTable } from './CompareTaskTable.vue';
+export { default as DecisionEventFields } from './DecisionEventFields.vue';
 export { default as EstimateSummary } from './EstimateSummary.vue';
 export { default as ExpectedActionsEditor } from './ExpectedActionsEditor.vue';
 export { default as FixtureEditor } from './FixtureEditor.vue';

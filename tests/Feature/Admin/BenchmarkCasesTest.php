@@ -905,3 +905,27 @@ test('the create form pre-fills a decision draft with its webhook event', functi
             ->where('draft.input.event_key', 'sonarr:Grab')
             ->where('draftWarnings', ['The gate scope of this run was not recorded; the case runs with the full toolset.']));
 });
+
+test('the form offers the decision services and the scoping action kinds', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('admin.benchmarks.cases.create'))
+        ->assertInertia(fn ($page) => $page
+            ->where('decisionServices', ['sonarr', 'radarr', 'whisparr', 'seerr'])
+            ->where('actionKinds', [
+                ['value' => 'library_change', 'label' => 'Library change'],
+                ['value' => 'seerr_request', 'label' => 'Seerr request'],
+                ['value' => 'media_server', 'label' => 'Media server'],
+            ]));
+});
+
+test('the index flags decision cases built from a webhook event', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $event = BenchmarkCase::factory()->create(['input' => ['prompt' => 'p', 'event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{}'], 'action_kind' => null, 'event_key' => 'sonarr:Grab']]);
+    $text = BenchmarkCase::factory()->create();
+
+    $this->get(route('admin.benchmarks.cases.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('cases.data', fn ($rows): bool => collect($rows)->firstWhere('id', $event->id)['webhook_event'] === true
+                && collect($rows)->firstWhere('id', $text->id)['webhook_event'] === false));
+});

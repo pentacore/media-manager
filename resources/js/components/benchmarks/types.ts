@@ -69,12 +69,24 @@ export type BenchmarkHistoryTurnForm = BenchmarkHistoryTurn & {
     attachments: BenchmarkAttachmentEntry[];
 };
 
+export type BenchmarkDecisionEvent = {
+    service: string;
+    event_type: string;
+    payload_json: string;
+};
+
+export type BenchmarkActionKindOption = { value: string; label: string };
+
+export type BenchmarkDecisionSource = 'event' | 'text';
+
 export type BenchmarkCaseInput = {
     prompt?: string;
     history?: BenchmarkHistoryTurn[];
     mode?: string | null;
     conversation?: BenchmarkConversationMode | null;
     event_key?: string | null;
+    event?: BenchmarkDecisionEvent | null;
+    action_kind?: string | null;
     providers?: string[];
 };
 
@@ -120,6 +132,7 @@ export type BenchmarkCaseRow = {
     source_invocation_id: string | null;
     attachment_count: number;
     scripted: boolean;
+    webhook_event: boolean;
     updated_at: string | null;
 };
 
