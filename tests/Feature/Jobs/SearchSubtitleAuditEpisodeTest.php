@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\QueueLane;
 use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Jobs\Middleware\LimitSubtitleAuditSearchConcurrency;
 use App\Jobs\SearchSubtitleAuditEpisode;
@@ -51,14 +52,16 @@ beforeEach(function (): void {
     ]);
 });
 
-test('the job waits for a search slot on the default lane and gives up at the batch deadline', function (): void {
+test('the job waits for a search slot on the maintenance lane and gives up at the batch deadline', function (): void {
     $deadline = now()->addMinutes(90);
     $job = new SearchSubtitleAuditEpisode($this->episode->id, $deadline);
     $reflection = new ReflectionClass($job);
 
     expect($reflection->isFinal())->toBeTrue()
-        ->and($reflection->getAttributes(QueueAttribute::class))->toBe([])
+        ->and($reflection->getAttributes(QueueAttribute::class)[0]->newInstance()->queue)->toBe(QueueLane::Maintenance->value)
         ->and($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(270)
+        ->and(LimitSubtitleAuditSearchConcurrency::RELEASE_AFTER_SECONDS)->toBe(300)
+        ->and(LimitSubtitleAuditSearchConcurrency::RELEASE_AFTER_SECONDS)->toBeGreaterThan($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)
         ->and($reflection->getAttributes(Tries::class)[0]->newInstance()->tries)->toBe(0)
         ->and($reflection->getAttributes(MaxExceptions::class)[0]->newInstance()->maxExceptions)->toBe(2)
         ->and($reflection->getAttributes(Backoff::class)[0]->newInstance()->backoff)->toBe(30)
@@ -129,7 +132,7 @@ test('the job is released when both search slots for the connection are taken', 
     $ran = false;
     $funnel = fn (Closure $inside): mixed => Cache::funnel(sprintf('subtitle-audit-search:%d', $this->connection->id))
         ->limit(2)
-        ->releaseAfter(240)
+        ->releaseAfter(LimitSubtitleAuditSearchConcurrency::RELEASE_AFTER_SECONDS)
         ->block(0)
         ->then($inside);
 
@@ -149,7 +152,7 @@ test('the job runs when a search slot for the connection is free', function (): 
 
     Cache::funnel(sprintf('subtitle-audit-search:%d', $this->connection->id))
         ->limit(2)
-        ->releaseAfter(240)
+        ->releaseAfter(LimitSubtitleAuditSearchConcurrency::RELEASE_AFTER_SECONDS)
         ->block(0)
         ->then(function () use ($searchSubtitleAuditEpisode, &$ran): void {
             new LimitSubtitleAuditSearchConcurrency()->handle($searchSubtitleAuditEpisode, function () use (&$ran): void {

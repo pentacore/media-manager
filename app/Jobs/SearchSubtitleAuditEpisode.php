@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\QueueLane;
 use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Jobs\Middleware\LimitSubtitleAuditSearchConcurrency;
 use App\Models\SubtitleAuditEpisode;
@@ -15,6 +16,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Backoff;
 use Illuminate\Queue\Attributes\MaxExceptions;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Throwable;
@@ -29,7 +31,12 @@ use Throwable;
  * does not expire its tail unsearched. Two exceptions (or the deadline passing)
  * fail the job, and failed() then fails the still-searching episode. The
  * searcher skips a row that already has an outcome, so a retry is safe.
+ *
+ * A search can take minutes, so it rides the maintenance lane's dedicated
+ * worker instead of pinning the general one behind approved actions and
+ * webhooks.
  */
+#[Queue(QueueLane::Maintenance)]
 #[Timeout(270)]
 #[Tries(0)]
 #[MaxExceptions(2)]

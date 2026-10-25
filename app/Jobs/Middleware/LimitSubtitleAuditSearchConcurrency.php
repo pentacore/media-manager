@@ -11,13 +11,15 @@ use Illuminate\Support\Facades\Cache;
 /**
  * At most two subtitle audit release searches run against one Sonarr
  * connection at a time; a job finding both slots taken goes back on the queue.
- * The slot outlives the job timeout, so a killed worker frees it on its own.
+ * A slot is held for at most RELEASE_AFTER_SECONDS, longer than the job's 270 s
+ * timeout, so a running search never loses its slot to a third one, and the
+ * slot of a worker killed mid-search frees itself once that time has passed.
  */
 final readonly class LimitSubtitleAuditSearchConcurrency
 {
     public const int SLOTS = 2;
 
-    private const int RELEASE_AFTER_SECONDS = 240;
+    public const int RELEASE_AFTER_SECONDS = 300;
 
     private const int RETRY_AFTER_SECONDS = 10;
 
