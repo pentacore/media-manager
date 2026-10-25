@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router, usePoll } from '@inertiajs/vue3';
-import { Ban, RefreshCw, Trash2 } from '@lucide/vue';
+import { Ban, GitCompareArrows, RefreshCw, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
+import BenchmarkComparisonController from '@/actions/App/Http/Controllers/Admin/BenchmarkComparisonController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
 import {
@@ -17,6 +18,7 @@ import {
     isRejudgingLive,
 } from '@/components/benchmarks';
 import type {
+    BenchmarkCompareOption,
     BenchmarkMatrixCell,
     BenchmarkMatrixTask,
     BenchmarkResultDetail,
@@ -24,6 +26,12 @@ import type {
 } from '@/components/benchmarks';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Table,
     TableBody,
@@ -38,6 +46,7 @@ import { dashboard } from '@/routes';
 const props = defineProps<{
     run: BenchmarkRunDetail;
     matrix: BenchmarkMatrixTask[];
+    compareOptions: BenchmarkCompareOption[];
     resultDetail?: BenchmarkResultDetail;
 }>();
 
@@ -58,7 +67,7 @@ const isActive = computed(
 
 const { start: startPolling, stop: stopPolling } = usePoll(
     POLL_INTERVAL_MS,
-    { only: ['run', 'matrix'] },
+    { only: ['run', 'matrix', 'compareOptions'] },
     { autoStart: false },
 );
 
@@ -119,6 +128,12 @@ const statusVariant = computed<'ok' | 'warn' | 'danger' | 'info' | 'default'>(
         }
     },
 );
+
+function compareWithUrl(option: BenchmarkCompareOption): string {
+    return BenchmarkComparisonController.show.url({
+        query: { runs: `${option.id},${props.run.id}` },
+    });
+}
 
 const { confirm } = useConfirm();
 
@@ -326,6 +341,40 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                 </div>
             </div>
             <div class="flex gap-2">
+                <DropdownMenu v-if="compareOptions.length > 0">
+                    <DropdownMenuTrigger as-child>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="gap-1.5"
+                            data-benchmark-compare-with
+                        >
+                            <GitCompareArrows class="size-3.5" />Compare with…
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        align="end"
+                        class="max-h-80 overflow-y-auto"
+                    >
+                        <DropdownMenuItem
+                            v-for="option in compareOptions"
+                            :key="option.id"
+                            as-child
+                            :data-benchmark-compare-option="option.id"
+                        >
+                            <Link :href="compareWithUrl(option)">
+                                <span class="truncate">{{ option.name }}</span>
+                                <Pill
+                                    v-if="option.previous_scheduled"
+                                    variant="info"
+                                    class="ml-2"
+                                    data-benchmark-compare-previous
+                                    >Previous scheduled run</Pill
+                                >
+                            </Link>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                     v-if="isActive"
                     variant="outline"
@@ -363,6 +412,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
             v-if="run.regressions !== null"
             :regressions="run.regressions"
             :baseline="run.baseline"
+            :run-id="run.id"
         />
 
         <p v-if="matrix.length === 0" class="text-[13px] text-muted-foreground">

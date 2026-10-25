@@ -5,10 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Benchmark\BenchmarkRunContext;
-use App\Ai\Benchmark\FixtureBook;
 use App\Ai\ResolvedSelection;
-use App\Enums\AiMode;
-use App\Enums\AiReasoningLevel;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\QueueLane;
@@ -20,6 +17,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\ModelPriceLookup;
 use App\Services\Benchmark\BenchmarkCaseRunner;
+use App\Services\Benchmark\BenchmarkContextStarter;
 use App\Services\Benchmark\BenchmarkRunSettler;
 use App\Services\Benchmark\BenchmarkScorer;
 use App\Services\Benchmark\CaseOutcome;
@@ -36,9 +34,6 @@ use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\DB;
-use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\UserMessage;
 use RuntimeException;
 use Throwable;
 
@@ -103,6 +98,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         BenchmarkScorer $benchmarkScorer,
         ModelPriceLookup $modelPriceLookup,
         AiBudgetGuard $aiBudgetGuard,
+        BenchmarkContextStarter $benchmarkContextStarter,
     ): void {
         $benchmarkResult = BenchmarkResult::query()->with(['run', 'benchmarkCase'])->find($this->resultId);
 
@@ -111,7 +107,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         }
 
         if ($this->judgeOnly) {
-            $this->rejudge($benchmarkResult, $benchmarkRunContext, $benchmarkScorer, $aiBudgetGuard);
+            $this->rejudge($benchmarkResult, $benchmarkRunContext, $benchmarkScorer, $aiBudgetGuard, $benchmarkContextStarter);
 
             return;
         }
@@ -147,7 +143,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $this->runCase($benchmarkResult, $benchmarkRun, $benchmarkCase, $benchmarkRunContext, $benchmarkCaseRunner, $benchmarkScorer, $modelPriceLookup, $aiBudgetGuard);
+        $this->runCase($benchmarkResult, $benchmarkRun, $benchmarkCase, $benchmarkRunContext, $benchmarkCaseRunner, $benchmarkScorer, $modelPriceLookup, $aiBudgetGuard, $benchmarkContextStarter);
         $this->settle($benchmarkRun->id);
     }
 
@@ -195,15 +191,16 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         BenchmarkScorer $benchmarkScorer,
         ModelPriceLookup $modelPriceLookup,
         AiBudgetGuard $aiBudgetGuard,
+        BenchmarkContextStarter $benchmarkContextStarter,
     ): void {
         $caseOutcome = null;
         $costUsd = 0.0;
 
         try {
-            $candidate = $this->candidate($benchmarkRun, $benchmarkResult->candidate_index);
+            $candidate = BenchmarkContextStarter::selection($this->storedCandidate($benchmarkRun, $benchmarkResult->candidate_index));
             $this->ensureProviderReady($candidate->provider);
             $aiBudgetGuard->enforce();
-            $this->startContext($benchmarkRunContext, $benchmarkRun, $benchmarkCase, $candidate);
+            $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkRun, $benchmarkCase, $benchmarkResult->candidate_index);
 
             $caseOutcome = $benchmarkCaseRunner->run($benchmarkCase);
             $costUsd = $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup);
@@ -251,13 +248,13 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
      * stored outcome. The case must still exist (its prompt and rubric feed
      * the judge); without it the result goes back to `failed`.
      */
-    private function rejudge(BenchmarkResult $benchmarkResult, BenchmarkRunContext $benchmarkRunContext, BenchmarkScorer $benchmarkScorer, AiBudgetGuard $aiBudgetGuard): void
+    private function rejudge(BenchmarkResult $benchmarkResult, BenchmarkRunContext $benchmarkRunContext, BenchmarkScorer $benchmarkScorer, AiBudgetGuard $aiBudgetGuard, BenchmarkContextStarter $benchmarkContextStarter): void
     {
         if (! $this->claimForJudging($benchmarkResult)) {
             return;
         }
 
-        $caseOutcome = $this->storedOutcome($benchmarkResult);
+        $caseOutcome = CaseOutcome::fromResult($benchmarkResult);
         $benchmarkCase = $benchmarkResult->benchmarkCase;
 
         if (! $benchmarkCase instanceof BenchmarkCase) {
@@ -270,12 +267,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $this->startContext(
-                $benchmarkRunContext,
-                $benchmarkResult->run,
-                $benchmarkCase,
-                $this->candidate($benchmarkResult->run, $benchmarkResult->candidate_index),
-            );
+            $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkCase, $benchmarkResult->candidate_index);
             $aiBudgetGuard->enforce();
 
             $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
@@ -374,38 +366,16 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         report_unless($throwable instanceof AiBudgetExceededException, $throwable);
     }
 
-    private function startContext(BenchmarkRunContext $benchmarkRunContext, BenchmarkRun $benchmarkRun, BenchmarkCase $benchmarkCase, ResolvedSelection $candidate): void
-    {
-        $benchmarkRunContext->start(
-            $benchmarkRun->id,
-            $benchmarkCase->task,
-            $candidate,
-            is_array($benchmarkRun->judge) ? $this->selection($benchmarkRun->judge) : null,
-            new FixtureBook($benchmarkCase->fixtures),
-            $this->history($benchmarkCase),
-            AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')),
-        );
-    }
-
-    private function candidate(BenchmarkRun $benchmarkRun, int $candidateIndex): ResolvedSelection
+    /**
+     * @return array<string, mixed>
+     */
+    private function storedCandidate(BenchmarkRun $benchmarkRun, int $candidateIndex): array
     {
         $candidate = $benchmarkRun->candidates[$candidateIndex] ?? null;
 
         throw_unless(is_array($candidate), RuntimeException::class, sprintf('The run has no candidate #%d.', $candidateIndex));
 
-        return $this->selection($candidate);
-    }
-
-    /**
-     * @param  array<string, mixed>  $selection  a stored `{provider, model, reasoning}`
-     */
-    private function selection(array $selection): ResolvedSelection
-    {
-        return new ResolvedSelection(
-            is_string($selection['provider'] ?? null) ? $selection['provider'] : '',
-            is_string($selection['model'] ?? null) ? $selection['model'] : '',
-            AiReasoningLevel::tryFrom(is_string($selection['reasoning'] ?? null) ? $selection['reasoning'] : '') ?? AiReasoningLevel::ProviderDefault,
-        );
+        return $candidate;
     }
 
     /**
@@ -418,34 +388,6 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
         throw_unless(is_array($config), RuntimeException::class, sprintf('The %s provider is not configured.', $provider === '' ? 'candidate' : $provider));
         throw_if($provider !== 'ollama' && blank($config['key'] ?? null), RuntimeException::class, sprintf('The %s provider has no API key configured.', $provider));
-    }
-
-    /**
-     * The case's chat history as SDK messages (other roles are skipped).
-     *
-     * @return list<Message>
-     */
-    private function history(BenchmarkCase $benchmarkCase): array
-    {
-        $messages = [];
-
-        foreach ((array) ($benchmarkCase->input['history'] ?? []) as $turn) {
-            if (! is_array($turn) || ! is_string($turn['content'] ?? null)) {
-                continue;
-            }
-
-            $message = match ($turn['role'] ?? null) {
-                'user' => new UserMessage($turn['content']),
-                'assistant' => new AssistantMessage($turn['content']),
-                default => null,
-            };
-
-            if ($message instanceof Message) {
-                $messages[] = $message;
-            }
-        }
-
-        return $messages;
     }
 
     /**
@@ -478,53 +420,6 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             'tool_calls' => $caseOutcome->toolCalls,
             'tool_misses' => $caseOutcome->toolMisses,
         ];
-    }
-
-    /**
-     * The outcome as stored on the result, normalised so a malformed stored
-     * entry cannot break the judge prompt.
-     */
-    private function storedOutcome(BenchmarkResult $benchmarkResult): CaseOutcome
-    {
-        $storedLog = $benchmarkResult->score_detail['tool_log'] ?? [];
-        $toolLog = [];
-
-        foreach (is_array($storedLog) ? $storedLog : [] as $call) {
-            if (! is_array($call) || ! is_string($call['tool'] ?? null)) {
-                continue;
-            }
-
-            $toolLog[] = [
-                'tool' => $call['tool'],
-                'arguments' => is_array($call['arguments'] ?? null) ? $call['arguments'] : [],
-                'result' => is_string($call['result'] ?? null) ? $call['result'] : null,
-                'hit' => (bool) ($call['hit'] ?? false),
-                ...(($call['write'] ?? false) === true ? ['write' => true] : []),
-                ...(($call['refused'] ?? false) === true ? ['refused' => true] : []),
-            ];
-        }
-
-        $intendedActions = [];
-
-        foreach ($benchmarkResult->intended_actions as $action) {
-            if (! is_string($action['tool'] ?? null)) {
-                continue;
-            }
-
-            $intendedActions[] = ['tool' => $action['tool'], 'arguments' => is_array($action['arguments'] ?? null) ? $action['arguments'] : []];
-        }
-
-        return new CaseOutcome(
-            output: $benchmarkResult->output ?? '',
-            intendedActions: $intendedActions,
-            toolLog: $toolLog,
-            toolCalls: $benchmarkResult->tool_calls,
-            toolMisses: $benchmarkResult->tool_misses,
-            promptTokens: $benchmarkResult->prompt_tokens,
-            completionTokens: $benchmarkResult->completion_tokens,
-            latencyMs: $benchmarkResult->latency_ms ?? 0,
-            invocationId: null,
-        );
     }
 
     private function costCapReached(BenchmarkRun $benchmarkRun): bool

@@ -406,6 +406,7 @@ function browserSmokeExcludedRouteNames(): array
 {
     return [
         'activity-log.export',
+        'admin.benchmarks.compare.show',
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
         'ai.chat.model-options',

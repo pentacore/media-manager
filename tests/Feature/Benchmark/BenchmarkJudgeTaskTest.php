@@ -96,9 +96,9 @@ test('the judge prompt carries no provider or model of the configured selections
 test('the judge agent returns its structured score', function (): void {
     BenchmarkJudgeAgent::fake([['score' => 8, 'rationale' => 'Good']]);
 
-    $agentResponse = BenchmarkJudgeAgent::make()->prompt('judge this');
+    $structuredAgentResponse = BenchmarkJudgeAgent::make()->prompt('judge this');
 
-    expect($agentResponse['score'])->toBe(8)
-        ->and($agentResponse['rationale'])->toBe('Good')
+    expect($structuredAgentResponse['score'])->toBe(8)
+        ->and($structuredAgentResponse['rationale'])->toBe('Good')
         ->and(BenchmarkJudgeAgent::make()->aiTask())->toBe(AiTask::BenchmarkJudge);
 });
