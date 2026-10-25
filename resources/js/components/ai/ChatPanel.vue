@@ -268,7 +268,11 @@ async function applyTemplate(template: ChatTemplate): Promise<void> {
 
     try {
         const text = await renderWithoutValues(template);
-        deliverTemplate(text, template.auto_send ? 'send' : 'insert', template);
+        void deliverTemplate(
+            text,
+            template.auto_send ? 'send' : 'insert',
+            template,
+        );
     } catch (cause) {
         toast.error(
             cause instanceof Error
@@ -286,7 +290,7 @@ function onTemplateRendered(text: string, action: TemplateAction): void {
         return;
     }
 
-    deliverTemplate(text, action, template);
+    void deliverTemplate(text, action, template);
 }
 
 /**
@@ -304,18 +308,21 @@ const templatePresetApplies = computed(
 /**
  * Send rendered text, or put it in the composer while a turn is in flight or
  * a workflow proposal is pending. A template's model preset fills the picker
- * when it starts a new chat.
+ * when it starts a new chat; its tool groups are pinned on any chat, before
+ * the text is sent.
  */
-function deliverTemplate(
+async function deliverTemplate(
     text: string,
     action: TemplateAction,
     template: ChatTemplate,
-): void {
+): Promise<void> {
     fillTemplate.value = null;
 
     if (templatePresetApplies.value && template.preset !== null) {
         override.value = { ...template.preset };
     }
+
+    await toolGroups.pinMany(template.tool_groups);
 
     if (action === 'send' && !sending.value && !hasPendingWorkflow.value) {
         void sendUserMessage({ text, pendingFiles: [] });

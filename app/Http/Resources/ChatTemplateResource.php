@@ -21,6 +21,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'auto_send' => 'boolean',
     'pinned' => 'boolean',
     'preset' => '{ provider: string | null; model: string | null; reasoning: AiReasoningLevel | null } | null',
+    'tool_groups' => 'string[]',
     'last_used_at' => 'string | null',
 ])]
 class ChatTemplateResource extends JsonResource
@@ -43,6 +44,7 @@ class ChatTemplateResource extends JsonResource
                 'model' => $this->model,
                 'reasoning' => $this->reasoning?->value,
             ],
+            'tool_groups' => $this->tool_groups ?? [],
             'last_used_at' => $this->last_used_at?->toIso8601String(),
         ];
     }

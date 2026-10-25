@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ToolGroup;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Models\ChatTemplate;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\AiSettings;
@@ -338,4 +339,28 @@ test('an older tool request card cannot be answered', function (): void {
         ->assertSeeIn('[data-chat-thread]', 'Fine, moving on.')
         ->assertDisabled('[data-tool-request-load]')
         ->assertDisabled('[data-tool-request-decline]');
+});
+
+test('using a template in an existing conversation adds its tool groups and keeps the pins', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    ServiceConnection::factory()->sonarr()->create();
+    $admin = User::factory()->admin()->create();
+    $conversationId = chatToolGroupsConversation($admin, ['downloads']);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Indexer check', 'tool_groups' => ['indexers', 'downloads']]);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertPresent('[data-tool-chip="downloads"][data-tool-source="pinned"]')
+        ->assertEnabled('[data-tool-add]')
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]')
+        ->assertPresent('[data-tool-chip="downloads"][data-tool-source="pinned"]');
+
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-tool-unpin=\"indexers\"]')?.disabled === false"));
+
+    expect(json_decode((string) DB::table('agent_conversations')->where('id', $conversationId)->value('pinned_tool_groups'), true))->toBe(['downloads', 'indexers']);
 });

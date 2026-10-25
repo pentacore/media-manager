@@ -57,6 +57,8 @@ export type UseChatToolGroupsReturn = {
     toggleTurnLines: () => void;
     /** Pins a group: local for a new chat, saved for an existing one. */
     pin: (value: ToolGroupValue) => Promise<void>;
+    /** Pins every available, not yet pinned group in one change. */
+    pinMany: (values: ToolGroupValue[]) => Promise<void>;
     /** Unpins a group the same way. */
     unpin: (value: ToolGroupValue) => Promise<void>;
     /** Takes the pins and carry-over from a loaded conversation (null: new). */
@@ -168,6 +170,35 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
         await save([...pinned.value, value]);
     }
 
+    async function pinMany(values: ToolGroupValue[]): Promise<void> {
+        if (values.length === 0) {
+            return;
+        }
+
+        let known = options.value;
+
+        if (!loaded.value) {
+            try {
+                known = (await fetchOptions()).groups;
+            } catch {
+                return;
+            }
+        }
+
+        const additions = values.filter(
+            (value, index) =>
+                values.indexOf(value) === index &&
+                !pinned.value.includes(value) &&
+                known.some((group) => group.value === value && group.available),
+        );
+
+        if (additions.length === 0) {
+            return;
+        }
+
+        await save([...pinned.value, ...additions]);
+    }
+
     async function unpin(value: ToolGroupValue): Promise<void> {
         await save(pinned.value.filter((group) => group !== value));
     }
@@ -203,6 +234,7 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
         showTurnLines,
         toggleTurnLines,
         pin,
+        pinMany,
         unpin,
         loadFor,
         refresh,

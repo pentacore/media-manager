@@ -213,3 +213,47 @@ test('a template without a preset exposes null', function (): void {
 
     expect(new ChatTemplateResource($template)->resolve()['preset'])->toBeNull();
 });
+
+test('a template stores its tool groups', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'tool_groups' => ['subtitles_replacement', 'playback'],
+    ]))->assertSessionHasNoErrors();
+
+    $chatTemplate = $admin->chatTemplates()->sole();
+
+    expect($chatTemplate->tool_groups)->toBe(['subtitles_replacement', 'playback'])
+        ->and(new ChatTemplateResource($chatTemplate)->resolve()['tool_groups'])->toBe(['subtitles_replacement', 'playback']);
+
+    $this->actingAs($admin)->patch(route('ai.templates.update', $chatTemplate), chatTemplatePayload([
+        'tool_groups' => ['indexers'],
+    ]))->assertSessionHasNoErrors();
+
+    expect($chatTemplate->fresh()->tool_groups)->toBe(['indexers']);
+
+    $this->actingAs($admin)->patch(route('ai.templates.update', $chatTemplate), chatTemplatePayload())
+        ->assertSessionHasNoErrors();
+
+    expect($chatTemplate->fresh()->tool_groups)->toBeNull();
+});
+
+test('a template without tool groups exposes an empty list', function (): void {
+    $template = ChatTemplate::factory()->create();
+
+    expect(new ChatTemplateResource($template)->resolve()['tool_groups'])->toBe([]);
+});
+
+test('unknown or repeated template tool groups are rejected', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'tool_groups' => ['not_a_group'],
+    ]))->assertSessionHasErrors('tool_groups.0');
+
+    $this->actingAs($admin)->post(route('ai.templates.store'), chatTemplatePayload([
+        'tool_groups' => ['playback', 'playback'],
+    ]))->assertSessionHasErrors('tool_groups.0');
+
+    expect($admin->chatTemplates()->count())->toBe(0);
+});
