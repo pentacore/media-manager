@@ -326,7 +326,7 @@ test('a partial reload that does not name the deep-linked request does not read 
         ->assertOk()
         ->assertJsonMissingPath('props.preselectedRequest');
 
-    expect(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'where "action_requests"."id" = ?'))->all())->toBe([]);
+    expect(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/where [`"]action_requests[`"]\.[`"]id[`"] = \?/', $sql) === 1)->all())->toBe([]);
     DB::disableQueryLog();
 
     $this->actingAs($member)

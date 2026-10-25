@@ -58,6 +58,11 @@ function bulkBarPhoneFocusOnMoreScript(): string
     return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
 }
 
+function bulkBarPhonePageFlagScript(): string
+{
+    return 'document.body.hasAttribute("data-bulk-bar-open")';
+}
+
 function bulkBarPhoneHeightScript(): string
 {
     return 'Math.round(document.querySelector("[data-bulk-bar]").getBoundingClientRect().height)';
@@ -118,8 +123,30 @@ test('the phone bar menu rejects with a reason, and clears a selection', functio
     $webpage->script(appHydratedScript());
     $webpage->click(sprintf('[data-action-card-select="%d"]', $another->id))
         ->click('[data-bulk-more]')
+        ->assertScript(bulkBarPhonePageFlagScript(), true)
         ->click('[data-bulk-menu-clear]')
         ->assertCount('[data-bulk-bar]', 0)
+        ->assertScript(bulkBarPhonePageFlagScript(), false)
+        ->assertNoSmoke();
+});
+
+test('the page flag clears when an Inertia visit leaves the page with the bar shown', function (): void {
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-action-card-select="%d"]', $pending->id))
+        ->assertVisible('[data-bulk-bar]')
+        ->assertScript(bulkBarPhonePageFlagScript(), true);
+
+    // The sidebar is an off-canvas sheet on a phone: open it, then follow a link.
+    $webpage->click('[data-sidebar="trigger"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("a[data-nav-item]")'));
+    $webpage->script('document.querySelector("a[data-nav-item]:not([href*=\"/actions\"])").click()');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-bulk-bar]")'));
+    $webpage->assertCount('[data-bulk-bar]', 0)
+        ->assertScript(bulkBarPhonePageFlagScript(), false)
         ->assertNoSmoke();
 });
 
