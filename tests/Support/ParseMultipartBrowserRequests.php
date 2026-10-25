@@ -7,6 +7,7 @@ namespace Tests\Support;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -30,7 +31,7 @@ final class ParseMultipartBrowserRequests
         } finally {
             foreach ($temporaryFiles as $temporaryFile) {
                 if (is_file($temporaryFile)) {
-                    unlink($temporaryFile);
+                    File::delete($temporaryFile);
                 }
             }
         }
