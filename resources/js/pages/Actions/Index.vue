@@ -10,6 +10,7 @@ import {
     ActionRequestTable,
     ActionStatusTabs,
     BulkRejectDialog,
+    SubtitleAuditManualPicks,
     isUncertainOutcome,
     retryConfirmation,
 } from '@/components/actions';
@@ -17,6 +18,7 @@ import type {
     ActionQueueRequests,
     ActionRequestRow,
 } from '@/components/actions';
+import type { SubtitleAuditBatchCard } from '@/components/ai/types';
 import { BulkActionBar } from '@/components/bulk';
 import { Button } from '@/components/ui/button';
 import { useActionQueueLive } from '@/composables/useActionQueueLive';
@@ -24,6 +26,7 @@ import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
 import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { hasSubtitleAuditFollowUps } from '@/lib/subtitleAudit';
 import { dashboard } from '@/routes';
 
 const props = defineProps<{
@@ -31,6 +34,8 @@ const props = defineProps<{
     statusCounts: Record<string, number>;
     filters: { status: string; subtitle_audit_batch: number | null };
     preselect: number | null;
+    /** The batch the queue is filtered to; null without the filter or once it is gone. */
+    subtitleAuditBatch?: SubtitleAuditBatchCard | null;
 }>();
 
 defineOptions({
@@ -46,6 +51,12 @@ defineOptions({
 });
 
 const { isAdmin } = useCan();
+
+const showSubtitleAuditFollowUps = computed(
+    () =>
+        props.subtitleAuditBatch != null &&
+        hasSubtitleAuditFollowUps(props.subtitleAuditBatch.episodes),
+);
 const { confirm } = useConfirm();
 
 const {
@@ -225,6 +236,11 @@ function goToPage(url: string | null): void {
             v-if="filters.subtitle_audit_batch !== null"
             :batch-id="filters.subtitle_audit_batch"
             :status="filters.status"
+        />
+
+        <SubtitleAuditManualPicks
+            v-if="showSubtitleAuditFollowUps && subtitleAuditBatch"
+            :batch="subtitleAuditBatch"
         />
 
         <ActionStatusTabs

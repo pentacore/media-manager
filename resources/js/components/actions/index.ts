@@ -8,6 +8,7 @@ export { default as ActionRequestTable } from './ActionRequestTable.vue';
 export { default as ActionStatusTabs } from './ActionStatusTabs.vue';
 export { default as BulkRejectDialog } from './BulkRejectDialog.vue';
 export { default as SecondOpinionVerdict } from './SecondOpinionVerdict.vue';
+export { default as SubtitleAuditManualPicks } from './SubtitleAuditManualPicks.vue';
 export {
     failureMessage,
     failureReasonLabel,
