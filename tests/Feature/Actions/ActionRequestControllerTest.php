@@ -244,6 +244,28 @@ test('status filter narrows results', function (): void {
         );
 });
 
+test('the action queue can be filtered to one subtitle audit batch', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['subtitle_audit_batch' => 7]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.total', 2)
+            ->where('filters.subtitle_audit_batch', 7)
+            ->where('statusCounts.pending', 2)
+        );
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.total', 3)
+            ->where('filters.subtitle_audit_batch', null)
+        );
+});
+
 test('replacement rows expose their attempt summary and other rows expose null', function (): void {
     // Explicit timestamps: `latest()` ties on identical created_at are
     // otherwise unordered, which made data.0/data.1 flaky.

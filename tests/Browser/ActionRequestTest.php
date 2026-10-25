@@ -204,3 +204,18 @@ test('a legacy action request still shows its payload title', function (): void 
         ->assertSeeIn('[data-action-title]', 'Legacy title')
         ->assertSeeIn('[data-action-description]', 'Legacy detail');
 });
+
+test('a batch filter shows only that batch and can be cleared', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->count(2)->create(['payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-action-batch-filter]')
+        ->assertSeeIn('[data-action-batch-filter]', 'Subtitle audit batch #7')
+        ->assertCount('[data-action-row]', 2)
+        ->click('[data-action-batch-filter-clear]')
+        ->assertMissing('[data-action-batch-filter]')
+        ->assertCount('[data-action-row]', 3);
+});

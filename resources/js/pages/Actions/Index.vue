@@ -3,6 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import {
+    ActionBatchFilterChip,
     ActionQueueHeader,
     ActionQueuePagination,
     ActionRequestDetail,
@@ -28,7 +29,7 @@ import { dashboard } from '@/routes';
 const props = defineProps<{
     requests: ActionQueueRequests;
     statusCounts: Record<string, number>;
-    filters: { status: string };
+    filters: { status: string; subtitle_audit_batch: number | null };
     preselect: number | null;
 }>();
 
@@ -94,6 +95,7 @@ const {
     retain: retainBulk,
 } = useBulkSelection<number>([
     () => props.filters.status,
+    () => props.filters.subtitle_audit_batch,
     () => props.requests.meta.current_page,
 ]);
 
@@ -148,7 +150,12 @@ onMounted(subscribeLive);
 function setFilter(id: string): void {
     router.get(
         ActionRequestController.index.url(),
-        id === 'all' ? {} : { status: id },
+        {
+            ...(id === 'all' ? {} : { status: id }),
+            ...(props.filters.subtitle_audit_batch === null
+                ? {}
+                : { subtitle_audit_batch: props.filters.subtitle_audit_batch }),
+        },
         { preserveState: true, preserveScroll: true, replace: true },
     );
 }
@@ -212,6 +219,12 @@ function goToPage(url: string | null): void {
             :stale-count="staleCount"
             :refreshing="refreshing"
             @refresh="refresh"
+        />
+
+        <ActionBatchFilterChip
+            v-if="filters.subtitle_audit_batch !== null"
+            :batch-id="filters.subtitle_audit_batch"
+            :status="filters.status"
         />
 
         <ActionStatusTabs

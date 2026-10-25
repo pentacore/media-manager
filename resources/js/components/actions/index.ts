@@ -1,3 +1,4 @@
+export { default as ActionBatchFilterChip } from './ActionBatchFilterChip.vue';
 export { default as ActionFailureDetails } from './ActionFailureDetails.vue';
 export { default as ActionPipeline } from './ActionPipeline.vue';
 export { default as ActionQueueHeader } from './ActionQueueHeader.vue';
