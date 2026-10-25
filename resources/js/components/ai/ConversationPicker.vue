@@ -93,6 +93,7 @@ function rename(): void {
                 <DropdownMenuItem
                     v-if="activeConversationId"
                     class="cursor-pointer gap-2 text-xs"
+                    data-conversation-rename
                     @select="rename"
                 >
                     <Pencil class="size-3.5" />

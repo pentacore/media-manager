@@ -64,12 +64,15 @@ const contentStyle = computed(() => {
         <SheetContent
             side="right"
             :style="contentStyle"
-            class="flex w-full flex-col gap-0 p-0 sm:max-w-none"
+            class="flex w-full flex-col gap-0 p-0 sm:max-w-none max-sm:[&>[data-sheet-close]]:absolute"
         >
             <SheetTitle class="sr-only">AI Assistant</SheetTitle>
-            <SheetDescription class="sr-only">
+            <SheetDescription v-if="isResizable" class="sr-only">
                 Chat with MediaAgent. Press Cmd or Ctrl + J to toggle. Drag the
                 left edge to resize.
+            </SheetDescription>
+            <SheetDescription v-else class="sr-only">
+                Chat with MediaAgent.
             </SheetDescription>
             <div
                 v-if="isResizable"

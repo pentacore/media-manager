@@ -141,6 +141,7 @@ function onRenameKey(event: KeyboardEvent): void {
                 size="sm"
                 class="size-7 p-0"
                 aria-label="Cancel rename"
+                data-chat-rename-cancel
                 @click="cancelRename"
             >
                 <X class="size-3.5" />

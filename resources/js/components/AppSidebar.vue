@@ -57,11 +57,25 @@ function closeMobileOnLinkClick(event: MouseEvent): void {
 
 /**
  * The phone sidebar is itself a sheet. Close it, then open the chat sheet on
- * the next tick, so the two modal layers never fight over focus.
+ * the next tick, once the sidebar has stopped trapping focus. The sidebar's
+ * own button is still animating out at that point, so the sidebar trigger
+ * takes focus first: the chat sheet records the focused element as the one
+ * to return to on close, and the trigger outlives the sidebar. On the chat
+ * page the chat is already on screen, so only the sidebar closes.
  */
 function openChatFromMobile(): void {
     setOpenMobile(false);
-    void nextTick(() => openChat());
+
+    if (page.component === 'AI/Chat') {
+        return;
+    }
+
+    void nextTick(() => {
+        document
+            .querySelector<HTMLElement>('[data-sidebar="trigger"]')
+            ?.focus();
+        openChat();
+    });
 }
 
 const navGroups = useNavItems(useNavCounts());

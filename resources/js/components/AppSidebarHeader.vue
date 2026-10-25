@@ -32,6 +32,9 @@ const unreadNotifications = computed<number>(
 );
 
 const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
+
+/** The chat page already shows the chat; the phone sheet would stack a second one over it. */
+const onChatPage = computed(() => page.component === 'AI/Chat');
 </script>
 
 <template>
@@ -111,7 +114,7 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
                 </Link>
             </Button>
             <Button
-                v-if="aiEnabled && isAdmin"
+                v-if="aiEnabled && isAdmin && !onChatPage"
                 variant="ghost"
                 size="icon"
                 class="size-10 sm:hidden"
