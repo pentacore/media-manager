@@ -309,3 +309,18 @@ test('a captured chat turn shows its attachment as a pending copy and copies it 
 
     expect(Storage::disk('local')->get(BenchmarkCaseAttachment::query()->sole()->path))->toBe('png-bytes');
 });
+
+test('the case list badges attachments and scripted cases', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    $chat = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['name' => 'Scripted screenshot chat', 'input' => ['prompt' => 'p', 'conversation' => 'scripted']]);
+    BenchmarkCaseAttachment::factory()->count(2)->for($chat)->image()->create();
+    $title = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Plain title case']);
+
+    visit(route('admin.benchmarks.cases.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-attachments]', $chat->id), '2 attachments')
+        ->assertSeeIn(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-scripted]', $chat->id), 'scripted')
+        ->assertMissing(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-attachments]', $title->id))
+        ->assertMissing(sprintf('[data-benchmark-case-row="%d"] [data-benchmark-case-scripted]', $title->id));
+});

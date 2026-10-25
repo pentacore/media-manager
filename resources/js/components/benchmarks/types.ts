@@ -118,6 +118,8 @@ export type BenchmarkCaseRow = {
     fixture_count: number;
     scoring_type: BenchmarkScoringKind | null;
     source_invocation_id: string | null;
+    attachment_count: number;
+    scripted: boolean;
     updated_at: string | null;
 };
 
@@ -278,6 +280,12 @@ export type BenchmarkToolLogEntry = {
     refused?: true;
 };
 
+export type BenchmarkTranscriptTurn = {
+    role: 'user' | 'assistant';
+    content: string;
+    attachments: string[];
+};
+
 export type BenchmarkResultDetail = {
     case_id: number | null;
     case_name: string;
@@ -306,6 +314,7 @@ export type BenchmarkResultDetail = {
         };
         error: string | null;
         tool_log: BenchmarkToolLogEntry[];
+        transcript: BenchmarkTranscriptTurn[];
         latency_ms: number | null;
         cost_usd: number;
     }>;

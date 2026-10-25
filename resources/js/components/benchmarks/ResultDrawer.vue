@@ -251,6 +251,47 @@ function toolBadgeVariant(
                                 >
                             </div>
 
+                            <div
+                                v-if="result.transcript.length > 0"
+                                data-benchmark-drawer-transcript
+                            >
+                                <h4
+                                    class="mb-1 text-[12px] font-semibold text-muted-foreground"
+                                >
+                                    Transcript
+                                </h4>
+                                <ol class="flex flex-col gap-1.5">
+                                    <li
+                                        v-for="(
+                                            turn, index
+                                        ) in result.transcript"
+                                        :key="index"
+                                        :data-benchmark-drawer-turn="index"
+                                    >
+                                        <span
+                                            class="text-[12px] font-semibold text-muted-foreground"
+                                            >{{
+                                                turn.role === 'user'
+                                                    ? 'User'
+                                                    : 'Candidate'
+                                            }}</span
+                                        >
+                                        <p
+                                            class="text-[12.5px] break-words whitespace-pre-wrap"
+                                        >
+                                            {{ turn.content }}
+                                        </p>
+                                        <p
+                                            v-if="turn.attachments.length > 0"
+                                            class="text-[12px] text-muted-foreground"
+                                            data-benchmark-drawer-turn-attachments
+                                        >
+                                            {{ turn.attachments.join(', ') }}
+                                        </p>
+                                    </li>
+                                </ol>
+                            </div>
+
                             <div v-if="result.tool_log.length > 0">
                                 <h4
                                     class="mb-1 text-[12px] font-semibold text-muted-foreground"

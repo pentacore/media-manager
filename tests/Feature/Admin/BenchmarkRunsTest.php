@@ -552,3 +552,27 @@ test('a run page offers runs sharing a task, the previous scheduled run first', 
     $this->get(route('admin.benchmarks.runs.show', BenchmarkRun::factory()->running()->create()))
         ->assertInertia(fn ($page) => $page->where('compareOptions', []));
 });
+
+test('the drawer partial exposes a scripted transcript apart from the score detail', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $run = BenchmarkRun::factory()->completed()->withCandidates([['provider' => 'openai', 'model' => 'a', 'reasoning' => null]])->create();
+    $case = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'And the sequel?', 'conversation' => 'scripted']]);
+    $result = BenchmarkResult::factory()->forCase($run, $case, 0)->scored(0.9, true)->create([
+        'output' => 'Queued.',
+        'score_detail' => ['score_10' => 9, 'rationale' => 'Consistent', 'tool_log' => [], 'transcript' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => ['download.log']],
+            ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+        ]],
+    ]);
+
+    $this->get(route('admin.benchmarks.runs.show', ['benchmarkRun' => $run, 'result' => $result->id]), [
+        'X-Inertia' => 'true',
+        'X-Inertia-Partial-Component' => 'Admin/Benchmarks/Runs/Show',
+        'X-Inertia-Partial-Data' => 'resultDetail',
+        'X-Inertia-Version' => benchmarkInertiaVersion($this, $run),
+    ])
+        ->assertOk()
+        ->assertJsonPath('props.resultDetail.results.0.transcript.0.attachments', ['download.log'])
+        ->assertJsonPath('props.resultDetail.results.0.transcript.1.content', 'Yes.')
+        ->assertJsonPath('props.resultDetail.results.0.score_detail', ['score_10' => 9, 'rationale' => 'Consistent']);
+});
