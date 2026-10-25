@@ -12,6 +12,7 @@ use App\Console\Commands\CheckServiceHealth;
 use App\Console\Commands\CheckServiceVersions;
 use App\Console\Commands\CheckSilentAgents;
 use App\Console\Commands\CollectServiceGauges;
+use App\Console\Commands\NotifyResolvedIncidents;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
@@ -58,6 +59,12 @@ Schedule::command(RecordOpsHeartbeat::class)
 // After the heartbeat, which marks a scheduler resume: the sweep restarts its
 // silence clock from that moment, so a platform outage opens no incidents.
 Schedule::command(CheckSilentAgents::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// After the silent sweep: an incident that stayed resolved for the notify
+// delay gets its held "resolved" push, so a flapping problem pushes once.
+Schedule::command(NotifyResolvedIncidents::class)
     ->everyMinute()
     ->withoutOverlapping(5);
 

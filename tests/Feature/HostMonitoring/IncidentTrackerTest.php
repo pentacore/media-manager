@@ -14,6 +14,8 @@ use App\Notifications\HostIncidentOpened;
 use App\Notifications\HostIncidentResolved;
 use App\Services\HostMonitoring\IncidentTracker;
 use App\Services\Notifications\AdminNotifier;
+use Illuminate\Console\Scheduling\Event as ScheduleEvent;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
@@ -29,6 +31,14 @@ beforeEach(function (): void {
     $this->server = Server::factory()->enrolled()->create();
     $this->tracker = resolve(IncidentTracker::class);
 });
+
+/**
+ * One run of the minute sweep that sends the held resolved pushes.
+ */
+function incidentTrackerSweep(): void
+{
+    test()->artisan('servers:notify-resolved')->assertSuccessful();
+}
 
 test('observing a new key opens one incident and notifies admins once', function (): void {
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', 'a');
@@ -101,7 +111,7 @@ test('an incident opened as critical sends opened with error severity and never 
     Notification::assertSentTo($this->admin, HostIncidentOpened::class, fn (HostIncidentOpened $notification): bool => $notification->toPush($this->admin)->severity === 'error');
 });
 
-test('two consecutive clears resolve and notify', function (): void {
+test('two consecutive clears resolve and broadcast at once but hold the resolved push', function (): void {
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
 
     $first = $this->tracker->clear($this->server, 'disk:/');
@@ -109,13 +119,13 @@ test('two consecutive clears resolve and notify', function (): void {
     expect($first)->not->toBeNull()
         ->and($first->status)->toBe(IncidentStatus::Open)
         ->and($first->clear_streak)->toBe(1);
-    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
 
     $second = $this->tracker->clear($this->server, 'disk:/');
 
     expect($second->status)->toBe(IncidentStatus::Resolved)
-        ->and($second->resolved_at)->not->toBeNull();
-    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+        ->and($second->resolved_at)->not->toBeNull()
+        ->and($second->resolve_notified_at)->toBeNull();
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
     Event::assertDispatchedTimes(ServerIncidentChanged::class, 2);
 });
 
@@ -137,7 +147,7 @@ test('a single clear resolves when one clear is required', function (): void {
     $incident = $this->tracker->clear($this->server, 'silent', 1);
 
     expect($incident->status)->toBe(IncidentStatus::Resolved);
-    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
 });
 
 test('clearing a key with nothing open returns null and sends nothing', function (): void {
@@ -146,45 +156,88 @@ test('clearing a key with nothing open returns null and sends nothing', function
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
     $this->tracker->clear($this->server, 'disk:/', 1);
 
-    expect($this->tracker->clear($this->server, 'disk:/', 1))->toBeNull();
+    expect($this->tracker->clear($this->server, 'disk:/', 1))->toBeNull()
+        ->and(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Resolved);
+});
+
+test('a stable resolve sends the resolved push once it stayed resolved for the notify delay', function (): void {
+    $this->freezeSecond();
+    $this->travel(-90)->minutes();
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
+    $this->travel(90)->minutes();
+    $this->tracker->clear($this->server, 'disk:/', 1);
+
+    $this->travel(9)->minutes();
+    incidentTrackerSweep();
+
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
+
+    $this->travel(1)->minutes();
+    incidentTrackerSweep();
+    incidentTrackerSweep();
+
+    expect(ServerIncident::query()->sole()->resolve_notified_at)->toEqual(now());
+    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+    Notification::assertSentTo($this->admin, HostIncidentResolved::class, fn (HostIncidentResolved $notification): bool => $notification->toArray($this->admin)['message'] === 'Resolved after 1 hour 30 minutes.');
+    Event::assertDispatchedTimes(ServerIncidentChanged::class, 2);
+});
+
+test('the notify delay is configurable', function (): void {
+    config(['mediamanager.monitoring.resolve_notify_delay_minutes' => 3]);
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    $this->tracker->clear($this->server, 'disk:/', 1);
+
+    $this->travel(3)->minutes();
+    incidentTrackerSweep();
+
     Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
 });
 
-test('a key that recurs after the reopen cooldown opens a fresh incident', function (): void {
-    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
-    $this->tracker->clear($this->server, 'disk:/', 1);
-    $this->travel(31)->minutes();
-    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
-
-    expect(ServerIncident::query()->count())->toBe(2)
-        ->and(ServerIncident::query()->open()->count())->toBe(1);
-    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 2);
-});
-
-test('a key that recurs within the reopen cooldown reopens the resolved incident without a push', function (): void {
-    $this->freezeSecond();
+test('a problem flapping within the notify delay pushes one opened and nothing else', function (): void {
     $first = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', 'a');
-    $this->tracker->clear($this->server, 'disk:/', 1);
-    $this->travel(29)->minutes();
 
-    $reopened = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 87% full', 'b');
+    foreach (range(1, 3) as $flap) {
+        $this->tracker->clear($this->server, 'disk:/', 1);
+        $this->travel(5)->minutes();
+        incidentTrackerSweep();
+        $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 87% full', 'b');
+        $this->travel(5)->minutes();
+        incidentTrackerSweep();
+    }
 
-    expect($reopened->id)->toBe($first->id)
-        ->and(ServerIncident::query()->sole())
+    expect(ServerIncident::query()->sole())
+        ->id->toBe($first->id)
         ->status->toBe(IncidentStatus::Open)
         ->resolved_at->toBeNull()
         ->clear_streak->toBe(0)
         ->title->toBe('Disk / is 87% full')
-        ->detail->toBe('b')
-        ->last_seen_at->toEqual(now());
+        ->detail->toBe('b');
     Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 1);
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
     Notification::assertNotSentTo($this->admin, HostIncidentEscalated::class);
-    Event::assertDispatchedTimes(ServerIncidentChanged::class, 3);
 });
 
-test('a reopen within the cooldown pushes only when the severity rises above the one already notified', function (): void {
+test('a recurrence after the resolved push went out opens a fresh incident and pushes opened', function (): void {
+    $first = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(10)->minutes();
+    incidentTrackerSweep();
+
+    $this->travel(1)->minutes();
+    $second = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+
+    expect($second->id)->not->toBe($first->id)
+        ->and(ServerIncident::query()->count())->toBe(2)
+        ->and(ServerIncident::query()->open()->sole()->id)->toBe($second->id)
+        ->and($first->fresh()->status)->toBe(IncidentStatus::Resolved);
+    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 2);
+    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+});
+
+test('a reopen within the notify delay pushes an escalation only when the severity rises above the one notified', function (): void {
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'w', null);
     $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(5)->minutes();
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Critical, 'c', null);
 
     expect(ServerIncident::query()->sole())
@@ -195,20 +248,35 @@ test('a reopen within the cooldown pushes only when the severity rises above the
     Notification::assertSentToTimes($this->admin, HostIncidentEscalated::class, 1);
 
     $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(5)->minutes();
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Critical, 'c', null);
 
     Notification::assertSentToTimes($this->admin, HostIncidentEscalated::class, 1);
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
 });
 
-test('a zero reopen cooldown always opens a fresh incident', function (): void {
-    config(['mediamanager.monitoring.reopen_cooldown_minutes' => 0]);
-
+test('the sweep skips an incident that reopened before its resolved push went out', function (): void {
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
     $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(10)->minutes();
     $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
 
-    expect(ServerIncident::query()->count())->toBe(2);
-    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 2);
+    expect($this->tracker->notifyHeldResolutions())->toBe(0);
+
+    Notification::assertNotSentTo($this->admin, HostIncidentResolved::class);
+    expect(ServerIncident::query()->sole()->status)->toBe(IncidentStatus::Open);
+});
+
+test('the held resolved push is scheduled every minute after the silent sweep', function (): void {
+    $events = collect(resolve(Schedule::class)->events())->values();
+    $silentIndex = $events->search(fn (ScheduleEvent $event): bool => str_contains((string) $event->command, 'servers:check-silent'));
+    $notifyIndex = $events->search(fn (ScheduleEvent $event): bool => str_contains((string) $event->command, 'servers:notify-resolved'));
+
+    expect($silentIndex)->toBeInt()
+        ->and($notifyIndex)->toBeInt()
+        ->and($silentIndex)->toBeLessThan($notifyIndex)
+        ->and($events[$notifyIndex]->expression)->toBe('* * * * *')
+        ->and($events[$notifyIndex]->withoutOverlapping)->toBeTrue();
 });
 
 test('the tracker locks the server row before it reads the incident', function (string $operation): void {

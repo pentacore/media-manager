@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Models\ServerIncident;
 use App\Models\User;
 use App\Notifications\HostIncidentOpened;
+use App\Notifications\HostIncidentResolved;
 use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event;
@@ -367,6 +368,44 @@ test('the next report resolves the silent incident', function (): void {
     expect(ServerIncident::query()->where('key', 'silent')->sole())
         ->status->toBe(IncidentStatus::Resolved)
         ->resolved_at->not->toBeNull();
+});
+
+test('an agent that goes silent again after its resolved push went out pages again', function (): void {
+    $admin = User::factory()->admin()->create();
+    $server = Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(5)]);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody(['metrics.failed_units' => []]));
+    $this->travel(10)->minutes();
+    $this->artisan('servers:notify-resolved')->assertSuccessful();
+
+    Notification::assertSentToTimes($admin, HostIncidentResolved::class, 1);
+
+    $this->travel(20)->minutes();
+    $server->update(['last_report_at' => now()]);
+    $this->travel(4)->minutes();
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    expect(ServerIncident::query()->where('key', 'silent')->count())->toBe(2)
+        ->and(silentRuleOpenSilentCount())->toBe(1);
+    Notification::assertSentToTimes($admin, HostIncidentOpened::class, 2);
+});
+
+test('an agent that comes back and goes silent again before its resolved push reopens the incident without a push', function (): void {
+    $admin = User::factory()->admin()->create();
+    $server = Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(5)]);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    AgentReportFixtures::dispatchReport($server, AgentReportFixtures::agentReportBody(['metrics.failed_units' => []]));
+    $this->travel(4)->minutes();
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->artisan('servers:check-silent')->assertSuccessful();
+    $this->artisan('servers:notify-resolved')->assertSuccessful();
+
+    expect(ServerIncident::query()->where('key', 'silent')->sole()->status)->toBe(IncidentStatus::Open);
+    Notification::assertSentToTimes($admin, HostIncidentOpened::class, 1);
+    Notification::assertNotSentTo($admin, HostIncidentResolved::class);
 });
 
 test('the silent sweep is scheduled every minute after the heartbeat', function (): void {

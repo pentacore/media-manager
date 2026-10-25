@@ -14,6 +14,7 @@ use App\Notifications\HostIncidentNotification;
 use App\Notifications\HostIncidentOpened;
 use App\Notifications\HostIncidentResolved;
 use App\Services\Notifications\AdminNotifier;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
@@ -24,9 +25,11 @@ use Throwable;
  * server queue up whoever called. Admins are notified and the browser is told only when something worth a
  * message changed, never for a detail-only update.
  *
- * A key that recurs within `reopen_cooldown_minutes` of resolving reopens that incident silently instead of
- * opening a new one, so a flapping problem pushes once; the reopen pushes only when its severity rises above
- * the one admins were already told about.
+ * A resolve is broadcast at once, but its "resolved" push is held: the minute sweep (notifyHeldResolutions)
+ * sends it once the incident stayed resolved for `resolve_notify_delay_minutes`. A key that recurs before that
+ * push went out reopens the same incident silently, so a flapping problem pushes once; the reopen pushes only
+ * when its severity rises above the one admins were told about. A recurrence after the push opens a new
+ * incident with its own "opened" push: admins who were told it resolved always hear that it is back.
  */
 final readonly class IncidentTracker
 {
@@ -46,10 +49,10 @@ final readonly class IncidentTracker
             $incident = $this->lockOpen($server, $key);
 
             if (! $incident instanceof ServerIncident) {
-                $recentlyResolved = $this->lockRecentlyResolved($server, $key);
+                $unannounced = $this->lockUnannouncedResolution($server, $key);
 
-                if ($recentlyResolved instanceof ServerIncident) {
-                    return $this->reopen($server, $recentlyResolved, $severity, $title, $detail, $context);
+                if ($unannounced instanceof ServerIncident) {
+                    return $this->reopen($server, $unannounced, $severity, $title, $detail, $context);
                 }
 
                 $incident = ServerIncident::query()->create([
@@ -130,17 +133,39 @@ final readonly class IncidentTracker
 
             $incident->status = IncidentStatus::Resolved;
             $incident->resolved_at = now();
+            $incident->resolve_notified_at = null;
             $incident->save();
 
-            $this->afterCommit($server, $incident, HostIncidentResolved::class);
+            $this->afterCommit($server, $incident, null);
 
             return $incident;
         });
     }
 
     /**
-     * Brings a recently resolved incident back as open with a fresh clear streak. Admins already got its opened (and
-     * resolved) push, so only a severity above the one they were told about is pushed, as an escalation.
+     * Sends the held "resolved" push of every incident that stayed resolved for the notify delay. Each one is
+     * re-read under the server and incident locks, so an incident that reopened meanwhile is skipped.
+     *
+     * @return int pushes sent
+     */
+    public function notifyHeldResolutions(): int
+    {
+        $sent = 0;
+
+        $this->unannouncedResolutions()
+            ->orderBy('id')
+            ->pluck('server_id', 'id')
+            ->each(function (int $serverId, int $incidentId) use (&$sent): void {
+                $sent += $this->notifyHeldResolution($serverId, $incidentId) ? 1 : 0;
+            });
+
+        return $sent;
+    }
+
+    /**
+     * Brings a resolved incident whose "resolved" push is still held back as open with a fresh clear streak. Admins
+     * were told it opened and never that it resolved, so only a severity above the one they know is pushed, as an
+     * escalation.
      *
      * @param  array<string, mixed>  $context
      */
@@ -180,22 +205,57 @@ final readonly class IncidentTracker
         Server::query()->whereKey($server->id)->lockForUpdate()->value('id');
     }
 
-    /**
-     * The newest incident for the key resolved within the reopen cooldown; none when the cooldown is 0.
-     */
-    private function lockRecentlyResolved(Server $server, string $key): ?ServerIncident
+    private function notifyHeldResolution(int $serverId, int $incidentId): bool
     {
-        $cooldownMinutes = (int) config('mediamanager.monitoring.reopen_cooldown_minutes');
+        return DB::transaction(function () use ($serverId, $incidentId): bool {
+            $server = Server::query()->whereKey($serverId)->lockForUpdate()->first();
 
-        if ($cooldownMinutes <= 0) {
-            return null;
-        }
+            if ($server === null) {
+                return false;
+            }
 
+            $incident = $this->unannouncedResolutions()->whereKey($incidentId)->lockForUpdate()->first();
+
+            if (! $incident instanceof ServerIncident) {
+                return false;
+            }
+
+            $incident->resolve_notified_at = now();
+            $incident->save();
+
+            $incident->setRelation('server', $server);
+
+            $hostIncidentResolved = HostIncidentResolved::fromIncident($incident);
+
+            DB::afterCommit(fn () => $this->notifyAdmins($hostIncidentResolved));
+
+            return true;
+        });
+    }
+
+    /**
+     * Resolved incidents whose "resolved" push is due: still unsent after the notify delay.
+     *
+     * @return Builder<ServerIncident>
+     */
+    private function unannouncedResolutions(): Builder
+    {
+        return ServerIncident::query()
+            ->where('status', IncidentStatus::Resolved->value)
+            ->whereNull('resolve_notified_at')
+            ->where('resolved_at', '<=', now()->subMinutes((int) config('mediamanager.monitoring.resolve_notify_delay_minutes')));
+    }
+
+    /**
+     * The newest resolved incident for the key whose "resolved" push has not gone out yet.
+     */
+    private function lockUnannouncedResolution(Server $server, string $key): ?ServerIncident
+    {
         return ServerIncident::query()
             ->where('server_id', $server->id)
             ->where('key', $key)
             ->where('status', IncidentStatus::Resolved->value)
-            ->where('resolved_at', '>=', now()->subMinutes($cooldownMinutes))
+            ->whereNull('resolve_notified_at')
             ->latest('resolved_at')
             ->latest('id')
             ->lockForUpdate()
@@ -229,15 +289,21 @@ final readonly class IncidentTracker
         DB::afterCommit(function () use ($message, $serverIncidentChanged): void {
             event($serverIncidentChanged);
 
-            if (! $message instanceof HostIncidentNotification) {
-                return;
-            }
-
-            try {
-                $this->adminNotifier->send($message);
-            } catch (Throwable $throwable) {
-                report($throwable);
+            if ($message instanceof HostIncidentNotification) {
+                $this->notifyAdmins($message);
             }
         });
+    }
+
+    /**
+     * A failing channel (mail down) is reported, not thrown, so it cannot take down the callbacks queued after it.
+     */
+    private function notifyAdmins(HostIncidentNotification $message): void
+    {
+        try {
+            $this->adminNotifier->send($message);
+        } catch (Throwable $throwable) {
+            report($throwable);
+        }
     }
 }

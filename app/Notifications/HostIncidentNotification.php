@@ -29,6 +29,7 @@ abstract class HostIncidentNotification extends Notification
         public readonly ?string $detail,
         public readonly IncidentSeverity $severity,
         public readonly CarbonImmutable $openedAt,
+        public readonly ?CarbonImmutable $resolvedAt = null,
     ) {}
 
     public static function fromIncident(ServerIncident $incident): static
@@ -41,6 +42,7 @@ abstract class HostIncidentNotification extends Notification
             detail: $incident->detail,
             severity: $incident->severity,
             openedAt: $incident->opened_at,
+            resolvedAt: $incident->resolved_at,
         );
     }
 

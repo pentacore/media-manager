@@ -32,6 +32,7 @@ use Override;
  * @property CarbonImmutable|null $escalated_at
  * @property CarbonImmutable|null $resolved_at
  * @property IncidentSeverity|null $notified_severity
+ * @property CarbonImmutable|null $resolve_notified_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Server $server
@@ -58,6 +59,7 @@ use Override;
     'escalated_at',
     'resolved_at',
     'notified_severity',
+    'resolve_notified_at',
 ])]
 class ServerIncident extends Model
 {
@@ -79,6 +81,7 @@ class ServerIncident extends Model
             'last_seen_at' => 'immutable_datetime',
             'escalated_at' => 'immutable_datetime',
             'resolved_at' => 'immutable_datetime',
+            'resolve_notified_at' => 'immutable_datetime',
         ];
     }
 

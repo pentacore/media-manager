@@ -39,6 +39,7 @@ class ServerIncidentFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'status' => IncidentStatus::Open,
             'resolved_at' => null,
+            'resolve_notified_at' => null,
         ]);
     }
 
@@ -47,6 +48,7 @@ class ServerIncidentFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'status' => IncidentStatus::Resolved,
             'resolved_at' => now(),
+            'resolve_notified_at' => now(),
         ]);
     }
 

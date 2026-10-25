@@ -422,7 +422,9 @@ return [
         // The agent's longest retry wait on 5xx/network errors (the contract's 5 s → 5 min backoff, before jitter).
         'agent_max_backoff_seconds' => (int) env('MEDIAMANAGER_MONITORING_AGENT_MAX_BACKOFF_SECONDS', 300),
         'incident_clear_streak' => (int) env('MEDIAMANAGER_MONITORING_INCIDENT_CLEAR_STREAK', 2),
-        'reopen_cooldown_minutes' => (int) env('MEDIAMANAGER_MONITORING_REOPEN_COOLDOWN_MINUTES', 30),
+        // How long an incident must stay resolved before its "resolved" push goes out; a recurrence before then
+        // reopens it without a new push.
+        'resolve_notify_delay_minutes' => (int) env('MEDIAMANAGER_MONITORING_RESOLVE_NOTIFY_DELAY_MINUTES', 10),
         'disk' => [
             'warning_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_WARNING_PERCENT', 85),
             'critical_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_CRITICAL_PERCENT', 95),
