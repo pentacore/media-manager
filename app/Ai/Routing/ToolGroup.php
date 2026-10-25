@@ -7,11 +7,13 @@ namespace App\Ai\Routing;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Tools\Arr\AddMediaTool;
+use App\Ai\Tools\Arr\AuditSeriesSubtitlesTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
+use App\Ai\Tools\Arr\RepairSeriesSubtitlesTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\SearchMediaReleasesTool;
@@ -148,6 +150,8 @@ enum ToolGroup: string
             self::SubtitlesReplacement => [
                 MediaFileInspectorAgent::class,
                 ReplaceMediaFileTool::class,
+                AuditSeriesSubtitlesTool::class,
+                RepairSeriesSubtitlesTool::class,
                 InspectSubtitleTool::class,
                 SearchSubtitlesTool::class,
                 RequestSubtitleOperationTool::class,
