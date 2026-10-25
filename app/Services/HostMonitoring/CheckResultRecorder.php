@@ -10,14 +10,16 @@ use Illuminate\Support\Str;
 
 /**
  * Stores each reported check result on the server's own check with that uuid. Ids of other servers' checks and unknown ids are ignored.
+ *
+ * Each result is written with a builder update: no model events fire, so a result never bumps config_version, and
+ * updated_at keeps meaning "last edited". `observed` is always an object; the (object) cast keeps an empty one `{}`
+ * instead of `[]`.
  */
 final readonly class CheckResultRecorder
 {
     public function record(Server $server, AgentReport $agentReport): void
     {
         foreach ($agentReport->checks as $check) {
-            // A builder update: no model events, so a result never bumps config_version, and updated_at keeps meaning "last edited".
-            // `observed` is always an object; the (object) cast keeps an empty one `{}` instead of `[]`.
             ServerCheck::query()
                 ->where('server_id', $server->id)
                 ->where('uuid', $check['id'])

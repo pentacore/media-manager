@@ -23,7 +23,7 @@ final class VerifyAgentToken implements AuthenticatesRequests
     {
         $server = $this->serverFor((string) $request->bearerToken());
 
-        abort_if(!$server instanceof Server, 401);
+        abort_if(! $server instanceof Server, 401);
 
         $request->attributes->set('server', $server);
 
