@@ -27,6 +27,7 @@ final readonly class SubtitleAuditEpisodeSearcher
         private ActionOrchestrator $actionOrchestrator,
         private SubtitleCheckRules $subtitleCheckRules,
         private SubtitleAuditBatchSettler $subtitleAuditBatchSettler,
+        private PendingReplacementGuard $pendingReplacementGuard,
     ) {}
 
     public function search(SubtitleAuditEpisode $subtitleAuditEpisode): void
@@ -105,6 +106,12 @@ final readonly class SubtitleAuditEpisodeSearcher
             autoCheckKey: $this->subtitleCheckRules->autoCheckKey($serviceConnection, $snapshot),
         );
         $built['payload']['subtitle_audit_batch_id'] = $subtitleAuditBatch->id;
+
+        // A redelivered job, or a manual replace while a long batch searched,
+        // may already have queued one: never queue a second for the file.
+        if ($this->pendingReplacementGuard->inFlightFor($snapshot)) {
+            return ['outcome' => SubtitleAuditEpisodeOutcome::Failed, 'failure_reason' => 'replacement_in_flight', 'missing_languages' => $missing];
+        }
 
         $actionRequest = $this->actionOrchestrator->dispatch(
             type: 'replace_media_file',

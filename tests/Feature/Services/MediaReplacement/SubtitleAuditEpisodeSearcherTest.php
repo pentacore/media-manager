@@ -252,3 +252,27 @@ test('an episode whose row is no longer searching is left alone', function (): v
         ->and(ActionRequest::query()->count())->toBe(0);
     Http::assertNothingSent();
 });
+
+test('an episode with a replacement already in flight fails instead of queueing a second one', function (): void {
+    fakeSearcherSonarr();
+    $inFlight = ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'status' => ActionRequestStatus::Pending,
+        'payload' => ['target' => [
+            'service_connection_id' => $this->connection->id,
+            'series_id' => 42,
+            'season_number' => 1,
+            'episode_numbers' => [1],
+        ]],
+    ]);
+
+    resolve(SubtitleAuditEpisodeSearcher::class)->search($this->episode);
+
+    $episode = $this->episode->fresh();
+
+    expect($episode->outcome)->toBe(SubtitleAuditEpisodeOutcome::Failed)
+        ->and($episode->failure_reason)->toBe('replacement_in_flight')
+        ->and($episode->missing_languages)->toBe(['eng'])
+        ->and($episode->action_request_id)->toBeNull()
+        ->and(ActionRequest::query()->pluck('id')->all())->toBe([$inFlight->id]);
+});
