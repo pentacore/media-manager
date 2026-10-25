@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ShieldAlert, ShieldCheck, ShieldQuestion } from '@lucide/vue';
 import { computed } from 'vue';
+import { Pill } from '@/components/mm';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 
 const props = defineProps<{
@@ -58,6 +59,13 @@ const detail = computed(() => {
             <span v-if="detail" class="text-[12.5px] text-muted-foreground">{{
                 detail
             }}</span>
+            <Pill
+                v-if="verdict.override_event"
+                class="w-fit"
+                data-second-opinion-override-event
+            >
+                Per-event rule: {{ verdict.override_event }}
+            </Pill>
         </div>
     </div>
 </template>

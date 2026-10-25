@@ -443,3 +443,12 @@ test('each listed request carries its status version', function (): void {
             ->where('requests.data.0.id', $actionRequest->id)
             ->where('requests.data.0.status_version', $actionRequest->status_version));
 });
+
+test('the browser payload names the event whose override shaped the second opinion', function (): void {
+    $withEvent = ActionRequest::factory()->secondOpinion(agrees: true, eventKey: 'sonarr:Download')->create();
+    $storedBeforeOverrides = ActionRequest::factory()->create(['second_opinion' => ['engine' => 'llm', 'mode' => 'hold', 'agrees' => true, 'failed' => false]]);
+    $actionRequestBrowserPayload = resolve(ActionRequestBrowserPayload::class);
+
+    expect($actionRequestBrowserPayload->description($withEvent)['second_opinion']['override_event'])->toBe('sonarr:Download')
+        ->and($actionRequestBrowserPayload->description($storedBeforeOverrides)['second_opinion']['override_event'])->toBeNull();
+});

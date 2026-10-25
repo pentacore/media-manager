@@ -23,7 +23,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'details' => 'Array<{ label: string; value: string }>',
     'description_verified' => 'boolean',
     'agent_rationale' => 'string | null',
-    'second_opinion' => "{ engine: 'llm' | 'jev'; mode: 'hold' | 'reject'; agrees: boolean; failed: boolean; confidence: number | null; reason: string | null } | null",
+    'second_opinion' => "{ engine: 'llm' | 'jev'; mode: 'hold' | 'reject'; agrees: boolean; failed: boolean; confidence: number | null; reason: string | null; override_event: string | null } | null",
     'source_service' => 'string',
     'target_service' => 'string',
     'status' => "'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected'",
