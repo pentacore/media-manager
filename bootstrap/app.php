@@ -32,6 +32,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // The verifier-prompt preview renders what the store saves, and the store reads its
+        // fields untrimmed from a JSON string, so the preview body must not be trimmed either.
+        $middleware->trimStrings(except: [
+            static fn (Request $request): bool => $request->is('admin/benchmarks/cases/verifier-prompt'),
+        ]);
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,

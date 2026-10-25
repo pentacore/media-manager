@@ -11,6 +11,7 @@ use App\Enums\ClassificationVerdict;
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
+use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
 use App\Services\Actions\ActionDescription;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -304,7 +305,7 @@ test('the verifier leaves room for reasoning tokens before its structured answer
 });
 
 test('a verdict serialises to the shape stored on the action request', function (): void {
-    $secondOpinionVerdict = new SecondOpinionVerdict(engine: 'llm', agrees: false, failed: false, confidence: 0.4, reason: 'No.', provider: 'openai', model: 'gpt-5-mini');
+    $secondOpinionVerdict = new SecondOpinionVerdict(engine: 'llm', agrees: false, failed: false, confidence: 0.4, reason: 'No.', provider: 'openai', model: 'gpt-5-mini', invocationId: 'inv-7');
 
     expect($secondOpinionVerdict->toArray(SecondOpinionMode::Reject))->toBe([
         'engine' => 'llm',
@@ -315,7 +316,38 @@ test('a verdict serialises to the shape stored on the action request', function 
         'reason' => 'No.',
         'provider' => 'openai',
         'model' => 'gpt-5-mini',
+        'invocation_id' => 'inv-7',
     ]);
+});
+
+test('an llm verdict carries the invocation id of the verifier call', function (): void {
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Fine.']]);
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase());
+
+    expect($secondOpinionVerdict->invocationId)->toBeString()->not->toBe('')
+        ->and(AiUsageRecord::query()->where('invocation_id', $secondOpinionVerdict->invocationId)->value('agent_class'))->toBe(DecisionVerifierAgent::class);
+});
+
+test('a cascade llm verdict keeps its invocation id next to the jev answer', function (): void {
+    secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
+    resolve(AiSettings::class)->setClassificationAuditSampleRate(0.0);
+    Classification::fake([['decision' => new BooleanAnswer(0.4)]]);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'Not justified.']]);
+
+    $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase());
+
+    expect($secondOpinionVerdict->engine)->toBe('llm')
+        ->and($secondOpinionVerdict->confidence)->toBe(0.4)
+        ->and($secondOpinionVerdict->invocationId)->toBeString()->not->toBe('');
+});
+
+test('a jev-only verdict and a failed check have no invocation id', function (): void {
+    secondOpinionEngine(SecondOpinionEngine::Jev);
+    Classification::fake([['decision' => new BooleanAnswer(0.9)]]);
+
+    expect(resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase())->invocationId)->toBeNull()
+        ->and(SecondOpinionVerdict::failure('llm', 'boom')->invocationId)->toBeNull();
 });
 
 test('resolving the review of a request without a second opinion touches no outcome rows', function (): void {

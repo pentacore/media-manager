@@ -15,8 +15,8 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * wildcard (`history.*`, `expected.*`) rules.
  */
 #[TypefinderOverrides([
-    'input' => "{ prompt?: string | null; history?: Array<{ role: 'user' | 'assistant'; content: string }> | null; mode?: 'executive' | 'advisory' | null; conversation?: 'context' | 'scripted' | null; event_key?: string | null; event?: { service: string; event_type: string; payload_json: string } | null; action_kind?: 'library_change' | 'seerr_request' | 'media_server' | 'other' | null; providers?: string[] }",
-    'scoring' => "{ type: 'actions' | 'prices' | 'judge'; expected?: Array<Record<string, unknown>> | null; tolerance_percent?: number | null; rubric_note?: string | null; pass_threshold?: number | null }",
+    'input' => "{ prompt?: string | null; history?: Array<{ role: 'user' | 'assistant'; content: string }> | null; mode?: 'executive' | 'advisory' | null; conversation?: 'context' | 'scripted' | null; event_key?: string | null; event?: { service: string; event_type: string; payload_json: string } | null; action_kind?: 'library_change' | 'seerr_request' | 'media_server' | 'other' | null; providers?: string[]; verifier?: { action_type: string; action_label: string; title: string; description: string; details?: Array<{ label: string; value: string }> | null; verified: boolean; payload_json: string; rationale?: string | null; source_service: string; event_type?: string | null; event_payload_json: string } | null }",
+    'scoring' => "{ type: 'actions' | 'prices' | 'judge' | 'verdict'; expected?: Array<Record<string, unknown>> | null; expected_agrees?: boolean | null; tolerance_percent?: number | null; rubric_note?: string | null; pass_threshold?: number | null }",
     'attachments' => 'Record<string, File[]> | null',
     'keep_attachment_ids' => 'Record<string, number[]> | null',
     'draft_attachment_ids' => 'Record<string, number[]> | null',
@@ -31,6 +31,14 @@ class StoreBenchmarkCaseRequest extends FormRequest
     public function rules(): array
     {
         return $this->benchmarkCaseRules();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return ['scoring.expected_agrees.required_if' => 'Choose the expected verdict.'];
     }
 
     /**

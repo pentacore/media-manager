@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\BenchmarkComparisonController;
 use App\Http\Controllers\Admin\BenchmarkDecisionPromptController;
 use App\Http\Controllers\Admin\BenchmarkRunController;
 use App\Http\Controllers\Admin\BenchmarkScheduleController;
+use App\Http\Controllers\Admin\BenchmarkVerifierPromptController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
 use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
@@ -86,6 +87,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('create', [BenchmarkCaseController::class, 'create'])->name('create');
             Route::post('/', [BenchmarkCaseController::class, 'store'])->name('store');
             Route::post('decision-prompt', BenchmarkDecisionPromptController::class)->name('decision-prompt');
+            Route::post('verifier-prompt', BenchmarkVerifierPromptController::class)->name('verifier-prompt');
             Route::get('{benchmarkCase}/edit', [BenchmarkCaseController::class, 'edit'])->whereNumber('benchmarkCase')->name('edit');
             Route::put('{benchmarkCase}', [BenchmarkCaseController::class, 'update'])->whereNumber('benchmarkCase')->name('update');
             Route::delete('{benchmarkCase}', [BenchmarkCaseController::class, 'destroy'])->whereNumber('benchmarkCase')->name('destroy');

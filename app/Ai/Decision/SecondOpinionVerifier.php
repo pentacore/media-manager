@@ -68,9 +68,17 @@ final readonly class SecondOpinionVerifier
         private AiBudgetGuard $aiBudgetGuard,
     ) {}
 
+    /**
+     * @return list<string>
+     */
+    public static function supportedActionTypes(): array
+    {
+        return [...ProposeActionTool::ALLOWED_TYPES, ...self::STUCK_IMPORT_TYPES];
+    }
+
     public static function supportsActionType(string $type): bool
     {
-        return in_array($type, [...ProposeActionTool::ALLOWED_TYPES, ...self::STUCK_IMPORT_TYPES], true);
+        return in_array($type, self::supportedActionTypes(), true);
     }
 
     public static function outcomeSubjectKey(int $actionRequestId): string
@@ -249,6 +257,7 @@ final readonly class SecondOpinionVerifier
                 reason: is_string($reason) && trim($reason) !== '' ? Str::limit(trim($reason), 500) : null,
                 provider: $agentResponse->meta->provider ?? null,
                 model: $agentResponse->meta->model ?? null,
+                invocationId: $agentResponse->invocationId,
             );
         } catch (AiBudgetExceededException) {
             return SecondOpinionVerdict::failure(SecondOpinionVerdict::ENGINE_LLM, 'Skipped: the AI budget hard cap is reached.');

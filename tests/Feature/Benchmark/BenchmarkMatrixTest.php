@@ -150,3 +150,49 @@ test('a task without any scored result has no best score', function (): void {
         ->and($matrix['best']['avg_score'])->toBeNull()
         ->and($matrix['best']['pass_rate'])->toBeNull();
 });
+
+test('a verdict task counts missed and false alarm verdicts per candidate', function (): void {
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+        ['provider' => 'openai', 'model' => 'b', 'reasoning' => null],
+    ])->create();
+    $stopIt = BenchmarkCase::factory()->expectingVerdict(false)->create();
+    $letItRun = BenchmarkCase::factory()->expectingVerdict(true)->create();
+    $alsoStop = BenchmarkCase::factory()->expectingVerdict(false)->create();
+    BenchmarkResult::factory()->forCase($run, $stopIt, 0)->scored(0.0, false)->create(['score_detail' => ['error_kind' => 'missed']]);
+    BenchmarkResult::factory()->forCase($run, $letItRun, 0)->scored(0.0, false)->create(['score_detail' => ['error_kind' => 'false_alarm']]);
+    BenchmarkResult::factory()->forCase($run, $alsoStop, 0)->scored(1.0, true)->create(['score_detail' => ['error_kind' => null]]);
+    BenchmarkResult::factory()->forCase($run, $stopIt, 1)->scored(1.0, true)->create(['score_detail' => ['error_kind' => null]]);
+    BenchmarkResult::factory()->forCase($run, $letItRun, 1)->scored(1.0, true)->create(['score_detail' => ['error_kind' => null]]);
+    BenchmarkResult::factory()->forCase($run, $alsoStop, 1)->failed('boom')->create(['score_detail' => ['error_kind' => 'missed']]);
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['task'])->toBe('decision_verifier')
+        ->and($matrix['verdict'])->toBeTrue()
+        ->and($matrix['candidates'][0]['missed'])->toBe(1)
+        ->and($matrix['candidates'][0]['false_alarms'])->toBe(1)
+        ->and($matrix['candidates'][1]['missed'])->toBe(0)
+        ->and($matrix['candidates'][1]['false_alarms'])->toBe(0);
+});
+
+test('a verdict task never marks a candidate self-judged even when it is the judge', function (): void {
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'a', 'reasoning' => null],
+    ])->create(['judge' => ['provider' => 'openai', 'model' => 'a', 'reasoning' => null]]);
+    $case = BenchmarkCase::factory()->expectingVerdict(false)->create();
+    BenchmarkResult::factory()->forCase($run, $case, 0)->scored(1.0, true)->create(['score_detail' => ['error_kind' => null]]);
+
+    expect(BenchmarkMatrix::for($run)[0]['candidates'][0]['self_judged'])->toBeFalse();
+});
+
+test('a task scored without verdicts has no missed or false alarm counts', function (): void {
+    $run = BenchmarkRun::factory()->completed()->create();
+    BenchmarkResult::factory()->forCase($run, BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(), 0)->scored(0.8, true)->create();
+
+    $matrix = BenchmarkMatrix::for($run)[0];
+
+    expect($matrix['verdict'])->toBeFalse()
+        ->and($matrix['candidates'][0]['missed'])->toBeNull()
+        ->and($matrix['candidates'][0]['false_alarms'])->toBeNull();
+});

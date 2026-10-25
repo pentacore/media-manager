@@ -29,6 +29,11 @@ export const PAYLOAD_MESSAGES: JsonObjectMessages = {
     invalid: 'The payload is not valid JSON.',
 };
 
+export const EVENT_PAYLOAD_MESSAGES: JsonObjectMessages = {
+    notObject: 'The event payload must be a JSON object.',
+    invalid: 'The event payload is not valid JSON.',
+};
+
 /** Parses the text of a JSON textarea; blank text means an empty object. */
 export function parseJsonObject(
     text: string,

@@ -10,7 +10,9 @@ use App\Enums\SecondOpinionMode;
 /**
  * One second opinion. $engine names whose answer is final ('llm' or 'jev');
  * $confidence is Jev's probability whenever Jev was asked; $jevVerdict and
- * $jevThreshold say how Jev's answer was used, for outcome tracking.
+ * $jevThreshold say how Jev's answer was used, for outcome tracking;
+ * $invocationId links the LLM call's usage row (null for Jev-only and
+ * failed verdicts).
  */
 final readonly class SecondOpinionVerdict
 {
@@ -28,6 +30,7 @@ final readonly class SecondOpinionVerdict
         public ?string $model = null,
         public ?ClassificationVerdict $jevVerdict = null,
         public ?float $jevThreshold = null,
+        public ?string $invocationId = null,
     ) {}
 
     public static function failure(string $engine, string $reason): self
@@ -50,6 +53,7 @@ final readonly class SecondOpinionVerdict
             model: $this->model,
             jevVerdict: $classificationVerdict,
             jevThreshold: $threshold,
+            invocationId: $this->invocationId,
         );
     }
 
@@ -74,7 +78,7 @@ final readonly class SecondOpinionVerdict
     /**
      * The shape stored on action_requests.second_opinion.
      *
-     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null}
+     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null, invocation_id: string|null}
      */
     public function toArray(SecondOpinionMode $secondOpinionMode): array
     {
@@ -87,6 +91,7 @@ final readonly class SecondOpinionVerdict
             'reason' => $this->reason,
             'provider' => $this->provider,
             'model' => $this->model,
+            'invocation_id' => $this->invocationId,
         ];
     }
 }

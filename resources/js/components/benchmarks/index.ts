@@ -20,4 +20,7 @@ export { default as RegressionBanner } from './RegressionBanner.vue';
 export { default as ResultDrawer } from './ResultDrawer.vue';
 export { default as ScheduleCandidatesPreview } from './ScheduleCandidatesPreview.vue';
 export { default as SelectionRow } from './SelectionRow.vue';
+export { default as VerdictScoringFields } from './VerdictScoringFields.vue';
+export { default as VerifierCaseFields } from './VerifierCaseFields.vue';
+export * from './verifierCase';
 export type * from './types';

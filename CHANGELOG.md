@@ -1,3 +1,24 @@
+# [1.55.0](https://github.com/pentacore/media-manager/compare/v1.54.0...v1.55.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **benchmarks:** harden verifier case capture drafts ([cd4dbb5](https://github.com/pentacore/media-manager/commit/cd4dbb501cf96311fa61604ac325feeee33c59fc))
+* **benchmarks:** keep the verifier prompt preview untrimmed like the saved case ([abe6429](https://github.com/pentacore/media-manager/commit/abe6429ed22b3f5be6a0e3d7812da19824ab0c5d))
+* **benchmarks:** only flag self-judged candidates on judge-scored tasks ([85ae517](https://github.com/pentacore/media-manager/commit/85ae517180726dfccaa48817ee67003055463ef2))
+* **benchmarks:** show the action type value beside its label in the verifier form ([fe6c2c6](https://github.com/pentacore/media-manager/commit/fe6c2c6ff924e6da263f1f70e99a29f5e2e56472))
+
+
+### Features
+
+* **actions:** benchmark a second opinion from the action queue ([8c881ba](https://github.com/pentacore/media-manager/commit/8c881ba88876f752c84eee74f6674a9ee69dd3b9))
+* **actions:** link second opinions to their verifier invocation ([5627e4a](https://github.com/pentacore/media-manager/commit/5627e4a9188241aa00b79f124c510c8dc1f16904))
+* **benchmarks:** add the verifier case form ([7437f84](https://github.com/pentacore/media-manager/commit/7437f8489f9acf805475d885125a56a54b406295))
+* **benchmarks:** build structured verifier cases from the production case file ([c41eb3b](https://github.com/pentacore/media-manager/commit/c41eb3b71732e6a9d849fcea46f1b0bc471f0c54))
+* **benchmarks:** capture verifier cases from usage rows and action requests ([7484b4c](https://github.com/pentacore/media-manager/commit/7484b4c42920a00a69db20610896322732d5686a))
+* **benchmarks:** score decision verifier cases by verdict ([e36e9b8](https://github.com/pentacore/media-manager/commit/e36e9b8b968ad32452484fcfe3dd989d875082f0))
+* **benchmarks:** show missed and false-alarm verdicts on runs ([cc46b35](https://github.com/pentacore/media-manager/commit/cc46b353e835fe1ccc5c60146d4ef92b2fdf664b))
+
 # [1.54.0](https://github.com/pentacore/media-manager/compare/v1.53.0...v1.54.0) (2026-10-25)
 
 

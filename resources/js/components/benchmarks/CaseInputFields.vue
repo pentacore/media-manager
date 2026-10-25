@@ -14,7 +14,11 @@ import type {
     BenchmarkDecisionEvent,
     BenchmarkDecisionSource,
     BenchmarkHistoryTurnForm,
+    BenchmarkVerifierActionType,
+    BenchmarkVerifierForm,
+    BenchmarkVerifierSource,
 } from './types';
+import VerifierCaseFields from './VerifierCaseFields.vue';
 
 type InputState = {
     prompt: string;
@@ -27,6 +31,8 @@ type InputState = {
     event: BenchmarkDecisionEvent;
     action_kind: string;
     providers: string[];
+    verifier_source: BenchmarkVerifierSource;
+    verifier: BenchmarkVerifierForm;
 };
 
 const props = defineProps<{
@@ -34,6 +40,7 @@ const props = defineProps<{
     eventKeys: string[];
     decisionServices: string[];
     actionKinds: BenchmarkActionKindOption[];
+    verifierActionTypes: BenchmarkVerifierActionType[];
     /** Server validation errors keyed like `input.prompt`. */
     errors: Record<string, string | undefined>;
 }>();
@@ -62,6 +69,25 @@ const DECISION_SOURCES: Array<{
     { value: 'event', label: 'Webhook event' },
     { value: 'text', label: 'Free-text prompt' },
 ];
+
+const VERIFIER_SOURCES: Array<{
+    value: BenchmarkVerifierSource;
+    label: string;
+}> = [
+    { value: 'structured', label: 'Structured' },
+    { value: 'text', label: 'Raw prompt' },
+];
+
+/** The prompt is typed unless an event or a structured verifier case renders it. */
+const showsPrompt = computed(
+    () =>
+        !(
+            (props.task === 'decision' &&
+                input.value.decision_source === 'event') ||
+            (props.task === 'decision_verifier' &&
+                input.value.verifier_source === 'structured')
+        ),
+);
 
 /** Canonical Laravel AI provider ids the price updater can be asked to refresh. */
 const PRICE_PROVIDERS = [
@@ -143,8 +169,16 @@ const textareaClass =
             class="w-fit"
         />
 
+        <SegmentedControl
+            v-if="task === 'decision_verifier'"
+            v-model="input.verifier_source"
+            :options="VERIFIER_SOURCES"
+            option-attribute="benchmark-verifier-source"
+            class="w-fit"
+        />
+
         <label
-            v-if="task !== 'decision' || input.decision_source === 'text'"
+            v-if="showsPrompt"
             class="grid gap-1.5 text-[12.5px] font-medium"
         >
             Prompt
@@ -292,6 +326,17 @@ const textareaClass =
             :services="decisionServices"
             :event-keys="eventKeys"
             :action-kinds="actionKinds"
+            :errors="errors"
+        />
+
+        <VerifierCaseFields
+            v-if="
+                task === 'decision_verifier' &&
+                input.verifier_source === 'structured'
+            "
+            v-model:verifier="input.verifier"
+            :action-types="verifierActionTypes"
+            :services="decisionServices"
             :errors="errors"
         />
 

@@ -315,3 +315,19 @@ test('the job is unique per judgement on the AI lane', function (): void {
         ->and($runNeutralJudgement->uniqueId())->toBe('neutral-judgement:7')
         ->and(new ReflectionClass(RunNeutralJudgement::class)->getAttributes(Illuminate\Queue\Attributes\Queue::class)[0]->getArguments()[0])->toBe(QueueLane::Ai);
 });
+
+test('verdict-scored results are never in a neutral re-judge scope', function (): void {
+    $verdictCase = BenchmarkCase::factory()->expectingVerdict(true)->create();
+    $runs = [];
+
+    foreach ([0, 1] as $position) {
+        $benchmarkRun = BenchmarkRun::factory()->completed()->create([
+            'candidates' => [['provider' => 'openai', 'model' => 'gpt-candidate', 'reasoning' => null]],
+            'judge' => ['provider' => 'openai', 'model' => 'gpt-candidate', 'reasoning' => null],
+        ]);
+        $runs[] = $benchmarkRun->id;
+        BenchmarkResult::factory()->forCase($benchmarkRun, $verdictCase, 0)->scored(1.0, true)->create(['output' => '{"agrees":true,"reason":"Fine."}']);
+    }
+
+    expect(neutralLauncher()->scope($runs, BenchmarkNeutralJudgement::keyFor(neutralJudge())))->toBeEmpty();
+});
