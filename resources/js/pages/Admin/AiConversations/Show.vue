@@ -9,6 +9,8 @@ import {
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
+import TurnToolGroups from '@/components/ai/TurnToolGroups.vue';
+import type { TurnToolGroups as TurnToolGroupsValue } from '@/components/ai/types';
 import { InitialsAvatar, PageHeader, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +45,7 @@ interface MessageRow {
     status: 'completed' | 'paused' | 'failed';
     error: string | null;
     steps: TranscriptStep[];
+    tool_groups?: TurnToolGroupsValue;
     created_at: string;
 }
 
@@ -321,6 +324,10 @@ function formatDate(iso: string | null): string {
                     >
                         {{ message.error }}
                     </p>
+                    <TurnToolGroups
+                        v-if="message.role === 'assistant'"
+                        :groups="message.tool_groups"
+                    />
                     <div
                         v-for="(step, s) in message.steps"
                         :key="s"

@@ -6,7 +6,8 @@ namespace App\Services\Chat;
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ChatToolRouter;
-use App\Ai\Routing\ToolGroup;
+use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Routing\ToolPayload;
 use App\Enums\AiMode;
 use App\Models\User;
@@ -72,13 +73,15 @@ final readonly class ChatTurnGuard
     /**
      * The chat agent for one turn: the user's conversation (or a new one)
      * with the turn's routed tool groups. Null groups keep every declared tool.
-     *
-     * @param  list<ToolGroup>|null  $groups
      */
-    public function agentFor(?string $conversationId, User $user, ?array $groups): MediaAgent
+    public function agentFor(?string $conversationId, User $user, ?RoutedToolGroups $routed): MediaAgent
     {
+        $chatToolRunContext = resolve(ChatToolRunContext::class);
+        $chatToolRunContext->routed = $routed;
+        $chatToolRunContext->routingActive = $this->aiSettings->chatRoutingEnabled();
+
         return (new MediaAgent)->continueOrStart($conversationId, as: $user)
-            ->withTools(fn (array $declared): array => $this->toolPayload->build($groups === null ? $declared : $this->chatToolRouter->filter($declared, $groups)));
+            ->withTools(fn (array $declared): array => $this->toolPayload->build($routed instanceof RoutedToolGroups ? $this->chatToolRouter->filter($declared, $routed->groups()) : $declared));
     }
 
     /**

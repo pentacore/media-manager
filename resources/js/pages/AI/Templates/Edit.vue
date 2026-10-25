@@ -7,9 +7,10 @@ import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatModelOptionsController from '@/actions/App/Http/Controllers/AI/ChatModelOptionsController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
+import ChatToolGroupsController from '@/actions/App/Http/Controllers/AI/ChatToolGroupsController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
 import ReasoningSelect from '@/components/ai/ReasoningSelect.vue';
-import type { ModelOptions } from '@/components/ai/types';
+import type { ModelOptions, ToolGroupOption } from '@/components/ai/types';
 import {
     buildToken,
     extractTokenNames,
@@ -32,6 +33,7 @@ import type {
 import InputError from '@/components/InputError.vue';
 import { Field, SegmentedControl, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/lib/http';
 import { dashboard } from '@/routes';
@@ -69,7 +71,16 @@ const form = useForm({
         model: string | null;
         reasoning: AiReasoningLevel | null;
     },
+    tool_groups: [...(props.template?.tool_groups ?? [])],
 });
+
+const toolGroupOptions = ref<ToolGroupOption[]>([]);
+
+function setToolGroup(value: string, checked: boolean): void {
+    form.tool_groups = checked
+        ? [...form.tool_groups.filter((group) => group !== value), value]
+        : form.tool_groups.filter((group) => group !== value);
+}
 
 const modelOptions = ref<ModelOptions | null>(null);
 
@@ -241,6 +252,17 @@ onMounted(() => {
         .catch(() => {
             toast.error('Could not load the model options.');
         });
+
+    void jsonRequest<{ groups: ToolGroupOption[] }>(
+        'GET',
+        ChatToolGroupsController.url(),
+    )
+        .then((response) => {
+            toolGroupOptions.value = response.groups;
+        })
+        .catch(() => {
+            toast.error('Could not load the tool groups.');
+        });
 });
 
 function save(): void {
@@ -363,6 +385,36 @@ function save(): void {
                 />
                 <InputError :message="form.errors['preset.model']" />
                 <InputError :message="form.errors['preset.provider']" />
+            </div>
+        </Field>
+
+        <Field
+            v-if="toolGroupOptions.length > 0"
+            label="Tool groups"
+            hint="Pinned to the chat when you use this template, on a new or an existing chat. Groups that are not available are skipped."
+            data-template-tool-groups
+        >
+            <div class="grid gap-2 sm:max-w-md">
+                <label
+                    v-for="group in toolGroupOptions"
+                    :key="group.value"
+                    class="flex items-center gap-2 text-[13px]"
+                >
+                    <Checkbox
+                        :model-value="form.tool_groups.includes(group.value)"
+                        :data-template-tool-group="group.value"
+                        @update:model-value="
+                            setToolGroup(group.value, $event === true)
+                        "
+                    />
+                    {{ group.label }}
+                    <span
+                        v-if="!group.available"
+                        class="text-[12px] text-muted-foreground"
+                        >not available</span
+                    >
+                </label>
+                <InputError :message="form.errors.tool_groups" />
             </div>
         </Field>
 

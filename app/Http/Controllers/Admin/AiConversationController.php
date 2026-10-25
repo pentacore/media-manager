@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Ai\Routing\RoutedToolGroups;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Database\Query\Builder;
@@ -112,7 +113,7 @@ class AiConversationController extends Controller
      * One stored message as the transcript renders it: 1.0 keeps each model
      * round trip as a step, with every tool result on the call that made it.
      *
-     * @return array{role: string, text: string, status: string, error: string|null, steps: list<array{content: string, reasoning: string, tool_calls: list<array<string, mixed>>}>, created_at: string}
+     * @return array{role: string, text: string, status: string, error: string|null, tool_groups: list<array{group: string, label: string, source: string}>|string|null, steps: list<array{content: string, reasoning: string, tool_calls: list<array<string, mixed>>}>, created_at: string}
      */
     private function transcriptMessage(StoredMessage $storedMessage): array
     {
@@ -123,6 +124,7 @@ class AiConversationController extends Controller
             'text' => $storedMessage->content,
             'status' => $storedMessage->status->value,
             'error' => is_string($error) ? $error : null,
+            'tool_groups' => RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null),
             'steps' => array_values(array_map(static fn (array $step): array => [
                 'content' => (string) ($step['content'] ?? ''),
                 'reasoning' => (string) ($step['reasoning'] ?? ''),

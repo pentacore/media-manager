@@ -114,7 +114,7 @@ class ChatTemplateController extends Controller
 
     /**
      * @param  array<string, mixed>  $validated
-     * @return array{name: string, body: string, variables: list<array{name: string, label: string, type: string, default: string|null, options: list<string>|null}>, auto_send: bool, pinned: bool, model_provider: string|null, model: string|null, reasoning: string|null}
+     * @return array{name: string, body: string, variables: list<array{name: string, label: string, type: string, default: string|null, options: list<string>|null}>, auto_send: bool, pinned: bool, model_provider: string|null, model: string|null, reasoning: string|null, tool_groups: list<string>|null}
      */
     private function attributes(array $validated, ChatTemplateDefinition $chatTemplateDefinition): array
     {
@@ -127,6 +127,7 @@ class ChatTemplateController extends Controller
             'model_provider' => filled($validated['preset']['model'] ?? null) ? ($validated['preset']['provider'] ?? null) : null,
             'model' => $validated['preset']['model'] ?? null,
             'reasoning' => $validated['preset']['reasoning'] ?? null,
+            'tool_groups' => filled($validated['tool_groups'] ?? null) ? array_values($validated['tool_groups']) : null,
         ];
     }
 
