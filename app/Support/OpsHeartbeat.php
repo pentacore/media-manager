@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Enums\QueueLane;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -15,6 +16,12 @@ use Illuminate\Support\Facades\Cache;
 final class OpsHeartbeat
 {
     public const string SCHEDULER = 'scheduler';
+
+    /**
+     * When the scheduler last came back after a gap (or first ran). Not a liveness component: it is only
+     * written on a resume, so ops:check-heartbeat must never judge its age.
+     */
+    public const string SCHEDULER_RESUMED = 'scheduler-resumed';
 
     public const string CACHE_PREFIX = 'ops-heartbeat:';
 
@@ -37,18 +44,42 @@ final class OpsHeartbeat
     }
 
     /**
+     * Records the scheduler heartbeat, first marking a resume when the previous one is missing or older than
+     * $gapSeconds: the platform was down, and clocks that measure silence restart from this moment.
+     */
+    public static function recordScheduler(int $gapSeconds): void
+    {
+        $age = self::ageInSeconds(self::SCHEDULER);
+
+        if ($age === null || $age > $gapSeconds) {
+            self::record(self::SCHEDULER_RESUMED);
+        }
+
+        self::record(self::SCHEDULER);
+    }
+
+    /**
+     * When the component last reported, or null if it never has.
+     */
+    public static function recordedAt(string $component): ?CarbonImmutable
+    {
+        $recordedAt = self::timestamp($component);
+
+        return $recordedAt === null ? null : CarbonImmutable::createFromTimestamp($recordedAt, now()->getTimezone());
+    }
+
+    /**
      * Seconds since the component last reported, or null if it never has.
      */
     public static function ageInSeconds(string $component): ?int
     {
-        $recordedAt = Cache::get(self::CACHE_PREFIX.$component);
+        $recordedAt = self::timestamp($component);
 
-        // The Redis store hands numbers back as numeric strings.
-        if (! is_numeric($recordedAt)) {
+        if ($recordedAt === null) {
             return null;
         }
 
-        return max(0, now()->getTimestamp() - (int) $recordedAt);
+        return max(0, now()->getTimestamp() - $recordedAt);
     }
 
     /**
@@ -70,5 +101,13 @@ final class OpsHeartbeat
         }
 
         return $stale;
+    }
+
+    private static function timestamp(string $component): ?int
+    {
+        $recordedAt = Cache::get(self::CACHE_PREFIX.$component);
+
+        // The Redis store hands numbers back as numeric strings.
+        return is_numeric($recordedAt) ? (int) $recordedAt : null;
     }
 }

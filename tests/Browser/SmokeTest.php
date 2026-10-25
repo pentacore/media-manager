@@ -378,6 +378,8 @@ function browserSmokeAdminRouteNames(): array
         'admin.media-replacement.index',
         'admin.media-replacement.attempts.index',
         'admin.notification-destinations.index',
+        'admin.servers.index',
+        'admin.servers.incidents.index',
         'admin.ai-settings.index',
         'admin.decision-agent.index',
         'admin.ai-models.index',

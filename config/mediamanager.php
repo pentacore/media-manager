@@ -392,6 +392,69 @@ return [
         'failed_jobs_days' => (int) env('MEDIAMANAGER_RETENTION_FAILED_JOBS_DAYS', 30),
         'job_batches_days' => (int) env('MEDIAMANAGER_RETENTION_JOB_BATCHES_DAYS', 7),
         'agent_conversations_days' => (int) env('MEDIAMANAGER_RETENTION_AGENT_CONVERSATIONS_DAYS', 0),
+        // Host-agent metric samples, one window per rollup resolution
+        // (1 min / 5 min / 1 h).
+        'server_metrics_minute_days' => (int) env('MEDIAMANAGER_RETENTION_SERVER_METRICS_MINUTE_DAYS', 2),
+        'server_metrics_five_minute_days' => (int) env('MEDIAMANAGER_RETENTION_SERVER_METRICS_FIVE_MINUTE_DAYS', 30),
+        'server_metrics_hour_days' => (int) env('MEDIAMANAGER_RETENTION_SERVER_METRICS_HOUR_DAYS', 365),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Host Monitoring
+    |--------------------------------------------------------------------------
+    |
+    | Limits and thresholds for the host agents that report to this app: the
+    | agent API's payload and rate limits, enrollment, when a silent host
+    | counts as an incident, and the per-rule thresholds that turn a report
+    | into an incident.
+    |
+    */
+
+    'monitoring' => [
+        'max_payload_kb' => (int) env('MEDIAMANAGER_MONITORING_MAX_PAYLOAD_KB', 512),
+        'enroll_rate_limit_per_minute' => (int) env('MEDIAMANAGER_MONITORING_ENROLL_RATE_LIMIT', 10),
+        'report_rate_limit_per_minute' => (int) env('MEDIAMANAGER_MONITORING_REPORT_RATE_LIMIT', 30),
+        'enrollment_ttl_hours' => (int) env('MEDIAMANAGER_MONITORING_ENROLLMENT_TTL_HOURS', 24),
+        'report_interval_seconds' => (int) env('MEDIAMANAGER_MONITORING_REPORT_INTERVAL_SECONDS', 60),
+        'silent_after_intervals' => (int) env('MEDIAMANAGER_MONITORING_SILENT_AFTER_INTERVALS', 3),
+        'platform_gap_seconds' => (int) env('MEDIAMANAGER_MONITORING_PLATFORM_GAP_SECONDS', 180),
+        // The agent's longest retry wait on 5xx/network errors (the contract's 5 s → 5 min backoff, before jitter).
+        'agent_max_backoff_seconds' => (int) env('MEDIAMANAGER_MONITORING_AGENT_MAX_BACKOFF_SECONDS', 300),
+        'incident_clear_streak' => (int) env('MEDIAMANAGER_MONITORING_INCIDENT_CLEAR_STREAK', 2),
+        // How long an incident must stay resolved before its "resolved" push goes out; a recurrence before then
+        // reopens it without a new push.
+        'resolve_notify_delay_minutes' => (int) env('MEDIAMANAGER_MONITORING_RESOLVE_NOTIFY_DELAY_MINUTES', 10),
+        'disk' => [
+            'warning_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_WARNING_PERCENT', 85),
+            'critical_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_CRITICAL_PERCENT', 95),
+            'clear_margin_percent' => (int) env('MEDIAMANAGER_MONITORING_DISK_CLEAR_MARGIN_PERCENT', 3),
+            'ignore_mounts' => (string) env('MEDIAMANAGER_MONITORING_DISK_IGNORE_MOUNTS', ''),
+        ],
+        'fill_rate' => [
+            'window_minutes' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_WINDOW_MINUTES', 60),
+            'min_samples' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_MIN_SAMPLES', 15),
+            'warning_hours' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_WARNING_HOURS', 24),
+            'critical_hours' => (int) env('MEDIAMANAGER_MONITORING_FILL_RATE_CRITICAL_HOURS', 6),
+        ],
+        'memory' => [
+            'window_minutes' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_WINDOW_MINUTES', 5),
+            'min_samples' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_MIN_SAMPLES', 4),
+            'warning_available_percent' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_WARNING_AVAILABLE_PERCENT', 10),
+            'critical_available_percent' => (int) env('MEDIAMANAGER_MONITORING_MEMORY_CRITICAL_AVAILABLE_PERCENT', 5),
+        ],
+        'oom' => [
+            'clear_after_minutes' => (int) env('MEDIAMANAGER_MONITORING_OOM_CLEAR_AFTER_MINUTES', 30),
+        ],
+        'restarts' => [
+            'window_minutes' => (int) env('MEDIAMANAGER_MONITORING_RESTARTS_WINDOW_MINUTES', 15),
+            'threshold' => (int) env('MEDIAMANAGER_MONITORING_RESTARTS_THRESHOLD', 3),
+        ],
+        'uptime_kuma_push_url' => env('MEDIAMANAGER_UPTIME_KUMA_PUSH_URL'),
+        'uptime_kuma_timeout_seconds' => (int) env('MEDIAMANAGER_UPTIME_KUMA_TIMEOUT_SECONDS', 5),
+        'agent_repo' => 'pentacore/lookout',
+        'install_script_url' => 'https://github.com/pentacore/lookout/releases/latest/download/install.sh',
+        'unraid_plugin_url' => 'https://github.com/pentacore/lookout/releases/latest/download/lookout.plg',
     ],
 
     /*

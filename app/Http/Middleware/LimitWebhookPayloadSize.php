@@ -13,13 +13,15 @@ use Symfony\Component\HttpFoundation\Response;
  * uploads. Reject oversized bodies before the connection lookup and token
  * decrypt, and before the controller copies the body into the database.
  * The declared Content-Length catches honest clients without reading the
- * body; the measured length catches chunked uploads.
+ * body; the measured length catches chunked uploads. The limit comes from
+ * the config key named by the middleware parameter, so the agent API reuses
+ * the check with its own limit.
  */
 final class LimitWebhookPayloadSize
 {
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $configKey = 'mediamanager.webhooks.max_payload_kb'): Response
     {
-        $maxBytes = max(1, (int) config('mediamanager.webhooks.max_payload_kb', 1024)) * 1024;
+        $maxBytes = max(1, (int) config($configKey, 1024)) * 1024;
         $declaredLength = $request->headers->get('Content-Length');
 
         abort_if(is_numeric($declaredLength) && (int) $declaredLength > $maxBytes, 413);

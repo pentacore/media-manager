@@ -6,13 +6,17 @@ use App\Console\Commands\AggregateStatistics;
 use App\Console\Commands\Ai\PruneConversations;
 use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
+use App\Console\Commands\CheckAgentVersion;
 use App\Console\Commands\CheckAppVersion;
 use App\Console\Commands\CheckServiceHealth;
 use App\Console\Commands\CheckServiceVersions;
+use App\Console\Commands\CheckSilentAgents;
 use App\Console\Commands\CollectServiceGauges;
+use App\Console\Commands\NotifyResolvedIncidents;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
+use App\Console\Commands\PushUptimeHeartbeat;
 use App\Console\Commands\ReconcileBazarrSubtitles;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
 use App\Console\Commands\ReconcileStuckActionRequests;
@@ -20,6 +24,7 @@ use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\RefreshWantedCount;
+use App\Console\Commands\RollupServerMetrics;
 use App\Console\Commands\RunDueBenchmarkSchedules;
 use App\Console\Commands\SettleStalledBenchmarkRuns;
 use App\Console\Commands\WarmServiceCaches;
@@ -35,6 +40,8 @@ use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServerFilesystemSample;
+use App\Models\ServerMetricSample;
 use App\Models\SubtitleCase;
 use App\Models\WebhookEvent;
 use Illuminate\Queue\Console\PruneBatchesCommand;
@@ -48,6 +55,34 @@ use Laravel\Telescope\Telescope;
 Schedule::command(RecordOpsHeartbeat::class)
     ->everyMinute()
     ->withoutOverlapping(5);
+
+// After the heartbeat, which marks a scheduler resume: the sweep restarts its
+// silence clock from that moment, so a platform outage opens no incidents.
+Schedule::command(CheckSilentAgents::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// After the silent sweep: an incident that stayed resolved for the notify
+// delay gets its held "resolved" push, so a flapping problem pushes once.
+Schedule::command(NotifyResolvedIncidents::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// The outside watcher: Uptime Kuma alerts when these pings stop. Does nothing
+// until a push URL is set.
+Schedule::command(PushUptimeHeartbeat::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+// Minute samples roll up into five-minute rows, and five-minute rows into
+// hourly ones; both re-read a short lookback and upsert, so a missed run heals.
+Schedule::command(RollupServerMetrics::class, ['--resolution' => 300])
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10);
+
+Schedule::command(RollupServerMetrics::class, ['--resolution' => 3600])
+    ->hourlyAt(7)
+    ->withoutOverlapping(30);
 
 // Every overlap lock carries an explicit expiry (minutes) sized to the task:
 // the 1440-minute default would let one crashed run silently skip a
@@ -63,6 +98,10 @@ Schedule::command(CheckServiceVersions::class)
     ->withoutOverlapping(60);
 
 Schedule::command(CheckAppVersion::class)
+    ->daily()
+    ->withoutOverlapping(30);
+
+Schedule::command(CheckAgentVersion::class)
     ->daily()
     ->withoutOverlapping(30);
 
@@ -175,6 +214,8 @@ Schedule::command('model:prune', [
         // case pruned tonight frees the action requests it pointed at.
         SubtitleCase::class,
         ActionRequest::class,
+        ServerMetricSample::class,
+        ServerFilesystemSample::class,
     ],
 ])
     ->dailyAt('03:00')
