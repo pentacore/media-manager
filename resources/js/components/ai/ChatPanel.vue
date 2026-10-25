@@ -22,6 +22,7 @@ import type { ChatTemplate, TemplateAction } from '@/components/chat-templates';
 import { useAiChat } from '@/composables/useAiChat';
 import type { AgentStep } from '@/composables/useAiChat';
 import { useChatTemplates } from '@/composables/useChatTemplates';
+import { useChatToolGroups } from '@/composables/useChatToolGroups';
 import { useChatTurns } from '@/composables/useChatTurns';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils';
 import ChatComposer from './ChatComposer.vue';
 import ChatHeader from './ChatHeader.vue';
 import ChatMessageBubble from './ChatMessageBubble.vue';
+import ChatToolStrip from './ChatToolStrip.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
 import type {
     AnsweredBy,
@@ -146,6 +148,8 @@ const effectiveAnsweredBy = computed<AnsweredBy | null>(() => {
     };
 });
 
+const toolGroups = useChatToolGroups();
+
 const {
     messages,
     sending,
@@ -166,7 +170,15 @@ const {
     mode,
     override,
     answeredBy: effectiveAnsweredBy,
+    pinnedToolGroups: toolGroups.pinned,
     scrollToBottom,
+});
+
+/** A turn has settled: the server may have carried groups over or pinned. */
+watch(sending, (isSending, wasSending) => {
+    if (wasSending && !isSending && activeConversationId.value !== null) {
+        void toolGroups.refresh(activeConversationId.value);
+    }
 });
 
 onMounted(async () => {
@@ -364,6 +376,7 @@ watch(
             messages.value = [];
             olderCursor.value = null;
             setOverride(emptyOverride());
+            toolGroups.loadFor(null);
         }
 
         // A first turn just created this conversation with the override
@@ -431,6 +444,7 @@ async function openConversation(id: string): Promise<void> {
         inferChoices();
         olderCursor.value = data.next_cursor;
         setOverride(data.override);
+        toolGroups.loadFor(data);
 
         // Persisted messages carry no workflow payload, so an unresolved
         // proposal would lose its approve/decline buttons on reload. Reattach
@@ -536,6 +550,7 @@ function newConversation(): void {
     olderCursor.value = null;
     error.value = null;
     setOverride(emptyOverride());
+    toolGroups.loadFor(null);
     composerRef.value?.focus();
 }
 </script>
@@ -616,6 +631,7 @@ function newConversation(): void {
                 :streaming="sending && streamingIndex === index"
                 :busy="sending"
                 :is-latest-assistant="latestAssistant === m"
+                :show-turn-tools="toolGroups.showTurnLines.value"
                 :reviewing-action-ids="reviewingActionIds"
                 @approve="approveWorkflow(m)"
                 @decline="declineWorkflow(m)"
@@ -631,6 +647,19 @@ function newConversation(): void {
             </div>
             <StepLivenessBanner v-if="sending" :step="pendingStep" />
         </div>
+
+        <ChatToolStrip
+            v-if="toolGroups.loaded.value"
+            :routing-enabled="toolGroups.routingEnabled.value"
+            :options="toolGroups.options.value"
+            :pinned="toolGroups.pinned.value"
+            :carried-over="toolGroups.carriedOver.value"
+            :show-turn-lines="toolGroups.showTurnLines.value"
+            :disabled="sending || loading"
+            @pin="toolGroups.pin"
+            @unpin="toolGroups.unpin"
+            @toggle-lines="toolGroups.toggleTurnLines"
+        />
 
         <ChatComposer
             ref="composer"

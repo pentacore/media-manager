@@ -47,6 +47,30 @@ export type ModelOptions = {
     reasoningProviders: string[];
 };
 
+/** A routable tool group's key (`App\Ai\Routing\ToolGroup`). */
+export type ToolGroupValue = string;
+
+/** Why a tool group was loaded for a turn. */
+export type ToolGroupSource =
+    'pinned' | 'assistant' | 'carried_over' | 'picked';
+
+/** One routed tool group a turn carried, with its label and why it loaded. */
+export type TurnToolGroup = {
+    group: ToolGroupValue;
+    label: string;
+    source: ToolGroupSource;
+};
+
+/** The groups a reply had: a list, `'all'` (routing off) or null (unknown). */
+export type TurnToolGroups = TurnToolGroup[] | 'all' | null;
+
+/** One entry of `GET ai/chat/tool-groups`. */
+export type ToolGroupOption = {
+    value: ToolGroupValue;
+    label: string;
+    available: boolean;
+};
+
 export interface WorkflowProposal {
     id: string;
     rationale: string;
@@ -116,4 +140,6 @@ export interface PendingFile {
 export interface ComposerSubmission {
     text: string;
     pendingFiles: PendingFile[];
+    /** Tool groups to load for just this turn (the assistant's request). */
+    loadToolGroups?: ToolGroupValue[];
 }

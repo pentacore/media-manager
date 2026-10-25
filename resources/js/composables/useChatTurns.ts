@@ -11,6 +11,8 @@ import type {
     ChatMode,
     ChatOverride,
     ComposerSubmission,
+    ToolGroupValue,
+    TurnToolGroups,
     WorkflowProposal,
 } from '@/components/ai/types';
 import { useAiChat } from '@/composables/useAiChat';
@@ -25,6 +27,8 @@ export type UseChatTurnsOptions = {
     override: Ref<ChatOverride>;
     /** Who answers the next turn, shown under a reply until the server says. */
     answeredBy: ComputedRef<AnsweredBy | null>;
+    /** Groups pinned in a new chat; sent with its first turn. */
+    pinnedToolGroups?: Ref<ToolGroupValue[]>;
     /** Scrolls the panel's thread to its end once the DOM has updated. */
     scrollToBottom: () => Promise<void>;
 };
@@ -78,6 +82,7 @@ export function useChatTurns({
     mode,
     override,
     answeredBy: effectiveAnsweredBy,
+    pinnedToolGroups,
     scrollToBottom,
 }: UseChatTurnsOptions): UseChatTurnsReturn {
     let nextMessageUid = 0;
@@ -138,6 +143,10 @@ export function useChatTurns({
                 ...(activeConversationId.value === null
                     ? { override: override.value }
                     : {}),
+                ...(activeConversationId.value === null &&
+                pinnedToolGroups?.value.length
+                    ? { pinned_tool_groups: pinnedToolGroups.value }
+                    : {}),
                 ...extraBody,
             }),
         });
@@ -165,6 +174,7 @@ export function useChatTurns({
             answered_by?: AnsweredBy | null;
             invocation_id?: string | null;
             cards?: ChatCard[];
+            tool_groups?: TurnToolGroups;
         };
 
         if (
@@ -184,6 +194,7 @@ export function useChatTurns({
             answered_by: data.answered_by ?? null,
             invocation_id: data.invocation_id ?? null,
             cards: data.cards ?? [],
+            tool_groups: data.tool_groups ?? null,
         });
 
         if (data.conversation_id) {
@@ -199,6 +210,7 @@ export function useChatTurns({
     async function sendStreamingTurn(
         bodyMessage: string,
         files: File[],
+        loadToolGroups?: ToolGroupValue[],
     ): Promise<void> {
         // Read the element back out of the reactive array so mutations to `.text`
         // during streaming go through Vue's proxy and re-render the bubble.
@@ -229,6 +241,8 @@ export function useChatTurns({
             mode: mode.value,
             attachments: files,
             override: override.value,
+            pinnedToolGroups: pinnedToolGroups?.value,
+            loadToolGroups,
             signal: streamAbortController.signal,
             onText: (accumulated) => {
                 assistantMessage.text = accumulated;
@@ -287,6 +301,7 @@ export function useChatTurns({
 
         assistantMessage.answered_by = result.answeredBy ?? answeredBy;
         assistantMessage.invocation_id = result.invocationId ?? null;
+        assistantMessage.tool_groups = result.toolGroups ?? null;
 
         // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
         // existing conversation it echoes what we sent, for a brand-new one it is
@@ -412,6 +427,7 @@ export function useChatTurns({
             sendStreamingTurn(
                 submission.text,
                 submission.pendingFiles.map((p) => p.file),
+                submission.loadToolGroups,
             ),
         );
     }

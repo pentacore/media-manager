@@ -13,6 +13,7 @@ import AttachmentChips from './AttachmentChips.vue';
 import ChoiceCard from './ChoiceCard.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import ToolCallChip from './ToolCallChip.vue';
+import TurnToolGroups from './TurnToolGroups.vue';
 import type { ActionRequestCard, ChatMessage } from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
 
@@ -27,6 +28,8 @@ const props = defineProps<{
     isLatestAssistant: boolean;
     /** Action request ids whose approve/reject is in flight. */
     reviewingActionIds: number[];
+    /** Show the "Tools this turn" line under an assistant reply. */
+    showTurnTools?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -207,6 +210,10 @@ const caseQuery = computed(() =>
                     · tier {{ message.answered_by.tier?.position }}
                 </span>
             </p>
+            <TurnToolGroups
+                v-if="message.role === 'assistant' && showTurnTools"
+                :groups="message.tool_groups"
+            />
         </div>
     </div>
 </template>
