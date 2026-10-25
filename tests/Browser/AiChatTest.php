@@ -964,6 +964,73 @@ function aiChatInsertSubtitleAuditConversation(User $user, SubtitleAuditBatch $s
     return $conversationId;
 }
 
+test('a handed off repair shows a searching batch card with nothing to approve yet', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = SubtitleAuditBatch::factory()->create(['series_id' => 42, 'series_title' => 'Severance', 'handed_off_at' => now()]);
+    SubtitleAuditEpisode::factory()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 1]);
+    SubtitleAuditEpisode::factory()->manualPick()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 2]);
+    $conversationId = (string) Str::uuid7();
+    aiChatInsertConversation($admin, $conversationId, 'Subtitle repair chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix the subtitles of Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'The searches continue in the background.', toolCalls: [[
+        'id' => 'call_repair',
+        'name' => 'RepairSeriesSubtitlesTool',
+        'arguments' => ['series_id' => 42, 'season_number' => null],
+        'result' => json_encode([
+            'handed_off' => true, 'subtitle_audit_batch_id' => $batch->id, 'searching' => 1, 'message' => 'Later.',
+            'subtitle_audit_batch' => SubtitleAuditBatchCard::present($batch),
+        ]),
+        'result_id' => null,
+    ]]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-status]', 'searching')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="searching"]', 'Still searching')
+        ->assertSeeIn('[data-subtitle-audit-searching]', 'Still searching 1 episode.')
+        ->assertCount('[data-subtitle-audit-pick]', 1)
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-decline]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('approving a batch larger than one bulk request approves it in chunks', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Severance']);
+
+    // No webhook event: a batch request has none, and creating one per row
+    // would build a connection per row.
+    foreach (range(1, 101) as $episodeNumber) {
+        $actionRequest = ActionRequest::factory()->create(['webhook_event_id' => null, 'type' => 'replace_media_file', 'status' => ActionRequestStatus::Pending]);
+        SubtitleAuditEpisode::factory()->queued()->create([
+            'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => $episodeNumber,
+            'action_request_id' => $actionRequest->id,
+        ]);
+    }
+
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (101)')
+        ->click('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertScript("new Set(Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())).size", 1)
+        ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(101) [data-subtitle-audit-action-status]', 'approved')
+        ->assertNoJavaScriptErrors();
+
+    expect(ActionRequest::query()->where('status', ActionRequestStatus::Approved)->count())->toBe(101);
+});
+
 test('a subtitle audit batch card approves every pending replacement at once', function (): void {
     Queue::fake([ExecuteActionRequest::class]);
     $admin = User::factory()->admin()->create();

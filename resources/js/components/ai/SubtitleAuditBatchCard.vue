@@ -2,11 +2,11 @@
 import { Link } from '@inertiajs/vue3';
 import { Captions } from '@lucide/vue';
 import { computed } from 'vue';
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useAiChat } from '@/composables/useAiChat';
 import { useConfirm } from '@/composables/useConfirm';
+import { subtitleAuditPickUrl } from '@/lib/subtitleAudit';
 import type {
     ActionRequestStatus,
     SubtitleAuditEpisodeOutcome,
@@ -70,14 +70,12 @@ function missingLanguages(episode: SubtitleAuditBatchEpisode): string {
         .join(', ');
 }
 
-function pickReleaseUrl(episode: SubtitleAuditBatchEpisode): string {
-    return SeriesController.show.url(props.card.series_id, {
-        query: {
-            replace_season: episode.season_number,
-            replace_episode: episode.episode_number,
-        },
-    });
-}
+/** Episodes whose release search has not finished yet. */
+const searchingCount = computed(
+    () =>
+        props.card.episodes.filter((episode) => episode.outcome === 'searching')
+            .length,
+);
 
 async function declineAll(): Promise<void> {
     if (
@@ -154,7 +152,12 @@ async function declineAll(): Promise<void> {
                         <template v-if="episode.outcome === 'manual_pick'">
                             ·
                             <Link
-                                :href="pickReleaseUrl(episode)"
+                                :href="
+                                    subtitleAuditPickUrl(
+                                        card.series_id,
+                                        episode,
+                                    )
+                                "
                                 class="touch-target inline-block text-foreground underline underline-offset-2 hover:text-accent"
                                 data-subtitle-audit-pick
                                 @click="closeChat()"
@@ -177,6 +180,16 @@ async function declineAll(): Promise<void> {
                 </Pill>
             </li>
         </ul>
+
+        <p
+            v-if="card.status === 'searching'"
+            class="mb-2 text-[11.5px] text-muted-foreground"
+            data-subtitle-audit-searching
+        >
+            Still searching {{ searchingCount }}
+            {{ searchingCount === 1 ? 'episode' : 'episodes' }}. Reopen this
+            conversation later to see the finished batch.
+        </p>
 
         <div v-if="pendingCount > 0" class="flex flex-wrap items-center gap-2">
             <Button
