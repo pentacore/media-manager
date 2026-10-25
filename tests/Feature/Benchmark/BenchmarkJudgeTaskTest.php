@@ -102,3 +102,34 @@ test('the judge agent returns its structured score', function (): void {
         ->and($structuredAgentResponse['rationale'])->toBe('Good')
         ->and(BenchmarkJudgeAgent::make()->aiTask())->toBe(AiTask::BenchmarkJudge);
 });
+
+test('the judge prompt lists the attachments of every turn', function (): void {
+    $prompt = DefaultRubrics::judgePrompt(AiTask::Chat, 'What does this error mean?', [], [], 'A stalled import.', null, null, [
+        ['label' => 'turn 1', 'name' => 'download.log', 'mime_type' => 'text/plain'],
+        ['label' => 'final prompt', 'name' => 'screenshot.png', 'mime_type' => 'image/png'],
+    ]);
+
+    expect($prompt)->toContain("ATTACHMENTS\nturn 1: download.log (text/plain)\nfinal prompt: screenshot.png (image/png)");
+});
+
+test('the judge prompt has no attachments section without attachments', function (): void {
+    expect(DefaultRubrics::judgePrompt(AiTask::Chat, 'p', [], [], 'out', null))->not->toContain('ATTACHMENTS');
+});
+
+test('a scripted transcript replaces the recorded conversation, keeping the last 20 turns cut to 1500 characters', function (): void {
+    $transcript = [];
+
+    foreach (range(1, 22) as $index) {
+        $transcript[] = ['role' => $index % 2 === 1 ? 'user' : 'assistant', 'content' => sprintf('turn %d %s', $index, str_repeat('x', 2000)), 'attachments' => []];
+    }
+
+    $prompt = DefaultRubrics::judgePrompt(AiTask::Chat, 'Then add it.', [['role' => 'assistant', 'content' => 'RECORDED REPLY']], [], 'Queued.', null, null, [], $transcript);
+
+    expect($prompt)->toContain('CONVERSATION (candidate transcript, last 20 turns)')
+        ->toContain('Judge the whole conversation: does each reply follow from the earlier turns, stay consistent with what the assistant said before, and answer the last message?')
+        ->toContain('user: turn 3 ')
+        ->not->toContain('turn 1 x')
+        ->not->toContain('turn 2 x')
+        ->not->toContain('RECORDED REPLY')
+        ->not->toContain(str_repeat('x', 1500));
+});

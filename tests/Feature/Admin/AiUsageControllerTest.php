@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\TitleAgent;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Enums\ClassificationGate;
@@ -820,7 +821,8 @@ test('show flags whether an invocation can become a benchmark case', function (s
         ->assertJsonPath('record.benchmark_run_id', null);
 })->with([
     'plain text prompt' => ['ok', ['prompt_text' => 'Find severance.'], true],
-    'attachments' => ['attachments', ['prompt_text' => "Look at this\n\nAttachments: a.png"], false],
+    'chat attachments' => ['chat attachments', ['prompt_text' => "Look at this\n\nAttachments: a.png"], true],
+    'attachments on a non-chat agent' => ['non-chat attachments', ['agent_class' => TitleAgent::class, 'prompt_text' => "Look at this\n\nAttachments: a.png"], false],
     'no prompt' => ['no prompt', ['prompt_text' => null], false],
     'non-text kind' => ['kind', ['prompt_text' => 'Embed me', 'kind' => AiUsageKind::Embeddings], false],
 ]);

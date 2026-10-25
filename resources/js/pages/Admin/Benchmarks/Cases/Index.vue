@@ -192,9 +192,26 @@ async function remove(benchmarkCase: BenchmarkCaseRow): Promise<void> {
                         <TableCell class="whitespace-nowrap">{{
                             benchmarkCase.task_label
                         }}</TableCell>
-                        <TableCell class="font-medium">{{
-                            benchmarkCase.name
-                        }}</TableCell>
+                        <TableCell class="font-medium">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span>{{ benchmarkCase.name }}</span>
+                                <Pill
+                                    v-if="benchmarkCase.attachment_count > 0"
+                                    data-benchmark-case-attachments
+                                    >{{
+                                        benchmarkCase.attachment_count === 1
+                                            ? '1 attachment'
+                                            : `${benchmarkCase.attachment_count} attachments`
+                                    }}</Pill
+                                >
+                                <Pill
+                                    v-if="benchmarkCase.scripted"
+                                    variant="info"
+                                    data-benchmark-case-scripted
+                                    >scripted</Pill
+                                >
+                            </div>
+                        </TableCell>
                         <TableCell>
                             <div class="flex flex-wrap gap-1">
                                 <Pill

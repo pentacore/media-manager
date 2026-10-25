@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Ai\Agents\MediaAgent;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
+use App\Enums\AiMode;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Enums\BenchmarkScoringType;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Models\ChatAttachment;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Services\Chat\ChatAttachmentStore;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Tool;
 use Throwable;
@@ -29,7 +34,7 @@ final readonly class CaseDraftFromUsage
 
     private const int NAME_PROMPT_CHARS = 60;
 
-    public function __construct(private AiSettings $aiSettings) {}
+    public function __construct(private AiSettings $aiSettings, private ChatAttachmentStore $chatAttachmentStore) {}
 
     /**
      * @return array{draft: array<string, mixed>, warnings: list<string>}
@@ -45,6 +50,12 @@ final readonly class CaseDraftFromUsage
         throw_if($blocker !== null, CaseDraftRefused::class, $blocker);
 
         $prompt = (string) $prompt;
+        $hadAttachments = str_contains($prompt, self::ATTACHMENTS_MARKER);
+
+        if ($hadAttachments) {
+            $prompt = substr($prompt, 0, (int) strrpos($prompt, self::ATTACHMENTS_MARKER));
+        }
+
         $aiTask = $this->taskFor($aiUsageRecord);
         $warnings = [];
 
@@ -77,14 +88,55 @@ final readonly class CaseDraftFromUsage
             ];
         }
 
-        $sourceTruncated = $warnings !== [];
-
         $input = ['prompt' => $prompt];
+        $draftAttachments = [];
 
         if ($aiTask === AiTask::Chat) {
-            $input['history'] = $this->history($aiUsageRecord);
-            $input['mode'] = $this->aiSettings->mode()->value;
+            $conversation = $this->conversation($aiUsageRecord, $prompt);
+            $replyMode = AiMode::tryFrom((string) (json_decode((string) ($conversation['reply']->meta ?? ''), true)['mode'] ?? ''));
+
+            $input['history'] = $conversation['history'];
+            $input['mode'] = ($replyMode ?? $this->aiSettings->mode())->value;
+            $input['conversation'] = 'context';
+
+            $turns = [];
+
+            foreach ($conversation['historyRows'] as $index => $row) {
+                if ($row->role === 'user') {
+                    $turns[] = [$index, $row];
+                }
+            }
+
+            if ($conversation['captured'] !== null) {
+                $turns[] = [null, $conversation['captured']];
+            }
+
+            $missing = 0;
+            $capturedFound = 0;
+
+            foreach ($turns as [$turn, $row]) {
+                $found = $this->attachmentsOf($row, $turn, $missing);
+                array_push($draftAttachments, ...$found);
+
+                if ($turn === null) {
+                    $capturedFound = count($found);
+                }
+            }
+
+            if ($missing > 0) {
+                $warnings[] = 'Some attachments of this conversation are no longer stored and were left out.';
+            }
+
+            if ($hadAttachments && $conversation['captured'] === null) {
+                $warnings[] = 'The captured message could not be located, so its attachments were left out; attach them by hand.';
+            }
+
+            if ($hadAttachments && $conversation['captured'] !== null && $capturedFound === 0 && $missing === 0) {
+                $warnings[] = 'The captured turn listed attachments, but none could be found.';
+            }
         }
+
+        $sourceTruncated = $warnings !== [];
 
         if ($aiTask === AiTask::PriceUpdater) {
             $input['providers'] = $this->providersIn($prompt);
@@ -101,6 +153,7 @@ final readonly class CaseDraftFromUsage
                 'tags' => [],
                 'notes' => null,
                 'input' => $input,
+                'draft_attachments' => $draftAttachments,
                 'fixtures' => array_map(
                     static fn (array $fixture): array => ['tool' => $fixture['tool'], 'arguments' => $fixture['arguments'], 'result' => $fixture['result']],
                     $fixtures,
@@ -125,7 +178,7 @@ final readonly class CaseDraftFromUsage
             $aiUsageRecord->is_benchmark => "Benchmark runs can't be captured as cases.",
             $aiUsageRecord->kind !== AiUsageKind::Text => 'Only text invocations can become benchmark cases.',
             blank($aiUsageRecord->prompt_text) => 'This invocation has no recorded prompt.',
-            str_contains((string) $aiUsageRecord->prompt_text, self::ATTACHMENTS_MARKER) => 'Invocations with attachments cannot become benchmark cases.',
+            str_contains((string) $aiUsageRecord->prompt_text, self::ATTACHMENTS_MARKER) && $aiUsageRecord->agent_class !== MediaAgent::class => 'Only chat invocations with attachments can become benchmark cases.',
             default => null,
         };
     }
@@ -152,12 +205,14 @@ final readonly class CaseDraftFromUsage
      * recorded prompt (it was truncated), the captured turn cannot be located,
      * so only messages from strictly before the record's second are kept.
      *
-     * @return list<array{role: string, content: string}>
+     * @return array{history: list<array{role: string, content: string}>, historyRows: list<object>, captured: object|null, reply: object|null}
      */
-    private function history(AiUsageRecord $aiUsageRecord): array
+    private function conversation(AiUsageRecord $aiUsageRecord, string $prompt): array
     {
+        $none = ['history' => [], 'historyRows' => [], 'captured' => null, 'reply' => null];
+
         if ($aiUsageRecord->conversation_id === null || $aiUsageRecord->created_at === null) {
-            return [];
+            return $none;
         }
 
         $secondStart = $aiUsageRecord->created_at->startOfSecond();
@@ -168,20 +223,79 @@ final readonly class CaseDraftFromUsage
             ->where('created_at', '<', $secondStart->addSecond())
             ->oldest()
             ->orderBy('id')
-            ->get(['role', 'content', 'created_at'])
+            ->get(['role', 'content', 'attachments', 'meta', 'created_at'])
             ->all();
 
-        for ($index = count($messages) - 1; $index >= 0; $index--) {
-            if ($messages[$index]->role === 'user' && $messages[$index]->content === $aiUsageRecord->prompt_text) {
-                $messages = array_slice($messages, 0, $index);
+        $captured = null;
+        $reply = null;
+        $kept = null;
 
-                return array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $messages);
+        for ($index = count($messages) - 1; $index >= 0; $index--) {
+            if ($messages[$index]->role === 'user' && $messages[$index]->content === $prompt) {
+                $kept = array_slice($messages, 0, $index);
+                $captured = $messages[$index];
+
+                foreach (array_slice($messages, $index + 1) as $later) {
+                    if ($later->role === 'assistant') {
+                        $reply = $later;
+
+                        break;
+                    }
+                }
+
+                break;
             }
         }
 
-        $earlier = array_filter($messages, static fn (object $message): bool => CarbonImmutable::parse((string) $message->created_at, $secondStart->getTimezone())->lessThan($secondStart));
+        $kept ??= array_values(array_filter($messages, static fn (object $message): bool => CarbonImmutable::parse((string) $message->created_at, $secondStart->getTimezone())->lessThan($secondStart)));
 
-        return array_values(array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $earlier));
+        return [
+            'history' => array_map(static fn (object $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content], $kept),
+            'historyRows' => $kept,
+            'captured' => $captured,
+            'reply' => $reply,
+        ];
+    }
+
+    /**
+     * The chat attachments of one stored message that still have a file.
+     *
+     * @return list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int}>
+     */
+    private function attachmentsOf(object $message, ?int $turn, int &$missing): array
+    {
+        $stored = json_decode((string) $message->attachments, true);
+        $stored = is_array($stored) ? array_values(array_filter($stored, is_array(...))) : [];
+
+        if ($stored === []) {
+            return [];
+        }
+
+        $mapped = $this->chatAttachmentStore->forMessage($stored);
+        $missing += max(0, count($stored) - count($mapped));
+
+        $rows = ChatAttachment::query()->whereIn('id', array_column($mapped, 'id'))->orderBy('id')->get();
+        $drafts = [];
+
+        foreach ($mapped as $entry) {
+            $row = $rows->firstWhere('id', $entry['id']);
+
+            if ($row === null || ! Storage::disk($row->disk)->exists($row->path)) {
+                $missing++;
+
+                continue;
+            }
+
+            $drafts[] = [
+                'chat_attachment_id' => $row->id,
+                'turn' => $turn,
+                'name' => $row->original_name,
+                'mime_type' => $row->mime_type,
+                'size' => $row->size,
+            ];
+        }
+
+        return $drafts;
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Ai\Conversations;
 use App\Ai\TaskModelResolver;
 use App\Ai\TierOutcome;
 use App\Enums\AiTask;
+use App\Settings\AiSettings;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Storage\DatabaseConversationStore;
 use Override;
@@ -14,7 +15,7 @@ use Throwable;
 
 /**
  * The SDK store, plus the reasoning level the turn ran at and, when the chat
- * model came from a tier list, which tier, in each assistant message's meta
+ * model came from a tier list, which tier, plus the chat mode, in each assistant message's meta
  * (for the chat's "answered by" line). The reasoning key is
  * `reasoning_level`: `meta.reasoning` used to hold reasoning text.
  * Stateless, so the SDK's singleton binding stays Octane-safe.
@@ -32,6 +33,7 @@ class ConversationStore extends DatabaseConversationStore
         return [
             ...parent::metaFor($response, $exception),
             'invocation_id' => $response->invocationId,
+            'mode' => resolve(AiSettings::class)->mode()->value,
             'reasoning_level' => $resolvedSelection->reasoning->value,
             ...($resolvedSelection->tier instanceof TierOutcome ? ['tier' => $resolvedSelection->tier->toArray()] : []),
         ];
