@@ -63,9 +63,9 @@ test('a title prompt without a provider argument is sent to the selected OpenRou
         ]),
     ]);
 
-    $agentResponse = (new TitleAgent)->prompt('what should I watch this weekend?');
+    $structuredAgentResponse = (new TitleAgent)->prompt('what should I watch this weekend?');
 
-    expect($agentResponse['title'])->toBe('Weekend Movie Picks');
+    expect($structuredAgentResponse['title'])->toBe('Weekend Movie Picks');
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
         && $request['model'] === 'openai/gpt-5.4-nano');
 });
