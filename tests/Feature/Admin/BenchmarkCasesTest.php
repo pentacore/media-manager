@@ -764,6 +764,24 @@ test('a captured attachment whose file is gone is left out with a warning', func
             ->where('draftWarnings', ['Some attachments of this conversation are no longer stored and were left out.']));
 });
 
+test('a captured turn that listed attachments but stored none is warned about', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [$aiUsageRecord] = benchmarkCapturedChatWithAttachments();
+    DB::table('agent_conversation_messages')
+        ->where('conversation_id', $aiUsageRecord->conversation_id)
+        ->where('content', 'What does this error mean?')
+        ->update(['attachments' => '[]']);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.draft_attachments.0.turn', 0)
+            ->has('draft.draft_attachments', 1)
+            ->where('draft.source_truncated', true)
+            ->where('draftWarnings', ['The captured turn listed attachments, but none could be found.']));
+});
+
 test('a chat reply with attachments is captured from the chat message too', function (): void {
     Storage::fake('local');
     $this->actingAs(User::factory()->admin()->create());

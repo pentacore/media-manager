@@ -112,10 +112,15 @@ final readonly class CaseDraftFromUsage
             }
 
             $missing = 0;
+            $capturedFound = 0;
 
             foreach ($turns as [$turn, $row]) {
                 $found = $this->attachmentsOf($row, $turn, $missing);
                 array_push($draftAttachments, ...$found);
+
+                if ($turn === null) {
+                    $capturedFound = count($found);
+                }
             }
 
             if ($missing > 0) {
@@ -124,6 +129,10 @@ final readonly class CaseDraftFromUsage
 
             if ($hadAttachments && $conversation['captured'] === null) {
                 $warnings[] = 'The captured message could not be located, so its attachments were left out; attach them by hand.';
+            }
+
+            if ($hadAttachments && $conversation['captured'] !== null && $capturedFound === 0 && $missing === 0) {
+                $warnings[] = 'The captured turn listed attachments, but none could be found.';
             }
         }
 

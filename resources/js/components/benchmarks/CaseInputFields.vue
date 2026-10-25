@@ -153,6 +153,14 @@ const textareaClass =
                             Candidate answers every turn
                         </option>
                     </select>
+                    <span
+                        v-if="input.conversation === 'scripted'"
+                        class="text-xs font-normal text-muted-foreground"
+                        data-benchmark-scripted-hint
+                    >
+                        Each turn runs within one job; long conversations may
+                        stop at the time budget.
+                    </span>
                     <InputError :message="errors['input.conversation']" />
                 </label>
             </div>

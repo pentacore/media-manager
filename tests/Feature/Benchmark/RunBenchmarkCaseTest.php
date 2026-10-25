@@ -24,11 +24,13 @@ use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Benchmark\BenchmarkRunLauncher;
+use App\Services\Benchmark\CaseAttachmentMissing;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files\File;
@@ -1052,4 +1054,80 @@ test('a re-judge keeps the stored transcript, dropping malformed entries', funct
     $benchmarkResult->refresh();
     expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
         ->and($benchmarkResult->score_detail['transcript'])->toBe($kept);
+});
+
+test('re-judging a result whose case was deleted keeps the stored transcript', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $transcript = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['tool_log' => [], 'transcript' => $transcript],
+    ]);
+    $benchmarkResult->benchmarkCase->delete();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($benchmarkResult->score_detail['error'])->toBe('Case was deleted')
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($transcript);
+});
+
+test('a failed re-judge keeps the stored transcript', function (): void {
+    Exceptions::fake();
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $transcript = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['tool_log' => [], 'transcript' => $transcript],
+    ]);
+    BenchmarkJudgeAgent::fake([fn (): never => throw new RuntimeException('judge overloaded')]);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($benchmarkResult->score_detail['error'])->toBe('judge overloaded')
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($transcript);
+});
+
+test('a scripted result that fails on its first turn stores no output', function (): void {
+    Exceptions::fake();
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake([fn (): never => throw new RuntimeException('provider down')]);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('Turn 1 of 3 failed: provider down')
+        ->and($benchmarkResult->output)->toBeNull();
+});
+
+test('a missing case attachment fails the result without being reported', function (): void {
+    Exceptions::fake();
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    Storage::disk('local')->delete($attachment->path);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->create();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
+    Exceptions::assertNotReported(CaseAttachmentMissing::class);
 });

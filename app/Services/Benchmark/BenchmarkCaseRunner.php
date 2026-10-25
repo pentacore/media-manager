@@ -23,7 +23,6 @@ use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -34,6 +33,12 @@ use Throwable;
  */
 final readonly class BenchmarkCaseRunner
 {
+    /**
+     * Seconds a scripted case may spend starting turns; leaves room for the
+     * judge inside the 280 s job.
+     */
+    private const int SCRIPTED_BUDGET_SECONDS = 200;
+
     private const string PROVIDER_WEBFETCH_FLAG = 'mediamanager.ai.price_fetcher_provider_webfetch';
 
     public function __construct(private BenchmarkRunContext $benchmarkRunContext) {}
@@ -88,8 +93,18 @@ final readonly class BenchmarkCaseRunner
         $latencyMs = 0;
         $output = '';
         $invocationId = null;
+        $startedScriptAt = now();
 
         foreach ($userTurns as $position => $userTurn) {
+            if ($position > 0 && $startedScriptAt->diffInSeconds(now(), true) >= self::SCRIPTED_BUDGET_SECONDS) {
+                throw ScriptedTurnFailed::budgetUsed(
+                    $position + 1,
+                    $total,
+                    self::SCRIPTED_BUDGET_SECONDS,
+                    $this->outcome($output, $promptTokens, $completionTokens, $latencyMs, $invocationId, $transcript),
+                );
+            }
+
             $content = $userTurn['content'];
             $files = $this->sdkFiles($benchmarkCase, $userTurn['turn']);
 
@@ -105,7 +120,7 @@ final readonly class BenchmarkCaseRunner
             try {
                 $agentResponse = resolve(MediaAgent::class)->prompt($content, attachments: $files);
             } catch (Throwable $throwable) {
-                throw new ScriptedTurnFailed(
+                throw ScriptedTurnFailed::turnThrew(
                     $position + 1,
                     $total,
                     $this->outcome($output, $promptTokens, $completionTokens, $latencyMs, $invocationId, $transcript),
@@ -154,7 +169,7 @@ final readonly class BenchmarkCaseRunner
     private function ensureAttachmentsStored(BenchmarkCase $benchmarkCase): void
     {
         foreach ($benchmarkCase->attachments as $attachment) {
-            throw_unless(Storage::disk($attachment->disk)->exists($attachment->path), RuntimeException::class, sprintf(
+            throw_unless(Storage::disk($attachment->disk)->exists($attachment->path), CaseAttachmentMissing::class, sprintf(
                 'The attachment %s (%s) is no longer stored; attach it to the case again.',
                 $attachment->original_name,
                 $attachment->turnLabel(),

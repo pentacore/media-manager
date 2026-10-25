@@ -147,6 +147,23 @@ test('saving without touching the attachments keeps every one of them', function
     'a JSON update without one' => [false],
 ]);
 
+test('an empty keep map in the form payload deletes every saved attachment', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    $final = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+
+    $this->post(route('admin.benchmarks.cases.update', $benchmarkCase), chatCaseMultipart(chatCaseBody([
+        'input' => ['history' => [
+            ['role' => 'user', 'content' => 'First screenshot'],
+            ['role' => 'assistant', 'content' => 'Looks like a stall.'],
+            ['role' => 'user', 'content' => 'Here is the log.'],
+        ]],
+        'keep_attachment_ids' => (object) [],
+    ]), update: true))->assertSessionHasNoErrors();
+
+    expect(BenchmarkCaseAttachment::query()->find($final->id))->toBeNull();
+    Storage::disk('local')->assertMissing($final->path);
+});
+
 test('a draft attachment is copied into the case folder on save and the chat file stays', function (): void {
     $chatAttachment = ChatAttachment::factory()->create();
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Paperclip, Trash2 } from '@lucide/vue';
+import { ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -16,11 +17,15 @@ defineProps<{
 }>();
 
 const entries = defineModel<BenchmarkAttachmentEntry[]>({ required: true });
+const overflow = ref(0);
 
 function onPick(event: Event): void {
     const input = event.target as HTMLInputElement;
     const free = MAX_ATTACHMENTS - entries.value.length;
-    const picked = Array.from(input.files ?? []).slice(0, Math.max(free, 0));
+    const all = Array.from(input.files ?? []);
+    const picked = all.slice(0, Math.max(free, 0));
+
+    overflow.value = all.length - picked.length;
 
     entries.value = [
         ...entries.value,
@@ -35,6 +40,7 @@ function onPick(event: Event): void {
 }
 
 function removeEntry(index: number): void {
+    overflow.value = 0;
     entries.value = entries.value.filter((_, i) => i !== index);
 }
 </script>
@@ -72,7 +78,7 @@ function removeEntry(index: number): void {
 
         <label
             v-if="entries.length < MAX_ATTACHMENTS"
-            class="inline-flex h-7 w-fit cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-xs font-medium hover:bg-bg-hover"
+            class="inline-flex h-7 w-fit cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-xs font-medium focus-within:ring-2 focus-within:ring-ring hover:bg-bg-hover"
         >
             <Paperclip class="size-3.5" />Attach file
             <input
@@ -84,6 +90,14 @@ function removeEntry(index: number): void {
                 @change="onPick"
             />
         </label>
+        <p
+            v-if="overflow > 0"
+            class="text-xs text-destructive"
+            data-benchmark-attachment-overflow
+        >
+            Only {{ MAX_ATTACHMENTS }} files per turn — {{ overflow }} not
+            added.
+        </p>
         <InputError :message="error" />
     </div>
 </template>

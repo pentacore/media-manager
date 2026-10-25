@@ -20,6 +20,7 @@ use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\BenchmarkContextStarter;
 use App\Services\Benchmark\BenchmarkRunSettler;
 use App\Services\Benchmark\BenchmarkScorer;
+use App\Services\Benchmark\CaseAttachmentMissing;
 use App\Services\Benchmark\CaseOutcome;
 use App\Services\Benchmark\ScriptedTurnFailed;
 use App\Support\UpstreamErrorText;
@@ -243,6 +244,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         $benchmarkResult->update([
             ...($caseOutcome instanceof CaseOutcome ? [
                 ...$this->outcomeAttributes($caseOutcome, $costUsd),
+                'output' => $caseOutcome->output === '' ? null : $caseOutcome->output,
                 'score_detail' => $this->storedDetail([], $caseOutcome),
             ] : []),
             'status' => BenchmarkResultStatus::Failed,
@@ -267,7 +269,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         if (! $benchmarkCase instanceof BenchmarkCase) {
             $benchmarkResult->update([
                 'judge_status' => BenchmarkJudgeStatus::Failed,
-                'score_detail' => ['error' => 'Case was deleted', 'tool_log' => $caseOutcome->toolLog],
+                'score_detail' => $this->storedDetail(['error' => 'Case was deleted'], $caseOutcome),
             ]);
 
             return;
@@ -367,7 +369,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
      */
     private function reportUnexpected(Throwable $throwable): void
     {
-        report_unless($throwable instanceof AiBudgetExceededException || $throwable->getPrevious() instanceof AiBudgetExceededException, $throwable);
+        report_unless($throwable instanceof AiBudgetExceededException || $throwable->getPrevious() instanceof AiBudgetExceededException || $throwable instanceof CaseAttachmentMissing, $throwable);
     }
 
     /**

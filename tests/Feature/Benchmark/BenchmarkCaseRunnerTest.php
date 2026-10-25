@@ -369,6 +369,39 @@ test('a scripted turn that throws names its turn and keeps what the earlier turn
         ]);
 });
 
+test('a scripted case stops before a turn once it used its time budget', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = runnerScriptedCase();
+    runnerStartContext($benchmarkCase);
+    $turns = [];
+    $slow = runnerScriptedReply('Yes, Dune is there.', 100, $turns);
+    MediaAgent::fake([
+        function (string $prompt, Collection $attachments) use ($slow, &$turns): TextResponse {
+            $response = $slow($prompt, $attachments);
+            $this->travel(201)->seconds();
+
+            return $response;
+        },
+        runnerScriptedReply('never', 100, $turns),
+    ]);
+
+    $thrown = null;
+
+    try {
+        resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+    } catch (ScriptedTurnFailed $scriptedTurnFailed) {
+        $thrown = $scriptedTurnFailed;
+    }
+
+    expect($thrown)->toBeInstanceOf(ScriptedTurnFailed::class)
+        ->and($thrown->getMessage())->toBe('Turn 2 of 3 not started: the case used its 200 s time budget.')
+        ->and($turns)->toHaveCount(1)
+        ->and($thrown->partialOutcome->transcript)->toBe([
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => ['download.log']],
+            ['role' => 'assistant', 'content' => 'Yes, Dune is there.', 'attachments' => []],
+        ]);
+});
+
 test('a context chat case keeps an empty transcript', function (): void {
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'Hi']]);
     runnerStartContext($benchmarkCase);
