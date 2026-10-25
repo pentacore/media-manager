@@ -75,6 +75,10 @@ function waitForDialogToLeave(dialog: Element, frame: number): void {
     window.setTimeout(moveFocusToBulkTarget, 0);
 }
 
+/**
+ * A select-all with no box (inside a table hidden on a phone) cannot take
+ * focus, so it is skipped and the page heading stands in for it.
+ */
 function moveFocusToBulkTarget(): void {
     const active = document.activeElement;
 
@@ -82,11 +86,13 @@ function moveFocusToBulkTarget(): void {
         return;
     }
 
-    const selectAll = document.querySelector<HTMLElement>(
-        '[data-bulk-select-all] button:not([disabled])',
-    );
+    const selectAll = Array.from(
+        document.querySelectorAll<HTMLElement>(
+            '[data-bulk-select-all] button:not([disabled])',
+        ),
+    ).find((element) => element.getClientRects().length > 0);
 
-    if (selectAll === null) {
+    if (selectAll === undefined) {
         focusPageHeading();
 
         return;

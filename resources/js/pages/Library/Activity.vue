@@ -16,6 +16,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
@@ -1110,6 +1111,35 @@ async function runQueueBulk(): Promise<void> {
                     >
                         Blocklist & retry…
                     </Button>
+                </template>
+                <template #primary="{ disabled }">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-10 px-4 text-xs"
+                        :disabled="disabled"
+                        data-bulk-queue-phone="remove"
+                        @click="queueBulkConfirm = 'remove'"
+                    >
+                        Remove…
+                    </Button>
+                </template>
+                <template #menu="{ disabled }">
+                    <DropdownMenuItem
+                        :disabled="queueBulkBusy"
+                        data-bulk-select-all-phone
+                        @select="setAllQueue(queuePageIds, true)"
+                    >
+                        Select all on this page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        :disabled="disabled"
+                        class="text-destructive focus:text-destructive"
+                        data-bulk-menu-item="blocklist"
+                        @select="queueBulkConfirm = 'blocklist'"
+                    >
+                        Blocklist &amp; retry…
+                    </DropdownMenuItem>
                 </template>
             </BulkActionBar>
 

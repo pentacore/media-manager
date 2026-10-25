@@ -818,6 +818,42 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         <Trash2 class="size-3.5" />Delete…
                     </Button>
                 </template>
+                <template #primary="{ disabled }">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-10 gap-1.5 px-4 text-xs"
+                        :disabled="disabled"
+                        data-bulk-sab-phone="pause"
+                        @click="runSlotBulk('pause')"
+                    >
+                        <Pause class="size-3.5" />Pause
+                    </Button>
+                </template>
+                <template #menu="{ disabled }">
+                    <DropdownMenuItem
+                        :disabled="slotBulkBusy"
+                        data-bulk-select-all-phone
+                        @select="setAllSlots(slotIds, true)"
+                    >
+                        Select all on this page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        :disabled="disabled"
+                        data-bulk-menu-item="resume"
+                        @select="runSlotBulk('resume')"
+                    >
+                        <Play class="size-3.5" />Resume
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        :disabled="disabled"
+                        class="text-destructive focus:text-destructive"
+                        data-bulk-menu-item="delete"
+                        @select="slotDeleteOpen = true"
+                    >
+                        <Trash2 class="size-3.5" />Delete…
+                    </DropdownMenuItem>
+                </template>
             </BulkActionBar>
 
             <Dialog v-model:open="slotDeleteOpen">

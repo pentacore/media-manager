@@ -20,6 +20,7 @@ import type {
 } from '@/components/actions';
 import { BulkActionBar } from '@/components/bulk';
 import { Button } from '@/components/ui/button';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useActionQueueLive } from '@/composables/useActionQueueLive';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
@@ -336,6 +337,34 @@ function goToPage(url: string | null): void {
                 >
                     Reject…
                 </Button>
+            </template>
+            <template #primary="{ disabled }">
+                <Button
+                    size="sm"
+                    class="h-10 px-4 text-xs"
+                    :disabled="disabled"
+                    data-bulk-approve-phone
+                    @click="bulkReview('approve')"
+                >
+                    Approve
+                </Button>
+            </template>
+            <template #menu="{ disabled }">
+                <DropdownMenuItem
+                    :disabled="bulkBusy"
+                    data-bulk-select-all-phone
+                    @select="setAllBulk(pendingOnPage, true)"
+                >
+                    Select all on this page
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    :disabled="disabled"
+                    class="text-destructive focus:text-destructive"
+                    data-bulk-menu-item="reject"
+                    @select="rejectDialogOpen = true"
+                >
+                    Reject…
+                </DropdownMenuItem>
             </template>
         </BulkActionBar>
 

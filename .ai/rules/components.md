@@ -50,3 +50,12 @@ Admin-only tables keep their columns and scroll inside their frame. `ActionQueue
 Never fork the detail for a new presentation; add a layout case.
 
 The sheet opens from a card (`openSheet`) or, on a phone, from a `?request=<id>` deep link in `onMounted` (`openDeepLinkedSheet()`, called from the page's single `onMounted` after `subscribeLive()`: `ActionQueueLiveListTest` re-runs the page's only mounted hook, so never add a second one). On close it focuses the card and brings it back into view with `scrollIntoView({ block: 'nearest' })`, not a saved `scrollY`, because a live row can be added above it meanwhile; when the card has left the list, focus goes to the page `h1` (`focusPageHeading()` from `@/lib/bulk`). Both run from `@close-auto-focus`, default prevented. Closing also drops `?request=` from the URL with a client-side `router.replace` (no new history entry), so a reload or back/forward does not reopen a deep link. The page's `visibleRequests` watcher closes the sheet before it moves the selection, and the sheet renders a held row (`shownRow`, frozen once `open` turns false) with the detail `inert` while it slides out, so a row that leaves the list (approved under the Pending tab) never turns the sheet into another action, not even during the exit animation. Live status changes need nothing extra, because the sheet renders the same `selected` row `useActionQueueLive` orders by `status_version`. `ActionQueuePhoneTest` pins it.
+
+## Bulk bars are one 56 px row on a phone
+`BulkActionBar` from `@/components/bulk` takes every action in its default slot (the desktop row).
+- **A phone-job surface** also passes `#primary` (the one action a phone keeps, `h-10`) and `#menu` (`DropdownMenuItem`s for the rest). Below `sm` the bar is then one `h-14` row: the count, the primary action, and ⋯ (`[data-bulk-more]`) with the menu items, the over-limit note and "Clear selection".
+- **Hooks:** give each phone action its own hook (`data-bulk-approve-phone`, `data-bulk-menu-item="<key>"`), never the inline button's: strict selectors count hidden duplicates.
+- **Phone select-all:** each adopter's `#menu` starts with "Select all on this page" (`[data-bulk-select-all-phone]`, calling the page's `setAll…(pageIds, true)`), because card lists never repeat `BulkSelectAll`.
+- **A bar without `#primary`** keeps the wrapping row at every width. The library bars do this, because their quality-profile `Select` cannot live in a menu.
+
+`BulkBarPhoneTest` pins the height, the menu, select-all, the clear and the frozen state during a run.
