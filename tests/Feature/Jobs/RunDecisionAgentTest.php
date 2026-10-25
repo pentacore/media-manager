@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Decision\DecisionPrompt;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
 use App\Jobs\RunDecisionAgent;
@@ -393,4 +394,13 @@ test('an agent call that times out records a Failed decision with the reason', f
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
         ->status->toBe(AgentDecisionStatus::Failed)
         ->summary->toBe('Agent run failed: cURL error 28: Operation timed out after 20001 milliseconds with 0 bytes received');
+});
+
+test('the agent is prompted with the shared decision prompt', function (): void {
+    DecisionAgent::fake(['ok']);
+    $payload = ['eventType' => 'Grab', 'series' => ['id' => 7, 'title' => 'Dune']];
+
+    runJob(null, 'sonarr', 'Grab', $payload);
+
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->prompt === DecisionPrompt::build('sonarr', 'Grab', $payload));
 });
