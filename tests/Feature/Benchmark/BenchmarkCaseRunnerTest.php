@@ -9,7 +9,14 @@ use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\Benchmark\FixtureBook;
+use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Decision\DecisionRunContext;
 use App\Ai\ResolvedSelection;
+use App\Ai\Routing\DecisionActionKind;
+use App\Ai\Tools\Arr\SearchMediaTool;
+use App\Ai\Tools\Decision\InspectStuckImportTool;
+use App\Ai\Tools\Decision\ProposeActionTool;
+use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\BenchmarkCase;
@@ -18,7 +25,9 @@ use App\Models\BenchmarkRun;
 use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\CaseOutcome;
 use App\Services\Benchmark\ScriptedTurnFailed;
+use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files\File;
@@ -27,6 +36,7 @@ use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -408,4 +418,121 @@ test('a context chat case keeps an empty transcript', function (): void {
     MediaAgent::fake(['Hello.']);
 
     expect(resolve(BenchmarkCaseRunner::class)->run($benchmarkCase)->transcript)->toBe([]);
+});
+
+/**
+ * Fake the DecisionAgent and capture, while the case's run context is still
+ * bound, the tools, instructions and context a prompted agent sees.
+ *
+ * @return object{tools: list<class-string>, instructions: string, context: DecisionRunContext|null}
+ */
+function runnerCaptureDecisionRun(): object
+{
+    $captured = (object) ['tools' => [], 'instructions' => '', 'context' => null];
+
+    DecisionAgent::fake(function () use ($captured): string {
+        $agent = new DecisionAgent;
+        $captured->tools = collect(iterator_to_array($agent->tools()))
+            ->flatMap(fn (object $tool): array => $tool instanceof ToolSearch ? $tool->tools : [$tool])
+            ->map(fn (object $tool): string => $tool::class)
+            ->values()
+            ->all();
+        $captured->instructions = (string) $agent->instructions();
+        $captured->context = App::bound(DecisionRunContext::class) ? resolve(DecisionRunContext::class) : null;
+
+        return 'ok';
+    });
+
+    return $captured;
+}
+
+function runnerDecisionEventCase(?string $actionKind): BenchmarkCase
+{
+    return BenchmarkCase::factory()->create(['input' => [
+        'prompt' => DecisionPrompt::build('sonarr', 'Grab', ['series' => ['id' => 7]]),
+        'event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{"series": {"id": 7}}'],
+        'action_kind' => $actionKind,
+        'event_key' => 'sonarr:Grab',
+    ]]);
+}
+
+test('a scoped decision case runs with the scoped tools and without the stuck-import section', function (): void {
+    $benchmarkCase = runnerDecisionEventCase('library_change');
+    runnerStartContext($benchmarkCase);
+    $captured = runnerCaptureDecisionRun();
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($captured->tools)
+        ->toContain(SearchMediaTool::class)
+        ->toContain(ProposeActionTool::class)
+        ->not->toContain(NowPlayingTool::class)
+        ->not->toContain(InspectStuckImportTool::class)
+        ->and($captured->instructions)->not->toContain('STUCK IMPORTS')
+        ->and(App::bound(DecisionRunContext::class))->toBeFalse();
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->prompt === $benchmarkCase->input['prompt']);
+});
+
+test('a decision case without an action kind keeps every tool and the stuck-import section', function (): void {
+    $benchmarkCase = runnerDecisionEventCase(null);
+    runnerStartContext($benchmarkCase);
+    $captured = runnerCaptureDecisionRun();
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($captured->tools)->toContain(InspectStuckImportTool::class)->toContain(NowPlayingTool::class)
+        ->and($captured->instructions)->toContain('STUCK IMPORTS');
+});
+
+test('the run context carries the case event and the max actions setting, without a webhook event or deadline', function (): void {
+    resolve(DecisionAgentSettings::class)->setMaxActionsPerRun(5);
+    $benchmarkCase = runnerDecisionEventCase('media_server');
+    runnerStartContext($benchmarkCase);
+    $captured = runnerCaptureDecisionRun();
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($captured->context)->toBeInstanceOf(DecisionRunContext::class)
+        ->and($captured->context->webhookEventId)->toBeNull()
+        ->and($captured->context->maxActions)->toBe(5)
+        ->and($captured->context->sourceService)->toBe('sonarr')
+        ->and($captured->context->eventType)->toBe('Grab')
+        ->and($captured->context->eventPayload)->toBe(['series' => ['id' => 7]])
+        ->and($captured->context->originConnectionId)->toBeNull()
+        ->and($captured->context->actionKind)->toBe(DecisionActionKind::MediaServer)
+        ->and($captured->context->deadline)->toBeNull();
+});
+
+test('a free-text decision case takes its service and event type from the event key', function (): void {
+    $benchmarkCase = BenchmarkCase::factory()->create(['input' => ['prompt' => 'Import failed', 'event_key' => 'radarr:ManualInteractionRequired']]);
+    runnerStartContext($benchmarkCase);
+    $captured = runnerCaptureDecisionRun();
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($captured->context->sourceService)->toBe('radarr')
+        ->and($captured->context->eventType)->toBe('ManualInteractionRequired')
+        ->and($captured->context->eventPayload)->toBe([])
+        ->and($captured->context->actionKind)->toBeNull();
+});
+
+test('a free-text decision case without an event key runs unscoped as the agent', function (): void {
+    $benchmarkCase = BenchmarkCase::factory()->create();
+    runnerStartContext($benchmarkCase);
+    $captured = runnerCaptureDecisionRun();
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($captured->context->sourceService)->toBe('agent')
+        ->and($captured->context->eventType)->toBeNull()
+        ->and($captured->tools)->toContain(InspectStuckImportTool::class);
+});
+
+test('the run context is unbound after a decision case, even when the agent throws', function (): void {
+    $benchmarkCase = runnerDecisionEventCase('library_change');
+    runnerStartContext($benchmarkCase);
+    DecisionAgent::fake(fn () => throw new RuntimeException('provider down'));
+
+    expect(fn () => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))->toThrow(RuntimeException::class, 'provider down');
+    expect(App::bound(DecisionRunContext::class))->toBeFalse();
 });

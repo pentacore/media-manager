@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { Plus, Trash2 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
+import { SegmentedControl } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import CaseAttachmentList from './CaseAttachmentList.vue';
+import DecisionEventFields from './DecisionEventFields.vue';
 import type {
     BenchmarkAttachmentEntry,
+    BenchmarkActionKindOption,
     BenchmarkConversationMode,
+    BenchmarkDecisionEvent,
+    BenchmarkDecisionSource,
     BenchmarkHistoryTurnForm,
 } from './types';
 
@@ -18,17 +23,45 @@ type InputState = {
     conversation: BenchmarkConversationMode;
     attachments: BenchmarkAttachmentEntry[];
     event_key: string;
+    decision_source: BenchmarkDecisionSource;
+    event: BenchmarkDecisionEvent;
+    action_kind: string;
     providers: string[];
 };
 
 const props = defineProps<{
     task: string;
     eventKeys: string[];
+    decisionServices: string[];
+    actionKinds: BenchmarkActionKindOption[];
     /** Server validation errors keyed like `input.prompt`. */
     errors: Record<string, string | undefined>;
 }>();
 
 const input = defineModel<InputState>({ required: true });
+
+// An event type outside the catalog has no event key; the free-text select
+// would otherwise keep a value the server rejects.
+watch(
+    () => input.value.decision_source,
+    (source) => {
+        if (
+            source === 'text' &&
+            input.value.event_key !== '' &&
+            !props.eventKeys.includes(input.value.event_key)
+        ) {
+            input.value.event_key = '';
+        }
+    },
+);
+
+const DECISION_SOURCES: Array<{
+    value: BenchmarkDecisionSource;
+    label: string;
+}> = [
+    { value: 'event', label: 'Webhook event' },
+    { value: 'text', label: 'Free-text prompt' },
+];
 
 /** Canonical Laravel AI provider ids the price updater can be asked to refresh. */
 const PRICE_PROVIDERS = [
@@ -102,7 +135,18 @@ const textareaClass =
     <section class="grid gap-3">
         <h2 class="text-[13px] font-semibold">Input</h2>
 
-        <label class="grid gap-1.5 text-[12.5px] font-medium">
+        <SegmentedControl
+            v-if="task === 'decision'"
+            v-model="input.decision_source"
+            :options="DECISION_SOURCES"
+            option-attribute="benchmark-decision-source"
+            class="w-fit"
+        />
+
+        <label
+            v-if="task !== 'decision' || input.decision_source === 'text'"
+            class="grid gap-1.5 text-[12.5px] font-medium"
+        >
             Prompt
             <textarea
                 v-model="input.prompt"
@@ -241,8 +285,18 @@ const textareaClass =
             </div>
         </div>
 
+        <DecisionEventFields
+            v-if="task === 'decision' && input.decision_source === 'event'"
+            v-model:event="input.event"
+            v-model:action-kind="input.action_kind"
+            :services="decisionServices"
+            :event-keys="eventKeys"
+            :action-kinds="actionKinds"
+            :errors="errors"
+        />
+
         <label
-            v-if="task === 'decision'"
+            v-if="task === 'decision' && input.decision_source === 'text'"
             class="grid gap-1.5 text-[12.5px] font-medium sm:max-w-md"
         >
             Event
