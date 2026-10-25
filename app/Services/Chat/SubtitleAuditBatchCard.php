@@ -20,7 +20,7 @@ final class SubtitleAuditBatchCard
      */
     public static function present(SubtitleAuditBatch $subtitleAuditBatch): array
     {
-        $subtitleAuditBatch->load('episodes.actionRequest:id,status');
+        $subtitleAuditBatch->loadMissing('episodes.actionRequest:id,status');
 
         $episodes = $subtitleAuditBatch->episodes
             ->sortBy([['season_number', 'asc'], ['episode_number', 'asc']])
@@ -51,6 +51,9 @@ final class SubtitleAuditBatchCard
     }
 
     /**
+     * Present several batches with one eager load (a conversation can hold many),
+     * keyed by batch id; a deleted batch is absent.
+     *
      * @param  list<int>  $ids
      * @return array<int, array<string, mixed>>
      */
@@ -58,7 +61,16 @@ final class SubtitleAuditBatchCard
     {
         $cards = [];
 
-        foreach (SubtitleAuditBatch::query()->whereIn('id', $ids)->get() as $subtitleAuditBatch) {
+        if ($ids === []) {
+            return $cards;
+        }
+
+        $subtitleAuditBatches = SubtitleAuditBatch::query()
+            ->whereIn('id', $ids)
+            ->with('episodes.actionRequest:id,status')
+            ->get();
+
+        foreach ($subtitleAuditBatches as $subtitleAuditBatch) {
             $cards[$subtitleAuditBatch->id] = self::present($subtitleAuditBatch);
         }
 

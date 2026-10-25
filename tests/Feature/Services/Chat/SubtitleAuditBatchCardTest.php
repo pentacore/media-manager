@@ -8,6 +8,7 @@ use App\Models\ActionRequest;
 use App\Models\SubtitleAuditBatch;
 use App\Models\SubtitleAuditEpisode;
 use App\Services\Chat\SubtitleAuditBatchCard;
+use Illuminate\Support\Facades\DB;
 
 test('the card lists episodes in order with their action status and the pending ids', function (): void {
     $batch = SubtitleAuditBatch::factory()->create(['series_id' => 42, 'series_title' => 'Show']);
@@ -52,4 +53,29 @@ test('presentMany skips deleted batches', function (): void {
 
     expect(array_keys($cards))->toBe([$batch->id])
         ->and($cards[$batch->id]['type'])->toBe('subtitle_audit_batch');
+});
+
+test('presentMany loads every batch with a constant number of queries', function (): void {
+    $batches = SubtitleAuditBatch::factory()->count(3)->create();
+
+    foreach ($batches as $batch) {
+        foreach ([1, 2] as $episodeNumber) {
+            SubtitleAuditEpisode::factory()->queued()->create([
+                'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => $episodeNumber,
+                'action_request_id' => ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending])->id,
+            ]);
+        }
+    }
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $cards = SubtitleAuditBatchCard::presentMany($batches->modelKeys());
+
+    $queries = DB::getQueryLog();
+    DB::disableQueryLog();
+
+    expect($cards)->toHaveCount(3)
+        ->and(array_map(fn (array $card): int => count($card['pending_action_request_ids']), $cards))->each->toBe(2)
+        ->and($queries)->toHaveCount(3);
 });

@@ -1,5 +1,9 @@
 import type { ConversationMessage } from '@/composables/useAiChat';
-import type { AiReasoningLevel } from '@/typefinder';
+import type {
+    AiReasoningLevel,
+    SubtitleAuditBatchStatus,
+    SubtitleAuditEpisodeOutcome,
+} from '@/typefinder';
 
 export type ChatMode = 'advisory' | 'executive';
 
@@ -86,10 +90,27 @@ export interface ChoiceOption {
     description: string | null;
 }
 
+/** One episode row of a subtitle audit batch card. */
+export interface SubtitleAuditBatchEpisode {
+    /** "S01E03". */
+    label: string;
+    season_number: number;
+    episode_number: number;
+    outcome: SubtitleAuditEpisodeOutcome;
+    /** ISO-639-2 codes ('eng'). */
+    missing_languages: string[];
+    release_title: string | null;
+    action_request_id: number | null;
+    /** An ActionRequestStatus, 'changed' once a review lost a race, or null without a request. */
+    action_status: string | null;
+}
+
 /**
  * A card under an assistant reply, derived from a tool result: clickable
- * choices (OfferChoicesTool) or an inline approval for a queued
- * ActionRequest. The shapes match `ChatCardExtractor` on the server.
+ * choices (OfferChoicesTool), an inline approval for a queued
+ * ActionRequest, a tool-group request, or a series subtitle repair batch
+ * (RepairSeriesSubtitlesTool). The shapes match `ChatCardExtractor` and
+ * `SubtitleAuditBatchCard` on the server.
  */
 export type ChatCard =
     | {
@@ -115,6 +136,17 @@ export type ChatCard =
           id: string;
           groups: Array<{ group: ToolGroupValue; label: string }>;
           reason: string;
+      }
+    | {
+          type: 'subtitle_audit_batch';
+          /** The SubtitleAuditBatch id. */
+          id: number;
+          series_id: number;
+          series_title: string;
+          status: SubtitleAuditBatchStatus;
+          episodes: SubtitleAuditBatchEpisode[];
+          /** The batch's still-pending replacement requests, which Approve all reviews. */
+          pending_action_request_ids: number[];
       };
 
 export type ChoicesCard = Extract<ChatCard, { type: 'choices' }>;
@@ -122,6 +154,11 @@ export type ChoicesCard = Extract<ChatCard, { type: 'choices' }>;
 export type ToolRequestCard = Extract<ChatCard, { type: 'tool_request' }>;
 
 export type ActionRequestCard = Extract<ChatCard, { type: 'action_request' }>;
+
+export type SubtitleAuditBatchCard = Extract<
+    ChatCard,
+    { type: 'subtitle_audit_batch' }
+>;
 
 export interface ChatMessage extends ConversationMessage {
     workflow?: WorkflowProposal | null;

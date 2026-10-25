@@ -12,12 +12,14 @@ import ActionApprovalCard from './ActionApprovalCard.vue';
 import AttachmentChips from './AttachmentChips.vue';
 import ChoiceCard from './ChoiceCard.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
+import SubtitleAuditBatchCard from './SubtitleAuditBatchCard.vue';
 import ToolCallChip from './ToolCallChip.vue';
 import ToolRequestCard from './ToolRequestCard.vue';
 import TurnToolGroups from './TurnToolGroups.vue';
 import type {
     ActionRequestCard,
     ChatMessage,
+    SubtitleAuditBatchCard as SubtitleAuditBatchCardData,
     ToolRequestCard as ToolRequestCardData,
 } from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
@@ -31,7 +33,7 @@ const props = defineProps<{
     busy: boolean;
     /** This is the newest message and an assistant reply. */
     isLatestAssistant: boolean;
-    /** Action request ids whose approve/reject is in flight. */
+    /** Action request ids whose approve/reject is in flight (a batch's too). */
     reviewingActionIds: number[];
     /** Show the "Tools this turn" line under an assistant reply. */
     showTurnTools?: boolean;
@@ -43,6 +45,11 @@ const emit = defineEmits<{
     (e: 'choose', labels: string[]): void;
     (e: 'answerToolRequest', card: ToolRequestCardData, load: boolean): void;
     (e: 'review', card: ActionRequestCard, action: 'approve' | 'reject'): void;
+    (
+        e: 'reviewBatch',
+        card: SubtitleAuditBatchCardData,
+        action: 'approve' | 'reject',
+    ): void;
 }>();
 
 const { render: renderMarkdown } = useMarkdown();
@@ -143,6 +150,17 @@ const caseQuery = computed(() =>
                     :interactive="isLatestAssistant && !busy && !message.chosen"
                     :chosen="message.chosen?.[0] ?? null"
                     @answer="(load) => emit('answerToolRequest', card, load)"
+                />
+                <SubtitleAuditBatchCard
+                    v-else-if="card.type === 'subtitle_audit_batch'"
+                    :card="card"
+                    :busy="
+                        card.pending_action_request_ids.some((id) =>
+                            reviewingActionIds.includes(id),
+                        )
+                    "
+                    @approve="emit('reviewBatch', card, 'approve')"
+                    @reject="emit('reviewBatch', card, 'reject')"
                 />
                 <ActionApprovalCard
                     v-else
