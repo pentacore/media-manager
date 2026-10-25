@@ -13,10 +13,15 @@ use App\Ai\ResolvedSelection;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkRun;
 use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\CaseOutcome;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Ai\Files\File;
+use Laravel\Ai\Files\StoredImage;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
@@ -205,4 +210,38 @@ test('the runner refuses a case whose task differs from the active context', fun
 
     expect(fn (): CaseOutcome => resolve(BenchmarkCaseRunner::class)->run($titleCase))->toThrow(LogicException::class);
     TitleAgent::assertNeverPrompted();
+});
+
+test('a chat case sends the prompt attachments with the prompt and never a history turn one', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'What does this error mean?',
+        'history' => [['role' => 'user', 'content' => 'Here is the log.'], ['role' => 'assistant', 'content' => 'Thanks.']],
+    ]]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->forTurn(0)->create();
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    runnerStartContext($benchmarkCase);
+    $sent = null;
+    MediaAgent::fake([function (string $prompt, Collection $attachments) use (&$sent): string {
+        $sent = $attachments->map(static fn (File $file): array => [$file::class, $file->name()])->all();
+
+        return 'A stalled import.';
+    }]);
+
+    resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect($sent)->toBe([[StoredImage::class, 'screenshot.png']]);
+});
+
+test('a chat case whose attachment file is gone fails before the candidate runs', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    Storage::disk('local')->delete($attachment->path);
+    runnerStartContext($benchmarkCase);
+    MediaAgent::fake(['never']);
+
+    expect(fn () => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))
+        ->toThrow(RuntimeException::class, 'The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
+    MediaAgent::assertNeverPrompted();
 });

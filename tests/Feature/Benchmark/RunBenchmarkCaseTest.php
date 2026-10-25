@@ -18,6 +18,7 @@ use App\Models\ActionRequest;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -29,6 +30,8 @@ use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
@@ -929,4 +932,48 @@ test('the job waits for a slot without burning tries but fails on its first exce
         ->and($payload['retryUntil'])->toBe(now()->addHours(12)->getTimestamp())
         ->and(new ReflectionClass(RunBenchmarkCase::class)->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)
         ->toBeGreaterThan(12 * 3600);
+});
+
+test('history user turns carry their attachments to the candidate', function (): void {
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $chatCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'What does this error mean?',
+        'history' => [['role' => 'user', 'content' => 'Here is the log.'], ['role' => 'assistant', 'content' => 'Thanks.']],
+    ]]);
+    BenchmarkCaseAttachment::factory()->for($chatCase)->text()->forTurn(0)->create();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $chatCase, 0)->create();
+    $seen = [];
+    MediaAgent::fake([function () use (&$seen): string {
+        $seen = array_map(
+            static fn (Message $message): array => $message instanceof UserMessage ? $message->attachments->map(static fn (File $file): ?string => $file->name())->all() : [],
+            resolve(BenchmarkRunContext::class)->history(),
+        );
+
+        return 'A stalled import.';
+    }]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($seen)->toBe([['download.log'], []]);
+});
+
+test('a candidate that cannot read images fails the result with its provider error and the run still completes', function (): void {
+    Storage::fake('local');
+    $benchmarkRun = jobRun();
+    $chatCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    BenchmarkCaseAttachment::factory()->for($chatCase)->image()->create();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, $chatCase, 0)->create();
+    MediaAgent::fake(fn (): never => throw new RuntimeException('This model does not support image input.'));
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('This model does not support image input.')
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+    BenchmarkJudgeAgent::assertNeverPrompted();
 });

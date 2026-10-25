@@ -13,11 +13,15 @@ use App\Ai\Agents\TitleAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Enums\AiTask;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
+use RuntimeException;
 
 /**
  * Runs one benchmark case's agent once, exactly as production would invoke
@@ -42,6 +46,11 @@ final readonly class BenchmarkCaseRunner
 
         $prompt = (string) ($benchmarkCase->input['prompt'] ?? '');
 
+        if ($benchmarkCase->task === AiTask::Chat) {
+            $benchmarkCase->loadMissing('attachments');
+            $this->ensureAttachmentsStored($benchmarkCase);
+        }
+
         $startedAt = hrtime(true);
         [$agentResponse, $output] = $this->prompt($benchmarkCase, $prompt);
         $latencyMs = (int) round((hrtime(true) - $startedAt) / 1_000_000);
@@ -62,12 +71,38 @@ final readonly class BenchmarkCaseRunner
     }
 
     /**
+     * Fails before any provider call when a case attachment's file is gone.
+     */
+    private function ensureAttachmentsStored(BenchmarkCase $benchmarkCase): void
+    {
+        foreach ($benchmarkCase->attachments as $attachment) {
+            throw_unless(Storage::disk($attachment->disk)->exists($attachment->path), RuntimeException::class, sprintf(
+                'The attachment %s (%s) is no longer stored; attach it to the case again.',
+                $attachment->original_name,
+                $attachment->turnLabel(),
+            ));
+        }
+    }
+
+    /**
+     * The SDK files of one user turn (null is the final prompt).
+     *
+     * @return list<File>
+     */
+    private function sdkFiles(BenchmarkCase $benchmarkCase, ?int $turn): array
+    {
+        return $benchmarkCase->attachmentsFor($turn)
+            ->map(static fn (BenchmarkCaseAttachment $attachment): File => $attachment->toSdkFile())
+            ->all();
+    }
+
+    /**
      * @return array{0: AgentResponse, 1: string}
      */
     private function prompt(BenchmarkCase $benchmarkCase, string $prompt): array
     {
         return match ($benchmarkCase->task) {
-            AiTask::Chat => $this->asText(resolve(MediaAgent::class)->prompt($prompt)),
+            AiTask::Chat => $this->asText(resolve(MediaAgent::class)->prompt($prompt, attachments: $this->sdkFiles($benchmarkCase, null))),
             AiTask::Title => $this->asTitle(resolve(TitleAgent::class)->prompt($prompt)),
             AiTask::Decision => $this->asText(resolve(DecisionAgent::class)->prompt($prompt)),
             AiTask::FileInspector => $this->asJson(resolve(MediaFileInspectorAgent::class)->prompt($prompt)),
