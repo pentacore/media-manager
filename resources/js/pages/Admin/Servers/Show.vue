@@ -181,7 +181,12 @@ async function remove(): Promise<void> {
 
         <div class="grid gap-6 lg:grid-cols-2">
             <IncidentList :incidents="incidents" />
-            <CheckList :checks="checks" />
+            <CheckList
+                :server-id="server.id"
+                :checks="checks"
+                :check-types="checkTypes"
+                :db-engines="dbEngines"
+            />
         </div>
 
         <EnrollmentDialog :server-id="server.id" :server-name="server.name" />

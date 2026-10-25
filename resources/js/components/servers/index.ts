@@ -1,5 +1,8 @@
 export { default as AddServerDialog } from './AddServerDialog.vue';
+export { default as CheckFormDialog } from './CheckFormDialog.vue';
 export { default as CheckList } from './CheckList.vue';
+export { CHECK_FIELDS } from './checkFields';
+export type { CheckField } from './checkFields';
 export { default as EnrollmentDialog } from './EnrollmentDialog.vue';
 export { default as IncidentList } from './IncidentList.vue';
 export { default as MetricsPanel } from './MetricsPanel.vue';

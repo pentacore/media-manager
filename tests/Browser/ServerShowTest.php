@@ -216,8 +216,157 @@ test('the server page fits a phone screen', function (): void {
         ->assertNoSmoke()
         ->assertVisible('[data-metrics-chart-fs="/srv/media/library/very/deep/mount"]')
         ->assertVisible('[data-page-header-more]')
-        ->assertMissing('[data-server-delete]');
+        ->assertMissing('[data-server-delete]')
+        ->assertVisible('[data-check-add]')
+        ->assertVisible('[data-check-row] [data-check-edit]')
+        ->assertVisible('[data-check-row] [data-check-toggle]')
+        ->assertVisible('[data-check-row] [data-check-delete]');
 
     $webpage->assertScript(phoneOverflowScript(), '')
         ->assertScript('(() => { const rect = document.querySelector("[data-page-header] h1").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth; })()', true);
+
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-check-row] [data-check-edit]')
+        ->assertVisible('[data-check-field="crit_hours"]')
+        ->assertScript(phoneOverflowScript('[data-check-dialog]'), '');
+});
+
+test('an admin adds a file freshness check with per-type fields', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-checks-empty]');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click('[data-check-add]')
+        ->assertVisible('[data-check-field="path"]')
+        ->assertVisible('[data-check-field="fstype"]')
+        ->assertMissing('[data-check-field="warn_hours"]')
+        ->click('[data-check-type]')
+        ->click('[role="option"]:has-text("File freshness")')
+        ->assertMissing('[data-check-field="fstype"]')
+        ->assertSeeIn('[data-check-field="pattern"]', 'Default *')
+        ->fill('[data-check-field="path"] input', '/mnt/backups')
+        ->fill('[data-check-field="pattern"] input', '*.tar.gz')
+        ->fill('[data-check-field="warn_hours"] input', '26')
+        ->fill('[data-check-field="crit_hours"] input', '48')
+        ->click('[data-check-save]')
+        ->assertSee('Check added.')
+        ->assertSeeIn('[data-check-row-label]', 'File freshness: /mnt/backups')
+        ->assertMissing('[data-check-dialog]');
+
+    $serverCheck = ServerCheck::query()->sole();
+    $params = $serverCheck->params;
+    ksort($params);
+
+    expect($serverCheck->type->value)->toBe('file_freshness')
+        ->and($params)->toBe(['crit_hours' => 48, 'path' => '/mnt/backups', 'pattern' => '*.tar.gz', 'warn_hours' => 26])
+        ->and($server->fresh()?->config_version)->toBe(2);
+});
+
+test('a database ping check picks its engine', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->click('[data-check-add]')
+        ->click('[data-check-type]')
+        ->click('[role="option"]:has-text("Database ping")')
+        ->assertSeeIn('[data-check-field="timeout_seconds"]', 'Default 5')
+        ->click('[data-check-field="engine"] [role="combobox"]')
+        ->click('[role="option"]:has-text("MySQL")')
+        ->fill('[data-check-field="host"] input', 'db.lan')
+        ->fill('[data-check-field="port"] input', '3306')
+        ->click('[data-check-save]')
+        ->assertSee('Check added.')
+        ->assertSeeIn('[data-check-row-label]', 'Database ping: db.lan:3306');
+
+    $params = ServerCheck::query()->sole()->params;
+    ksort($params);
+
+    expect($params)->toBe(['engine' => 'mysql', 'host' => 'db.lan', 'port' => 3306]);
+});
+
+test('a validation error shows under the field', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->click('[data-check-add]')
+        ->click('[data-check-type]')
+        ->click('[role="option"]:has-text("File freshness")')
+        ->fill('[data-check-field="path"] input', '/mnt/backups')
+        ->fill('[data-check-field="warn_hours"] input', '48')
+        ->fill('[data-check-field="crit_hours"] input', '24')
+        ->click('[data-check-save]')
+        ->assertSeeIn('[data-check-field="crit_hours"]', 'The critical hours must be at least the warn hours.')
+        ->assertVisible('[data-check-dialog]')
+        ->assertValue('[data-check-field="path"] input', '/mnt/backups');
+
+    expect(ServerCheck::query()->count())->toBe(0);
+});
+
+test('an existing check opens pre-filled with its type locked and saves', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+    $serverCheck = ServerCheck::factory()->for($server)->pathOnMount()->create();
+    $row = sprintf('[data-check-row="%d"]', $serverCheck->id);
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->click($row.' [data-check-edit]')
+        ->assertValue('[data-check-field="path"] input', '/mnt/backups/daily')
+        ->assertValue('[data-check-field="mount"] input', '/mnt/backups')
+        ->assertSeeIn('[data-check-type]', 'Path on mount')
+        ->assertScript('document.querySelector("[data-check-type]").disabled', true)
+        ->fill('[data-check-field="path"] input', '/mnt/backups/weekly')
+        ->click('[data-check-save]')
+        ->assertSee('Check saved.')
+        ->assertSeeIn($row.' [data-check-row-label]', 'Path on mount: /mnt/backups/weekly');
+
+    expect($serverCheck->fresh()?->params['path'])->toBe('/mnt/backups/weekly');
+
+    // Adding after an edit starts from a blank form again.
+    $webpage->click('[data-check-add]')
+        ->assertValue('[data-check-field="path"] input', '')
+        ->assertScript('document.querySelector("[data-check-type]").disabled', false);
+});
+
+test('a check can be paused and removed', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+    $serverCheck = ServerCheck::factory()->for($server)->mountpointProtected()->create();
+    $row = sprintf('[data-check-row="%d"]', $serverCheck->id);
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))
+        ->assertNoSmoke()
+        ->assertMissing($row.' [data-check-disabled]')
+        ->assertAttribute($row.' [data-check-toggle]', 'aria-label', 'Pause Mountpoint protected: /mnt/backups');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click($row.' [data-check-toggle]')
+        ->assertSee('Check paused.')
+        ->assertSeeIn($row.' [data-check-disabled]', 'Paused')
+        ->assertAttribute($row.' [data-check-toggle]', 'aria-label', 'Resume Mountpoint protected: /mnt/backups');
+
+    expect($serverCheck->fresh()?->is_enabled)->toBeFalse();
+
+    $webpage->click($row.' [data-check-delete]')
+        ->click('[data-confirm-cancel]')
+        ->assertVisible($row);
+
+    $webpage->click($row.' [data-check-delete]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Check removed.')
+        ->assertMissing($row)
+        ->assertVisible('[data-checks-empty]');
+
+    expect(ServerCheck::query()->count())->toBe(0);
 });
