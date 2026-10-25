@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Conversations;
 
+use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\TaskModelResolver;
 use App\Ai\TierOutcome;
 use App\Enums\AiTask;
@@ -29,6 +30,7 @@ class ConversationStore extends DatabaseConversationStore
     protected function metaFor(AgentResponse $response, ?Throwable $exception): array
     {
         $resolvedSelection = resolve(TaskModelResolver::class)->resolve(AiTask::Chat);
+        $toolGroups = resolve(ChatToolRunContext::class)->toolGroups();
 
         return [
             ...parent::metaFor($response, $exception),
@@ -36,6 +38,7 @@ class ConversationStore extends DatabaseConversationStore
             'mode' => resolve(AiSettings::class)->mode()->value,
             'reasoning_level' => $resolvedSelection->reasoning->value,
             ...($resolvedSelection->tier instanceof TierOutcome ? ['tier' => $resolvedSelection->tier->toArray()] : []),
+            ...($toolGroups === null ? [] : ['tool_groups' => $toolGroups]),
         ];
     }
 }

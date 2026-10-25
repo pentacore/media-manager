@@ -341,3 +341,81 @@ test('an action request card persisted through the real conversation store comes
     expect($messages[1]['cards'])->toHaveCount(1)
         ->and($messages[1]['cards'][0])->toMatchArray(['type' => 'action_request', 'id' => $actionRequest->id, 'status' => 'pending', 'requires_approval' => true]);
 });
+
+test("history carries each reply's tool groups", function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    DB::table('agent_conversations')->where('id', $conversationId)->update(['pinned_tool_groups' => '["indexers"]']);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'What is playing?', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Nothing.',
+        'steps' => json_encode([[...conversationStep('Nothing.', ''), 'tool_calls' => [['id' => 'c1', 'name' => 'NowPlayingTool', 'arguments' => [], 'result_id' => 'r1']]]]),
+        'meta' => json_encode(['tool_groups' => [
+            ['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'],
+            ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'pinned'],
+        ]]),
+    ]);
+
+    $response = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk();
+
+    expect($response->json('messages.1.tool_groups'))->toBe([
+        ['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'],
+        ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'pinned'],
+    ])
+        ->and($response->json('messages.0.tool_groups'))->toBeNull()
+        ->and($response->json('pinned_tool_groups'))->toBe(['indexers'])
+        ->and($response->json('carried_over_tool_groups'))->toBe([
+            ['group' => 'playback', 'label' => 'Playback', 'source' => 'carried_over'],
+        ]);
+});
+
+test('history drops unknown tool group values', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Hi.',
+        'steps' => json_encode([conversationStep('Hi.', '')]),
+        'meta' => json_encode(['tool_groups' => [
+            ['group' => 'gone', 'label' => 'Gone', 'source' => 'picked'],
+            ['group' => 'playback', 'label' => 'Playback', 'source' => 'nope'],
+            ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'picked'],
+        ]]),
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->assertJsonPath('messages.0.tool_groups', [['group' => 'indexers', 'label' => 'Indexers', 'source' => 'picked']]);
+});
+
+test('replies from before tool tracking have no tool groups', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin);
+
+    $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->assertJsonPath('messages.1.tool_groups', null)
+        ->assertJsonPath('pinned_tool_groups', [])
+        ->assertJsonPath('carried_over_tool_groups', []);
+});
+
+test('a full toolset reply reports all tool groups', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Hi.',
+        'steps' => json_encode([conversationStep('Hi.', '')]),
+        'meta' => json_encode(['tool_groups' => 'all']),
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->assertJsonPath('messages.0.tool_groups', 'all');
+});

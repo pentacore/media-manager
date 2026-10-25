@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
@@ -58,7 +60,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, ConversationModelOverride $conversationModelOverride, ChatCardExtractor $chatCardExtractor, ConversationToolPins $conversationToolPins, ChatToolRouter $chatToolRouter, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -106,6 +108,7 @@ class ConversationController extends Controller
                     'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                     'failed' => $storedMessage->status === MessageStatus::Failed,
                     'cards' => $entry['cards'],
+                    'tool_groups' => $storedMessage->role === 'assistant' ? RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null) : null,
                     'answered_by' => $storedMessage->role === 'assistant' ? [
                         'provider' => $storedMessage->meta['provider'] ?? null,
                         'model' => $storedMessage->meta['model'] ?? null,
@@ -128,6 +131,7 @@ class ConversationController extends Controller
             'title' => (string) $row->title,
             'updated_at' => $row->updated_at,
             'override' => $conversationModelOverride->forConversation($conversation),
+            ...$this->toolGroupState($conversation, $conversationToolPins, $chatToolRouter),
             'messages' => $messages,
             'next_cursor' => $cursorPaginator->nextCursor()?->encode(),
         ]);
@@ -210,6 +214,25 @@ class ConversationController extends Controller
     }
 
     /**
+     * The conversation's pinned tool groups and the groups the next turn
+     * would carry over from the last reply; the chat strip reads it after
+     * each completed turn.
+     */
+    public function toolGroups(
+        Request $request,
+        ChatTurnGuard $chatTurnGuard,
+        ConversationToolPins $conversationToolPins,
+        ChatToolRouter $chatToolRouter,
+        string $conversation,
+    ): JsonResponse {
+        if (! $chatTurnGuard->conversationIsAvailable($conversation, $request->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        return response()->json($this->toolGroupState($conversation, $conversationToolPins, $chatToolRouter));
+    }
+
+    /**
      * Replace the conversation's pinned tool groups.
      */
     public function updateToolGroups(
@@ -232,6 +255,27 @@ class ConversationController extends Controller
                 $conversationToolPins->forConversation($conversation),
             ),
         ]);
+    }
+
+    /**
+     * @return array{pinned_tool_groups: list<string>, carried_over_tool_groups: list<array{group: string, label: string, source: string}>}
+     */
+    private function toolGroupState(string $conversation, ConversationToolPins $conversationToolPins, ChatToolRouter $chatToolRouter): array
+    {
+        $carriedOver = [];
+
+        foreach ($chatToolRouter->carriedOver($conversation) as $value => $toolGroupSource) {
+            $toolGroup = ToolGroup::from($value);
+            $carriedOver[] = ['group' => $toolGroup->value, 'label' => $toolGroup->label(), 'source' => $toolGroupSource->value];
+        }
+
+        return [
+            'pinned_tool_groups' => array_map(
+                fn (ToolGroup $toolGroup): string => $toolGroup->value,
+                $conversationToolPins->forConversation($conversation),
+            ),
+            'carried_over_tool_groups' => $carriedOver,
+        ];
     }
 
     private function conversationBelongsTo(string $conversationId, ?User $user): bool

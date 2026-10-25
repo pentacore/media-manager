@@ -15,4 +15,20 @@ final class ChatToolRunContext
     public ?RoutedToolGroups $routed = null;
 
     public bool $routingActive = false;
+
+    /**
+     * What the turn records and returns as its tool groups: the routed groups,
+     * "all" when routing was active but the turn had the full toolset, or null
+     * when routing was off.
+     *
+     * @return list<array{group: string, label: string, source: string}>|string|null
+     */
+    public function toolGroups(): array|string|null
+    {
+        if ($this->routed instanceof RoutedToolGroups) {
+            return $this->routed->toArray();
+        }
+
+        return $this->routingActive ? RoutedToolGroups::ALL : null;
+    }
 }

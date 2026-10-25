@@ -417,3 +417,36 @@ test('send returns an action_request card for a queued destructive tool', functi
         ->and($response->json('cards.0.title'))->toBe($actionRequest->title)
         ->and($actionRequest->title)->not->toBeNull();
 });
+
+test('a routed turn stores and returns its tool groups', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([chatRouterAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?', 'pinned_tool_groups' => ['indexers']])
+        ->assertOk();
+
+    $expected = [
+        ['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'],
+        ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'pinned'],
+    ];
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($response->json('tool_groups'))->toBe($expected)
+        ->and($meta['tool_groups'])->toBe($expected);
+});
+
+test('a turn with routing off records no tool groups', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Hi.']);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Hello'])
+        ->assertOk();
+
+    $meta = json_decode((string) DB::table('agent_conversation_messages')->where('role', 'assistant')->value('meta'), true);
+
+    expect($response->json('tool_groups'))->toBeNull()
+        ->and($meta)->not->toHaveKey('tool_groups');
+});

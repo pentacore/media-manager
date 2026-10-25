@@ -10,6 +10,11 @@ namespace App\Ai\Routing;
 final readonly class RoutedToolGroups
 {
     /**
+     * The stored and wire value of a turn that had the full toolset.
+     */
+    public const string ALL = 'all';
+
+    /**
      * @param  array<string, ToolGroupSource>  $sources  keyed by ToolGroup value
      */
     public function __construct(public array $sources) {}
@@ -35,6 +40,21 @@ final readonly class RoutedToolGroups
             'label' => $toolGroup->label(),
             'source' => $this->sources[$toolGroup->value]->value,
         ], $this->groups());
+    }
+
+    /**
+     * A stored `meta.tool_groups` value as the wire value: the known groups,
+     * "all", or null for anything else (including no tracking).
+     *
+     * @return list<array{group: string, label: string, source: string}>|string|null
+     */
+    public static function wireValue(mixed $stored): array|string|null
+    {
+        if ($stored === self::ALL) {
+            return self::ALL;
+        }
+
+        return self::fromArray($stored)?->toArray();
     }
 
     /**

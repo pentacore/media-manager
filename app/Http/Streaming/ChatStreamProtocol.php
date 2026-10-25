@@ -6,6 +6,7 @@ namespace App\Http\Streaming;
 
 use App\Ai\AnsweredBy;
 use App\Ai\ChatFailure;
+use App\Ai\Routing\ChatToolRunContext;
 use Closure;
 use Generator;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +107,7 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
     {
         $attributes = parent::completionAttributes($usage, $reason, $provider, $model);
         $attributes['invocationId'] = $this->response?->invocationId;
+        $attributes['toolGroups'] = resolve(ChatToolRunContext::class)->toolGroups();
 
         try {
             $attributes['answeredBy'] = AnsweredBy::forChat($provider, $model);

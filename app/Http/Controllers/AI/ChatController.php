@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AI;
 
 use App\Ai\AnsweredBy;
 use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\ToolGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
@@ -105,6 +106,7 @@ class ChatController extends Controller
             'conversation_id' => $newConversationId,
             'workflow' => $workflowPayload,
             'invocation_id' => $response->invocationId,
+            'tool_groups' => resolve(ChatToolRunContext::class)->toolGroups(),
             'answered_by' => AnsweredBy::forChat($response->meta->provider, $response->meta->model),
             'cards' => $chatCardExtractor->hydrate($chatCardExtractor->fromToolResults(
                 collect($response->steps)

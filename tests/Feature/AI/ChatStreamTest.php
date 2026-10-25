@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Routing\ToolGroup;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
@@ -26,10 +27,12 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Approvals\PendingApproval;
+use Laravel\Ai\Classification;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StepCompleted;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\StreamErrorException;
+use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -633,4 +636,36 @@ test('a non-streamed turn is never stopped by the disconnect check', function ()
         ->postJson(route('ai.chat.send'), ['message' => 'Check my services'])
         ->assertOk()
         ->assertJsonPath('text', 'Both steps ran.');
+});
+
+test("RUN_FINISHED names the turn's tool groups", function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([collect(ToolGroup::cases())
+        ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($toolGroup === ToolGroup::Playback ? 0.9 : 0.05)])
+        ->all()]);
+    MediaAgent::fake(['Nothing is playing.']);
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'What is playing?', 'pinned_tool_groups' => ['indexers']], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+
+    expect($frame['toolGroups'])->toBe([
+        ['group' => 'playback', 'label' => 'Playback', 'source' => 'picked'],
+        ['group' => 'indexers', 'label' => 'Indexers', 'source' => 'pinned'],
+    ]);
+});
+
+test('RUN_FINISHED has no tool groups when routing is off', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Hi.']);
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
+
+    expect($frame['toolGroups'])->toBeNull();
 });

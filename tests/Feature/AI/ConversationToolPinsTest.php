@@ -134,6 +134,46 @@ test('pins sent for an existing conversation are ignored in favour of its stored
         ->and(resolve(ConversationToolPins::class)->forTurn(null, ['indexers', 'gone']))->toBe([ToolGroup::Indexers]);
 });
 
+test('the tool groups endpoint returns pins and carried-over groups', function (): void {
+    $admin = User::factory()->admin()->create();
+    $id = pinsConversation($admin, '["indexers"]');
+    $createdAt = now();
+
+    DB::table('agent_conversation_messages')->insert([
+        'id' => (string) Str::uuid7($createdAt),
+        'conversation_id' => $id,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'agent' => MediaAgent::class,
+        'role' => 'assistant',
+        'content' => 'Nothing.',
+        'attachments' => '[]',
+        'usage' => '[]',
+        'meta' => '{}',
+        'steps' => json_encode([['content' => 'Nothing.', 'tool_calls' => [['id' => 'c1', 'name' => 'NowPlayingTool', 'arguments' => [], 'result_id' => 'r1']], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
+        'status' => 'completed',
+        'created_at' => $createdAt,
+        'updated_at' => $createdAt,
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('ai.conversations.tool-groups.show', $id))
+        ->assertOk()
+        ->assertExactJson([
+            'pinned_tool_groups' => ['indexers'],
+            'carried_over_tool_groups' => [['group' => 'playback', 'label' => 'Playback', 'source' => 'carried_over']],
+        ]);
+});
+
+test("the tool groups endpoint does not show someone else's conversation", function (): void {
+    $admin = User::factory()->admin()->create();
+    $id = pinsConversation(User::factory()->admin()->create());
+
+    $this->actingAs($admin)
+        ->getJson(route('ai.conversations.tool-groups.show', $id))
+        ->assertNotFound();
+});
+
 /**
  * @return array<string, BooleanAnswer>
  */
