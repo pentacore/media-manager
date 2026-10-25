@@ -155,3 +155,19 @@ test('the approval rules page says per-event overrides take precedence', functio
         ->assertSeeIn('[data-second-opinion-event-note]', 'Per-event overrides on the Decision Agent page take precedence.')
         ->assertAttribute('[data-second-opinion-event-note-link]', 'href', route('admin.decision-agent.index', absolute: false));
 });
+
+test('the card says when a per-event rule skipped the second opinion and offers no benchmark', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $actionRequest = ActionRequest::factory()->described()->secondOpinionSkipped('sonarr:Download')->create([
+        'origin' => 'agent', 'status' => ActionRequestStatus::Pending, 'requires_approval' => true,
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertAttribute('[data-action-second-opinion]', 'data-second-opinion-state', 'skipped')
+        ->assertSeeIn('[data-action-second-opinion]', 'Second opinion skipped')
+        ->assertSeeIn('[data-action-second-opinion] [data-second-opinion-override-event]', 'Per-event rule: sonarr:Download')
+        ->assertMissing('[data-action-benchmark-verdict]');
+});

@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { ShieldAlert, ShieldCheck, ShieldQuestion } from '@lucide/vue';
+import {
+    ShieldAlert,
+    ShieldCheck,
+    ShieldOff,
+    ShieldQuestion,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import { Pill } from '@/components/mm';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
@@ -8,7 +13,11 @@ const props = defineProps<{
     verdict: NonNullable<ActionRequestResource['second_opinion']>;
 }>();
 
-const state = computed<'agrees' | 'disagrees' | 'failed'>(() => {
+const state = computed<'agrees' | 'disagrees' | 'failed' | 'skipped'>(() => {
+    if ('skipped' in props.verdict) {
+        return 'skipped';
+    }
+
     if (props.verdict.failed) {
         return 'failed';
     }
@@ -22,10 +31,15 @@ const heading = computed(
             agrees: 'Second opinion: agrees',
             disagrees: 'Second opinion: disagrees',
             failed: 'Second opinion: check failed',
+            skipped: 'Second opinion skipped',
         })[state.value],
 );
 
 const detail = computed(() => {
+    if ('skipped' in props.verdict) {
+        return '';
+    }
+
     if (props.verdict.reason) {
         return props.verdict.reason;
     }
@@ -49,6 +63,10 @@ const detail = computed(() => {
         <ShieldAlert
             v-else-if="state === 'disagrees'"
             class="mt-0.5 size-4 shrink-0 text-warning"
+        />
+        <ShieldOff
+            v-else-if="state === 'skipped'"
+            class="mt-0.5 size-4 shrink-0 text-fg-subtle"
         />
         <ShieldQuestion v-else class="mt-0.5 size-4 shrink-0 text-fg-subtle" />
         <div class="flex flex-col gap-1">

@@ -55,6 +55,16 @@ class ActionRequestFactory extends Factory
         ]);
     }
 
+    /**
+     * A request whose event's Off mode skipped the check its action rule would run.
+     */
+    public function secondOpinionSkipped(string $eventKey): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'second_opinion' => ['skipped' => true, 'mode' => 'off', 'event_key' => $eventKey],
+        ]);
+    }
+
     public function autoExecute(): static
     {
         return $this->state(fn (array $attributes): array => [

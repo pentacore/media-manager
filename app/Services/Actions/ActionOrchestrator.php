@@ -141,13 +141,15 @@ class ActionOrchestrator
      *
      * Second opinion: when the type's rule sets one (anything but Off), an
      * independent verifier checks the proposal before it is stored (the run's
-     * event can override the type's mode, engine, threshold and verifier model,
-     * see SecondOpinionVerifier::policyFor()). A
-     * disagreement under Hold forces approval; under Reject the request is
-     * created already Rejected and never runs. A failed check always holds,
-     * never rejects. The verdict is stored on the request, and the returned
-     * request's transient heldBySecondOpinion says whether the second opinion
-     * is what held it (for DecisionRunContext::recordDispatched()).
+     * event can override the type's mode, engine, threshold and verifier
+     * model, see SecondOpinionVerifier::policyFor()). A disagreement under
+     * Hold forces approval; under Reject the request is created already
+     * Rejected and never runs. A failed check always holds, never rejects.
+     * The verdict is stored on the request (or, when the event's Off skipped
+     * a check the type's rule would run, SecondOpinionPolicy::skipMarker()),
+     * and the returned request's transient heldBySecondOpinion says whether
+     * the second opinion is what held it (for
+     * DecisionRunContext::recordDispatched()).
      *
      * @param  array<string, mixed>  $payload
      */
@@ -243,7 +245,7 @@ class ActionOrchestrator
                 'reason' => 'second_opinion_rejected',
                 'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict->reason ?? 'no reason given.'),
             ] : null,
-            'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode, $secondOpinionPolicy->overrideEventKey()),
+            'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode, $secondOpinionPolicy->overrideEventKey()) ?? $secondOpinionPolicy->skipMarker(),
         ]);
 
         $actionRequest->heldBySecondOpinion = $heldBySecondOpinion;

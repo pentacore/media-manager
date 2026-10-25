@@ -33,4 +33,12 @@ enum SecondOpinionEngine: string
     {
         return $this !== self::Llm;
     }
+
+    /**
+     * Whether the engine can ask the LLM verifier (always, or on doubt).
+     */
+    public function canAskLlm(): bool
+    {
+        return $this !== self::Jev;
+    }
 }

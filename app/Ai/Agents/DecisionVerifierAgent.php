@@ -29,6 +29,7 @@ class DecisionVerifierAgent implements Agent, HasMiddleware, HasProviderOptions,
     use RunsAsAiTask;
     use UsesFailoverChain;
 
+    /** The triggering event ("service:EventType") whose verifier model tiers apply; null uses the default list. */
     private ?string $eventKey = null;
 
     public function aiTask(): AiTask

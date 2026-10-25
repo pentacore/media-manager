@@ -6,6 +6,7 @@ use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Decision\SecondOpinionCase;
 use App\Ai\Decision\SecondOpinionVerdict;
 use App\Ai\Decision\SecondOpinionVerifier;
+use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
@@ -430,4 +431,65 @@ test('the stored verdict names the event whose override applied', function (): v
 
     expect($secondOpinionVerdict->toArray(SecondOpinionMode::Hold, 'sonarr:Download'))->toMatchArray(['mode' => 'hold', 'event_key' => 'sonarr:Download'])
         ->and($secondOpinionVerdict->toArray(SecondOpinionMode::Hold)['event_key'])->toBeNull();
+});
+
+test('resolving the review of a request whose event skipped the check touches no outcome rows', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinionSkipped('sonarr:Download')->create();
+    $classificationOutcome = ClassificationOutcome::factory()->create([
+        'gate' => ClassificationGate::SecondOpinion,
+        'subject_key' => SecondOpinionVerifier::outcomeSubjectKey($actionRequest->id),
+        'verdict' => ClassificationVerdict::Fallback,
+        'outcome_at' => null,
+        'outcome_positive' => null,
+    ]);
+
+    resolve(SecondOpinionVerifier::class)->resolveFromReview($actionRequest, approved: true);
+
+    expect($classificationOutcome->fresh()->outcome_at)->toBeNull();
+});
+
+test('an event marks the policy only when one of its fields took effect', function (SecondOpinionEngine $globalEngine, array $override, ?string $verifierTier, ?string $expected): void {
+    secondOpinionEngine($globalEngine);
+
+    if ($override !== []) {
+        resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides(['sonarr:Download' => [...['mode' => null, 'engine' => null, 'jev_threshold' => null], ...$override]]);
+    }
+
+    $aiTaskModelFactory = AiTaskModel::factory()->event('sonarr:Download', AiTask::DecisionVerifier);
+
+    match ($verifierTier) {
+        'model' => $aiTaskModelFactory->selecting('openai', 'gpt-event-verifier')->create(),
+        'reasoning' => $aiTaskModelFactory->reasoning(AiReasoningLevel::Low)->create(),
+        'inherit' => $aiTaskModelFactory->create(),
+        default => null,
+    };
+
+    expect(resolve(SecondOpinionVerifier::class)->policyFor('monitor_series', SecondOpinionMode::Hold, 'sonarr:Download')->overrideEventKey())->toBe($expected);
+})->with([
+    'a mode' => [SecondOpinionEngine::Llm, ['mode' => SecondOpinionMode::Reject], null, 'sonarr:Download'],
+    'an engine' => [SecondOpinionEngine::Llm, ['engine' => SecondOpinionEngine::Llm], null, 'sonarr:Download'],
+    'a threshold under a jev engine' => [SecondOpinionEngine::JevThenLlm, ['jev_threshold' => 0.5], null, 'sonarr:Download'],
+    'a threshold under the llm engine' => [SecondOpinionEngine::Llm, ['jev_threshold' => 0.5], null, null],
+    'a threshold the event engine ignores' => [SecondOpinionEngine::Jev, ['engine' => SecondOpinionEngine::Llm, 'jev_threshold' => 0.5], null, 'sonarr:Download'],
+    'a verifier model under an llm engine' => [SecondOpinionEngine::JevThenLlm, [], 'model', 'sonarr:Download'],
+    'a verifier reasoning on an inherit tier' => [SecondOpinionEngine::Llm, [], 'reasoning', 'sonarr:Download'],
+    'an inherit-only verifier tier' => [SecondOpinionEngine::Llm, [], 'inherit', null],
+    'a verifier model under jev decides' => [SecondOpinionEngine::Jev, [], 'model', null],
+]);
+
+test('jev doubt at the event threshold asks the llm on the verifier model of the event', function (): void {
+    secondOpinionEngine(SecondOpinionEngine::Llm, 0.8);
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides(['sonarr:SeriesAdd' => ['mode' => null, 'engine' => SecondOpinionEngine::JevThenLlm, 'jev_threshold' => 0.5]]);
+    AiTaskModel::factory()->event('sonarr:SeriesAdd', AiTask::DecisionVerifier)->selecting('openai', 'gpt-event-verifier')->create();
+    Classification::fake([['decision' => new BooleanAnswer(0.4)]]);
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Fine.']]);
+    $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
+
+    $secondOpinionVerdict = $secondOpinionVerifier->verify(secondOpinionCase(), null, $secondOpinionVerifier->policyFor('monitor_series', SecondOpinionMode::Hold, 'sonarr:SeriesAdd'));
+
+    expect($secondOpinionVerdict->engine)->toBe('llm')
+        ->and($secondOpinionVerdict->confidence)->toBe(0.4)
+        ->and($secondOpinionVerdict->jevVerdict)->toBe(ClassificationVerdict::Fallback)
+        ->and($secondOpinionVerdict->jevThreshold)->toBe(0.5);
+    DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-event-verifier');
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Actions;
 
+use App\Ai\Decision\SecondOpinionPolicy;
 use App\Models\ActionRequest;
 
 final readonly class ActionRequestBrowserPayload
@@ -48,7 +49,7 @@ final readonly class ActionRequestBrowserPayload
      * ActionRequestCreated broadcast. Legacy rows (created before descriptions
      * existed) return nulls and let the page fall back to payload keys.
      *
-     * @return array{title: string|null, description: string|null, details: list<array{label: string, value: string}>, description_verified: bool, agent_rationale: string|null, second_opinion: array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null, override_event: string|null}|null}
+     * @return array{title: string|null, description: string|null, details: list<array{label: string, value: string}>, description_verified: bool, agent_rationale: string|null, second_opinion: array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null, override_event: string|null}|array{skipped: true, override_event: string|null}|null}
      */
     public function description(ActionRequest $actionRequest): array
     {
@@ -69,13 +70,20 @@ final readonly class ActionRequestBrowserPayload
 
     /**
      * The stored verdict without the provider and model, with the reason
-     * bounded like the rationale. Null when no second opinion ran.
+     * bounded like the rationale; `{skipped: true, override_event}` when the
+     * event's Off skipped the check. Null when no second opinion ran.
      *
-     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null, override_event: string|null}|null
+     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|int|null, reason: string|null, override_event: string|null}|array{skipped: true, override_event: string|null}|null
      */
     private function secondOpinion(ActionRequest $actionRequest): ?array
     {
         $secondOpinion = $actionRequest->second_opinion;
+        $eventKey = $secondOpinion['event_key'] ?? null;
+        $overrideEvent = is_string($eventKey) && $eventKey !== '' ? mb_substr($eventKey, 0, 120) : null;
+
+        if (SecondOpinionPolicy::isSkipMarker($secondOpinion)) {
+            return ['skipped' => true, 'override_event' => $overrideEvent];
+        }
 
         if (! is_array($secondOpinion) || ! is_bool($secondOpinion['agrees'] ?? null)) {
             return null;
@@ -83,7 +91,6 @@ final readonly class ActionRequestBrowserPayload
 
         $confidence = $secondOpinion['confidence'] ?? null;
         $reason = $secondOpinion['reason'] ?? null;
-        $eventKey = $secondOpinion['event_key'] ?? null;
 
         return [
             'engine' => ($secondOpinion['engine'] ?? null) === 'jev' ? 'jev' : 'llm',
@@ -92,7 +99,7 @@ final readonly class ActionRequestBrowserPayload
             'failed' => ($secondOpinion['failed'] ?? false) === true,
             'confidence' => is_int($confidence) || is_float($confidence) ? $confidence : null,
             'reason' => is_string($reason) && $reason !== '' ? mb_substr($reason, 0, 500) : null,
-            'override_event' => is_string($eventKey) && $eventKey !== '' ? mb_substr($eventKey, 0, 120) : null,
+            'override_event' => $overrideEvent,
         ];
     }
 

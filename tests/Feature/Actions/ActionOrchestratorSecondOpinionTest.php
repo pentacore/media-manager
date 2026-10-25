@@ -7,6 +7,7 @@ use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
+use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
@@ -14,6 +15,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Models\ClassificationOutcome;
 use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\ActionRequestBrowserPayload;
@@ -229,10 +231,23 @@ test('an event set to off skips the check its hold rule would run', function ():
 
     $actionRequest = secondOpinionEventDispatch();
 
-    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved)->and($actionRequest->second_opinion)->toBeNull();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved)
+        ->and($actionRequest->fresh()->second_opinion)->toBe(['skipped' => true, 'mode' => 'off', 'event_key' => 'sonarr:Download'])
+        ->and(ClassificationOutcome::query()->exists())->toBeFalse();
     DecisionVerifierAgent::assertNeverPrompted();
     Queue::assertPushed(ExecuteActionRequest::class);
 });
+
+test('an event set to off leaves no mark where the action rule would not check either', function (string $type, SecondOpinionMode $actionMode): void {
+    secondOpinionRule($type, $actionMode);
+    secondOpinionEventMode('sonarr:Download', SecondOpinionMode::Off);
+    DecisionVerifierAgent::fake()->preventStrayPrompts();
+
+    expect(secondOpinionEventDispatch($type)->second_opinion)->toBeNull();
+})->with([
+    'an off rule' => ['monitor_series', SecondOpinionMode::Off],
+    'an unsupported type' => ['refresh_series', SecondOpinionMode::Hold],
+]);
 
 test('an event set to reject checks a type whose rule is off and records the event', function (): void {
     secondOpinionRule('monitor_series', SecondOpinionMode::Off);
@@ -270,4 +285,13 @@ test('a verifier model set for the event marks the verdict with the event', func
 
     expect(secondOpinionEventDispatch()->second_opinion)->toMatchArray(['mode' => 'hold', 'event_key' => 'sonarr:Download']);
     DecisionVerifierAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-event-verifier');
+});
+
+test('a threshold-only event entry under the llm engine records no event', function (): void {
+    secondOpinionRule('monitor_series', SecondOpinionMode::Hold);
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEngine(SecondOpinionEngine::Llm);
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides(['sonarr:Download' => ['mode' => null, 'engine' => null, 'jev_threshold' => 0.5]]);
+    DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Justified.']]);
+
+    expect(secondOpinionEventDispatch()->second_opinion)->toMatchArray(['mode' => 'hold', 'agrees' => true, 'event_key' => null]);
 });

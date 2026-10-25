@@ -452,3 +452,9 @@ test('the browser payload names the event whose override shaped the second opini
     expect($actionRequestBrowserPayload->description($withEvent)['second_opinion']['override_event'])->toBe('sonarr:Download')
         ->and($actionRequestBrowserPayload->description($storedBeforeOverrides)['second_opinion']['override_event'])->toBeNull();
 });
+
+test('the browser payload says when an event skipped the second opinion', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinionSkipped('sonarr:Download')->create();
+
+    expect(resolve(ActionRequestBrowserPayload::class)->description($actionRequest)['second_opinion'])->toBe(['skipped' => true, 'override_event' => 'sonarr:Download']);
+});

@@ -15,6 +15,7 @@ use App\Enums\ClassificationVerdict;
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
+use App\Models\AiTaskModel;
 use App\Models\ClassificationOutcome;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
@@ -28,9 +29,10 @@ use Throwable;
 
 /**
  * Gives the second opinion on an automated proposal with the engine and
- * threshold of its policy (falling back to the Decision Agent defaults), and tracks Jev's answers under the
- * SecondOpinion classification gate. Never throws: every failure is a
- * failed verdict, which the orchestrator treats as Hold.
+ * threshold of its policy (falling back to the Decision Agent defaults),
+ * and tracks Jev's answers under the SecondOpinion classification gate.
+ * Never throws: every failure is a failed verdict, which the orchestrator
+ * treats as Hold.
  */
 final readonly class SecondOpinionVerifier
 {
@@ -97,19 +99,22 @@ final readonly class SecondOpinionVerifier
      */
     public function policyFor(string $actionType, SecondOpinionMode $actionMode, ?string $eventKey): SecondOpinionPolicy
     {
-        $eventMode = $this->decisionAgentSettings->secondOpinionModeOverride($eventKey);
+        $eventOverride = $this->decisionAgentSettings->secondOpinionEventOverride($eventKey);
+        $eventMode = $eventOverride['mode'] ?? null;
+        $supported = self::supportsActionType($actionType);
+        $secondOpinionEngine = $this->decisionAgentSettings->secondOpinionEngine($eventKey);
 
         return new SecondOpinionPolicy(
             mode: match (true) {
                 ! $eventMode instanceof SecondOpinionMode => $actionMode,
-                self::supportsActionType($actionType) => $eventMode,
+                $supported => $eventMode,
                 default => SecondOpinionMode::Off,
             },
-            engine: $this->decisionAgentSettings->secondOpinionEngine($eventKey),
+            engine: $secondOpinionEngine,
             jevThreshold: $this->decisionAgentSettings->secondOpinionJevThreshold($eventKey),
             eventKey: $eventKey,
-            overridden: $eventKey !== null && ($this->decisionAgentSettings->hasSecondOpinionEventOverride($eventKey)
-                || $this->taskModelResolver->tiers(AiTask::DecisionVerifier, $eventKey)->isNotEmpty()),
+            overridden: $eventKey !== null && $this->eventOverrideTookEffect($eventOverride, $secondOpinionEngine, $eventKey),
+            skipsActionRule: $supported && $eventMode === SecondOpinionMode::Off && $actionMode !== SecondOpinionMode::Off,
         );
     }
 
@@ -189,7 +194,7 @@ final readonly class SecondOpinionVerifier
      */
     public function resolveFromReview(ActionRequest $actionRequest, bool $approved): void
     {
-        if ($actionRequest->second_opinion === null) {
+        if ($actionRequest->second_opinion === null || SecondOpinionPolicy::isSkipMarker($actionRequest->second_opinion)) {
             return;
         }
 
@@ -322,6 +327,29 @@ final readonly class SecondOpinionVerifier
         );
 
         return $timeout >= self::MIN_LLM_TIMEOUT_SECONDS ? $timeout : null;
+    }
+
+    /**
+     * Whether the event's override changed how the check runs: its mode or
+     * engine, its threshold under an engine that asks Jev, or verifier tiers
+     * that pick a provider, model or reasoning (not all-inherit) under an
+     * engine that can ask the LLM.
+     *
+     * @param  array{mode: SecondOpinionMode|null, engine: SecondOpinionEngine|null, jev_threshold: float|null}|null  $eventOverride
+     */
+    private function eventOverrideTookEffect(?array $eventOverride, SecondOpinionEngine $secondOpinionEngine, string $eventKey): bool
+    {
+        if ($eventOverride !== null && ($eventOverride['mode'] instanceof SecondOpinionMode || $eventOverride['engine'] instanceof SecondOpinionEngine)) {
+            return true;
+        }
+
+        if (($eventOverride['jev_threshold'] ?? null) !== null && $secondOpinionEngine->usesClassifier()) {
+            return true;
+        }
+
+        return $secondOpinionEngine->canAskLlm() && $this->taskModelResolver->tiers(AiTask::DecisionVerifier, $eventKey)->contains(
+            static fn (AiTaskModel $aiTaskModel): bool => filled($aiTaskModel->provider) || filled($aiTaskModel->model) || $aiTaskModel->reasoning !== null,
+        );
     }
 
     /**

@@ -24,6 +24,12 @@ test('only the jev engines use the classifier', function (): void {
         ->and(SecondOpinionEngine::Jev->label())->toBe('Jev decides');
 });
 
+test('every engine but jev decides can ask the llm', function (): void {
+    expect(SecondOpinionEngine::Llm->canAskLlm())->toBeTrue()
+        ->and(SecondOpinionEngine::JevThenLlm->canAskLlm())->toBeTrue()
+        ->and(SecondOpinionEngine::Jev->canAskLlm())->toBeFalse();
+});
+
 test('the decision verifier task follows chat, takes tiers and is benchmarked by verdict', function (): void {
     expect(AiTask::DecisionVerifier->value)->toBe('decision_verifier')
         ->and(AiTask::DecisionVerifier->label())->toBe('Decision verifier')

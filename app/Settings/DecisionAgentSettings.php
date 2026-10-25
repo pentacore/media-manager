@@ -226,7 +226,7 @@ class DecisionAgentSettings
      */
     public function secondOpinionEngine(?string $eventKey = null): SecondOpinionEngine
     {
-        $eventEngine = $this->eventOverride($eventKey)['engine'] ?? null;
+        $eventEngine = $this->secondOpinionEventOverride($eventKey)['engine'] ?? null;
 
         if ($eventEngine !== null) {
             return $eventEngine;
@@ -255,7 +255,7 @@ class DecisionAgentSettings
      */
     public function secondOpinionJevThreshold(?string $eventKey = null): float
     {
-        $eventThreshold = $this->eventOverride($eventKey)['jev_threshold'] ?? null;
+        $eventThreshold = $this->secondOpinionEventOverride($eventKey)['jev_threshold'] ?? null;
 
         if ($eventThreshold !== null) {
             return $eventThreshold;
@@ -353,18 +353,21 @@ class DecisionAgentSettings
 
     public function secondOpinionModeOverride(?string $eventKey): ?SecondOpinionMode
     {
-        return $this->eventOverride($eventKey)['mode'] ?? null;
+        return $this->secondOpinionEventOverride($eventKey)['mode'] ?? null;
     }
 
     public function hasSecondOpinionEventOverride(?string $eventKey): bool
     {
-        return $this->eventOverride($eventKey) !== null;
+        return $this->secondOpinionEventOverride($eventKey) !== null;
     }
 
     /**
+     * The stored override entry for $eventKey ("service:EventType"), or null
+     * when the event has none.
+     *
      * @return array{mode: SecondOpinionMode|null, engine: SecondOpinionEngine|null, jev_threshold: float|null}|null
      */
-    private function eventOverride(?string $eventKey): ?array
+    public function secondOpinionEventOverride(?string $eventKey): ?array
     {
         if ($eventKey === null) {
             return null;
