@@ -11,10 +11,14 @@ use App\Enums\AiTask;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Models\AiModelPrice;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkRun;
 use App\Services\Benchmark\BenchmarkScorer;
 use App\Services\Benchmark\CaseOutcome;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Ai\Files\File;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
@@ -396,3 +400,65 @@ test('no score detail ever uses the tool log key', function (BenchmarkCase $benc
     'prices' => fn (): BenchmarkCase => scorerPriceCase([]),
     'judge' => fn (): BenchmarkCase => BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(),
 ]);
+
+test('the judge sees the prompt images and only the names of documents and earlier images', function (): void {
+    Storage::fake('local');
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'What does this error mean?',
+        'history' => [['role' => 'user', 'content' => 'Earlier screenshot'], ['role' => 'assistant', 'content' => 'Got it.']],
+    ]]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->forTurn(0)->create(['original_name' => 'earlier.png']);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->create();
+    $sent = null;
+    BenchmarkJudgeAgent::fake([function (string $prompt, Collection $attachments) use (&$sent): array {
+        $sent = $attachments->map(static fn (File $file): ?string => $file->name())->all();
+
+        return ['score' => 8, 'rationale' => 'Reads the screenshot right'];
+    }]);
+
+    resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'A stalled import.'));
+
+    expect($sent)->toBe(['screenshot.png']);
+    BenchmarkJudgeAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => str_contains(
+        $agentPrompt->prompt,
+        "ATTACHMENTS\nturn 1: earlier.png (image/png)\nfinal prompt: screenshot.png (image/png)\nfinal prompt: download.log (text/plain)",
+    ));
+});
+
+test('a scripted case is judged on the candidate transcript instead of the recorded replies', function (): void {
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'And the sequel?', 'conversation' => 'scripted',
+        'history' => [['role' => 'user', 'content' => 'Is Dune in the library?'], ['role' => 'assistant', 'content' => 'RECORDED REPLY']],
+    ]]);
+    BenchmarkJudgeAgent::fake([['score' => 9, 'rationale' => 'Consistent']]);
+    $caseOutcome = new CaseOutcome(output: 'Part Two is missing.', intendedActions: [], toolLog: [], toolCalls: 0, toolMisses: 0, promptTokens: 1, completionTokens: 1, latencyMs: 1, invocationId: null, transcript: [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes, Dune (2021) is there.', 'attachments' => []],
+        ['role' => 'user', 'content' => 'And the sequel?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Part Two is missing.', 'attachments' => []],
+    ]);
+
+    resolve(BenchmarkScorer::class)->score($benchmarkCase, $caseOutcome);
+
+    BenchmarkJudgeAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => str_contains($agentPrompt->prompt, 'candidate transcript')
+        && str_contains($agentPrompt->prompt, 'assistant: Yes, Dune (2021) is there.')
+        && str_contains($agentPrompt->prompt, 'Judge the whole conversation')
+        && ! str_contains($agentPrompt->prompt, 'RECORDED REPLY'));
+});
+
+test('a judge that cannot take images fails the judge, not the result', function (): void {
+    Storage::fake('local');
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    BenchmarkJudgeAgent::fake(fn (): never => throw new RuntimeException('The judge model does not support image input.'));
+
+    $scores = resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'A screenshot of an error.'));
+
+    expect($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($scores['score'])->toBeNull()
+        ->and($scores['detail']['error'])->toContain('image input');
+});
