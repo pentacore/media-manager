@@ -1,3 +1,26 @@
+# [1.53.0](https://github.com/pentacore/media-manager/compare/v1.52.0...v1.53.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **ai:** only catalogue tools the chat agent declares ([99b9cfb](https://github.com/pentacore/media-manager/commit/99b9cfb92b381c5ed2e5d6776daab99840fca98d))
+* **ai:** only offer find/request tools on routed turns ([ffa0de9](https://github.com/pentacore/media-manager/commit/ffa0de982a00e402b1b97ff391eefeff82cee887))
+* **ai:** tidy tool group pins, catalogue and request validation ([5a9fe43](https://github.com/pentacore/media-manager/commit/5a9fe43aaae938003eda00325788487885d6c93a))
+* **chat:** don't mark ignored tool requests as declined on reload ([8247bbf](https://github.com/pentacore/media-manager/commit/8247bbf7644a65fb6e23e400d9809c936e2f497d))
+* **chat:** show core tools on each reply's tool line ([c3c550f](https://github.com/pentacore/media-manager/commit/c3c550f67d46cae2563e30d4826c6df2aeb67079))
+
+
+### Features
+
+* **ai:** let the chat assistant ask to load a tool group ([383df9a](https://github.com/pentacore/media-manager/commit/383df9ab7d175fe99fedcdba69de12271ba07f0d))
+* **ai:** let the chat assistant search every tool group ([2a3b1f0](https://github.com/pentacore/media-manager/commit/2a3b1f0130c47adf69dd2ec909c487073c2870ac))
+* **ai:** pin tool groups to a conversation ([b1fa212](https://github.com/pentacore/media-manager/commit/b1fa2127c548741961656f982cee464299b5ff69))
+* **ai:** record and expose each chat turn's tool groups ([bf13af5](https://github.com/pentacore/media-manager/commit/bf13af5785013954798ba5906809751962c59a24))
+* **ai:** track the source of each routed chat tool group ([1663f8d](https://github.com/pentacore/media-manager/commit/1663f8d175e43a60d33eb4784e9e4dc603f667ac))
+* **chat:** answer the assistant's tool request from a card ([fae99e2](https://github.com/pentacore/media-manager/commit/fae99e2bc50666da583d733c3c02763acfbc5b57))
+* **chat:** let templates pre-select tool groups ([62fd433](https://github.com/pentacore/media-manager/commit/62fd4333d3c46c06e5230462416fc24fdbec9668))
+* **chat:** show and pin the chat's tool groups ([627846f](https://github.com/pentacore/media-manager/commit/627846fb8aa0d73a0cb91572d13ad6cf08f2c297))
+
 # [1.52.0](https://github.com/pentacore/media-manager/compare/v1.51.0...v1.52.0) (2026-10-25)
 
 
