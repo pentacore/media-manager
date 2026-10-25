@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\AI;
 
+use App\Ai\Routing\ToolGroup;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\RenameConversationRequest;
 use App\Http\Requests\AI\UpdateConversationModelRequest;
+use App\Http\Requests\AI\UpdateConversationToolGroupsRequest;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
 use App\Services\Chat\ChatCardExtractor;
+use App\Services\Chat\ChatTurnGuard;
 use App\Services\Chat\ConversationModelOverride;
+use App\Services\Chat\ConversationToolPins;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -202,6 +206,31 @@ class ConversationController extends Controller
                 'reasoning' => $resolvedSelection->reasoning->value,
                 'reasoning_label' => $resolvedSelection->reasoning->label(),
             ],
+        ]);
+    }
+
+    /**
+     * Replace the conversation's pinned tool groups.
+     */
+    public function updateToolGroups(
+        UpdateConversationToolGroupsRequest $updateConversationToolGroupsRequest,
+        ChatTurnGuard $chatTurnGuard,
+        ConversationToolPins $conversationToolPins,
+        string $conversation,
+    ): JsonResponse {
+        if (! $chatTurnGuard->conversationIsAvailable($conversation, $updateConversationToolGroupsRequest->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $validated = $updateConversationToolGroupsRequest->validated();
+
+        $conversationToolPins->persist($conversation, array_map(ToolGroup::from(...), $validated['groups']));
+
+        return response()->json([
+            'pinned_tool_groups' => array_map(
+                fn (ToolGroup $toolGroup): string => $toolGroup->value,
+                $conversationToolPins->forConversation($conversation),
+            ),
         ]);
     }
 

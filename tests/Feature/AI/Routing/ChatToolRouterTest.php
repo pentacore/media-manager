@@ -12,6 +12,7 @@ use App\Ai\Routing\ToolGroupSource;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
+use App\Ai\Tools\Prowlarr\SearchIndexersTool;
 use App\Ai\Tools\System\OfferChoicesTool;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Enums\ClassificationVerdict;
@@ -400,4 +401,28 @@ test('routed tool groups round trip through their stored shape', function (): vo
         ->and(RoutedToolGroups::fromArray([...$routed->toArray(), ['group' => 'nope', 'source' => 'picked'], ['group' => 'playback', 'source' => 'bad']])?->sources)
         ->toBe(['playback' => ToolGroupSource::Picked, 'indexers' => ToolGroupSource::Pinned])
         ->and(RoutedToolGroups::fromArray('all'))->toBeNull();
+});
+
+test('pins persist across a full-toolset fallback turn', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    config()->set('mediamanager.ai.enabled', true);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'participant_type' => $admin->getMorphClass(),
+        'participant_id' => $admin->id,
+        'title' => 'T',
+        'pinned_tool_groups' => '["indexers"]',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    Classification::fake([routerGroupAnswers([]), routerGroupAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['one', 'two']);
+
+    $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'hmm', 'conversation_id' => $conversationId])->assertOk();
+    $this->actingAs($admin)->postJson(route('ai.chat.send'), ['message' => 'what is playing', 'conversation_id' => $conversationId])->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => $agentPrompt->prompt === 'what is playing'
+        && array_diff([SearchIndexersTool::class, NowPlayingTool::class], routerPromptedToolClasses($agentPrompt)) === []);
 });

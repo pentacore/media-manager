@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AI;
 
 use App\Ai\AnsweredBy;
 use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\ToolGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
@@ -19,6 +20,7 @@ use App\Services\Chat\ChatFailureResponder;
 use App\Services\Chat\ChatTurnGuard;
 use App\Services\Chat\ChatWorkflowContinuation;
 use App\Services\Chat\ConversationModelOverride;
+use App\Services\Chat\ConversationToolPins;
 use App\Services\Chat\WorkflowContinuationRefused;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
@@ -42,7 +44,7 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, ConversationToolPins $conversationToolPins, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
@@ -72,8 +74,10 @@ class ChatController extends Controller
             ? ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7())
             : null;
 
+        $pins = $conversationToolPins->forTurn($conversationId, $validated['pinned_tool_groups'] ?? []);
+
         try {
-            $routed = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey) : null;
+            $routed = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId, $turnKey, $pins, $this->requestedLoads($validated)) : null;
             $response = $chatTurnGuard->agentFor($conversationId, $user, $routed)
                 ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
@@ -91,6 +95,7 @@ class ChatController extends Controller
 
         if ($isNewConversation && $newConversationId !== null) {
             $conversationModelOverride->persist($newConversationId);
+            $conversationToolPins->persist($newConversationId, $pins);
             $this->seedConversationTitle($newConversationId, $validated['message']);
             dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
         }
@@ -119,7 +124,7 @@ class ChatController extends Controller
      * Workflow continuations are intentionally NOT supported here — they stay on
      * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ConversationModelOverride $conversationModelOverride, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ConversationModelOverride $conversationModelOverride, ConversationToolPins $conversationToolPins, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
 
@@ -140,15 +145,17 @@ class ChatController extends Controller
             ? ClassificationOutcome::subjectKey('chat_turn', (string) Str::uuid7())
             : null;
 
+        $pins = $conversationToolPins->forTurn($conversationId, $validated['pinned_tool_groups'] ?? []);
+
         try {
-            $routed = $chatToolRouter->route($message, $conversationId, $turnKey);
+            $routed = $chatToolRouter->route($message, $conversationId, $turnKey, $pins, $this->requestedLoads($validated));
             $stream = $chatTurnGuard->agentFor($conversationId, $user, $routed)
                 ->stream($message, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $chatFailureResponder->respond($throwable, $user);
         }
 
-        $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $chatToolRouter, $turnKey): void {
+        $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $conversationToolPins, $pins, $chatToolRouter, $turnKey): void {
             if ($turnKey !== null) {
                 $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
             }
@@ -158,12 +165,13 @@ class ChatController extends Controller
 
             if ($isNewConversation && $newConversationId !== null) {
                 $conversationModelOverride->persist($newConversationId);
+                $conversationToolPins->persist($newConversationId, $pins);
                 $this->seedConversationTitle($newConversationId, $message);
                 dispatch(new GenerateConversationTitle($newConversationId, $message));
             }
         });
 
-        $stream->catch(function () use ($stream, $isNewConversation, $message, $conversationModelOverride): void {
+        $stream->catch(function () use ($stream, $isNewConversation, $message, $conversationModelOverride, $conversationToolPins, $pins): void {
             // 1.0 stores a failed first turn once a step completed, so the
             // conversation exists — give it the same readable title a
             // successful turn gets. A turn that died before its first step
@@ -173,6 +181,7 @@ class ChatController extends Controller
                 && DB::table('agent_conversations')->where('id', $stream->conversationId)->exists()
             ) {
                 $conversationModelOverride->persist($stream->conversationId);
+                $conversationToolPins->persist($stream->conversationId, $pins);
                 $this->seedConversationTitle($stream->conversationId, $message);
                 dispatch(new GenerateConversationTitle($stream->conversationId, $message));
             }
@@ -207,6 +216,20 @@ class ChatController extends Controller
         );
 
         return response()->json(['workflow' => $workflow]);
+    }
+
+    /**
+     * The groups the user asked to load for this turn.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return list<ToolGroup>
+     */
+    private function requestedLoads(array $validated): array
+    {
+        return array_values(array_unique(
+            array_map(ToolGroup::from(...), $validated['load_tool_groups'] ?? []),
+            SORT_REGULAR,
+        ));
     }
 
     /**

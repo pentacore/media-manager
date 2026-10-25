@@ -35,6 +35,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::patch('conversations/{conversation}/model', [ConversationController::class, 'updateModel'])
             ->whereUuid('conversation')
             ->name('conversations.model');
+        Route::put('conversations/{conversation}/tool-groups', [ConversationController::class, 'updateToolGroups'])
+            ->whereUuid('conversation')
+            ->name('conversations.tool-groups');
 
         Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
         Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');
