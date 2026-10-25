@@ -85,9 +85,14 @@ function setMode(override: SecondOpinionEventOverride, value: unknown): void {
         value === 'inherit' ? null : (String(value) as SecondOpinionMode);
 }
 
+/** An engine that never asks Jev drops the threshold it would ignore. */
 function setEngine(override: SecondOpinionEventOverride, value: unknown): void {
     override.engine =
         value === 'inherit' ? null : (String(value) as SecondOpinionEngine);
+
+    if (!usesClassifier(override)) {
+        override.jev_threshold = null;
+    }
 }
 
 function setThreshold(

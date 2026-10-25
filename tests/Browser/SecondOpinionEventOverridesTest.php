@@ -102,3 +102,21 @@ test('the per-event overrides fit a phone screen', function (): void {
         ->assertVisible('[data-second-opinion-override="sonarr:Download"] [data-override-threshold]')
         ->assertScript(phoneOverflowScript('main'), '');
 });
+
+test('switching an event to the llm engine drops its jev threshold', function (): void {
+    config(['mediamanager.ai.classification.provider' => 'openrouter', 'ai.providers.openrouter.key' => 'sk-test']);
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    secondOpinionOverride('sonarr:Download', SecondOpinionMode::Hold, SecondOpinionEngine::JevThenLlm, 0.7);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(secondOpinionOverridesPage())
+        ->assertNoSmoke()
+        ->click('[data-second-opinion-override="sonarr:Download"] [data-override-engine]')
+        ->click('[data-override-engine-option="llm"]')
+        ->assertMissing('[data-second-opinion-override="sonarr:Download"] [data-override-threshold]')
+        ->press('Save settings')
+        ->assertSee('Decision agent settings updated.');
+
+    expect(resolve(DecisionAgentSettings::class)->secondOpinionEventOverrides()['sonarr:Download'])
+        ->toBe(['mode' => SecondOpinionMode::Hold, 'engine' => SecondOpinionEngine::Llm, 'jev_threshold' => null]);
+});
