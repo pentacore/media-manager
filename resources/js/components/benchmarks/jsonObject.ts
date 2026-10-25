@@ -17,8 +17,23 @@ export function formatJsonObject(value: unknown): string {
     return JSON.stringify(value, null, 2);
 }
 
-/** Parses the text of an arguments textarea; blank text means an empty object. */
-export function parseJsonObject(text: string): ParsedJsonObject {
+export type JsonObjectMessages = { notObject: string; invalid: string };
+
+export const ARGUMENT_MESSAGES: JsonObjectMessages = {
+    notObject: 'Arguments must be a JSON object.',
+    invalid: 'Arguments are not valid JSON.',
+};
+
+export const PAYLOAD_MESSAGES: JsonObjectMessages = {
+    notObject: 'The payload must be a JSON object.',
+    invalid: 'The payload is not valid JSON.',
+};
+
+/** Parses the text of a JSON textarea; blank text means an empty object. */
+export function parseJsonObject(
+    text: string,
+    messages: JsonObjectMessages = ARGUMENT_MESSAGES,
+): ParsedJsonObject {
     if (text.trim() === '') {
         return { value: {}, error: null };
     }
@@ -31,11 +46,11 @@ export function parseJsonObject(text: string): ParsedJsonObject {
             typeof parsed !== 'object' ||
             Array.isArray(parsed)
         ) {
-            return { value: null, error: 'Arguments must be a JSON object.' };
+            return { value: null, error: messages.notObject };
         }
 
         return { value: parsed as JsonObject, error: null };
     } catch {
-        return { value: null, error: 'Arguments are not valid JSON.' };
+        return { value: null, error: messages.invalid };
     }
 }

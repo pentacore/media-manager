@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Concerns;
 
+use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiMode;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
@@ -24,6 +25,7 @@ use Illuminate\Validation\Validator;
 trait BenchmarkCaseValidationRules
 {
     use ChatAttachmentValidationRules;
+    use DecisionEventValidationRules;
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -37,7 +39,7 @@ trait BenchmarkCaseValidationRules
             'tags.*' => ['string', 'max:40'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'input' => ['required', 'array'],
-            'input.prompt' => ['required', 'string', 'max:65536'],
+            'input.prompt' => [Rule::requiredIf(fn (): bool => $this->input('input.event') === null), 'nullable', 'string', 'max:65536'],
             'input.history' => ['nullable', 'array', 'max:50'],
             'input.history.*' => ['array'],
             'input.history.*.role' => ['required', Rule::in(['user', 'assistant'])],
@@ -45,6 +47,9 @@ trait BenchmarkCaseValidationRules
             'input.mode' => ['nullable', AiMode::validationRule()],
             'input.conversation' => ['nullable', BenchmarkConversationMode::validationRule()],
             'input.event_key' => ['nullable', 'string', Rule::in(DecisionAgentSettings::availableEventKeys())],
+            'input.event' => ['nullable', 'array:service,event_type,payload_json'],
+            ...$this->decisionEventRules('input.event.', false),
+            'input.action_kind' => ['nullable', DecisionActionKind::validationRule()],
             'input.providers' => [Rule::requiredIf(fn (): bool => $this->input('task') === AiTask::PriceUpdater->value), 'array'],
             'input.providers.*' => ['string'],
             'fixtures' => ['nullable', 'array', 'max:200'],
@@ -95,6 +100,14 @@ trait BenchmarkCaseValidationRules
                 if ($aiTask instanceof AiTask && $aiTask->isBenchmarkable() && ! $validator->errors()->has('scoring.type') && $this->input('scoring.type') !== $aiTask->benchmarkScoringType()->value) {
                     $validator->errors()->add('scoring.type', sprintf('The %s task is scored with %s.', $aiTask->label(), $aiTask->benchmarkScoringType()->value));
                 }
+            },
+            function (Validator $validator): void {
+                if ($this->input('input.event') !== null && $this->input('task') !== AiTask::Decision->value) {
+                    $validator->errors()->add('input.event', 'Only decision cases can carry a webhook event.');
+                }
+            },
+            function (Validator $validator): void {
+                $this->checkDecisionPayloadObject($validator, 'input.event.payload_json');
             },
             function (Validator $validator): void {
                 foreach (['fixtures', 'scoring.expected'] as $listKey) {

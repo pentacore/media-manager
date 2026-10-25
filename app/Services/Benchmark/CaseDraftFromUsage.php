@@ -34,7 +34,7 @@ final readonly class CaseDraftFromUsage
 
     private const int NAME_PROMPT_CHARS = 60;
 
-    public function __construct(private AiSettings $aiSettings, private ChatAttachmentStore $chatAttachmentStore) {}
+    public function __construct(private AiSettings $aiSettings, private ChatAttachmentStore $chatAttachmentStore, private DecisionCaseCapture $decisionCaseCapture) {}
 
     /**
      * @return array{draft: array<string, mixed>, warnings: list<string>}
@@ -137,6 +137,19 @@ final readonly class CaseDraftFromUsage
         }
 
         $sourceTruncated = $warnings !== [];
+        $name = sprintf('%s: %s', $aiTask->label(), Str::limit(Str::squish($prompt), self::NAME_PROMPT_CHARS));
+
+        if ($aiTask === AiTask::Decision) {
+            $decisionDraft = $this->decisionCaseCapture->capture($aiUsageRecord, $prompt);
+
+            $input = $decisionDraft->input;
+            array_push($warnings, ...$decisionDraft->warnings);
+            $sourceTruncated = $sourceTruncated || $decisionDraft->truncated;
+
+            if ($decisionDraft->eventLabel !== null) {
+                $name = sprintf('%s: %s', $aiTask->label(), $decisionDraft->eventLabel);
+            }
+        }
 
         if ($aiTask === AiTask::PriceUpdater) {
             $input['providers'] = $this->providersIn($prompt);
@@ -149,7 +162,7 @@ final readonly class CaseDraftFromUsage
         return [
             'draft' => [
                 'task' => $aiTask->value,
-                'name' => sprintf('%s: %s', $aiTask->label(), Str::limit(Str::squish($prompt), self::NAME_PROMPT_CHARS)),
+                'name' => $name,
                 'tags' => [],
                 'notes' => null,
                 'input' => $input,
