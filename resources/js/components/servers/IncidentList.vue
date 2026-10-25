@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref } from 'vue';
 import { Pill, TimeStamp } from '@/components/mm';
 import { cn } from '@/lib/utils';
+import { incidentPillVariant } from './incident';
 import type { ServerIncidentRow } from './types';
 
 defineProps<{
@@ -67,11 +68,10 @@ onMounted(async () => {
                 <div class="flex flex-wrap items-center gap-2">
                     <Pill
                         :variant="
-                            incident.status === 'resolved'
-                                ? 'default'
-                                : incident.severity === 'critical'
-                                  ? 'danger'
-                                  : 'warn'
+                            incidentPillVariant(
+                                incident.status,
+                                incident.severity,
+                            )
                         "
                         dot
                         :data-incident-severity="incident.severity"

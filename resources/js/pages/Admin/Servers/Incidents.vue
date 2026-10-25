@@ -4,6 +4,7 @@ import { onMounted } from 'vue';
 import ServerController from '@/actions/App/Http/Controllers/Admin/ServerController';
 import ServerIncidentController from '@/actions/App/Http/Controllers/Admin/ServerIncidentController';
 import { PageHeader, Pill, TimeStamp } from '@/components/mm';
+import { incidentPillVariant } from '@/components/servers';
 import type { ServerIncidentRow } from '@/components/servers';
 import { Button } from '@/components/ui/button';
 import {
@@ -201,11 +202,10 @@ onMounted(live.subscribe);
                             <td class="px-3 py-2.5 whitespace-nowrap">
                                 <Pill
                                     :variant="
-                                        row.status === 'resolved'
-                                            ? 'default'
-                                            : row.severity === 'critical'
-                                              ? 'danger'
-                                              : 'warn'
+                                        incidentPillVariant(
+                                            row.status,
+                                            row.severity,
+                                        )
                                     "
                                     dot
                                     :data-incident-severity="row.severity"

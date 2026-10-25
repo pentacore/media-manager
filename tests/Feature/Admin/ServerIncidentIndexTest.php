@@ -44,10 +44,11 @@ test('the server filter narrows the list', function (): void {
             ->has('servers', 2));
 });
 
-test('the server filter must be an existing numeric id', function (string $value): void {
+test('a non-numeric or unknown server filter is ignored', function (string $value): void {
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.servers.incidents.index', ['server' => $value]))
-        ->assertSessionHasErrors('server');
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('filters.server', null));
 })->with(['text' => 'abc', 'missing' => '99999']);
 
 test('the list paginates at 25', function (): void {
