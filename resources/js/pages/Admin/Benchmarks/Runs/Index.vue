@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Ban, Plus, Trash2 } from '@lucide/vue';
+import { Ban, GitCompareArrows, Plus, Trash2 } from '@lucide/vue';
+import { computed, ref } from 'vue';
 import BenchmarkCaseController from '@/actions/App/Http/Controllers/Admin/BenchmarkCaseController';
 import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/BenchmarkRunController';
 import BenchmarkScheduleController from '@/actions/App/Http/Controllers/Admin/BenchmarkScheduleController';
-import { formatUsd } from '@/components/benchmarks';
+import { compareUrl, formatUsd } from '@/components/benchmarks';
 import type { BenchmarkRunRow } from '@/components/benchmarks';
 import { PageHeader, Pill, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     Table,
@@ -66,6 +68,31 @@ function statusVariant(
         default:
             return 'default';
     }
+}
+
+const MIN_COMPARED = 2;
+const MAX_COMPARED = 5;
+
+const selected = ref<number[]>([]);
+
+function toggle(run: BenchmarkRunRow, checked: boolean): void {
+    selected.value = checked
+        ? [...selected.value, run.id]
+        : selected.value.filter((id) => id !== run.id);
+}
+
+const canCompare = computed(
+    () =>
+        selected.value.length >= MIN_COMPARED &&
+        selected.value.length <= MAX_COMPARED,
+);
+
+function compareSelected(): void {
+    const runs = [...selected.value].sort((a, b) => a - b);
+
+    router.visit(
+        compareUrl({ runs, baseline: runs[0], pairs: [], scores: 'original' }),
+    );
 }
 
 const { confirm } = useConfirm();
@@ -167,10 +194,33 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
             </template>
         </PageHeader>
 
+        <div
+            v-if="selected.length > 0"
+            class="flex flex-wrap items-center gap-3 text-[12.5px]"
+            data-benchmark-compare-bar
+        >
+            <span>{{ selected.length }} selected</span>
+            <Button
+                size="sm"
+                class="gap-1.5"
+                :disabled="!canCompare"
+                data-benchmark-compare-selected
+                @click="compareSelected"
+            >
+                <GitCompareArrows class="size-3.5" />Compare
+            </Button>
+            <span v-if="!canCompare" class="text-muted-foreground"
+                >Pick 2 to 5 finished runs.</span
+            >
+        </div>
+
         <div class="overflow-x-auto rounded-xl border border-border bg-card">
             <Table>
                 <TableHeader>
                     <TableRow>
+                        <TableHead class="w-[1%]"
+                            ><span class="sr-only">Compare</span></TableHead
+                        >
                         <TableHead>Name</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Cases × candidates</TableHead>
@@ -193,6 +243,22 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                             )
                         "
                     >
+                        <TableCell class="w-[1%]" @click.stop>
+                            <Checkbox
+                                :model-value="selected.includes(run.id)"
+                                :disabled="!run.comparable"
+                                :aria-label="`Compare ${run.name}`"
+                                :title="
+                                    run.comparable
+                                        ? undefined
+                                        : 'Only finished runs can be compared'
+                                "
+                                :data-benchmark-run-select="run.id"
+                                @update:model-value="
+                                    (value) => toggle(run, value === true)
+                                "
+                            />
+                        </TableCell>
                         <TableCell class="font-medium">
                             <Link
                                 :href="BenchmarkRunController.show.url(run.id)"
@@ -256,7 +322,7 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                             </Button>
                         </TableCell>
                     </TableRow>
-                    <TableEmpty v-if="runs.data.length === 0" :colspan="6">
+                    <TableEmpty v-if="runs.data.length === 0" :colspan="7">
                         No benchmark runs yet.
                     </TableEmpty>
                 </TableBody>

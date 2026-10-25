@@ -354,6 +354,24 @@ test('the judge cost is priced from the judge usage', function (): void {
         ->and($scores['score'])->toBe(0.6);
 });
 
+test('a judge that answers without a score is still billed for the call', function (): void {
+    scorerStartContext(AiTask::Title);
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-judge', 'input_per_mtok' => 2, 'output_per_mtok' => 8]);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    BenchmarkJudgeAgent::fake(fn (): StructuredTextResponse => new StructuredTextResponse(
+        ['rationale' => 'No number'],
+        '{"rationale":"No number"}',
+        new TextUsage(500_000, 100_000),
+        new Meta('openai', 'gpt-judge'),
+    ));
+
+    $scores = resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'A title'));
+
+    expect($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($scores['score'])->toBeNull()
+        ->and($scores['judge_cost_usd'])->toBe(1.8);
+});
+
 test('an unpriced judge costs nothing', function (): void {
     scorerStartContext(AiTask::Title);
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();

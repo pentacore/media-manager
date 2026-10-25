@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AiModelsController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\BenchmarkCaseController;
+use App\Http\Controllers\Admin\BenchmarkComparisonController;
 use App\Http\Controllers\Admin\BenchmarkRunController;
 use App\Http\Controllers\Admin\BenchmarkScheduleController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
@@ -82,6 +83,13 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('{benchmarkCase}/edit', [BenchmarkCaseController::class, 'edit'])->whereNumber('benchmarkCase')->name('edit');
             Route::put('{benchmarkCase}', [BenchmarkCaseController::class, 'update'])->whereNumber('benchmarkCase')->name('update');
             Route::delete('{benchmarkCase}', [BenchmarkCaseController::class, 'destroy'])->whereNumber('benchmarkCase')->name('destroy');
+        });
+
+        Route::prefix('benchmarks/compare')->name('benchmarks.compare.')->group(function (): void {
+            Route::get('/', [BenchmarkComparisonController::class, 'show'])->name('show');
+            Route::post('neutral/estimate', [BenchmarkComparisonController::class, 'estimate'])->name('estimate');
+            Route::post('neutral', [BenchmarkComparisonController::class, 'start'])->name('start');
+            Route::post('neutral/{benchmarkNeutralRejudge}/cancel', [BenchmarkComparisonController::class, 'cancel'])->whereNumber('benchmarkNeutralRejudge')->name('cancel');
         });
 
         Route::prefix('benchmarks/schedules')->name('benchmarks.schedules.')->group(function (): void {

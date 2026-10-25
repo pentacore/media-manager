@@ -28,7 +28,8 @@ class RecordFailedAgentRun
         $runUsageAccumulator = resolve(RunUsageAccumulator::class);
         $invocationId = $agentFailed->invocationId;
         $agentPrompt = $agentFailed->prompt;
-        $benchmarkRunId = resolve(BenchmarkRunContext::class)->runId();
+        $benchmarkRunContext = resolve(BenchmarkRunContext::class);
+        $benchmarkRunId = $benchmarkRunContext->billedRunId();
 
         resolve(UsageRecordWriter::class)->record([
             'invocation_id' => $invocationId,
@@ -42,7 +43,7 @@ class RecordFailedAgentRun
             'prompt_text' => UsageText::agentInput($agentPrompt),
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
             'benchmark_run_id' => $benchmarkRunId,
-            'is_benchmark' => $benchmarkRunId !== null,
+            'is_benchmark' => $benchmarkRunContext->active(),
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',
             'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
