@@ -8,14 +8,18 @@ import {
     ExpectedActionsEditor,
     FixtureEditor,
     JudgeScoringFields,
+    PAYLOAD_MESSAGES,
+    parseJsonObject,
     PriceExpectationsEditor,
 } from '@/components/benchmarks';
 import type {
+    BenchmarkActionKindOption,
     BenchmarkCasePayload,
     BenchmarkAttachmentEntry,
     BenchmarkExpectedAction,
     BenchmarkExpectedPrice,
     BenchmarkFixture,
+    BenchmarkDecisionSource,
     BenchmarkScoringKind,
     BenchmarkTaskOption,
 } from '@/components/benchmarks';
@@ -30,6 +34,8 @@ const props = defineProps<{
     draftWarnings: string[];
     tasks: BenchmarkTaskOption[];
     eventKeys: string[];
+    decisionServices: string[];
+    actionKinds: BenchmarkActionKindOption[];
     writeTools: string[];
     defaultRubrics: Record<string, string>;
 }>();
@@ -109,6 +115,18 @@ const form = useForm({
         conversation: source?.input.conversation ?? 'context',
         attachments: turnEntries(null),
         event_key: source?.input.event_key ?? '',
+        decision_source:
+            source === null || source.input.event
+                ? ('event' as BenchmarkDecisionSource)
+                : ('text' as BenchmarkDecisionSource),
+        event: source?.input.event
+            ? { ...source.input.event }
+            : {
+                  service: props.decisionServices[0] ?? 'sonarr',
+                  event_type: '',
+                  payload_json: '{}',
+              },
+        action_kind: source?.input.action_kind ?? '',
         providers: [...(source?.input.providers ?? [])],
     },
     fixtures: [...(source?.fixtures ?? [])] as BenchmarkFixture[],
@@ -150,8 +168,18 @@ const scoringType = computed<BenchmarkScoringKind>(
 const fixturesInvalid = ref(false);
 const actionsInvalid = ref(false);
 
+const payloadInvalid = computed(
+    () =>
+        form.task === 'decision' &&
+        form.input.decision_source === 'event' &&
+        parseJsonObject(form.input.event.payload_json, PAYLOAD_MESSAGES)
+            .error !== null,
+);
+
 const showBlocked = computed(
-    () => blocked.value && (fixturesInvalid.value || actionsInvalid.value),
+    () =>
+        blocked.value &&
+        (fixturesInvalid.value || actionsInvalid.value || payloadInvalid.value),
 );
 
 watch(scoringType, (type) => {
@@ -183,7 +211,11 @@ const tagsError = computed(
 
 /** Only the input fields the chosen task reads are sent. */
 form.transform((data) => {
-    const input: Record<string, unknown> = { prompt: data.input.prompt };
+    const input: Record<string, unknown> = {};
+
+    if (data.task !== 'decision' || data.input.decision_source === 'text') {
+        input.prompt = data.input.prompt;
+    }
 
     if (data.task === 'chat') {
         input.history = data.input.history.map(({ role, content }) => ({
@@ -194,7 +226,17 @@ form.transform((data) => {
         input.conversation = data.input.conversation;
     }
 
-    if (data.task === 'decision') {
+    if (data.task === 'decision' && data.input.decision_source === 'event') {
+        const { service, event_type, payload_json } = data.input.event;
+
+        input.event = {
+            service,
+            event_type,
+            payload_json: payload_json.trim() === '' ? '{}' : payload_json,
+        };
+        input.action_kind =
+            data.input.action_kind === '' ? null : data.input.action_kind;
+    } else if (data.task === 'decision') {
         input.event_key =
             data.input.event_key === '' ? null : data.input.event_key;
     }
@@ -278,7 +320,8 @@ form.transform((data) => {
 });
 
 function save(): void {
-    blocked.value = fixturesInvalid.value || actionsInvalid.value;
+    blocked.value =
+        fixturesInvalid.value || actionsInvalid.value || payloadInvalid.value;
 
     if (blocked.value) {
         return;
@@ -368,6 +411,8 @@ const selectClass =
             v-model="form.input"
             :task="form.task"
             :event-keys="eventKeys"
+            :decision-services="decisionServices"
+            :action-kinds="actionKinds"
             :errors="errors"
         />
 

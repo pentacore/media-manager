@@ -1,3 +1,20 @@
+# [1.54.0](https://github.com/pentacore/media-manager/compare/v1.53.0...v1.54.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **benchmarks:** keep large payloads saveable, quiet the blank-case preview and clear stale event keys ([37acc42](https://github.com/pentacore/media-manager/commit/37acc42c76704f8a1d6a228118649e9d8d6c24f8))
+* **benchmarks:** recover an empty payload from a trimmed decision run ([265846c](https://github.com/pentacore/media-manager/commit/265846cef67aec9bb8e8f5347c77c74a4c55ae8d))
+
+
+### Features
+
+* **benchmarks:** build decision cases from webhook events in the case form ([3a16972](https://github.com/pentacore/media-manager/commit/3a1697266ed407ec4fab8132bdccda9869a4ceec))
+* **benchmarks:** capture the webhook event and gate scope of a decision ([6ca5b88](https://github.com/pentacore/media-manager/commit/6ca5b88a179a2a626add49f8439e42716b93b95d))
+* **benchmarks:** preview the decision prompt of a webhook event ([db5b5b8](https://github.com/pentacore/media-manager/commit/db5b5b87b1c1f0c745fb8854df0488dae3aff11c))
+* **benchmarks:** run decision cases under the case's run context ([ec6e09d](https://github.com/pentacore/media-manager/commit/ec6e09de1cff08d193de325313113cef6f870458))
+* **benchmarks:** store decision cases as webhook events ([7815b9a](https://github.com/pentacore/media-manager/commit/7815b9a3e673f8fa542bfb4ccecb3029ebaf76fe))
+
 # [1.53.0](https://github.com/pentacore/media-manager/compare/v1.52.0...v1.53.0) (2026-10-25)
 
 

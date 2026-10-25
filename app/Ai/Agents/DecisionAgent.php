@@ -59,7 +59,9 @@ class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTool
 
     /**
      * The run's webhook event key, so an event override picks the model and
-     * reasoning for this run.
+     * reasoning for this run. Inside a benchmark run the candidate is pinned
+     * (TaskModelResolver lets an active BenchmarkRunContext win), so the key
+     * has no model effect there.
      */
     protected function aiTaskEventKey(): ?string
     {

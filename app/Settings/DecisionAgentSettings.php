@@ -131,6 +131,16 @@ class DecisionAgentSettings
     }
 
     /**
+     * The services the catalog covers.
+     *
+     * @return list<string>
+     */
+    public static function eventServices(): array
+    {
+        return array_keys(self::eventCatalog());
+    }
+
+    /**
      * Flattened "service:Event" keys from the catalog, used to validate the
      * stored allowlist.
      *

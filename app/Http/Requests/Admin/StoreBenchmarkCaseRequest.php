@@ -15,7 +15,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * wildcard (`history.*`, `expected.*`) rules.
  */
 #[TypefinderOverrides([
-    'input' => "{ prompt: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> | null; mode?: 'executive' | 'advisory' | null; conversation?: 'context' | 'scripted' | null; event_key?: string | null; providers?: string[] }",
+    'input' => "{ prompt?: string | null; history?: Array<{ role: 'user' | 'assistant'; content: string }> | null; mode?: 'executive' | 'advisory' | null; conversation?: 'context' | 'scripted' | null; event_key?: string | null; event?: { service: string; event_type: string; payload_json: string } | null; action_kind?: 'library_change' | 'seerr_request' | 'media_server' | 'other' | null; providers?: string[] }",
     'scoring' => "{ type: 'actions' | 'prices' | 'judge'; expected?: Array<Record<string, unknown>> | null; tolerance_percent?: number | null; rubric_note?: string | null; pass_threshold?: number | null }",
     'attachments' => 'Record<string, File[]> | null',
     'keep_attachment_ids' => 'Record<string, number[]> | null',
