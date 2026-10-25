@@ -412,6 +412,7 @@ function browserSmokeExcludedRouteNames(): array
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
         'ai.chat.model-options',
+        'ai.chat.tool-groups',
         'ai.conversations.index',
         'ai.templates.options',
         'ai.templates.library',
