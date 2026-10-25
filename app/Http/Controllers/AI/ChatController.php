@@ -228,10 +228,17 @@ class ChatController extends Controller
      */
     private function requestedLoads(array $validated): array
     {
-        return array_values(array_unique(
-            array_map(ToolGroup::from(...), $validated['load_tool_groups'] ?? []),
-            SORT_REGULAR,
-        ));
+        $groups = [];
+
+        foreach ($validated['load_tool_groups'] ?? [] as $value) {
+            $group = ToolGroup::from($value);
+
+            if (! in_array($group, $groups, true)) {
+                $groups[] = $group;
+            }
+        }
+
+        return $groups;
     }
 
     /**

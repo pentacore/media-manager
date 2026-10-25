@@ -210,6 +210,8 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
     }
 
     async function refresh(conversationId: string): Promise<void> {
+        const request = pinRequest;
+
         try {
             const state = await jsonRequest<ToolGroupState>(
                 'GET',
@@ -217,7 +219,10 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
             );
 
             if (activeConversationId.value === conversationId) {
-                pinned.value = state.pinned_tool_groups;
+                if (request === pinRequest) {
+                    pinned.value = state.pinned_tool_groups;
+                }
+
                 carriedOver.value = state.carried_over_tool_groups;
             }
         } catch {

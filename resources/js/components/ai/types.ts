@@ -64,7 +64,7 @@ export type TurnToolGroup = {
     source: ToolGroupSource;
 };
 
-/** The groups a reply had: a list, `'all'` (routing off) or null (unknown). */
+/** The groups a reply had: a list, `'all'` (routing on, but the turn had the full toolset) or null (routing off or unknown). */
 export type TurnToolGroups = TurnToolGroup[] | 'all' | null;
 
 /** One entry of `GET ai/chat/tool-groups`. */

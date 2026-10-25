@@ -13,7 +13,9 @@ use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Ai\Tools\Prowlarr\SearchIndexersTool;
+use App\Ai\Tools\System\FindToolsTool;
 use App\Ai\Tools\System\OfferChoicesTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Enums\ClassificationVerdict;
 use App\Models\AiProposedWorkflow;
@@ -130,6 +132,32 @@ test('groups of tools called in the previous turn stay loaded', function (): voi
 
     expect(resolve(ChatToolRouter::class)->route('yes do it', $conversationId)?->groups())
         ->toContain(ToolGroup::LibraryChanges, ToolGroup::Playback);
+});
+
+test('a full-toolset turn with routing on has no find or request tools and no routing section', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    Classification::fake([routerGroupAnswers([])]);
+    MediaAgent::fake(['ok']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'hmm'])
+        ->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => ! in_array(FindToolsTool::class, routerPromptedToolClasses($agentPrompt), true)
+        && ! in_array(RequestToolsTool::class, routerPromptedToolClasses($agentPrompt), true)
+        && ! str_contains((string) $agentPrompt->agent->instructions(), 'FindToolsTool'));
+});
+
+test('a routed turn carries the find and request tools', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+    MediaAgent::fake(['ok']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
+        ->assertOk();
+
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => array_diff([FindToolsTool::class, RequestToolsTool::class], routerPromptedToolClasses($agentPrompt)) === []);
 });
 
 test('a routed chat turn only sends the routed tools to the agent', function (): void {
@@ -330,11 +358,20 @@ function routerToolRequestCall(): array
 }
 
 test('pinned groups join a routed turn as pinned', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
 
     $routed = resolve(ChatToolRouter::class)->route('What is playing?', null, pinned: [ToolGroup::Indexers]);
 
     expect($routed?->sources)->toBe(['playback' => ToolGroupSource::Picked, 'indexers' => ToolGroupSource::Pinned]);
+});
+
+test('a pin for a group this install cannot use is dropped', function (): void {
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('What is playing?', null, pinned: [ToolGroup::Indexers]);
+
+    expect($routed?->sources)->toBe(['playback' => ToolGroupSource::Picked]);
 });
 
 test('pins change nothing when routing falls back to the full toolset', function (): void {
@@ -344,6 +381,7 @@ test('pins change nothing when routing falls back to the full toolset', function
 });
 
 test('pinned wins over picked for the same group', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     Classification::fake([routerGroupAnswers(['indexers' => 0.9])]);
 
     $routed = resolve(ChatToolRouter::class)->route('indexer health?', null, pinned: [ToolGroup::Indexers]);
@@ -385,6 +423,7 @@ test('an assistant group keeps its source while it is used', function (): void {
 });
 
 test('routed telemetry counts pinned and approved groups as included', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
 
     resolve(ChatToolRouter::class)->route('What is playing?', null, 'chat_turn:t9', pinned: [ToolGroup::Indexers]);

@@ -39,6 +39,7 @@ final readonly class ChatToolRouter
         private Classifier $classifier,
         private AiSettings $aiSettings,
         private ClassificationOutcomeRecorder $classificationOutcomeRecorder,
+        private ToolGroupCatalogue $toolGroupCatalogue,
     ) {}
 
     /**
@@ -90,14 +91,18 @@ final readonly class ChatToolRouter
 
             $sources = array_merge($sources, $this->carriedOverFrom($previous));
 
+            $available = $pinned === [] && $requestedLoads === [] ? [] : $this->toolGroupCatalogue->available();
+
             foreach ($requestedLoads as $toolGroup) {
-                if (in_array($toolGroup->value, $previous['requested'], true)) {
+                if (in_array($toolGroup, $available, true) && in_array($toolGroup->value, $previous['requested'], true)) {
                     $sources[$toolGroup->value] = ToolGroupSource::Assistant;
                 }
             }
 
             foreach ($pinned as $toolGroup) {
-                $sources[$toolGroup->value] = ToolGroupSource::Pinned;
+                if (in_array($toolGroup, $available, true)) {
+                    $sources[$toolGroup->value] = ToolGroupSource::Pinned;
+                }
             }
 
             $routed = new RoutedToolGroups(RoutedToolGroups::ordered($sources));

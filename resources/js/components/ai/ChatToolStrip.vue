@@ -70,21 +70,6 @@ const pinnable = computed(() =>
                 >Core</span
             >
             <span
-                v-for="entry in carriedChips"
-                :key="`carried-${entry.group}`"
-                :class="[
-                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
-                    sourceClasses(entry.source),
-                ]"
-                :data-tool-chip="entry.group"
-                :data-tool-source="entry.source"
-            >
-                {{ entry.label }}
-                <span class="text-[9.5px] tracking-wide uppercase opacity-70">{{
-                    SOURCE_LABELS[entry.source]
-                }}</span>
-            </span>
-            <span
                 v-for="chip in pinnedChips"
                 :key="`pinned-${chip.value}`"
                 :class="[
@@ -112,6 +97,21 @@ const pinnable = computed(() =>
                 >
                     <X class="size-3" />
                 </button>
+            </span>
+            <span
+                v-for="entry in carriedChips"
+                :key="`carried-${entry.group}`"
+                :class="[
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
+                    sourceClasses(entry.source),
+                ]"
+                :data-tool-chip="entry.group"
+                :data-tool-source="entry.source"
+            >
+                {{ entry.label }}
+                <span class="text-[9.5px] tracking-wide uppercase opacity-70">{{
+                    SOURCE_LABELS[entry.source]
+                }}</span>
             </span>
             <DropdownMenu>
                 <DropdownMenuTrigger as-child>

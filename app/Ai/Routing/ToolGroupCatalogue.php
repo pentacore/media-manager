@@ -38,24 +38,42 @@ class ToolGroupCatalogue
      */
     public function available(): array
     {
+        return $this->availableFrom($this->declaredClasses());
+    }
+
+    /**
+     * @param  list<class-string>  $declared
+     * @return list<ToolGroup>
+     */
+    private function availableFrom(array $declared): array
+    {
         return array_values(array_filter(
             ToolGroup::cases(),
-            fn (ToolGroup $toolGroup): bool => $this->declaredToolClasses($toolGroup) !== [],
+            fn (ToolGroup $toolGroup): bool => $this->declaredToolClasses($toolGroup, $declared) !== [],
         ));
     }
 
     /**
-     * The group's tool classes MediaAgent declares on this install.
+     * Every tool class this install's MediaAgent declares.
      *
      * @return list<class-string>
      */
-    private function declaredToolClasses(ToolGroup $toolGroup): array
+    private function declaredClasses(): array
     {
-        $declared = array_map(
+        return array_map(
             static fn (object $tool): string => $tool::class,
             [...(new MediaAgent)->tools()],
         );
+    }
 
+    /**
+     * The group's tool classes among the declared ones.
+     *
+     * @param  list<class-string>  $declared
+     * @return list<class-string>
+     */
+    private function declaredToolClasses(ToolGroup $toolGroup, array $declared): array
+    {
         return array_values(array_intersect($toolGroup->toolClasses(), $declared));
     }
 
@@ -72,8 +90,10 @@ class ToolGroupCatalogue
 
         $scored = [];
 
-        foreach ($this->available() as $toolGroup) {
-            $match = $this->scoreGroup($toolGroup, $words);
+        $declared = $this->declaredClasses();
+
+        foreach ($this->availableFrom($declared) as $toolGroup) {
+            $match = $this->scoreGroup($toolGroup, $words, $declared);
 
             if ($match !== null) {
                 $scored[] = $match;
@@ -91,13 +111,14 @@ class ToolGroupCatalogue
 
     /**
      * @param  list<string>  $words
+     * @param  list<class-string>  $declared
      * @return array{score: int, group: string, label: string, tools: list<array{name: string, summary: string}>}|null
      */
-    private function scoreGroup(ToolGroup $toolGroup, array $words): ?array
+    private function scoreGroup(ToolGroup $toolGroup, array $words, array $declared): ?array
     {
         $tools = [];
 
-        foreach ($this->declaredToolClasses($toolGroup) as $class) {
+        foreach ($this->declaredToolClasses($toolGroup, $declared) as $class) {
             $tool = resolve($class);
             $description = (string) $tool->description();
             $score = $this->score($words, $this->haystack($tool, $description));

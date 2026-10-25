@@ -16,6 +16,7 @@ use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Settings\AiSettings;
@@ -639,6 +640,7 @@ test('a non-streamed turn is never stopped by the disconnect check', function ()
 });
 
 test("RUN_FINISHED names the turn's tool groups", function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([collect(ToolGroup::cases())
         ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($toolGroup === ToolGroup::Playback ? 0.9 : 0.05)])

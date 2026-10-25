@@ -183,3 +183,22 @@ function toolPinsAnswers(): array
         ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($toolGroup === ToolGroup::Playback ? 0.9 : 0.05)])
         ->all();
 }
+
+test('repeated or excess tool group arrays are rejected', function (): void {
+    $admin = User::factory()->admin()->create();
+    $id = pinsConversation($admin);
+    $tooMany = array_merge(array_map(fn (ToolGroup $toolGroup): string => $toolGroup->value, ToolGroup::cases()), ['playback']);
+
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'Hello', 'pinned_tool_groups' => ['indexers', 'indexers']])
+        ->assertJsonValidationErrors('pinned_tool_groups.0');
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'Hello', 'load_tool_groups' => $tooMany])
+        ->assertJsonValidationErrors('load_tool_groups');
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.stream'), ['message' => 'Hello', 'pinned_tool_groups' => $tooMany])
+        ->assertJsonValidationErrors('pinned_tool_groups');
+    $this->actingAs($admin)
+        ->putJson(route('ai.conversations.tool-groups', $id), ['groups' => ['indexers', 'indexers']])
+        ->assertJsonValidationErrors('groups.0');
+});

@@ -244,6 +244,12 @@ test('a template without tool groups exposes an empty list', function (): void {
     expect(new ChatTemplateResource($template)->resolve()['tool_groups'])->toBe([]);
 });
 
+test('a stale stored tool group value is left out of the resource', function (): void {
+    $template = ChatTemplate::factory()->create(['tool_groups' => ['playback', 'removed_group', 'indexers']]);
+
+    expect(new ChatTemplateResource($template)->resolve()['tool_groups'])->toBe(['playback', 'indexers']);
+});
+
 test('unknown or repeated template tool groups are rejected', function (): void {
     $admin = User::factory()->admin()->create();
 

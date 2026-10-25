@@ -41,20 +41,25 @@ class RequestToolsTool extends BaseTool
         $groups = array_map(ToolGroup::from(...), array_values($validated['groups']));
         $chatToolRunContext = resolve(ChatToolRunContext::class);
 
-        if (! $chatToolRunContext->routed instanceof RoutedToolGroups
-            || array_filter($groups, static fn (ToolGroup $toolGroup): bool => in_array($toolGroup, $chatToolRunContext->routed->groups(), true)) !== []) {
-            return [
-                'error' => 'already_loaded',
-                'message' => 'Every tool is already loaded, or one of these groups is. Use the tools directly.',
-            ];
-        }
-
         $available = resolve(ToolGroupCatalogue::class)->available();
 
         if (array_filter($groups, static fn (ToolGroup $toolGroup): bool => ! in_array($toolGroup, $available, true)) !== []) {
             return [
                 'error' => 'not_available',
                 'message' => 'One of these tool groups is not available on this install. Tell the user plainly.',
+            ];
+        }
+
+        $loaded = $chatToolRunContext->routed instanceof RoutedToolGroups
+            ? array_values(array_filter($groups, static fn (ToolGroup $toolGroup): bool => in_array($toolGroup, $chatToolRunContext->routed->groups(), true)))
+            : null;
+
+        if ($loaded === null || $loaded !== []) {
+            return [
+                'error' => 'already_loaded',
+                'message' => $loaded === null
+                    ? 'Every tool is already loaded. Use the tools directly.'
+                    : sprintf('Already loaded: %s. Use those tools directly and request only the groups that are not loaded.', implode(', ', array_map(static fn (ToolGroup $toolGroup): string => $toolGroup->label(), $loaded))),
             ];
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Ai\Routing\ToolGroup;
 use App\Models\ChatTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -44,7 +45,10 @@ class ChatTemplateResource extends JsonResource
                 'model' => $this->model,
                 'reasoning' => $this->reasoning?->value,
             ],
-            'tool_groups' => $this->tool_groups ?? [],
+            'tool_groups' => array_values(array_filter(
+                $this->tool_groups ?? [],
+                static fn (string $value): bool => ToolGroup::tryFrom($value) instanceof ToolGroup,
+            )),
             'last_used_at' => $this->last_used_at?->toIso8601String(),
         ];
     }

@@ -25,8 +25,8 @@ class UpdateConversationToolGroupsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'groups' => ['present', 'array'],
-            'groups.*' => ['string', Rule::enum(ToolGroup::class)],
+            'groups' => ['present', 'array', 'max:'.count(ToolGroup::cases())],
+            'groups.*' => ['string', 'distinct', Rule::enum(ToolGroup::class)],
         ];
     }
 }

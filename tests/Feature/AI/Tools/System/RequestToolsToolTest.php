@@ -42,6 +42,7 @@ test('refuses a group that is already loaded', function (): void {
     $result = requestTools(['groups' => ['playback', 'subtitles_replacement'], 'reason' => 'x']);
 
     expect($result['error'])->toBe('already_loaded')
+        ->and($result['message'])->toContain('Playback')
         ->and($result)->not->toHaveKey('tool_request');
 });
 
@@ -67,4 +68,10 @@ test('rejects more than three groups', function (): void {
 
 test('requires a reason', function (): void {
     expect(requestTools(['groups' => ['playback']])['error'])->toBe('invalid_arguments');
+});
+
+test('checks availability before whether the group is loaded', function (): void {
+    resolve(ChatToolRunContext::class)->routed = new RoutedToolGroups(['playback' => ToolGroupSource::Picked]);
+
+    expect(requestTools(['groups' => ['playback', 'indexers'], 'reason' => 'x'])['error'])->toBe('not_available');
 });

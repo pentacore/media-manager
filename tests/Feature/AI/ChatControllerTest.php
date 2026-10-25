@@ -14,6 +14,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
@@ -422,6 +423,7 @@ test('send returns an action_request card for a queued destructive tool', functi
 });
 
 test('a routed turn stores and returns its tool groups', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([chatRouterAnswers(['playback' => 0.9])]);
     MediaAgent::fake(['Nothing is playing.']);
