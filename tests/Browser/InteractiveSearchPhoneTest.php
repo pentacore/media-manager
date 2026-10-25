@@ -25,7 +25,7 @@ function interactiveSearchPhoneFakeSonarr(): void
             ? Http::response([], 200)
             : Http::response([
                 ['guid' => 'guid-1', 'indexerId' => 3, 'title' => 'Severance.S01.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP', 'indexer' => 'NZBgeek', 'protocol' => 'usenet', 'size' => 9_000_000_000, 'ageHours' => 30, 'rejected' => false, 'rejections' => [], 'quality' => ['quality' => ['name' => 'WEBDL-2160p']]],
-                ['guid' => 'guid-2', 'indexerId' => 4, 'title' => 'Severance.S01.720p.HDTV', 'indexer' => 'Tracker', 'protocol' => 'torrent', 'seeders' => 5, 'size' => 3_000_000_000, 'ageHours' => 400, 'rejected' => true, 'rejections' => ['Not an upgrade'], 'quality' => ['quality' => ['name' => 'HDTV-720p']]],
+                ['guid' => 'guid-2', 'indexerId' => 4, 'title' => 'Severance.S01.720p.HDTV.x264.AAC2.0.Example.Release.Group.With.A.Very.Long.Name', 'indexer' => 'Tracker', 'protocol' => 'torrent', 'seeders' => 5, 'size' => 3_000_000_000, 'ageHours' => 400, 'rejected' => true, 'rejections' => ['Not an upgrade'], 'quality' => ['quality' => ['name' => 'HDTV-720p']]],
             ]),
         'sonarr.local:8989/*' => Http::response([]),
     ]);
@@ -58,6 +58,8 @@ test('release cards fit a phone and Grab sends the release', function (): void {
         ->assertSeeIn("[data-release-card=\"{$second}\"]", 'Not an upgrade')
         ->assertSeeIn("[data-release-card=\"{$second}\"] [data-release-card-grab]", 'Grab anyway')
         ->assertScript(phoneOverflowScript('[role="dialog"]'), '')
+        // Nothing in the dialog is wider than its scrolling body.
+        ->assertScript('(() => { const body = document.querySelector("[data-interactive-search-dialog] [data-slot=\\"dialog-body\\"]"); return body.scrollWidth <= body.clientWidth; })()', true)
         ->click("[data-release-card=\"{$first}\"] [data-release-card-grab]")
         ->assertSee('Release sent to the download client.')
         ->assertNoSmoke();
@@ -94,4 +96,58 @@ test('at desktop width the interactive search keeps its release table', function
 
     $webpage->assertVisible(sprintf('[data-release-row="%s"] [data-release-grab]', hash('sha256', 'guid-1')))
         ->assertMissing('[data-release-cards]');
+});
+
+test('a rejected release grabs from its card, and every Grab waits while one is in flight', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $rejected = hash('sha256', 'guid-2');
+
+    $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-season-card="1"] button')
+        ->click('[data-season-actions="1"] [data-interactive-search]');
+    $webpage->script(interactiveSearchPhoneOpenScript());
+    // Hold the grab request, as a slow indexer would.
+    $webpage->script(<<<'JS'
+        (() => {
+            const original = window.fetch;
+            window.__mmReleaseGrab = () => {};
+            window.fetch = (input, init) => {
+                if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
+                    return new Promise((resolve, reject) => { window.__mmReleaseGrab = () => original(input, init).then(resolve, reject); });
+                }
+                return original(input, init);
+            };
+        })()
+    JS);
+
+    $webpage->click("[data-release-card=\"{$rejected}\"] [data-release-card-grab]");
+    $webpage->script(confirmDialogWaitUntilScript('[...document.querySelectorAll("[data-release-card-grab]")].every((button) => button.disabled)'));
+    $webpage->assertScript('[...document.querySelectorAll("[data-release-card-grab]")].every((button) => button.disabled)', true);
+
+    $webpage->script('window.__mmReleaseGrab()');
+    $webpage->assertSee('Release sent to the download client.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v3/release') && $request['guid'] === 'guid-2');
+});
+
+test('the release dialog close button stays reachable after scrolling the cards on a phone', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->resize(375, 480);
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-season-card="1"] button')
+        ->click('[data-season-actions="1"] [data-interactive-search]');
+    $webpage->script(interactiveSearchPhoneOpenScript());
+
+    $body = 'document.querySelector("[data-interactive-search-dialog] [data-slot=\\"dialog-body\\"]")';
+    $webpage->assertScript(sprintf('%s.scrollHeight > %s.clientHeight', $body, $body), true);
+    $webpage->script(sprintf('(() => { const body = %s; body.scrollTop = body.scrollHeight; })()', $body));
+    $webpage->assertScript(sprintf('%s.scrollTop > 0', $body), true)
+        ->assertScript('(() => { const close = document.querySelector("[data-interactive-search-dialog] [data-slot=\\"dialog-close\\"]"); const rect = close.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight && close.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)); })()', true)
+        ->click('[data-interactive-search-dialog] [data-slot="dialog-close"]');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-interactive-search-dialog]")'));
+    $webpage->assertMissing('[data-interactive-search-dialog]');
 });

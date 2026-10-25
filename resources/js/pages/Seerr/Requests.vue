@@ -826,6 +826,7 @@ const rangeText = computed(() => {
                             type="button"
                             class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Retry"
+                            data-request-retry
                             @click="retryRequest(req)"
                         >
                             <RefreshCw class="size-3.5" />

@@ -154,7 +154,11 @@ test('a member sees grab queue cards with Open but without the admin menu or che
     $this->actingAs(User::factory()->member()->create());
 
     $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
 
+    // With a service picked an admin gets checkboxes; a member still does not.
+    $webpage->click('[data-service-filter="sonarr"]');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[data-service-filter=\\"sonarr\\"]").classList.contains("bg-accent")'));
     $webpage->assertVisible('[data-queue-card="sonarr-41"] [data-queue-card-open]')
         ->assertCount('[data-queue-card-menu]', 0)
         ->assertCount('[data-queue-card-select]', 0);

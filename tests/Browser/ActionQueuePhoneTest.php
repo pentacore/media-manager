@@ -14,7 +14,7 @@ beforeEach(function (): void {
 });
 
 test('action cards fit a phone and show the type, target, status, age and failure reason', function (): void {
-    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "'.str_repeat('Severance', 8).'"']);
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'type' => 'monitor_series', 'target_service' => 'radarr', 'title' => 'Monitor series "'.str_repeat('Severance', 8).'"', 'created_at' => now()->subMinutes(30)]);
     $failed = ActionRequest::factory()->described()->failed()->create();
     $this->actingAs(User::factory()->member()->create());
 
@@ -22,7 +22,10 @@ test('action cards fit a phone and show the type, target, status, age and failur
 
     $webpage->assertVisible(sprintf('[data-action-card="%d"]', $pending->id))
         ->assertSeeIn(sprintf('[data-action-card="%d"] [data-action-card-title]', $pending->id), 'SeveranceSeverance')
-        ->assertSeeIn(sprintf('[data-action-card="%d"]', $pending->id), "act_{$pending->id}")
+        ->assertSeeIn(sprintf('[data-action-card="%d"]', $pending->id), "act_{$pending->id} · monitor_series")
+        // The target: only its service chip says radarr on this card.
+        ->assertSeeIn(sprintf('[data-action-card="%d"]', $pending->id), 'radarr')
+        ->assertSeeIn(sprintf('[data-action-card="%d"] time', $pending->id), '30m ago')
         ->assertSeeIn(sprintf('[data-action-card="%d"]', $pending->id), 'Pending')
         ->assertSeeIn(sprintf('[data-action-card-failure="%d"]', $failed->id), 'Execution failed')
         ->assertMissing(sprintf('[data-action-row="%d"]', $pending->id))

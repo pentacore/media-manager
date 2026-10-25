@@ -125,7 +125,14 @@ test('a last-week day popover stays on screen on a phone, short ones too, and Es
         $webpage->click(sprintf('[data-calendar-day-open="%s"]', $day));
         $webpage->script(calendarPhonePopoverSettledScript($day));
         $webpage->assertScript(calendarPhonePopoverOnScreenScript($day), true)
-            ->keys(sprintf('[data-calendar-day-popover="%s"]', $day), 'Escape');
+            // The day heading stays in view above the item list.
+            ->assertScript(sprintf('(() => { const heading = document.querySelector("[data-calendar-day-popover=\\"%s\\"] h3").getBoundingClientRect(); return heading.height > 0 && heading.top >= 0 && heading.bottom <= window.innerHeight; })()', $day), true);
+        if ($day === '2026-09-10') {
+            // Four episodes do not fit the capped popover: the list scrolls.
+            $webpage->assertScript('(() => { const list = document.querySelector("[data-calendar-day-popover=\\"2026-09-10\\"] h3").nextElementSibling; const before = list.scrollHeight > list.clientHeight; list.scrollTop = list.scrollHeight; return before && list.scrollTop > 0; })()', true);
+        }
+
+        $webpage->keys(sprintf('[data-calendar-day-popover="%s"]', $day), 'Escape');
         $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-calendar-day-popover]")'));
     }
 });

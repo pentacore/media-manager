@@ -13,6 +13,7 @@ function browsePhoneFakeSeerrRequests(): void
     Http::fake([
         'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 0, 'tv' => 1]),
         'seerr.local:5055/api/v1/request/1/approve' => Http::response(['id' => 1, 'status' => 2]),
+        'seerr.local:5055/api/v1/request/1/retry' => Http::response(['id' => 1, 'status' => 2]),
         'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1], 'results' => [
             ['id' => 1, 'status' => 1, 'type' => 'tv', 'media' => ['mediaType' => 'tv', 'tmdbId' => 95396, 'tvdbId' => 371980, 'status' => 3],
                 'requestedBy' => ['displayName' => 'Example Requester With A Long Name', 'email' => 'requester@example.com'], 'createdAt' => '2026-10-01T00:00:00Z', 'seasons' => [['seasonNumber' => 1]]],
@@ -55,11 +56,65 @@ test("an admin's request card keeps Approve, Decline, edit and delete on the car
     $webpage->keys('[role="dialog"]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[role=\"dialog\"]")'));
 
+    $webpage->click('[data-request-card="1"] [data-request-retry]')
+        ->assertSee('Request retry triggered.');
+
     $webpage->click('[data-request-card="1"] [data-request-approve]')
         ->assertSee('Request approved.')
         ->assertNoSmoke();
 
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v1/request/1/retry'));
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v1/request/1/approve'));
+});
+
+test("a member's request card has no edit, retry or delete on a phone", function (): void {
+    browsePhoneFakeSeerrRequests();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-request-card=\\"1\\"]")'));
+
+    $webpage->assertVisible('[data-request-card="1"] [data-request-approve]')
+        ->assertCount('[data-request-card="1"] [data-request-edit]', 0)
+        ->assertCount('[data-request-card="1"] [data-request-retry]', 0)
+        ->assertCount('[data-request-card="1"] [data-request-delete]', 0)
+        ->assertScript(phoneOverflowScript('main'), '')
+        ->assertNoSmoke();
+});
+
+test("a TV title's sheet keeps its season picker and the requester select on a phone", function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response(['results' => [
+            ['id' => 95396, 'mediaType' => 'tv', 'name' => 'Severance', 'firstAirDate' => '2022-02-17', 'posterPath' => '/poster.jpg'],
+        ]]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [
+            ['id' => 7, 'displayName' => 'Example Requester With A Long Name', 'email' => 'requester@example.com'],
+        ]]),
+        'seerr.local:5055/api/v1/tv/95396' => Http::response(['id' => 95396, 'name' => 'Severance', 'firstAirDate' => '2022-02-17', 'overview' => 'Work and life, split.', 'seasons' => [
+            ['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9],
+            ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10],
+        ]]),
+        'seerr.local:5055/*' => Http::response([]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.search.index', ['q' => 'severance'], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-search-title="tv-95396"]')
+        ->assertSeeIn('[data-title-sheet]', 'Work and life, split.')
+        ->assertVisible('[data-title-sheet] [data-season-option="1"]')
+        ->assertVisible('[data-title-sheet] [data-season-option="2"]')
+        ->assertScript(phoneOverflowScript('[data-title-sheet]'), '');
+    // The season picker toggles from a tap (whatever it starts as).
+    $webpage->script('(() => { window.__mmSeasonState = document.querySelector("[data-title-sheet] [data-season-option=\\"2\\"] [role=\\"checkbox\\"]").getAttribute("data-state"); })()');
+    $webpage->click('[data-title-sheet] [data-season-option="2"] [role="checkbox"]')
+        ->assertScript('document.querySelector("[data-title-sheet] [data-season-option=\\"2\\"] [role=\\"checkbox\\"]").getAttribute("data-state") !== window.__mmSeasonState', true)
+        ->assertScript('(() => { const trigger = document.querySelector("[data-title-sheet] [data-slot=\\"select-trigger\\"]").getBoundingClientRect(); return trigger.left >= 0 && trigger.right <= window.innerWidth; })()', true)
+        ->click('[data-title-sheet] [data-slot="select-trigger"]')
+        ->assertScript('(() => { const list = document.querySelector("[role=\\"listbox\\"]").getBoundingClientRect(); return list.left >= 0 && list.right <= window.innerWidth; })()', true)
+        ->assertNoSmoke();
 });
 
 test('a viewer finds a title in Search and requests it from the full-width sheet on a phone', function (): void {
@@ -86,6 +141,8 @@ test('a viewer finds a title in Search and requests it from the full-width sheet
         ->click('[data-request-submit]')
         ->assertSee('Request submitted.')
         ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v1/request') && $request['mediaType'] === 'movie' && $request['mediaId'] === 438631);
 });
 
 test('discover cards are wide enough to tap and snap as the row scrolls on a phone', function (): void {

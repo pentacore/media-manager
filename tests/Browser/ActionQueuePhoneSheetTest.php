@@ -207,3 +207,23 @@ test('a review still in flight when a deep-linked sheet closes does not bring th
         ->assertNoSmoke();
     expect($older->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
+
+test('a live status change reaches the action card on a phone', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Severance"']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertSeeIn(sprintf('[data-action-card="%d"]', $actionRequest->id), 'Pending');
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $actionRequest->id, 'status' => 'approved', 'result' => null,
+        'updated_at' => $actionRequest->updated_at->addSeconds(60)->toISOString(),
+        'status_version' => $actionRequest->status_version + 1,
+    ], 3));
+    $webpage->script(confirmDialogWaitUntilScript(sprintf("document.body.innerText.includes('Request #%d is now approved')", $actionRequest->id)));
+
+    $webpage->assertSeeIn(sprintf('[data-action-card="%d"]', $actionRequest->id), 'Approved')
+        ->assertCount(sprintf('[data-action-card-select="%d"]', $actionRequest->id), 0)
+        ->assertNoSmoke();
+});

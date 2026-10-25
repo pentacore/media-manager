@@ -66,7 +66,10 @@ function mobileLayoutFakeServices(): void
             'size' => 1_000_000_000, 'sizeleft' => 500_000_000, 'timeleft' => '00:05:00', 'statusMessages' => [],
             'added' => '2026-09-29T10:00:00Z', 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'downloadId' => 'SABnzbd_nzo_41',
         ]]]),
-        'sonarr.local:8989/api/v3/series/7*' => Http::response(mobileLayoutSeries(7, 'Severance') + ['overview' => 'An example overview.']),
+        'sonarr.local:8989/api/v3/series/7*' => Http::response(array_merge(mobileLayoutSeries(7, 'Severance'), [
+            'overview' => 'An example overview.',
+            'seasons' => [['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 1, 'episodeFileCount' => 1, 'totalEpisodeCount' => 1, 'sizeOnDisk' => 1_000_000_000]]],
+        ])),
         'sonarr.local:8989/api/v3/episode*' => Http::response([
             ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long', 'airDate' => '2022-02-18', 'hasFile' => true, 'monitored' => true],
         ]),
@@ -109,6 +112,13 @@ function mobileLayoutFakeServices(): void
         ]]),
         'seerr.local:5055/api/v1/tv/*' => Http::response(['id' => 95396, 'name' => 'The Extraordinarily Long Example Series Title Of Doom', 'posterPath' => '/example.jpg', 'firstAirDate' => '2022-02-17']),
         'seerr.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [['id' => 7, 'email' => 'requester@example.com', 'displayName' => 'Example Requester']]]),
+        'seerr.local:5055/api/v1/discover/trending*' => Http::response(['results' => [
+            ['id' => 95396, 'mediaType' => 'tv', 'name' => 'The Extraordinarily Long Example Series Title Of Doom', 'firstAirDate' => '2022-02-17', 'posterPath' => '/example.jpg'],
+            ['id' => 438631, 'mediaType' => 'movie', 'title' => 'Dune', 'releaseDate' => '2021-10-22', 'posterPath' => '/dune.jpg'],
+        ]]),
+        'seerr.local:5055/api/v1/search*' => Http::response(['results' => [
+            ['id' => 438631, 'mediaType' => 'movie', 'title' => 'Dune: An Extremely Long Example Movie Title That Wraps', 'releaseDate' => '2021-10-22', 'posterPath' => '/dune.jpg'],
+        ]]),
         'seerr.local:5055/*' => Http::response([]),
     ]);
 
@@ -210,12 +220,14 @@ dataset('mobile layout member pages', [
     'dashboard' => ['dashboard', '[data-dashboard-review-queue]'],
     'series' => ['media.series.index', '[data-add-series]'],
     'movies' => ['media.movies.index', '[data-add-movie]'],
-    'series detail' => ['media.series.show', '[data-series-actions]', null, ['id' => 7]],
-    'movie detail' => ['media.movies.show', '[data-movie-actions]', null, ['id' => 10]],
-    'search' => ['media.search.index', null],
-    'discover' => ['media.discover.index', null],
+    // The detail rows wait for their deferred episodes / quality profiles.
+    'series detail' => ['media.series.show', '[data-series-actions]', '[data-season-card="1"]', ['id' => 7]],
+    'movie detail' => ['media.movies.show', '[data-movie-actions]', '[data-movie-actions] [data-quality-profile-trigger]', ['id' => 10]],
+    'search' => ['media.search.index', null, '[data-search-title="movie-438631"]', ['q' => 'dune']],
+    'discover' => ['media.discover.index', null, '[data-discover-row="trending"] [data-title-card]'],
     'requests' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
-    'my requests' => ['media.requests.mine', null],
+    // The member is the fixture's Seerr requester, so this lists request 1.
+    'my requests' => ['media.requests.mine', null, '[data-my-request="1"]'],
     // Agenda is the phone default; the settle waits for it.
     'calendar' => ['media.calendar.index', null, '[data-calendar-agenda]'],
     'grab queue' => ['media.library.activity.queue', '[data-activity-refresh]'],
@@ -256,7 +268,7 @@ dataset('mobile layout admin pages', [
  */
 test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
     mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create(['name' => 'Example Member']));
+    $this->actingAs(User::factory()->member()->create(['name' => 'Example Member', 'email' => 'requester@example.com']));
 
     mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout member pages');
