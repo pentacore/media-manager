@@ -18,6 +18,12 @@ final class DefaultRubrics
 
     private const int HISTORY_CHARS = 500;
 
+    private const int TRANSCRIPT_TURNS = 20;
+
+    private const int TRANSCRIPT_CHARS = 1500;
+
+    private const string SCRIPTED_RUBRIC = 'Judge the whole conversation: does each reply follow from the earlier turns, stay consistent with what the assistant said before, and answer the last message?';
+
     private const int TOOL_RESULTS = 20;
 
     private const int TOOL_RESULT_CHARS = 2000;
@@ -36,12 +42,14 @@ final class DefaultRubrics
      * @param  list<array{role: string, content: string}>  $history
      * @param  list<array{tool: string, arguments: array<string, mixed>, result: string}>  $toolResults
      * @param  AiMode|null  $mode  the chat mode the candidate ran in, so the judge can grade mode compliance
+     * @param  list<array{label: string, name: string, mime_type: string}>  $attachments
+     * @param  list<array{role: string, content: string, attachments?: list<string>}>  $transcript  the candidate's scripted conversation; replaces $history when not empty
      */
-    public static function judgePrompt(AiTask $task, string $prompt, array $history, array $toolResults, string $output, ?string $rubricNote, ?AiMode $mode = null): string
+    public static function judgePrompt(AiTask $task, string $prompt, array $history, array $toolResults, string $output, ?string $rubricNote, ?AiMode $mode = null, array $attachments = [], array $transcript = []): string
     {
         $sections = [
             "TASK\n".$task->label(),
-            "RUBRIC\n".self::for($task),
+            "RUBRIC\n".self::for($task).($transcript === [] ? '' : "\n".self::SCRIPTED_RUBRIC),
         ];
 
         if ($mode instanceof AiMode) {
@@ -52,13 +60,30 @@ final class DefaultRubrics
             $sections[] = "CASE NOTE\n".$rubricNote;
         }
 
-        $turns = array_map(
-            static fn (array $turn): string => sprintf('%s: %s', $turn['role'], mb_substr($turn['content'], 0, self::HISTORY_CHARS)),
-            array_slice($history, -self::HISTORY_TURNS),
-        );
+        if ($transcript !== []) {
+            $turns = array_map(
+                static fn (array $turn): string => sprintf('%s: %s', $turn['role'], mb_substr($turn['content'], 0, self::TRANSCRIPT_CHARS)),
+                array_slice($transcript, -self::TRANSCRIPT_TURNS),
+            );
 
-        $sections[] = 'CONVERSATION (last '.self::HISTORY_TURNS." turns)\n".($turns === [] ? '(none)' : implode("\n", $turns));
+            $sections[] = 'CONVERSATION (candidate transcript, last '.self::TRANSCRIPT_TURNS." turns)\n".implode("\n", $turns);
+        } else {
+            $turns = array_map(
+                static fn (array $turn): string => sprintf('%s: %s', $turn['role'], mb_substr($turn['content'], 0, self::HISTORY_CHARS)),
+                array_slice($history, -self::HISTORY_TURNS),
+            );
+
+            $sections[] = 'CONVERSATION (last '.self::HISTORY_TURNS." turns)\n".($turns === [] ? '(none)' : implode("\n", $turns));
+        }
+
         $sections[] = "USER PROMPT\n".$prompt;
+
+        if ($attachments !== []) {
+            $sections[] = "ATTACHMENTS\n".implode("\n", array_map(
+                static fn (array $attachment): string => sprintf('%s: %s (%s)', $attachment['label'], $attachment['name'], $attachment['mime_type']),
+                $attachments,
+            ));
+        }
 
         $results = array_map(
             static fn (array $call): string => sprintf(

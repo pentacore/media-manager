@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\TitleAgent;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -178,7 +179,7 @@ test('the drill-down offers to save a capturable invocation as a benchmark case'
 });
 
 test('the drill-down explains why an invocation cannot be captured', function (): void {
-    $record = AiUsageRecord::factory()->create(['prompt_text' => "Look\n\nAttachments: a.png"]);
+    $record = AiUsageRecord::factory()->create(['agent_class' => TitleAgent::class, 'prompt_text' => "Look\n\nAttachments: a.png"]);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-usage.index', absolute: false))

@@ -370,3 +370,27 @@ test('a checked run without regressions says so', function (): void {
         ->assertNoSmoke()
         ->assertSeeIn('[data-benchmark-no-regression]', 'No earlier comparable run');
 });
+
+test('the drawer shows a scripted result transcript with its attachment names', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['name' => 'Dune follow-up', 'input' => ['prompt' => 'And the sequel?', 'conversation' => 'scripted']]);
+    $run = BenchmarkRun::factory()->completed()->withCandidates([
+        ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => 'provider_default'],
+    ])->create(['judge' => ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => null], 'case_ids' => [$benchmarkCase->id]]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->scored(0.9, true)->create([
+        'output' => 'Part Two is missing.',
+        'score_detail' => ['score_10' => 9, 'rationale' => 'Consistent', 'tool_log' => [], 'transcript' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => ['download.log']],
+            ['role' => 'assistant', 'content' => 'Yes, Dune is there.', 'attachments' => []],
+        ]],
+    ]);
+
+    visit(route('admin.benchmarks.runs.show', $run, absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-benchmark-cell="%d"]', $benchmarkResult->id))
+        ->assertVisible('[data-benchmark-drawer-transcript]')
+        ->assertSeeIn('[data-benchmark-drawer-turn="0"]', 'Is Dune in the library?')
+        ->assertSeeIn('[data-benchmark-drawer-turn="0"] [data-benchmark-drawer-turn-attachments]', 'download.log')
+        ->assertSeeIn('[data-benchmark-drawer-turn="1"]', 'Candidate')
+        ->assertSeeIn('[data-benchmark-drawer-turn="1"]', 'Yes, Dune is there.');
+});
