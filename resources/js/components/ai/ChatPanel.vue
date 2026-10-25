@@ -568,7 +568,7 @@ function newConversation(): void {
         :class="
             cn(
                 'flex min-h-0 flex-col',
-                isSheet ? 'h-full' : 'h-[calc(100vh-3.25rem)]',
+                isSheet ? 'h-full' : 'h-[calc(100dvh-3.25rem)]',
             )
         "
     >

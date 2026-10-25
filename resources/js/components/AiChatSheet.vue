@@ -11,6 +11,7 @@ import {
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiChatWidth } from '@/composables/useAiChatWidth';
 import { useCan } from '@/composables/useCan';
+import { useVisualViewport } from '@/composables/useVisualViewport';
 import { cn } from '@/lib/utils';
 import ChatPanel from './ai/ChatPanel.vue';
 
@@ -36,9 +37,26 @@ const {
 /** Below `sm` the sheet stays full-width, so the pixel width doesn't apply. */
 const isResizable = useMediaQuery('(min-width: 640px)');
 
-const contentStyle = computed(() =>
-    isResizable.value ? { width: `${width.value}px` } : undefined,
-);
+const { height: visibleHeight, offsetTop: visibleTop } = useVisualViewport();
+
+/**
+ * From `sm` the sheet is resizable and as tall as the window. Below `sm` it
+ * is full width and fills the *visible* viewport, so the on-screen keyboard
+ * shrinks it and the composer stays above the keyboard.
+ */
+const contentStyle = computed(() => {
+    if (isResizable.value) {
+        return { width: `${width.value}px` };
+    }
+
+    return visibleHeight.value === null
+        ? undefined
+        : {
+              top: `${visibleTop.value}px`,
+              bottom: 'auto',
+              height: `${visibleHeight.value}px`,
+          };
+});
 </script>
 
 <template>

@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { Check, Pencil, Sparkles, X } from '@lucide/vue';
+import { Check, MoreHorizontal, Pencil, Sparkles, X } from '@lucide/vue';
 import { nextTick, ref, useTemplateRef } from 'vue';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import { useAiChat } from '@/composables/useAiChat';
 import { cn } from '@/lib/utils';
+import ChatModelOptions from './ChatModelOptions.vue';
 import ChatModelPicker from './ChatModelPicker.vue';
 import ConversationPicker from './ConversationPicker.vue';
 import type { ChatMode, ChatOverride, ModelOptions } from './types';
@@ -29,6 +35,9 @@ const emit = defineEmits<{
 }>();
 
 const { activeConversationId, renameConversation } = useAiChat();
+
+/** The phone header's ⋯ panel (mode and model). */
+const optionsOpen = ref(false);
 
 const renaming = ref(false);
 const renameDraft = ref('');
@@ -86,16 +95,23 @@ function onRenameKey(event: KeyboardEvent): void {
         :class="
             cn(
                 'flex items-center justify-between gap-3 border-b border-border',
-                isSheet ? 'px-4 py-3' : 'px-6 py-3.5',
+                isSheet ? 'px-4 py-3 max-sm:pr-14' : 'px-6 py-3.5',
             )
         "
     >
-        <div class="flex items-center gap-2.5">
+        <div
+            :class="
+                cn(
+                    'flex items-center gap-2.5 max-sm:min-w-0',
+                    renaming ? 'max-sm:flex-1' : 'max-sm:shrink-0',
+                )
+            "
+        >
             <Sparkles class="size-4 text-accent" />
             <span
                 v-if="!renaming"
                 :title="title"
-                class="max-w-[360px] truncate font-semibold"
+                class="max-w-[360px] truncate font-semibold max-sm:hidden"
                 data-chat-title
             >
                 {{ title }}
@@ -104,7 +120,7 @@ function onRenameKey(event: KeyboardEvent): void {
                 v-else
                 ref="renameInput"
                 v-model="renameDraft"
-                class="h-7 w-44 text-sm"
+                class="h-7 w-44 text-sm max-sm:w-auto max-sm:min-w-0 max-sm:flex-1"
                 data-chat-rename-input
                 @keydown="onRenameKey"
             />
@@ -133,7 +149,7 @@ function onRenameKey(event: KeyboardEvent): void {
                 v-else-if="activeConversationId"
                 variant="ghost"
                 size="sm"
-                class="size-7 p-0 text-muted-foreground hover:text-foreground"
+                class="size-7 p-0 text-muted-foreground hover:text-foreground max-sm:hidden"
                 title="Rename conversation"
                 data-chat-rename
                 @click="startRename"
@@ -143,38 +159,95 @@ function onRenameKey(event: KeyboardEvent): void {
         </div>
         <div class="flex min-w-0 items-center gap-1.5">
             <ConversationPicker
+                :class="cn('max-sm:min-w-0', renaming && 'max-sm:hidden')"
                 @select="emit('select', $event)"
                 @new="emit('new')"
                 @rename="startRename"
             />
-            <ChatModelPicker
-                v-model="override"
-                :options="modelOptions"
-                :disabled="modelLocked"
-                @change="emit('overrideChange', $event)"
-            />
-            <div
-                v-if="!isSheet"
-                class="ml-2 flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
-            >
-                <button
-                    v-for="m in ['advisory', 'executive'] as const"
-                    :key="m"
-                    type="button"
-                    :data-chat-mode="m"
-                    :class="
-                        cn(
-                            'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
-                            mode === m
-                                ? 'bg-accent text-accent-foreground'
-                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                        )
-                    "
-                    @click="mode = m"
+            <div class="hidden items-center gap-1.5 sm:contents">
+                <ChatModelPicker
+                    v-model="override"
+                    :options="modelOptions"
+                    :disabled="modelLocked"
+                    @change="emit('overrideChange', $event)"
+                />
+                <div
+                    v-if="!isSheet"
+                    class="ml-2 flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
                 >
-                    {{ m }}
-                </button>
+                    <button
+                        v-for="m in ['advisory', 'executive'] as const"
+                        :key="m"
+                        type="button"
+                        :data-chat-mode="m"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
+                                mode === m
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="mode = m"
+                    >
+                        {{ m }}
+                    </button>
+                </div>
             </div>
+            <Popover v-model:open="optionsOpen">
+                <PopoverTrigger as-child>
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        class="size-8 sm:hidden"
+                        aria-label="Chat options"
+                        data-chat-options
+                    >
+                        <MoreHorizontal class="size-4" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                    align="end"
+                    class="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-4"
+                    data-chat-options-panel
+                >
+                    <div class="flex flex-col gap-1.5">
+                        <span class="text-xs font-medium text-muted-foreground">
+                            Mode
+                        </span>
+                        <div
+                            class="flex gap-1 rounded-md border border-border bg-bg-elev p-0.5"
+                            role="group"
+                            aria-label="Chat mode"
+                        >
+                            <button
+                                v-for="m in ['advisory', 'executive'] as const"
+                                :key="m"
+                                type="button"
+                                :aria-pressed="mode === m"
+                                :data-chat-menu-mode="m"
+                                :class="
+                                    cn(
+                                        'touch-target inline-flex h-9 flex-1 items-center justify-center rounded px-2 text-xs font-medium capitalize transition-colors',
+                                        mode === m
+                                            ? 'bg-accent text-accent-foreground'
+                                            : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                                    )
+                                "
+                                @click="mode = m"
+                            >
+                                {{ m }}
+                            </button>
+                        </div>
+                    </div>
+                    <ChatModelOptions
+                        v-model="override"
+                        :options="modelOptions"
+                        :disabled="modelLocked"
+                        @change="emit('overrideChange', $event)"
+                    />
+                </PopoverContent>
+            </Popover>
         </div>
     </div>
 </template>

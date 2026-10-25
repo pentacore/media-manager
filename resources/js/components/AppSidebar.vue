@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
-import { computed, onMounted, onUnmounted } from 'vue';
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import { computed, nextTick, onMounted, onUnmounted } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import AppVersion from '@/components/AppVersion.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -54,6 +53,15 @@ function closeMobileOnLinkClick(event: MouseEvent): void {
     ) {
         setOpenMobile(false);
     }
+}
+
+/**
+ * The phone sidebar is itself a sheet. Close it, then open the chat sheet on
+ * the next tick, so the two modal layers never fight over focus.
+ */
+function openChatFromMobile(): void {
+    setOpenMobile(false);
+    void nextTick(() => openChat());
 }
 
 const navGroups = useNavItems(useNavCounts());
@@ -121,11 +129,15 @@ const showAiAffordance = computed(() => aiEnabled.value && isAdmin.value);
                             ⌘J
                         </kbd>
                     </SidebarMenuButton>
-                    <SidebarMenuButton v-else as-child>
-                        <Link :href="AIChatController.index.url()">
-                            <Sparkles />
-                            <span>AI Assistant</span>
-                        </Link>
+                    <SidebarMenuButton
+                        v-else
+                        as="button"
+                        type="button"
+                        data-sidebar-ai-chat
+                        @click="openChatFromMobile"
+                    >
+                        <Sparkles />
+                        <span>AI Assistant</span>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             </SidebarMenu>

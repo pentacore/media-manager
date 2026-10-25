@@ -59,3 +59,6 @@ The sheet opens from a card (`openSheet`) or, on a phone, from a `?request=<id>`
 - **A bar without `#primary`** keeps the wrapping row at every width. The library bars do this, because their quality-profile `Select` cannot live in a menu.
 
 `BulkBarPhoneTest` pins the height, the menu, select-all, the clear and the frozen state during a run.
+
+## The AI chat is a sheet on a phone
+The chat opens from the header's AI button (`[data-header-ai-chat-sheet]`, `sm:hidden`) and from the phone sidebar's "AI Assistant" button (`[data-sidebar-ai-chat]`, which closes the sidebar first) as the full-width `AiChatSheet`, never by navigating to `/ai/chat`; desktop keeps the header link and the ⌘J footer button. On a phone `ChatHeader` keeps the conversation picker and a ⋯ popover (`[data-chat-options]`) with the mode buttons and `ChatModelOptions`, the single model/reasoning editor that the desktop chip's popover (`ChatModelPicker`) renders too. While renaming on a phone the picker hides and the rename row flexes, so it never overlaps the ⋯ or the sheet's fixed close X. Never fork the model controls; `ChatSheetPhoneTest` and `ChatModelOverrideTest` pin it.
