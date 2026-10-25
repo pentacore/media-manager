@@ -141,7 +141,7 @@ function dayLabel(day: string): string {
                     <PopoverContent
                         align="start"
                         :collision-padding="isPhone ? 16 : 0"
-                        class="w-96 max-w-[calc(100vw-2rem)] p-0 max-sm:w-[calc(100vw-2rem)]"
+                        class="w-96 max-w-[calc(100vw-2rem)] p-0 max-sm:flex max-sm:max-h-(--reka-popover-content-available-height) max-sm:w-[calc(100vw-2rem)] max-sm:flex-col"
                         :data-calendar-day-popover="day"
                     >
                         <h3
@@ -149,7 +149,7 @@ function dayLabel(day: string): string {
                         >
                             {{ dayHeading(day) }}
                         </h3>
-                        <div class="max-h-96 overflow-y-auto">
+                        <div class="max-h-96 overflow-y-auto max-sm:min-h-0">
                             <CalendarItem
                                 v-for="item in itemsOn(day)"
                                 :key="item.key"

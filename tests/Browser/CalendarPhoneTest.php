@@ -16,6 +16,22 @@ function calendarPhonePoster(): array
     return [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
 }
 
+/**
+ * The day popover's box sits inside the viewport on both axes, once its open animation has finished.
+ */
+function calendarPhonePopoverOnScreenScript(string $day): string
+{
+    return sprintf('(() => { const rect = document.querySelector("[data-calendar-day-popover=\\"%s\\"]").getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight && Math.abs(rect.left - 16) <= 1 && Math.abs(rect.right - (window.innerWidth - 16)) <= 1; })()', $day);
+}
+
+/**
+ * Waits until the day popover is open and its open animation has finished.
+ */
+function calendarPhonePopoverSettledScript(string $day): string
+{
+    return confirmDialogWaitUntilScript(sprintf('!!document.querySelector("[data-calendar-day-popover=\\"%1$s\\"]") && document.querySelector("[data-calendar-day-popover=\\"%1$s\\"]").getAnimations().length === 0', $day));
+}
+
 beforeEach(function (): void {
     $this->travelTo(CarbonImmutable::parse('2026-09-15T12:00:00Z'));
     $this->seed(ActionTypeConfigSeeder::class);
@@ -33,9 +49,10 @@ beforeEach(function (): void {
     Http::fake([
         'sonarr.local:8989/api/v3/calendar*' => Http::response($episodes),
         'sonarr.local:8989/*' => Http::response([]),
-        'radarr.local:7878/api/v3/calendar*' => Http::response([[
-            'id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-24T00:00:00Z', 'images' => calendarPhonePoster(),
-        ]]),
+        'radarr.local:7878/api/v3/calendar*' => Http::response([
+            ['id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-24T00:00:00Z', 'images' => calendarPhonePoster()],
+            ['id' => 11, 'title' => 'An Example Movie In The Last Week', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-29T00:00:00Z', 'images' => calendarPhonePoster()],
+        ]),
         'radarr.local:7878/*' => Http::response([]),
     ]);
 });
@@ -51,7 +68,7 @@ test('the calendar opens in Agenda on a phone and its rows fit', function (): vo
         ->assertCount('[data-calendar-day]', 0)
         ->assertScript(phoneOverflowScript('main'), '')
         ->assertScript('[...document.querySelectorAll("[data-calendar-agenda] [data-search-now]")].every((button) => { const rect = button.getBoundingClientRect(); return rect.right <= window.innerWidth; })', true)
-        ->assertScript('[...document.querySelectorAll("[data-calendar-agenda] [data-calendar-item]")].every((row) => { const title = row.querySelector("[data-calendar-item-title]").getBoundingClientRect(); const search = row.querySelector("[data-search-now]").getBoundingClientRect(); return title.width >= 240 && search.top >= title.bottom; })', true)
+        ->assertScript('[...document.querySelectorAll("[data-calendar-agenda] [data-calendar-item]")].every((row) => { const titleElement = row.querySelector("[data-calendar-item-title]"); const title = titleElement.getBoundingClientRect(); const search = row.querySelector("[data-search-now]").getBoundingClientRect(); return title.width >= 240 && titleElement.scrollWidth <= titleElement.clientWidth && titleElement.scrollHeight <= titleElement.clientHeight && search.top >= title.bottom; })', true)
         ->assertNoSmoke();
 });
 
@@ -74,6 +91,43 @@ test('the month grid shows dots per day on a phone and a tapped day opens a full
     $webpage->assertScript('(() => { const rect = document.querySelector("[data-calendar-day-popover=\"2026-09-10\"]").getBoundingClientRect(); return Math.abs(rect.left - 16) <= 1 && Math.abs(rect.right - (window.innerWidth - 16)) <= 1; })()', true)
         ->assertVisible('[data-calendar-day-popover="2026-09-10"] [data-calendar-item]:first-child [data-search-now]')
         ->assertNoSmoke();
+});
+
+test('a day dot takes its service colour on a phone', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.calendar.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-calendar-view="month"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-calendar-day-open=\"2026-09-24\"]")'));
+
+    $webpage->assertScript('(() => { const radarr = document.querySelectorAll("[data-calendar-day-open=\"2026-09-24\"] [data-calendar-day-dots] > span.rounded-full"); const sonarr = document.querySelector("[data-calendar-day-open=\"2026-09-10\"] [data-calendar-day-dots] > span.rounded-full"); return radarr.length === 1 && radarr[0].classList.contains("bg-svc-radarr") && sonarr.classList.contains("bg-svc-sonarr") && getComputedStyle(radarr[0]).backgroundColor !== getComputedStyle(sonarr).backgroundColor; })()', true);
+});
+
+test('a last-week day popover stays on screen on a phone, short ones too, and Escape returns focus to the day', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.calendar.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-calendar-view="month"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-calendar-day-open=\"2026-09-29\"]")'));
+
+    $webpage->click('[data-calendar-day-open="2026-09-29"]');
+    $webpage->script(calendarPhonePopoverSettledScript('2026-09-29'));
+    $webpage->assertScript(calendarPhonePopoverOnScreenScript('2026-09-29'), true)
+        ->assertVisible('[data-calendar-day-popover="2026-09-29"] [data-search-now]')
+        ->keys('[data-calendar-day-popover="2026-09-29"]', 'Escape');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-calendar-day-popover]")'));
+    $webpage->assertScript('document.activeElement === document.querySelector("[data-calendar-day-open=\"2026-09-29\"]")', true);
+
+    $webpage->resize(375, 600);
+    foreach (['2026-09-10', '2026-09-24', '2026-09-29'] as $day) {
+        $webpage->click(sprintf('[data-calendar-day-open="%s"]', $day));
+        $webpage->script(calendarPhonePopoverSettledScript($day));
+        $webpage->assertScript(calendarPhonePopoverOnScreenScript($day), true)
+            ->keys(sprintf('[data-calendar-day-popover="%s"]', $day), 'Escape');
+        $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-calendar-day-popover]")'));
+    }
 });
 
 test('the calendar view toggles are 40 px targets on a phone', function (): void {
