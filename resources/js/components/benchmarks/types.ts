@@ -1,6 +1,6 @@
 import type { AiReasoningLevel, BenchmarkJudgeStatus } from '@/typefinder';
 
-export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge';
+export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge' | 'verdict';
 
 type JsonScalar = string | number | boolean | null;
 
@@ -249,6 +249,10 @@ export type BenchmarkMatrixCandidate = {
     latency_p50: number | null;
     latency_p95: number | null;
     tool_misses: number;
+    /** Verdicts that wrongly agreed; null when the task is not verdict-scored. */
+    missed: number | null;
+    /** Verdicts that wrongly disagreed; null when the task is not verdict-scored. */
+    false_alarms: number | null;
 };
 
 export type BenchmarkMatrixCell = {
@@ -267,6 +271,7 @@ export type BenchmarkMatrixCell = {
 export type BenchmarkMatrixTask = {
     task: string;
     task_label: string;
+    verdict: boolean;
     candidates: BenchmarkMatrixCandidate[];
     /** The most results any candidate has scored; only candidates at it can be best by score or pass rate. */
     max_scored: number;
@@ -324,6 +329,10 @@ export type BenchmarkResultDetail = {
             extra?: unknown[];
             mismatches?: unknown[];
             error?: string;
+            expected_agrees?: boolean;
+            agrees?: boolean | null;
+            reason?: string | null;
+            error_kind?: 'missed' | 'false_alarm' | 'no_verdict' | null;
         };
         error: string | null;
         tool_log: BenchmarkToolLogEntry[];

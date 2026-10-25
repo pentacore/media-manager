@@ -41,6 +41,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useConfirm } from '@/composables/useConfirm';
+import { formatCount } from '@/lib/format';
 import { dashboard } from '@/routes';
 
 const props = defineProps<{
@@ -437,6 +438,15 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                             <TableHead>Candidate</TableHead>
                             <TableHead class="text-right">Avg score</TableHead>
                             <TableHead class="text-right">Pass rate</TableHead>
+                            <TableHead
+                                v-if="task.verdict"
+                                class="text-right"
+                                data-benchmark-missed-head
+                                >Missed</TableHead
+                            >
+                            <TableHead v-if="task.verdict" class="text-right"
+                                >False alarms</TableHead
+                            >
                             <TableHead class="text-right"
                                 >Cost / case</TableHead
                             >
@@ -482,6 +492,24 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                                 data-benchmark-pass-rate
                                 >{{ formatPercent(candidate.pass_rate)
                                 }}{{ coverage(task, candidate) }}</TableCell
+                            >
+                            <TableCell
+                                v-if="task.verdict"
+                                :class="[
+                                    'text-right tabular-nums',
+                                    (candidate.missed ?? 0) > 0 &&
+                                        'text-destructive',
+                                ]"
+                                data-benchmark-missed
+                                >{{ formatCount(candidate.missed) }}</TableCell
+                            >
+                            <TableCell
+                                v-if="task.verdict"
+                                class="text-right tabular-nums"
+                                data-benchmark-false-alarms
+                                >{{
+                                    formatCount(candidate.false_alarms)
+                                }}</TableCell
                             >
                             <TableCell
                                 :class="[
