@@ -113,7 +113,7 @@ function canBenchmark(row: ActionRequestRow): boolean {
                     <StatusPill :status="selected.status" />
                 </div>
                 <h2
-                    class="font-serif text-[22px] leading-tight text-foreground italic"
+                    class="font-serif text-[22px] leading-tight text-foreground italic max-sm:break-words"
                     data-action-title
                 >
                     {{ payloadTitle(selected) }}

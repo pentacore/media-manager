@@ -657,7 +657,9 @@ onMounted(() => {
                             <span>act_{{ action.id }}</span>
                             <TimeStamp :iso="action.created_at" />
                         </div>
-                        <div class="mt-1 text-sm font-medium">
+                        <div
+                            class="mt-1 text-sm font-medium max-sm:break-words"
+                        >
                             <span
                                 :class="
                                     isDestructive(action.type)
