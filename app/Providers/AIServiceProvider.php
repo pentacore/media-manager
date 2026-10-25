@@ -9,6 +9,7 @@ use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\ChatTurnContext;
 use App\Ai\Conversations\ConversationStore;
 use App\Ai\ReasoningOptions;
+use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\TaskModelResolver;
 use App\Http\Streaming\ClientConnection;
 use App\Listeners\Ai\EnforceAiRateLimit;
@@ -52,6 +53,9 @@ class AIServiceProvider extends ServiceProvider
         // The conversation override for the chat turn in flight; scoped so it
         // never applies to the next Octane request or queued job.
         $this->app->scoped(ChatTurnContext::class);
+
+        // The routed tool groups of the chat turn in flight; scoped for the same reason.
+        $this->app->scoped(ChatToolRunContext::class);
 
         // The benchmark job's run, candidate and fixtures; scoped so a run never
         // pins models or replays tools in the next Octane request or queued job.

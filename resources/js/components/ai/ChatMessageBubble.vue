@@ -13,7 +13,13 @@ import AttachmentChips from './AttachmentChips.vue';
 import ChoiceCard from './ChoiceCard.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import ToolCallChip from './ToolCallChip.vue';
-import type { ActionRequestCard, ChatMessage } from './types';
+import ToolRequestCard from './ToolRequestCard.vue';
+import TurnToolGroups from './TurnToolGroups.vue';
+import type {
+    ActionRequestCard,
+    ChatMessage,
+    ToolRequestCard as ToolRequestCardData,
+} from './types';
 import WorkflowProposalCard from './WorkflowProposalCard.vue';
 
 const props = defineProps<{
@@ -27,12 +33,15 @@ const props = defineProps<{
     isLatestAssistant: boolean;
     /** Action request ids whose approve/reject is in flight. */
     reviewingActionIds: number[];
+    /** Show the "Tools this turn" line under an assistant reply. */
+    showTurnTools?: boolean;
 }>();
 
 const emit = defineEmits<{
     (e: 'approve'): void;
     (e: 'decline'): void;
     (e: 'choose', labels: string[]): void;
+    (e: 'answerToolRequest', card: ToolRequestCardData, load: boolean): void;
     (e: 'review', card: ActionRequestCard, action: 'approve' | 'reject'): void;
 }>();
 
@@ -128,6 +137,13 @@ const caseQuery = computed(() =>
                     :chosen="message.chosen ?? null"
                     @choose="(labels) => emit('choose', labels)"
                 />
+                <ToolRequestCard
+                    v-else-if="card.type === 'tool_request'"
+                    :card="card"
+                    :interactive="isLatestAssistant && !busy && !message.chosen"
+                    :chosen="message.chosen?.[0] ?? null"
+                    @answer="(load) => emit('answerToolRequest', card, load)"
+                />
                 <ActionApprovalCard
                     v-else
                     :card="card"
@@ -207,6 +223,10 @@ const caseQuery = computed(() =>
                     · tier {{ message.answered_by.tier?.position }}
                 </span>
             </p>
+            <TurnToolGroups
+                v-if="message.role === 'assistant' && showTurnTools"
+                :groups="message.tool_groups"
+            />
         </div>
     </div>
 </template>

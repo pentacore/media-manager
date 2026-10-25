@@ -36,9 +36,11 @@ use App\Ai\Tools\Seerr\DiscoverTvTool;
 use App\Ai\Tools\Seerr\GetTitleTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\Seerr\SearchCatalogTool;
+use App\Ai\Tools\System\FindToolsTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\OfferChoicesTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Ai\Tools\System\SemanticLibrarySearchTool;
 use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
 use App\Ai\Tools\Tmdb\TmdbGetSimilarTool;
@@ -169,6 +171,8 @@ enum ToolGroup: string
             QueryActivityTool::class,
             SemanticLibrarySearchTool::class,
             OfferChoicesTool::class,
+            FindToolsTool::class,
+            RequestToolsTool::class,
             SearchMediaTool::class,
             GetMediaTool::class,
             ProposeWorkflowTool::class,

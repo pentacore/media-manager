@@ -29,6 +29,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property string|null $model_provider
  * @property string|null $model
  * @property AiReasoningLevel|null $reasoning
+ * @property list<string>|null $tool_groups
  * @property CarbonImmutable|null $last_used_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -51,6 +52,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
     'model_provider',
     'model',
     'reasoning',
+    'tool_groups',
 ])]
 #[TypefinderOverrides([
     'variables' => "Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>",
@@ -71,6 +73,7 @@ class ChatTemplate extends Model
             'auto_send' => 'boolean',
             'pinned' => 'boolean',
             'reasoning' => AiReasoningLevel::class,
+            'tool_groups' => 'array',
             'last_used_at' => 'immutable_datetime',
         ];
     }

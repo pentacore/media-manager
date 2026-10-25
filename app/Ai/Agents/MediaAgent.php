@@ -12,6 +12,8 @@ use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
@@ -42,9 +44,11 @@ use App\Ai\Tools\Seerr\DiscoverTvTool;
 use App\Ai\Tools\Seerr\GetTitleTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\Seerr\SearchCatalogTool;
+use App\Ai\Tools\System\FindToolsTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\OfferChoicesTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Ai\Tools\System\RequestToolsTool;
 use App\Ai\Tools\System\SemanticLibrarySearchTool;
 use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
 use App\Ai\Tools\Tmdb\TmdbGetSimilarTool;
@@ -83,6 +87,13 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     }
     use RunsAsAiTask;
     use UsesFailoverChain;
+
+    /**
+     * Appended to the instructions on routed chat turns.
+     */
+    private const string TOOL_GROUP_INSTRUCTIONS = <<<'PROMPT'
+**Tools you may not have loaded:** each turn carries only the tool groups it is likely to need. When a capability you need seems missing, call FindToolsTool with the need before answering. If an unloaded group has it, call RequestToolsTool with that group and a short reason, then end your turn: the user sees Load / No thanks buttons. Never tell the user the chat lacks a tool without searching first. If FindToolsTool finds nothing, say so plainly. When the user's message says tool groups were loaded, continue the request from before without asking again.
+PROMPT;
 
     public function aiTask(): AiTask
     {
@@ -132,9 +143,17 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
         return true;
     }
 
+    /**
+     * Whether the chat turn in flight loads a routed subset of tool groups.
+     */
+    private function isRoutedTurn(): bool
+    {
+        return resolve(ChatToolRunContext::class)->routed instanceof RoutedToolGroups;
+    }
+
     public function instructions(): Stringable|string
     {
-        return <<<'PROMPT'
+        $instructions = <<<'PROMPT'
 You are MediaAgent, the assistant for a self-hosted media stack (Sonarr, Radarr, Emby, Seerr, Prowlarr, Whisparr).
 
 The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, AddMediaTool, DeleteMediaTool, MonitorMediaTool, SetMediaQualityProfileTool, SearchMediaReleasesTool) take a `service` parameter: sonarr = TV series, radarr = movies, whisparr = adult content. If a tool fails because a service is not configured, say so plainly.
@@ -176,6 +195,12 @@ Important rules:
 - If a tool returns `{error: 'tool_failed', ...}` or `{error: 'advisory_mode_blocks_destructive', ...}`, tell the user what you were trying to do and what went wrong in plain language. Don't retry the exact same call.
 - If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant Action Rule isn't enabled (Admin → Action Rules).
 PROMPT;
+
+        if ($this->isRoutedTurn()) {
+            $instructions .= "\n\n".self::TOOL_GROUP_INSTRUCTIONS;
+        }
+
+        return $instructions;
     }
 
     /**
@@ -240,6 +265,11 @@ PROMPT;
             // Workflow
             resolve(ProposeWorkflowTool::class),
         ];
+
+        if ($this->isRoutedTurn()) {
+            $tools[] = resolve(FindToolsTool::class);
+            $tools[] = resolve(RequestToolsTool::class);
+        }
 
         if ($this->hasActiveConnection(ServiceType::Prowlarr)) {
             $tools[] = resolve(SearchIndexersTool::class);

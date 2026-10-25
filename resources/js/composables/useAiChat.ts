@@ -1,6 +1,13 @@
 import { computed, ref } from 'vue';
 import ConversationController from '@/actions/App/Http/Controllers/AI/ConversationController';
-import type { AnsweredBy, ChatCard, ChatOverride } from '@/components/ai/types';
+import type {
+    AnsweredBy,
+    ChatCard,
+    ChatOverride,
+    ToolGroupValue,
+    TurnToolGroup,
+    TurnToolGroups,
+} from '@/components/ai/types';
 import { jsonRequest } from '@/lib/http';
 
 export interface ConversationSummary {
@@ -39,6 +46,8 @@ export interface ConversationMessage {
     answered_by?: AnsweredBy | null;
     /** Choice and approval cards under an assistant reply. */
     cards?: ChatCard[];
+    /** The routed tool groups behind an assistant reply. */
+    tool_groups?: TurnToolGroups;
 }
 
 export interface ConversationPage {
@@ -46,6 +55,8 @@ export interface ConversationPage {
     title: string;
     updated_at: string;
     override: ChatOverride;
+    pinned_tool_groups: ToolGroupValue[];
+    carried_over_tool_groups: TurnToolGroup[];
     messages: ConversationMessage[];
     next_cursor: string | null;
 }

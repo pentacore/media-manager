@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\AI;
 
+use App\Ai\Routing\ToolGroup;
 use App\Concerns\AiModelSelectionValidationRules;
 use App\Concerns\ChatAttachmentValidationRules;
 use App\Enums\AiMode;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class SendChatRequest extends FormRequest
@@ -36,6 +38,10 @@ class SendChatRequest extends FormRequest
             'workflow_action' => ['nullable', 'string', 'in:approved,declined'],
             'mode' => ['nullable', 'string', AiMode::validationRule()],
             ...$this->chatAttachmentRules(),
+            'pinned_tool_groups' => ['sometimes', 'array', 'max:'.count(ToolGroup::cases())],
+            'pinned_tool_groups.*' => ['string', 'distinct', Rule::enum(ToolGroup::class)],
+            'load_tool_groups' => ['sometimes', 'array', 'max:'.count(ToolGroup::cases())],
+            'load_tool_groups.*' => ['string', 'distinct', Rule::enum(ToolGroup::class)],
             'override' => ['nullable', 'array:provider,model,reasoning'],
             ...$this->selectionRules('override'),
         ];
