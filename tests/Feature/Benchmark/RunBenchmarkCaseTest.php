@@ -977,3 +977,79 @@ test('a candidate that cannot read images fails the result with its provider err
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
     BenchmarkJudgeAgent::assertNeverPrompted();
 });
+
+function jobScriptedCase(): BenchmarkCase
+{
+    return BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'Then add it.',
+        'conversation' => 'scripted',
+        'history' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?'],
+            ['role' => 'assistant', 'content' => 'RECORDED REPLY'],
+            ['role' => 'user', 'content' => 'And the sequel?'],
+        ],
+    ]]);
+}
+
+test('a scripted result stores the candidate transcript next to the tool log', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake(['Yes.', 'Missing.', 'Queued.']);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkResult->output)->toBe('Queued.')
+        ->and($benchmarkResult->score_detail['tool_log'])->toBe([])
+        ->and($benchmarkResult->score_detail['transcript'])->toHaveCount(6)
+        ->and($benchmarkResult->score_detail['transcript'][1])->toBe(['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []]);
+});
+
+test('a scripted result whose middle turn fails keeps the earlier turns and names the turn', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create();
+    MediaAgent::fake([
+        fn (): TextResponse => new TextResponse('Yes.', new TextUsage(100_000, 10_000), new Meta('openai', 'gpt-candidate')),
+        fn (): never => throw new RuntimeException('provider down'),
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('Turn 2 of 3 failed: provider down')
+        ->and($benchmarkResult->output)->toBe('Yes.')
+        ->and($benchmarkResult->prompt_tokens)->toBe(100_000)
+        ->and((float) $benchmarkResult->cost_usd)->toBe(0.28)
+        ->and($benchmarkResult->score_detail)->toBe(['tool_log' => [], 'transcript' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+            ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+            ['role' => 'user', 'content' => 'And the sequel?', 'attachments' => []],
+        ]])
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('a re-judge keeps the stored transcript, dropping malformed entries', function (): void {
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now()]);
+    $kept = [
+        ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => []],
+        ['role' => 'assistant', 'content' => 'Yes.', 'attachments' => []],
+    ];
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobScriptedCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Yes.',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+        'score_detail' => ['error' => 'judge overloaded', 'tool_log' => [], 'transcript' => [...$kept, 'garbage', ['role' => 'system', 'content' => 'x']]],
+    ]);
+    jobFakeJudge(9);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    $benchmarkResult->refresh();
+    expect($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($benchmarkResult->score_detail['transcript'])->toBe($kept);
+});

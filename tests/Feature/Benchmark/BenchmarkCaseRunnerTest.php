@@ -17,6 +17,7 @@ use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkRun;
 use App\Services\Benchmark\BenchmarkCaseRunner;
 use App\Services\Benchmark\CaseOutcome;
+use App\Services\Benchmark\ScriptedTurnFailed;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -244,4 +245,134 @@ test('a chat case whose attachment file is gone fails before the candidate runs'
     expect(fn () => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))
         ->toThrow(RuntimeException::class, 'The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
     MediaAgent::assertNeverPrompted();
+});
+
+function runnerScriptedCase(): BenchmarkCase
+{
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => [
+        'prompt' => 'Then add it.',
+        'conversation' => 'scripted',
+        'history' => [
+            ['role' => 'user', 'content' => 'Is Dune in the library?'],
+            ['role' => 'assistant', 'content' => 'RECORDED REPLY'],
+            ['role' => 'user', 'content' => 'And the sequel?'],
+        ],
+    ]]);
+    BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->forTurn(0)->create();
+
+    return $benchmarkCase;
+}
+
+/**
+ * One candidate reply, recording the prompt, attachments and history its turn saw.
+ *
+ * @param  list<array<string, mixed>>  $turns
+ */
+function runnerScriptedReply(string $text, int $promptTokens, array &$turns): Closure
+{
+    return function (string $prompt, Collection $attachments) use ($text, $promptTokens, &$turns): TextResponse {
+        $turns[] = [
+            'prompt' => $prompt,
+            'attachments' => $attachments->map(static fn (File $file): ?string => $file->name())->all(),
+            'history' => array_map(static fn (Message $message): array => [
+                $message->role->value,
+                $message->content,
+                $message instanceof UserMessage ? $message->attachments->map(static fn (File $file): ?string => $file->name())->all() : [],
+            ], resolve(BenchmarkRunContext::class)->history()),
+        ];
+
+        return new TextResponse($text, new TextUsage($promptTokens, intdiv($promptTokens, 10)), new Meta('openai', 'gpt-candidate'));
+    };
+}
+
+test('a scripted case answers every user turn in order on its own earlier replies', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = runnerScriptedCase();
+    runnerStartContext($benchmarkCase, [new UserMessage('stale starter history')]);
+    $turns = [];
+    MediaAgent::fake([
+        runnerScriptedReply('Yes, Dune is there.', 100, $turns),
+        runnerScriptedReply('Dune: Part Two is missing.', 200, $turns),
+        runnerScriptedReply('Queued Dune: Part Two.', 300, $turns),
+    ]);
+
+    $caseOutcome = resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect(array_column($turns, 'prompt'))->toBe(['Is Dune in the library?', 'And the sequel?', 'Then add it.'])
+        ->and($turns[0]['attachments'])->toBe(['download.log'])
+        ->and($turns[0]['history'])->toBe([])
+        ->and($turns[1]['history'])->toBe([
+            ['user', 'Is Dune in the library?', ['download.log']],
+            ['assistant', 'Yes, Dune is there.', []],
+        ])
+        ->and($turns[2]['history'])->toHaveCount(4)
+        ->and($caseOutcome->output)->toBe('Queued Dune: Part Two.')
+        ->and($caseOutcome->promptTokens)->toBe(600)
+        ->and($caseOutcome->completionTokens)->toBe(60)
+        ->and($caseOutcome->transcript)->toBe([
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => ['download.log']],
+            ['role' => 'assistant', 'content' => 'Yes, Dune is there.', 'attachments' => []],
+            ['role' => 'user', 'content' => 'And the sequel?', 'attachments' => []],
+            ['role' => 'assistant', 'content' => 'Dune: Part Two is missing.', 'attachments' => []],
+            ['role' => 'user', 'content' => 'Then add it.', 'attachments' => []],
+            ['role' => 'assistant', 'content' => 'Queued Dune: Part Two.', 'attachments' => []],
+        ]);
+});
+
+test('scripted turns share one fixture book, so the tool log runs across turns in order', function (): void {
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->withFixtures([
+        ['tool' => 'GetServiceStatusTool', 'arguments' => [], 'result' => '{"sonarr":"ok"}'],
+    ])->create(['input' => ['prompt' => 'And Radarr?', 'conversation' => 'scripted', 'history' => [['role' => 'user', 'content' => 'Is Sonarr up?']]]]);
+    runnerStartContext($benchmarkCase);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'GetServiceStatusTool', arguments: []),
+        'Sonarr is up.',
+        new ToolCall(id: 'c2', name: 'QueryActivityTool', arguments: ['limit' => 5]),
+        'No Radarr activity.',
+    ]);
+
+    $caseOutcome = resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect(array_column($caseOutcome->toolLog, 'tool'))->toBe(['GetServiceStatusTool', 'QueryActivityTool'])
+        ->and($caseOutcome->toolCalls)->toBe(2)
+        ->and($caseOutcome->toolMisses)->toBe(1)
+        ->and($caseOutcome->output)->toBe('No Radarr activity.');
+});
+
+test('a scripted turn that throws names its turn and keeps what the earlier turns produced', function (): void {
+    Storage::fake('local');
+    $benchmarkCase = runnerScriptedCase();
+    runnerStartContext($benchmarkCase);
+    $turns = [];
+    MediaAgent::fake([
+        runnerScriptedReply('Yes, Dune is there.', 100, $turns),
+        fn (): never => throw new RuntimeException('provider down'),
+    ]);
+
+    $thrown = null;
+
+    try {
+        resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+    } catch (ScriptedTurnFailed $scriptedTurnFailed) {
+        $thrown = $scriptedTurnFailed;
+    }
+
+    expect($thrown)->toBeInstanceOf(ScriptedTurnFailed::class)
+        ->and($thrown->getMessage())->toBe('Turn 2 of 3 failed: provider down')
+        ->and($thrown->getPrevious()?->getMessage())->toBe('provider down')
+        ->and($thrown->partialOutcome->output)->toBe('Yes, Dune is there.')
+        ->and($thrown->partialOutcome->promptTokens)->toBe(100)
+        ->and($thrown->partialOutcome->transcript)->toBe([
+            ['role' => 'user', 'content' => 'Is Dune in the library?', 'attachments' => ['download.log']],
+            ['role' => 'assistant', 'content' => 'Yes, Dune is there.', 'attachments' => []],
+            ['role' => 'user', 'content' => 'And the sequel?', 'attachments' => []],
+        ]);
+});
+
+test('a context chat case keeps an empty transcript', function (): void {
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'Hi']]);
+    runnerStartContext($benchmarkCase);
+    MediaAgent::fake(['Hello.']);
+
+    expect(resolve(BenchmarkCaseRunner::class)->run($benchmarkCase)->transcript)->toBe([]);
 });

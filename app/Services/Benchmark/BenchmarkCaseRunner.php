@@ -18,10 +18,13 @@ use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Laravel\Ai\Files\File;
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use LogicException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Runs one benchmark case's agent once, exactly as production would invoke
@@ -51,10 +54,84 @@ final readonly class BenchmarkCaseRunner
             $this->ensureAttachmentsStored($benchmarkCase);
         }
 
+        if ($benchmarkCase->isScripted()) {
+            return $this->runScripted($benchmarkCase);
+        }
+
         $startedAt = hrtime(true);
         [$agentResponse, $output] = $this->prompt($benchmarkCase, $prompt);
         $latencyMs = (int) round((hrtime(true) - $startedAt) / 1_000_000);
 
+        return $this->outcome(
+            $output,
+            $agentResponse->usage->inputTokens,
+            $agentResponse->usage->outputTokens,
+            $latencyMs,
+            $agentResponse->invocationId,
+            [],
+        );
+    }
+
+    /**
+     * The candidate answers every user turn in order, on its own earlier
+     * replies (and each turn's attachments) as history. Tokens and latency are
+     * summed; the tool log comes from the one shared fixture book.
+     */
+    private function runScripted(BenchmarkCase $benchmarkCase): CaseOutcome
+    {
+        $userTurns = $benchmarkCase->userTurns();
+        $total = count($userTurns);
+        $messages = [];
+        $transcript = [];
+        $promptTokens = 0;
+        $completionTokens = 0;
+        $latencyMs = 0;
+        $output = '';
+        $invocationId = null;
+
+        foreach ($userTurns as $position => $userTurn) {
+            $content = $userTurn['content'];
+            $files = $this->sdkFiles($benchmarkCase, $userTurn['turn']);
+
+            $transcript[] = [
+                'role' => 'user',
+                'content' => $content,
+                'attachments' => $benchmarkCase->attachmentsFor($userTurn['turn'])->pluck('original_name')->all(),
+            ];
+            $this->benchmarkRunContext->setHistory($messages);
+
+            $startedAt = hrtime(true);
+
+            try {
+                $agentResponse = resolve(MediaAgent::class)->prompt($content, attachments: $files);
+            } catch (Throwable $throwable) {
+                throw new ScriptedTurnFailed(
+                    $position + 1,
+                    $total,
+                    $this->outcome($output, $promptTokens, $completionTokens, $latencyMs, $invocationId, $transcript),
+                    $throwable,
+                );
+            }
+
+            $latencyMs += (int) round((hrtime(true) - $startedAt) / 1_000_000);
+            $promptTokens += $agentResponse->usage->inputTokens;
+            $completionTokens += $agentResponse->usage->outputTokens;
+            $output = $agentResponse->text;
+            $invocationId = $agentResponse->invocationId;
+
+            $transcript[] = ['role' => 'assistant', 'content' => $output, 'attachments' => []];
+            $messages[] = new UserMessage($content, $files);
+            $messages[] = new AssistantMessage($output);
+        }
+
+        return $this->outcome($output, $promptTokens, $completionTokens, $latencyMs, $invocationId, $transcript);
+    }
+
+    /**
+     * @param  list<array{role: 'user'|'assistant', content: string, attachments: list<string>}>  $transcript
+     */
+    private function outcome(string $output, int $promptTokens, int $completionTokens, int $latencyMs, ?string $invocationId, array $transcript): CaseOutcome
+    {
         $fixtureBook = $this->benchmarkRunContext->fixtures();
 
         return new CaseOutcome(
@@ -63,10 +140,11 @@ final readonly class BenchmarkCaseRunner
             toolLog: $fixtureBook->log(),
             toolCalls: $fixtureBook->calls(),
             toolMisses: $fixtureBook->misses(),
-            promptTokens: $agentResponse->usage->inputTokens,
-            completionTokens: $agentResponse->usage->outputTokens,
+            promptTokens: $promptTokens,
+            completionTokens: $completionTokens,
             latencyMs: $latencyMs,
-            invocationId: $agentResponse->invocationId,
+            invocationId: $invocationId,
+            transcript: $transcript,
         );
     }
 

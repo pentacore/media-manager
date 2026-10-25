@@ -21,6 +21,7 @@ use App\Services\Benchmark\BenchmarkContextStarter;
 use App\Services\Benchmark\BenchmarkRunSettler;
 use App\Services\Benchmark\BenchmarkScorer;
 use App\Services\Benchmark\CaseOutcome;
+use App\Services\Benchmark\ScriptedTurnFailed;
 use App\Support\UpstreamErrorText;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -195,6 +196,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     ): void {
         $caseOutcome = null;
         $costUsd = 0.0;
+        $candidate = null;
 
         try {
             $candidate = BenchmarkContextStarter::selection($this->storedCandidate($benchmarkRun, $benchmarkResult->candidate_index));
@@ -206,6 +208,11 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             $costUsd = $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup);
             $scores = $benchmarkScorer->score($benchmarkCase, $caseOutcome);
         } catch (Throwable $throwable) {
+            if (! $caseOutcome instanceof CaseOutcome && $throwable instanceof ScriptedTurnFailed) {
+                $caseOutcome = $throwable->partialOutcome;
+                $costUsd = $candidate instanceof ResolvedSelection ? $this->candidateCost($caseOutcome, $candidate, $modelPriceLookup) : 0.0;
+            }
+
             $this->reportUnexpected($throwable);
             $this->recordFailure($benchmarkResult, $throwable, $caseOutcome, $costUsd);
 
@@ -220,7 +227,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             'error' => null,
             'score' => $scores['score'],
             'passed' => $scores['passed'],
-            'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
+            'score_detail' => $this->storedDetail($scores['detail'], $caseOutcome),
             'judge_status' => $scores['judge_status'],
             'judge_cost_usd' => $scores['judge_cost_usd'],
         ]);
@@ -236,7 +243,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         $benchmarkResult->update([
             ...($caseOutcome instanceof CaseOutcome ? [
                 ...$this->outcomeAttributes($caseOutcome, $costUsd),
-                'score_detail' => ['tool_log' => $caseOutcome->toolLog],
+                'score_detail' => $this->storedDetail([], $caseOutcome),
             ] : []),
             'status' => BenchmarkResultStatus::Failed,
             'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
@@ -275,10 +282,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             $this->reportUnexpected($throwable);
             $benchmarkResult->update([
                 'judge_status' => BenchmarkJudgeStatus::Failed,
-                'score_detail' => [
-                    'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
-                    'tool_log' => $caseOutcome->toolLog,
-                ],
+                'score_detail' => $this->storedDetail(['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)], $caseOutcome),
             ]);
             $this->settle($benchmarkResult->benchmark_run_id);
 
@@ -290,7 +294,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         $benchmarkResult->update([
             'score' => $scores['score'],
             'passed' => $scores['passed'],
-            'score_detail' => [...$scores['detail'], 'tool_log' => $caseOutcome->toolLog],
+            'score_detail' => $this->storedDetail($scores['detail'], $caseOutcome),
             'judge_status' => $scores['judge_status'],
             'judge_cost_usd' => $scores['judge_cost_usd'],
         ]);
@@ -363,7 +367,23 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
      */
     private function reportUnexpected(Throwable $throwable): void
     {
-        report_unless($throwable instanceof AiBudgetExceededException, $throwable);
+        report_unless($throwable instanceof AiBudgetExceededException || $throwable->getPrevious() instanceof AiBudgetExceededException, $throwable);
+    }
+
+    /**
+     * The result's score detail: the judge's detail, the tool log and, for a
+     * scripted case, the candidate transcript.
+     *
+     * @param  array<string, mixed>  $detail
+     * @return array<string, mixed>
+     */
+    private function storedDetail(array $detail, CaseOutcome $caseOutcome): array
+    {
+        return [
+            ...$detail,
+            'tool_log' => $caseOutcome->toolLog,
+            ...($caseOutcome->transcript === [] ? [] : ['transcript' => $caseOutcome->transcript]),
+        ];
     }
 
     /**
