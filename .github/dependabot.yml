@@ -33,6 +33,12 @@ updates:
       npm-development:
         dependency-type: development
         update-types: [minor, patch]
+    ignore:
+      # 3.3.12/3.3.13 rewrite `//` inside static prop strings into block
+      # comments and break types:check (vuejs/language-tools#6240, fixed by
+      # #6297). Drop this once a fixed release is out.
+      - dependency-name: vue-tsc
+        versions: ['3.3.12', '3.3.13']
 
   - package-ecosystem: github-actions
     directory: /
