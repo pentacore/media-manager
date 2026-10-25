@@ -12,6 +12,7 @@ use App\Models\AiUsageRecord;
 use App\Models\ClassificationOutcome;
 use App\Models\WebhookEvent;
 use App\Services\Benchmark\CaseDraftFromUsage;
+use App\Services\Benchmark\DecisionCaseCapture;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -135,4 +136,15 @@ test('a decision usage row with a hand-written prompt and no decision row stays 
     ['draft' => $draft, 'warnings' => $warnings] = resolve(CaseDraftFromUsage::class)->draft($usage);
 
     expect($draft['input'])->toBe(['prompt' => 'Import failed'])->and($warnings)->toBe([]);
+});
+
+test('a trimmed run with an empty payload is recovered as an empty object', function (): void {
+    ['usage' => $usage] = captureDecisionRun([], 'Health', trimmed: true);
+
+    ['draft' => $draft, 'warnings' => $warnings] = resolve(CaseDraftFromUsage::class)->draft($usage);
+
+    expect($draft['input']['event']['payload_json'])->toBe('{}')
+        ->and($draft['input']['prompt'])->toBe($usage->prompt_text)
+        ->and($draft['source_truncated'])->toBeFalse()
+        ->and($warnings)->not->toContain(DecisionCaseCapture::PAYLOAD_WARNING);
 });

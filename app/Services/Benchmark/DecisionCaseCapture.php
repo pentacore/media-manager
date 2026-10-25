@@ -36,7 +36,7 @@ final readonly class DecisionCaseCapture
         }
 
         $webhookEvent = $decision?->webhookEvent;
-        $payloadJson = $webhookEvent !== null ? DecisionPrompt::payloadJson($webhookEvent->payload) : ($parsed['payload_json'] ?? null);
+        $payloadJson = $webhookEvent !== null ? DecisionPrompt::payloadJson($webhookEvent->payload) : $this->emptyAsObject($parsed['payload_json'] ?? null);
         $payload = $payloadJson === null ? null : DecisionPrompt::payloadFromJson($payloadJson);
         $eventKey = DecisionAgentSettings::eventKey($service, $eventType);
         $eventLabel = sprintf('%s %s', $service, $eventType);
@@ -69,6 +69,14 @@ final readonly class DecisionCaseCapture
             'action_kind' => $actionKind,
             'event_key' => $eventKey,
         ], $warnings, false, $eventLabel);
+    }
+
+    /**
+     * A recorded empty payload is printed as a list; it is stored as an object.
+     */
+    private function emptyAsObject(?string $payloadJson): ?string
+    {
+        return $payloadJson === '[]' ? '{}' : $payloadJson;
     }
 
     /**
