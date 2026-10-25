@@ -15,6 +15,7 @@ use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBenchmarkCaseRequest;
+use App\Models\ActionRequest;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
@@ -24,6 +25,7 @@ use App\Services\Benchmark\CaseAttachmentSync;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
+use App\Services\Benchmark\VerifierCaseCapture;
 use App\Services\Benchmark\VerifierCaseInput;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Database\Eloquent\Builder;
@@ -84,14 +86,24 @@ class BenchmarkCaseController extends Controller
         ]);
     }
 
-    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage, CaptureSource $captureSource): Response|RedirectResponse
+    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage, CaptureSource $captureSource, VerifierCaseCapture $verifierCaseCapture): Response|RedirectResponse
     {
         $draft = null;
         $warnings = [];
 
         $aiUsageRecord = null;
 
-        if ($request->filled('from_usage')) {
+        if ($request->filled('action_request')) {
+            $actionRequest = ActionRequest::query()->findOrFail($request->integer('action_request'));
+
+            try {
+                ['draft' => $draft, 'warnings' => $warnings] = $verifierCaseCapture->draft($actionRequest);
+            } catch (CaseDraftRefused $caseDraftRefused) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __($caseDraftRefused->getMessage())]);
+
+                return back();
+            }
+        } elseif ($request->filled('from_usage')) {
             $aiUsageRecord = AiUsageRecord::query()->findOrFail($request->integer('from_usage'));
         } elseif ($request->filled('from_invocation')) {
             $aiUsageRecord = $captureSource->forInvocation($request->string('from_invocation')->toString());

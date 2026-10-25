@@ -34,7 +34,7 @@ final readonly class CaseDraftFromUsage
 
     private const int NAME_PROMPT_CHARS = 60;
 
-    public function __construct(private AiSettings $aiSettings, private ChatAttachmentStore $chatAttachmentStore, private DecisionCaseCapture $decisionCaseCapture) {}
+    public function __construct(private AiSettings $aiSettings, private ChatAttachmentStore $chatAttachmentStore, private DecisionCaseCapture $decisionCaseCapture, private VerifierCaseCapture $verifierCaseCapture) {}
 
     /**
      * @return array{draft: array<string, mixed>, warnings: list<string>}
@@ -137,6 +137,7 @@ final readonly class CaseDraftFromUsage
         }
 
         $sourceTruncated = $warnings !== [];
+        $expectedAgrees = null;
         $name = sprintf('%s: %s', $aiTask->label(), Str::limit(Str::squish($prompt), self::NAME_PROMPT_CHARS));
 
         if ($aiTask === AiTask::Decision) {
@@ -148,6 +149,18 @@ final readonly class CaseDraftFromUsage
 
             if ($decisionDraft->eventLabel !== null) {
                 $name = sprintf('%s: %s', $aiTask->label(), $decisionDraft->eventLabel);
+            }
+        }
+
+        if ($aiTask === AiTask::DecisionVerifier) {
+            $verifierDraft = $this->verifierCaseCapture->fromUsage($aiUsageRecord, $prompt);
+
+            $input = $verifierDraft->input;
+            $expectedAgrees = $verifierDraft->expectedAgrees;
+            array_push($warnings, ...$verifierDraft->warnings);
+
+            if ($verifierDraft->name !== null) {
+                $name = $verifierDraft->name;
             }
         }
 
@@ -171,7 +184,7 @@ final readonly class CaseDraftFromUsage
                     static fn (array $fixture): array => ['tool' => $fixture['tool'], 'arguments' => $fixture['arguments'], 'result' => $fixture['result']],
                     $fixtures,
                 ),
-                'scoring' => $this->scoring($aiTask, $fixtures),
+                'scoring' => $this->scoring($aiTask, $fixtures, $expectedAgrees),
                 'source_invocation_id' => $aiUsageRecord->invocation_id,
                 'source_prompt_tokens' => $aiUsageRecord->prompt_tokens,
                 'source_completion_tokens' => $aiUsageRecord->completion_tokens,
@@ -348,7 +361,7 @@ final readonly class CaseDraftFromUsage
      * @param  list<array{tool: string, arguments: array<string, mixed>, result: string, writes: bool, tool_class: string}>  $fixtures
      * @return array<string, mixed>
      */
-    private function scoring(AiTask $aiTask, array $fixtures): array
+    private function scoring(AiTask $aiTask, array $fixtures, ?bool $expectedAgrees): array
     {
         return match ($aiTask->benchmarkScoringType()) {
             BenchmarkScoringType::Actions => [
@@ -371,7 +384,7 @@ final readonly class CaseDraftFromUsage
                 'rubric_note' => null,
                 'pass_threshold' => 7,
             ],
-            BenchmarkScoringType::Verdict => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => null],
+            BenchmarkScoringType::Verdict => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => $expectedAgrees],
         };
     }
 
