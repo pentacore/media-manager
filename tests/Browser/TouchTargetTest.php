@@ -195,10 +195,10 @@ test('neighbouring row actions keep their own taps on a phone', function (): voi
         ->assertScript(touchTargetNeighbourScript('[data-pool-delete]'), true);
 
     $webpage->navigate(route('sabnzbd.queue.index', absolute: false));
-    $webpage->script(touchTargetLibraryLoadedScript('[data-sab-slot-delete]'));
-    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true)
-        ->assertAttribute('[data-sab-slot-delete]', 'aria-label', 'Delete Example.Show.S01E01')
-        ->assertScript('document.querySelector("[data-sab-slot-delete]").previousElementSibling.getAttribute("aria-label")', 'Pause Example.Show.S01E01');
+    $webpage->script(touchTargetLibraryLoadedScript('[data-sab-card-delete]'));
+    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-card-delete]'), true)
+        ->assertAttribute('[data-sab-card-delete]', 'aria-label', 'Delete Example.Show.S01E01')
+        ->assertScript('document.querySelector("[data-sab-card-delete]").previousElementSibling.getAttribute("aria-label")', 'Pause Example.Show.S01E01');
 
     $webpage->navigate(route('admin.benchmarks.schedules.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-benchmark-schedule-delete]'));

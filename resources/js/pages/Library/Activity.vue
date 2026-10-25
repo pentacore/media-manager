@@ -1,16 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import {
-    AlertTriangle,
-    ExternalLink,
-    Loader2,
-    MoreVertical,
-    RefreshCcw,
-} from '@lucide/vue';
+import { AlertTriangle, ExternalLink, Loader2, RefreshCcw } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
-import { PageHeader, Pill, SvcChip } from '@/components/mm';
+import { QueueRowMenu } from '@/components/library-actions';
+import { PageHeader, PhoneCardList, Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -21,14 +16,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
@@ -281,6 +268,14 @@ const acting = ref<string | null>(null);
 
 function actionKey(row: QueueRow, verb: string): string {
     return `${row.service}-${row.id}-${verb}`;
+}
+
+/** A remove or blocklist for this queue item is in flight. */
+function isRemoving(row: QueueRow): boolean {
+    return (
+        acting.value === actionKey(row, 'remove') ||
+        acting.value === actionKey(row, 'block')
+    );
 }
 
 async function forceGrab(row: QueueRow): Promise<void> {
@@ -814,7 +809,7 @@ async function runQueueBulk(): Promise<void> {
 
                 <!-- Rows -->
                 <div
-                    class="overflow-hidden rounded-xl border border-border bg-card"
+                    class="overflow-hidden rounded-xl border border-border bg-card max-sm:hidden"
                 >
                     <div class="overflow-x-auto">
                         <table class="w-full border-collapse text-[13px]">
@@ -954,85 +949,26 @@ async function runQueueBulk(): Promise<void> {
                                                     class="size-3.5"
                                                 />Open
                                             </a>
-                                            <DropdownMenu v-if="isAdmin">
-                                                <DropdownMenuTrigger as-child>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        class="size-7 p-0"
-                                                        :disabled="
-                                                            acting ===
-                                                                actionKey(
-                                                                    row,
-                                                                    'remove',
-                                                                ) ||
-                                                            acting ===
-                                                                actionKey(
-                                                                    row,
-                                                                    'block',
-                                                                )
-                                                        "
-                                                        :aria-label="`Manage ${row.title ?? 'queue item'}`"
-                                                        data-queue-row-menu
-                                                    >
-                                                        <MoreVertical
-                                                            class="size-3.5"
-                                                        />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent
-                                                    align="end"
-                                                    class="w-52"
-                                                >
-                                                    <DropdownMenuLabel
-                                                        >Manage queue
-                                                        item</DropdownMenuLabel
-                                                    >
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        data-queue-grab
-                                                        @select="forceGrab(row)"
-                                                    >
-                                                        Force grab now
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        data-queue-manual-import
-                                                        :disabled="
-                                                            !row.download_id
-                                                        "
-                                                        @select="
-                                                            openManualImport(
-                                                                row,
-                                                            )
-                                                        "
-                                                    >
-                                                        Manual import…
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        data-queue-remove="remove"
-                                                        @select="
-                                                            removeQueueItem(
-                                                                row,
-                                                                'remove',
-                                                            )
-                                                        "
-                                                    >
-                                                        Remove from queue
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                        class="text-destructive focus:text-destructive"
-                                                        data-queue-remove="block"
-                                                        @select="
-                                                            removeQueueItem(
-                                                                row,
-                                                                'block',
-                                                            )
-                                                        "
-                                                    >
-                                                        Blocklist & retry
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                            <QueueRowMenu
+                                                v-if="isAdmin"
+                                                variant="row"
+                                                :title="row.title"
+                                                :can-manual-import="
+                                                    !!row.download_id
+                                                "
+                                                :busy="isRemoving(row)"
+                                                @grab="forceGrab(row)"
+                                                @manual-import="
+                                                    openManualImport(row)
+                                                "
+                                                @remove="
+                                                    (verb) =>
+                                                        removeQueueItem(
+                                                            row,
+                                                            verb,
+                                                        )
+                                                "
+                                            />
                                         </div>
                                     </td>
                                 </tr>
@@ -1040,6 +976,111 @@ async function runQueueBulk(): Promise<void> {
                         </table>
                     </div>
                 </div>
+                <PhoneCardList
+                    :items="filteredRows"
+                    :item-key="(row) => `${row.service}-${row.id}`"
+                    label="Download queue"
+                    data-queue-cards
+                >
+                    <template #card="{ item: row }">
+                        <div
+                            class="flex flex-col gap-2"
+                            :data-queue-card="`${row.service}-${row.id}`"
+                        >
+                            <div class="flex items-start gap-3">
+                                <BulkCheckbox
+                                    v-if="bulkService !== null"
+                                    class="pt-0.5"
+                                    :checked="isQueueSelected(row.id)"
+                                    :disabled="queueBulkBusy"
+                                    :label="`Select ${row.title ?? 'queue item'}`"
+                                    :data-queue-card-select="row.id"
+                                    @update:checked="
+                                        (value) => toggleQueue(row.id, value)
+                                    "
+                                />
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-medium break-all">
+                                        {{ row.title ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="row.subtitle"
+                                        class="text-[11.5px] break-words text-muted-foreground"
+                                    >
+                                        {{ row.subtitle }}
+                                    </div>
+                                    <div
+                                        v-if="row.error_message"
+                                        class="mt-1 text-[11.5px] break-words text-destructive"
+                                    >
+                                        {{ row.error_message }}
+                                    </div>
+                                    <div
+                                        v-for="(
+                                            message, mi
+                                        ) in row.status_messages"
+                                        :key="mi"
+                                        class="text-warn mt-1 text-[11.5px] break-words"
+                                    >
+                                        <span
+                                            v-if="message.title.trim() !== ''"
+                                            class="font-medium"
+                                            >{{ message.title }}:</span
+                                        >
+                                        {{ message.messages.join('; ') }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground"
+                            >
+                                <SvcChip :id="row.service" />
+                                <Pill :variant="trackedVariant(row)">{{
+                                    statusLabel(row)
+                                }}</Pill>
+                                <span>{{ row.quality ?? '—' }}</span>
+                                <span class="font-mono-tabular"
+                                    >{{ formatBytes(row.size) }} ·
+                                    {{ progress(row) }}%</span
+                                >
+                                <span class="font-mono-tabular">{{
+                                    timeleftLabel(row)
+                                }}</span>
+                            </div>
+                            <div class="flex items-center justify-end gap-2">
+                                <Button
+                                    as-child
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-9 gap-1.5 text-xs"
+                                    data-queue-card-open
+                                >
+                                    <a
+                                        :href="`${row.service_url}/activity/queue`"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        ><ExternalLink
+                                            class="size-3.5"
+                                        />Open</a
+                                    >
+                                </Button>
+                                <QueueRowMenu
+                                    v-if="isAdmin"
+                                    variant="card"
+                                    :card-key="`${row.service}-${row.id}`"
+                                    :title="row.title"
+                                    :can-manual-import="!!row.download_id"
+                                    :busy="isRemoving(row)"
+                                    @grab="forceGrab(row)"
+                                    @manual-import="openManualImport(row)"
+                                    @remove="
+                                        (verb) => removeQueueItem(row, verb)
+                                    "
+                                />
+                            </div>
+                        </div>
+                    </template>
+                </PhoneCardList>
             </template>
 
             <BulkActionBar

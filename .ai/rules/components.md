@@ -38,6 +38,7 @@ On the phone-job pages (Action Queue, SABnzbd queue and history, grab queue, wat
 - **Hooks:** every hook inside a card gets its own `data-<x>-card-*` name (`data-action-card-select`, `data-sab-card-delete`), never the table row's. Pest's strict selectors count hidden elements, so a reused hook breaks every desktop test that uses it.
 - **Select-all on phones:** shared components with a static hook (`BulkSelectAll`'s `data-bulk-select-all`) are not repeated in cards. Phone select-all is the compact bulk bar's ⋯ item "Select all on this page" (`[data-bulk-select-all-phone]`).
 - **What a card holds:** the row's key facts and every row action, with long file or release names in `break-all` and titles in `break-words`.
+- **One empty message:** a card list's `empty` slot must not repeat text that the table's own empty row already shows, because a strict `assertSeeIn` counts the hidden copy as a second match. The SABnzbd queue and history keep the table's empty row as the only message. Their table frame is `max-sm:hidden` only while it has rows, their `thead` is `max-sm:hidden`, and the `PhoneCardList` renders only when there are rows (`v-if`).
 
 Admin-only tables keep their columns and scroll inside their frame. `ActionQueuePhoneTest`, `DownloadsPhoneTest`, `InteractiveSearchPhoneTest` and `MonitoringPhoneTest` pin it.
 
