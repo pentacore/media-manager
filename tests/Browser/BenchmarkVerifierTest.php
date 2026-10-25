@@ -105,6 +105,7 @@ test('an admin writes a structured verifier case with a live preview and an expe
         ->select('[data-benchmark-task]', 'decision_verifier')
         ->assertAttribute('[data-benchmark-verifier-source="structured"]', 'aria-pressed', 'true')
         ->assertMissing('[data-benchmark-prompt]')
+        ->assertScript("Array.from(document.querySelector('[data-verifier-action-type]').options).some((option) => option.text.trim() === 'Delete series (delete_series)')", true)
         ->select('[data-verifier-action-type]', 'delete_series')
         ->assertValue('[data-verifier-action-label]', 'Delete series')
         ->fill('[data-verifier-title]', 'Delete series "Severance (2022)"')

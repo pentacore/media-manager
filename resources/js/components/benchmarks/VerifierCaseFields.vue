@@ -167,7 +167,11 @@ const jsonTextareaClass =
                         :key="option.value"
                         :value="option.value"
                     >
-                        {{ option.value }}
+                        {{
+                            option.label === option.value
+                                ? option.value
+                                : `${option.label} (${option.value})`
+                        }}
                     </option>
                 </select>
                 <InputError :message="errors['input.verifier.action_type']" />
