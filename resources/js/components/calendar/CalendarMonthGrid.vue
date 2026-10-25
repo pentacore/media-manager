@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core';
 import { computed } from 'vue';
 import {
     Popover,
@@ -6,6 +7,7 @@ import {
     PopoverTrigger,
 } from '@/components/ui/popover';
 import { useDateTime } from '@/composables/useDateTime';
+import { cn } from '@/lib/utils';
 import type { CalendarItem as CalendarItemType } from '@/types';
 import CalendarItem from './CalendarItem.vue';
 
@@ -18,6 +20,12 @@ const props = defineProps<{
 }>();
 
 const MAX_PER_DAY = 3;
+
+/**
+ * Below `sm` the day popover spans the screen with a 16 px gutter. The query
+ * only feeds the popover, which SSR never renders (it opens on a tap).
+ */
+const isPhone = useMediaQuery('(max-width: 639.98px)');
 
 const { formatDate } = useDateTime();
 
@@ -56,7 +64,7 @@ function dayLabel(day: string): string {
                 v-for="day in cells"
                 :key="day"
                 :class="[
-                    'flex min-h-24 flex-col border-r border-b border-border p-1',
+                    'flex min-h-24 flex-col border-r border-b border-border p-1 max-sm:min-h-14',
                     !day.startsWith(month) &&
                         'bg-bg-hover/30 text-muted-foreground',
                 ]"
@@ -78,27 +86,62 @@ function dayLabel(day: string): string {
                             >
                                 {{ Number(day.slice(8)) }}
                             </span>
-                            <CalendarItem
-                                v-for="item in itemsOn(day).slice(
-                                    0,
-                                    MAX_PER_DAY,
-                                )"
-                                :key="item.key"
-                                :item="item"
-                                compact
-                            />
                             <span
-                                v-if="itemsOn(day).length > MAX_PER_DAY"
-                                class="block px-1 text-[11px] text-muted-foreground"
-                                data-calendar-day-more
+                                class="contents max-sm:hidden"
+                                data-calendar-day-rows
                             >
-                                +{{ itemsOn(day).length - MAX_PER_DAY }} more
+                                <CalendarItem
+                                    v-for="item in itemsOn(day).slice(
+                                        0,
+                                        MAX_PER_DAY,
+                                    )"
+                                    :key="item.key"
+                                    :item="item"
+                                    compact
+                                />
+                                <span
+                                    v-if="itemsOn(day).length > MAX_PER_DAY"
+                                    class="block px-1 text-[11px] text-muted-foreground"
+                                    data-calendar-day-more
+                                >
+                                    +{{ itemsOn(day).length - MAX_PER_DAY }}
+                                    more
+                                </span>
+                            </span>
+                            <span
+                                class="flex flex-wrap items-center justify-end gap-1 px-0.5 sm:hidden"
+                                aria-hidden="true"
+                                data-calendar-day-dots
+                            >
+                                <span
+                                    v-for="item in itemsOn(day).slice(
+                                        0,
+                                        MAX_PER_DAY,
+                                    )"
+                                    :key="item.key"
+                                    :class="
+                                        cn(
+                                            'size-1.5 rounded-full',
+                                            item.service === 'sonarr'
+                                                ? 'bg-svc-sonarr'
+                                                : 'bg-svc-radarr',
+                                        )
+                                    "
+                                />
+                                <span
+                                    v-if="itemsOn(day).length > MAX_PER_DAY"
+                                    class="text-[10px] leading-none text-muted-foreground"
+                                    >+{{
+                                        itemsOn(day).length - MAX_PER_DAY
+                                    }}</span
+                                >
                             </span>
                         </button>
                     </PopoverTrigger>
                     <PopoverContent
                         align="start"
-                        class="w-96 max-w-[calc(100vw-2rem)] p-0"
+                        :collision-padding="isPhone ? 16 : 0"
+                        class="w-96 max-w-[calc(100vw-2rem)] p-0 max-sm:w-[calc(100vw-2rem)]"
                         :data-calendar-day-popover="day"
                     >
                         <h3
