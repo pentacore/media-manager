@@ -8,11 +8,14 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Decision\SecondOpinionCase;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
+use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
 use App\Models\AgentDecision;
 use App\Models\AiToolInvocation;
@@ -22,6 +25,7 @@ use App\Models\BenchmarkRun;
 use App\Models\ChatAttachment;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescription;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonInterface;
@@ -116,7 +120,7 @@ test('the index lists cases and filters by task and tag', function (): void {
             ->component('Admin/Benchmarks/Cases/Index')
             ->has('cases.data', 2)
             ->has('cases.meta')
-            ->has('tasks', count(AiTask::cases()) - 3)
+            ->has('tasks', count(AiTask::cases()) - 2)
             ->where('filters.task', null));
 
     $this->get(route('admin.benchmarks.cases.index', ['task' => 'decision']))
@@ -428,6 +432,9 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     expect(BenchmarkCase::query()->count())->toBe(0);
 })->with([
     'unknown task' => [['task' => 'nope'], 'task'],
+    'judge scoring for a verifier case' => [['task' => 'decision_verifier'], 'scoring.type'],
+    'verdict without an expected verdict' => [['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict']], 'scoring.expected_agrees'],
+    'expected verdict not a boolean' => [['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict', 'expected_agrees' => 'maybe']], 'scoring.expected_agrees'],
     'judge task' => [['task' => 'benchmark_judge'], 'task'],
     'failover task' => [['task' => 'failover'], 'task'],
     'name missing' => [['name' => ''], 'name'],
@@ -464,6 +471,15 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     'payload not JSON' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{bad']], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.payload_json'],
     'payload too long' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => sprintf('{"a": "%s"}', str_repeat('a', 65_536))]], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event.payload_json'],
     'unknown action kind' => [['task' => 'decision', 'input' => ['event' => ['service' => 'sonarr', 'event_type' => 'Grab', 'payload_json' => '{}'], 'action_kind' => 'nope'], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.action_kind'],
+    'verifier on a title case' => [['input' => ['verifier' => benchmarkVerifierFields()]], 'input.verifier'],
+    'verifier title missing' => [benchmarkVerifierOverrides(['title' => '']), 'input.verifier.title'],
+    'verifier title too long' => [benchmarkVerifierOverrides(['title' => str_repeat('a', 301)]), 'input.verifier.title'],
+    'verifier source service missing' => [benchmarkVerifierOverrides(['source_service' => '']), 'input.verifier.source_service'],
+    'verifier payload as a list' => [benchmarkVerifierOverrides(['payload_json' => '[1, 2]']), 'input.verifier.payload_json'],
+    'verifier event payload not JSON' => [benchmarkVerifierOverrides(['event_payload_json' => '{bad']), 'input.verifier.event_payload_json'],
+    'too many verifier details' => [benchmarkVerifierOverrides(['details' => array_fill(0, 21, ['label' => 'Row', 'value' => 'Yes'])]), 'input.verifier.details'],
+    'verifier detail without a value' => [benchmarkVerifierOverrides(['details' => [['label' => 'Delete files', 'value' => '']]]), 'input.verifier.details.0.value'],
+    'verifier rationale too long' => [benchmarkVerifierOverrides(['rationale' => str_repeat('a', 1001)]), 'input.verifier.rationale'],
 ]);
 
 test('a decision case from a webhook event derives its prompt and event key on save', function (): void {
@@ -928,4 +944,139 @@ test('the index flags decision cases built from a webhook event', function (): v
         ->assertInertia(fn ($page) => $page
             ->where('cases.data', fn ($rows): bool => collect($rows)->firstWhere('id', $event->id)['webhook_event'] === true
                 && collect($rows)->firstWhere('id', $text->id)['webhook_event'] === false));
+});
+
+test('a raw-prompt verifier case saves its prompt and expected verdict', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $prompt = "PROPOSED ACTION\nType: delete_series (Delete series)";
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload([
+        'task' => 'decision_verifier',
+        'name' => 'Wrong series delete',
+        'input' => ['prompt' => $prompt],
+        'scoring' => ['type' => 'verdict', 'expected_agrees' => false],
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('admin.benchmarks.cases.index'));
+
+    $benchmarkCase = BenchmarkCase::query()->sole();
+
+    expect($benchmarkCase->task)->toBe(AiTask::DecisionVerifier)
+        ->and($benchmarkCase->input)->toEqual(['prompt' => $prompt])
+        ->and($benchmarkCase->scoring)->toEqual(['type' => 'verdict', 'expected_agrees' => false]);
+});
+
+test('a verifier case without an expected verdict is told to choose one', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload(['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict']]))
+        ->assertSessionHasErrors(['scoring.expected_agrees' => 'Choose the expected verdict.']);
+});
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function benchmarkVerifierFields(array $overrides = []): array
+{
+    return array_replace([
+        'action_type' => 'delete_series',
+        'action_label' => 'Delete series',
+        'title' => 'Delete series "Severance (2022)"',
+        'description' => 'Sonarr will delete the series and its files.',
+        'details' => [['label' => 'Delete files', 'value' => 'Yes']],
+        'verified' => true,
+        'payload_json' => '{"zeta": 1, "alpha": {"b": 1, "a": 2}}',
+        'rationale' => 'Emby reported the series removed.',
+        'source_service' => 'emby',
+        'event_type' => 'library.deleted',
+        'event_payload_json' => '{"Item": {"Name": "Severance"}}',
+    ], $overrides);
+}
+
+/**
+ * @param  array<string, mixed>  $verifier
+ * @return array<string, mixed>
+ */
+function benchmarkVerifierOverrides(array $verifier = []): array
+{
+    return [
+        'task' => 'decision_verifier',
+        'name' => 'Wrong series delete',
+        'input' => ['prompt' => '', 'verifier' => benchmarkVerifierFields($verifier)],
+        'scoring' => ['type' => 'verdict', 'expected_agrees' => false],
+    ];
+}
+
+function benchmarkVerifierCaseFile(): string
+{
+    return new SecondOpinionCase(
+        actionType: 'delete_series',
+        actionLabel: 'Delete series',
+        actionDescription: new ActionDescription('Delete series "Severance (2022)"', 'Sonarr will delete the series and its files.', [['label' => 'Delete files', 'value' => 'Yes']]),
+        payload: ['zeta' => 1, 'alpha' => ['b' => 1, 'a' => 2]],
+        rationale: 'Emby reported the series removed.',
+        sourceService: 'emby',
+        eventType: 'library.deleted',
+        eventPayload: ['Item' => ['Name' => 'Severance']],
+    )->toPrompt();
+}
+
+test('a structured verifier case derives its prompt from the production case file on save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload(benchmarkVerifierOverrides()))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.benchmarks.cases.index'));
+
+    $input = BenchmarkCase::query()->sole()->input;
+
+    expect($input['verifier'])->toEqual(benchmarkVerifierFields())
+        ->and($input['prompt'])->toBe(benchmarkVerifierCaseFile())
+        ->and(strpos($input['prompt'], '"zeta"'))->toBeLessThan(strpos($input['prompt'], '"alpha"'))
+        ->and(strpos($input['prompt'], '"b"'))->toBeLessThan(strpos($input['prompt'], '"a"'));
+});
+
+test('the verifier payload key order survives a reload and a re-save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload(benchmarkVerifierOverrides()))->assertSessionHasNoErrors();
+    $benchmarkCase = BenchmarkCase::query()->sole();
+
+    $this->put(route('admin.benchmarks.cases.update', $benchmarkCase), benchmarkCasePayload([
+        ...benchmarkVerifierOverrides(),
+        'input' => ['prompt' => '', 'verifier' => $benchmarkCase->fresh()->input['verifier']],
+    ]))->assertSessionHasNoErrors();
+
+    expect($benchmarkCase->fresh()->input['prompt'])->toBe(benchmarkVerifierCaseFile());
+});
+
+test('blank optional verifier fields are stored normalised', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $overrides = benchmarkVerifierOverrides(['rationale' => '', 'event_type' => '']);
+    unset($overrides['input']['verifier']['details']);
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload($overrides))->assertSessionHasNoErrors();
+
+    expect(BenchmarkCase::query()->sole()->input['verifier'])->toMatchArray(['details' => [], 'rationale' => '', 'event_type' => null]);
+});
+
+test('the form offers every second-opinion action type with its rule label', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'label' => 'Delete series']);
+
+    $this->get(route('admin.benchmarks.cases.create'))
+        ->assertInertia(fn ($page) => $page
+            ->has('verifierActionTypes', count(SecondOpinionVerifier::supportedActionTypes()))
+            ->where('verifierActionTypes', fn ($types): bool => collect($types)->contains(['value' => 'delete_series', 'label' => 'Delete series'])
+                && collect($types)->contains(['value' => 'resolve_manual_import', 'label' => 'resolve_manual_import'])));
+});
+
+test('the index carries the expected verdict of verifier cases only', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $verifier = BenchmarkCase::factory()->expectingVerdict(false)->create();
+    $title = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    $this->get(route('admin.benchmarks.cases.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('cases.data', fn ($rows): bool => collect($rows)->firstWhere('id', $verifier->id)['expected_agrees'] === false
+                && collect($rows)->firstWhere('id', $verifier->id)['scoring_type'] === 'verdict'
+                && collect($rows)->firstWhere('id', $title->id)['expected_agrees'] === null));
 });

@@ -9,11 +9,14 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Ai\Decision\DecisionPrompt;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
+use App\Enums\BenchmarkScoringType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBenchmarkCaseRequest;
+use App\Models\ActionRequest;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
@@ -23,6 +26,8 @@ use App\Services\Benchmark\CaseAttachmentSync;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
+use App\Services\Benchmark\VerifierCaseCapture;
+use App\Services\Benchmark\VerifierCaseInput;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -65,6 +70,7 @@ class BenchmarkCaseController extends Controller
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
                     'attachment_count' => $benchmarkCase->attachments_count ?? 0,
                     'scripted' => $benchmarkCase->isScripted(),
+                    'expected_agrees' => ($benchmarkCase->scoring['type'] ?? null) === BenchmarkScoringType::Verdict->value ? ($benchmarkCase->scoring['expected_agrees'] ?? null) : null,
                     'webhook_event' => is_array($benchmarkCase->input['event'] ?? null),
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
@@ -81,14 +87,24 @@ class BenchmarkCaseController extends Controller
         ]);
     }
 
-    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage, CaptureSource $captureSource): Response|RedirectResponse
+    public function create(Request $request, CaseDraftFromUsage $caseDraftFromUsage, CaptureSource $captureSource, VerifierCaseCapture $verifierCaseCapture): Response|RedirectResponse
     {
         $draft = null;
         $warnings = [];
 
         $aiUsageRecord = null;
 
-        if ($request->filled('from_usage')) {
+        if ($request->filled('action_request')) {
+            $actionRequest = ActionRequest::query()->findOrFail($request->integer('action_request'));
+
+            try {
+                ['draft' => $draft, 'warnings' => $warnings] = $verifierCaseCapture->draft($actionRequest);
+            } catch (CaseDraftRefused $caseDraftRefused) {
+                Inertia::flash('toast', ['type' => 'error', 'message' => __($caseDraftRefused->getMessage())]);
+
+                return back();
+            }
+        } elseif ($request->filled('from_usage')) {
             $aiUsageRecord = AiUsageRecord::query()->findOrFail($request->integer('from_usage'));
         } elseif ($request->filled('from_invocation')) {
             $aiUsageRecord = $captureSource->forInvocation($request->string('from_invocation')->toString());
@@ -260,6 +276,7 @@ class BenchmarkCaseController extends Controller
                 ->map(static fn (DecisionActionKind $kind): array => ['value' => $kind->value, 'label' => $kind->label()])
                 ->values()
                 ->all(),
+            'verifierActionTypes' => $this->verifierActionTypes(),
             'writeTools' => $this->writeToolNames(),
             'defaultRubrics' => $this->defaultRubrics(),
         ]);
@@ -291,6 +308,11 @@ class BenchmarkCaseController extends Controller
             } else {
                 $input['event_key'] = $validated['input']['event_key'] ?? null;
             }
+        }
+
+        if ($aiTask === AiTask::DecisionVerifier && is_array($validated['input']['verifier'] ?? null)) {
+            $input['verifier'] = VerifierCaseInput::normalize($validated['input']['verifier']);
+            $input['prompt'] = VerifierCaseInput::prompt($input['verifier']);
         }
 
         if ($aiTask === AiTask::PriceUpdater) {
@@ -330,6 +352,7 @@ class BenchmarkCaseController extends Controller
                         'cache_write_per_mtok' => $price['cache_write_per_mtok'] ?? null,
                     ], $scoring['expected'] ?? []),
                 ],
+                BenchmarkScoringType::Verdict->value => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => (bool) $scoring['expected_agrees']],
                 default => [
                     'type' => 'judge',
                     'rubric_note' => $scoring['rubric_note'] ?? null,
@@ -352,6 +375,19 @@ class BenchmarkCaseController extends Controller
             static fn (AiTask $aiTask): array => ['name' => $aiTask->label(), 'value' => $aiTask->value],
             array_filter(AiTask::cases(), static fn (AiTask $aiTask): bool => $aiTask->isBenchmarkable()),
         ));
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function verifierActionTypes(): array
+    {
+        $labels = VerifierCaseInput::actionLabels();
+
+        return array_map(
+            static fn (string $type): array => ['value' => $type, 'label' => $labels[$type]],
+            SecondOpinionVerifier::supportedActionTypes(),
+        );
     }
 
     /**

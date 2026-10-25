@@ -26,6 +26,7 @@ trait BenchmarkCaseValidationRules
 {
     use ChatAttachmentValidationRules;
     use DecisionEventValidationRules;
+    use VerifierCaseValidationRules;
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -39,7 +40,7 @@ trait BenchmarkCaseValidationRules
             'tags.*' => ['string', 'max:40'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'input' => ['required', 'array'],
-            'input.prompt' => [Rule::requiredIf(fn (): bool => $this->input('input.event') === null), 'nullable', 'string', 'max:65536'],
+            'input.prompt' => [Rule::requiredIf(fn (): bool => $this->input('input.event') === null && $this->input('input.verifier') === null), 'nullable', 'string', 'max:65536'],
             'input.history' => ['nullable', 'array', 'max:50'],
             'input.history.*' => ['array'],
             'input.history.*.role' => ['required', Rule::in(['user', 'assistant'])],
@@ -49,6 +50,8 @@ trait BenchmarkCaseValidationRules
             'input.event_key' => ['nullable', 'string', Rule::in(DecisionAgentSettings::availableEventKeys())],
             'input.event' => ['nullable', 'array:service,event_type,payload_json'],
             ...$this->decisionEventRules('input.event.', false),
+            'input.verifier' => ['nullable', 'array:action_type,action_label,title,description,details,verified,payload_json,rationale,source_service,event_type,event_payload_json'],
+            ...$this->verifierCaseRules('input.verifier.', false),
             'input.action_kind' => ['nullable', DecisionActionKind::validationRule()],
             'input.providers' => [Rule::requiredIf(fn (): bool => $this->input('task') === AiTask::PriceUpdater->value), 'array'],
             'input.providers.*' => ['string'],
@@ -70,6 +73,7 @@ trait BenchmarkCaseValidationRules
             'scoring.expected.*.cache_read_per_mtok' => ['nullable', 'numeric', 'min:0'],
             'scoring.expected.*.cache_write_per_mtok' => ['nullable', 'numeric', 'min:0'],
             'scoring.tolerance_percent' => ['nullable', 'numeric', 'min:0', 'max:50'],
+            'scoring.expected_agrees' => ['nullable', 'required_if:scoring.type,verdict', 'boolean'],
             'scoring.rubric_note' => ['nullable', 'string', 'max:2000'],
             'scoring.pass_threshold' => ['nullable', 'integer', 'min:1', 'max:10'],
             'source_invocation_id' => ['nullable', 'string', 'max:120'],
@@ -104,6 +108,16 @@ trait BenchmarkCaseValidationRules
             function (Validator $validator): void {
                 if ($this->input('input.event') !== null && $this->input('task') !== AiTask::Decision->value) {
                     $validator->errors()->add('input.event', 'Only decision cases can carry a webhook event.');
+                }
+            },
+            function (Validator $validator): void {
+                if ($this->input('input.verifier') !== null && $this->input('task') !== AiTask::DecisionVerifier->value) {
+                    $validator->errors()->add('input.verifier', 'Only decision verifier cases can carry a structured case file.');
+                }
+            },
+            function (Validator $validator): void {
+                if (is_array($this->input('input.verifier'))) {
+                    $this->checkVerifierPayloadObjects($validator, 'input.verifier.');
                 }
             },
             function (Validator $validator): void {

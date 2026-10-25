@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
@@ -536,3 +537,26 @@ test('the run context is unbound after a decision case, even when the agent thro
     expect(fn () => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))->toThrow(RuntimeException::class, 'provider down');
     expect(App::bound(DecisionRunContext::class))->toBeFalse();
 });
+
+test('a verifier case prompts the verifier agent with the case file and outputs its verdict as JSON', function (): void {
+    $prompt = "PROPOSED ACTION\nType: delete_series (Delete series)";
+    $benchmarkCase = BenchmarkCase::factory()->expectingVerdict(false)->create(['input' => ['prompt' => $prompt]]);
+    runnerStartContext($benchmarkCase);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'The event concerns another series.']]);
+
+    $caseOutcome = resolve(BenchmarkCaseRunner::class)->run($benchmarkCase);
+
+    expect(json_decode($caseOutcome->output, true))->toBe(['agrees' => false, 'reason' => 'The event concerns another series.'])
+        ->and($caseOutcome->intendedActions)->toBe([])
+        ->and($caseOutcome->toolLog)->toBe([]);
+    DecisionVerifierAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => $agentPrompt->prompt === $prompt && $agentPrompt->model === 'gpt-candidate');
+});
+
+test('a verifier answer without a boolean verdict throws so the result fails', function (array $answer): void {
+    $benchmarkCase = BenchmarkCase::factory()->expectingVerdict(true)->create();
+    runnerStartContext($benchmarkCase);
+    DecisionVerifierAgent::fake([$answer]);
+
+    expect(fn (): CaseOutcome => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))
+        ->toThrow(RuntimeException::class, 'The verifier returned no verdict.');
+})->with(['missing' => [['reason' => 'Unsure.']], 'a string' => [['agrees' => 'true', 'reason' => 'Yes.']]]);

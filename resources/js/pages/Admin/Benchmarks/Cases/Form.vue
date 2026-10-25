@@ -11,6 +11,10 @@ import {
     PAYLOAD_MESSAGES,
     parseJsonObject,
     PriceExpectationsEditor,
+    VerdictScoringFields,
+    verifierBody,
+    verifierFormState,
+    verifierPayloadsInvalid,
 } from '@/components/benchmarks';
 import type {
     BenchmarkActionKindOption,
@@ -22,6 +26,8 @@ import type {
     BenchmarkDecisionSource,
     BenchmarkScoringKind,
     BenchmarkTaskOption,
+    BenchmarkVerifierActionType,
+    BenchmarkVerifierSource,
 } from '@/components/benchmarks';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -36,6 +42,7 @@ const props = defineProps<{
     eventKeys: string[];
     decisionServices: string[];
     actionKinds: BenchmarkActionKindOption[];
+    verifierActionTypes: BenchmarkVerifierActionType[];
     writeTools: string[];
     defaultRubrics: Record<string, string>;
 }>();
@@ -55,6 +62,7 @@ defineOptions({
 const SCORING_BY_TASK: Record<string, BenchmarkScoringKind> = {
     decision: 'actions',
     price_updater: 'prices',
+    decision_verifier: 'verdict',
 };
 
 const source = props.case ?? props.draft;
@@ -128,6 +136,14 @@ const form = useForm({
               },
         action_kind: source?.input.action_kind ?? '',
         providers: [...(source?.input.providers ?? [])],
+        verifier_source:
+            source === null || source.input.verifier
+                ? ('structured' as BenchmarkVerifierSource)
+                : ('text' as BenchmarkVerifierSource),
+        verifier: verifierFormState(source?.input.verifier, {
+            actionType: props.verifierActionTypes[0],
+            service: props.decisionServices[0] ?? 'sonarr',
+        }),
     },
     fixtures: [...(source?.fixtures ?? [])] as BenchmarkFixture[],
     scoring: {
@@ -145,6 +161,9 @@ const form = useForm({
         tolerance_percent: source?.scoring.tolerance_percent ?? 1,
         rubric_note: source?.scoring.rubric_note ?? '',
         pass_threshold: source?.scoring.pass_threshold ?? 7,
+        expected_agrees: (source?.scoring.type === 'verdict'
+            ? (source.scoring.expected_agrees ?? null)
+            : null) as boolean | null,
     },
     source_invocation_id: source?.source_invocation_id ?? null,
     source_prompt_tokens: source?.source_prompt_tokens ?? null,
@@ -170,10 +189,13 @@ const actionsInvalid = ref(false);
 
 const payloadInvalid = computed(
     () =>
-        form.task === 'decision' &&
-        form.input.decision_source === 'event' &&
-        parseJsonObject(form.input.event.payload_json, PAYLOAD_MESSAGES)
-            .error !== null,
+        (form.task === 'decision' &&
+            form.input.decision_source === 'event' &&
+            parseJsonObject(form.input.event.payload_json, PAYLOAD_MESSAGES)
+                .error !== null) ||
+        (form.task === 'decision_verifier' &&
+            form.input.verifier_source === 'structured' &&
+            verifierPayloadsInvalid(form.input.verifier)),
 );
 
 const showBlocked = computed(
@@ -213,8 +235,19 @@ const tagsError = computed(
 form.transform((data) => {
     const input: Record<string, unknown> = {};
 
-    if (data.task !== 'decision' || data.input.decision_source === 'text') {
+    const structuredVerifier =
+        data.task === 'decision_verifier' &&
+        data.input.verifier_source === 'structured';
+
+    if (
+        !(data.task === 'decision' && data.input.decision_source === 'event') &&
+        !structuredVerifier
+    ) {
         input.prompt = data.input.prompt;
+    }
+
+    if (structuredVerifier) {
+        input.verifier = verifierBody(data.input.verifier);
     }
 
     if (data.task === 'chat') {
@@ -261,6 +294,8 @@ form.transform((data) => {
             cache_read_per_mtok: numberOrNull(price.cache_read_per_mtok),
             cache_write_per_mtok: numberOrNull(price.cache_write_per_mtok),
         }));
+    } else if (data.scoring.type === 'verdict') {
+        scoring.expected_agrees = data.scoring.expected_agrees;
     } else {
         scoring.rubric_note =
             data.scoring.rubric_note === '' ? null : data.scoring.rubric_note;
@@ -413,6 +448,7 @@ const selectClass =
             :event-keys="eventKeys"
             :decision-services="decisionServices"
             :action-kinds="actionKinds"
+            :verifier-action-types="verifierActionTypes"
             :errors="errors"
         />
 
@@ -437,6 +473,12 @@ const selectClass =
                 v-else-if="scoringType === 'prices'"
                 v-model:prices="form.scoring.prices"
                 v-model:tolerance="form.scoring.tolerance_percent"
+                :errors="errors"
+            />
+
+            <VerdictScoringFields
+                v-else-if="scoringType === 'verdict'"
+                v-model:expected-agrees="form.scoring.expected_agrees"
                 :errors="errors"
             />
 

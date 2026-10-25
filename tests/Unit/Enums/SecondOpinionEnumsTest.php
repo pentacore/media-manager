@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiTask;
+use App\Enums\BenchmarkScoringType;
 use App\Enums\ClassificationGate;
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
@@ -23,14 +24,19 @@ test('only the jev engines use the classifier', function (): void {
         ->and(SecondOpinionEngine::Jev->label())->toBe('Jev decides');
 });
 
-test('the decision verifier task follows chat, takes tiers and is not benchmarkable', function (): void {
+test('the decision verifier task follows chat, takes tiers and is benchmarked by verdict', function (): void {
     expect(AiTask::DecisionVerifier->value)->toBe('decision_verifier')
         ->and(AiTask::DecisionVerifier->label())->toBe('Decision verifier')
         ->and(AiTask::DecisionVerifier->inheritsChatModel())->toBeTrue()
         ->and(AiTask::DecisionVerifier->allowsTiers())->toBeTrue()
         ->and(AiTask::DecisionVerifier->hasReasoning())->toBeTrue()
-        ->and(AiTask::DecisionVerifier->isBenchmarkable())->toBeFalse()
-        ->and(AiTask::DecisionVerifier->acceptsEventScopes())->toBeFalse();
+        ->and(AiTask::DecisionVerifier->isBenchmarkable())->toBeTrue()
+        ->and(AiTask::DecisionVerifier->benchmarkScoringType())->toBe(BenchmarkScoringType::Verdict)
+        ->and(AiTask::DecisionVerifier->acceptsEventScopes())->toBeFalse()
+        ->and(AiTask::Failover->isBenchmarkable())->toBeFalse()
+        ->and(AiTask::BenchmarkJudge->isBenchmarkable())->toBeFalse()
+        ->and(BenchmarkScoringType::Verdict->value)->toBe('verdict')
+        ->and(BenchmarkScoringType::Verdict->label())->toBe('Verdict');
 });
 
 test('the second opinion gate has a label', function (): void {

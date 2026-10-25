@@ -53,6 +53,15 @@ class BenchmarkCaseFactory extends Factory
         ]);
     }
 
+    public function expectingVerdict(bool $agrees): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'task' => AiTask::DecisionVerifier,
+            'input' => ['prompt' => "PROPOSED ACTION\nType: delete_series (Delete series)"],
+            'scoring' => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => $agrees],
+        ]);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $fixtures
      */

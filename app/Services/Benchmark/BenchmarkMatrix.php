@@ -6,6 +6,8 @@ namespace App\Services\Benchmark;
 
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkResultStatus;
+use App\Enums\BenchmarkScoringType;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use Illuminate\Support\Collection;
@@ -23,6 +25,7 @@ final readonly class BenchmarkMatrix
      * @return list<array{
      *     task: string,
      *     task_label: string,
+     *     verdict: bool,
      *     candidates: list<array<string, mixed>>,
      *     max_scored: int,
      *     best: array{avg_score: int|null, pass_rate: int|null, cost_per_case: int|null, latency_p50: int|null},
@@ -41,9 +44,12 @@ final readonly class BenchmarkMatrix
 
         foreach ($results->sortBy(fn (Collection $group, string $task): int => self::taskOrder($task)) as $task => $taskResults) {
             $candidates = [];
+            $verdict = AiTask::tryFrom((string) $task)?->benchmarkScoringType() === BenchmarkScoringType::Verdict;
+            $judged = AiTask::tryFrom((string) $task)?->benchmarkScoringType() === BenchmarkScoringType::Judge;
+            $verdictErrors = $verdict ? self::verdictErrors($benchmarkRun, (string) $task) : [];
 
             foreach ($benchmarkRun->candidates as $index => $candidate) {
-                $candidates[] = self::candidateRow($benchmarkRun, $index, $candidate, $taskResults->where('candidate_index', $index));
+                $candidates[] = self::candidateRow($benchmarkRun, $index, $candidate, $taskResults->where('candidate_index', $index), $judged, $verdict ? ($verdictErrors[$index] ?? ['missed' => 0, 'false_alarms' => 0]) : null);
             }
 
             $maxScored = $candidates === [] ? 0 : (int) max(array_column($candidates, 'scored'));
@@ -52,6 +58,7 @@ final readonly class BenchmarkMatrix
             $matrix[] = [
                 'task' => (string) $task,
                 'task_label' => AiTask::tryFrom((string) $task)?->label() ?? (string) $task,
+                'verdict' => $verdict,
                 'candidates' => $candidates,
                 'max_scored' => $maxScored,
                 'best' => [
@@ -70,9 +77,11 @@ final readonly class BenchmarkMatrix
     /**
      * @param  array<string, mixed>  $candidate
      * @param  Collection<int, BenchmarkResult>  $results
+     * @param  bool  $judged  whether the task is judge-scored, the only kind a judge can grade its own candidate on
+     * @param  array{missed: int, false_alarms: int}|null  $verdictErrors  null when the task is not verdict-scored
      * @return array<string, mixed>
      */
-    private static function candidateRow(BenchmarkRun $benchmarkRun, int $index, array $candidate, Collection $results): array
+    private static function candidateRow(BenchmarkRun $benchmarkRun, int $index, array $candidate, Collection $results, bool $judged, ?array $verdictErrors): array
     {
         $judge = $benchmarkRun->judge;
         $reasoning = is_string($candidate['reasoning'] ?? null) ? $candidate['reasoning'] : null;
@@ -83,11 +92,44 @@ final readonly class BenchmarkMatrix
             'model' => $candidate['model'] ?? null,
             'reasoning' => $reasoning,
             'reasoning_label' => AiReasoningLevel::tryFrom((string) $reasoning)?->label() ?? AiReasoningLevel::ProviderDefault->label(),
-            'self_judged' => is_array($judge)
+            'self_judged' => $judged
+                && is_array($judge)
                 && ($judge['provider'] ?? null) === ($candidate['provider'] ?? null)
                 && ($judge['model'] ?? null) === ($candidate['model'] ?? null),
             ...BenchmarkCandidateStats::of($results),
+            'missed' => $verdictErrors['missed'] ?? null,
+            'false_alarms' => $verdictErrors['false_alarms'] ?? null,
         ];
+    }
+
+    /**
+     * Missed and false-alarm verdicts per candidate of one verdict-scored task.
+     *
+     * @return array<int, array{missed: int, false_alarms: int}>
+     */
+    private static function verdictErrors(BenchmarkRun $benchmarkRun, string $task): array
+    {
+        $counts = [];
+
+        $rows = $benchmarkRun->results()
+            ->where('case_task', $task)
+            ->where('status', BenchmarkResultStatus::Ok)
+            ->selectRaw("candidate_index, score_detail->>'error_kind' as error_kind, count(*) as total")
+            ->groupByRaw("candidate_index, score_detail->>'error_kind'")
+            ->toBase()
+            ->get();
+
+        foreach ($rows as $row) {
+            $counts[(int) $row->candidate_index] ??= ['missed' => 0, 'false_alarms' => 0];
+
+            match ($row->error_kind) {
+                'missed' => $counts[(int) $row->candidate_index]['missed'] += (int) $row->total,
+                'false_alarm' => $counts[(int) $row->candidate_index]['false_alarms'] += (int) $row->total,
+                default => null,
+            };
+        }
+
+        return $counts;
     }
 
     /**
