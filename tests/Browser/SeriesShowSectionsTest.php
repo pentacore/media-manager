@@ -29,6 +29,53 @@ function seriesSectionsFakeSonarr(): void
 }
 
 /**
+ * Series 7 for the replace dialog: S01E03 has an installed file the dialog can
+ * inspect, under a root folder configured as tv. The episodefile fake precedes
+ * the episode wildcard, which would match it too.
+ */
+function seriesSectionsFakeSonarrWithFile(ServiceConnection $serviceConnection): void
+{
+    $serviceConnection->update(['settings' => [
+        'sonarr_root_folders' => [['root_folder_id' => 1, 'path' => '/tv', 'scope' => 'tv']],
+    ]]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/7*' => Http::response([
+            'id' => 7, 'title' => 'Example Series Title', 'titleSlug' => 'example-series-title', 'year' => 2026, 'status' => 'continuing',
+            'path' => '/tv/Example Series Title', 'seriesType' => 'standard', 'tags' => [],
+            'monitored' => true, 'qualityProfileId' => 1, 'images' => [],
+            'seasons' => [['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 2, 'episodeFileCount' => 1, 'sizeOnDisk' => 100]]],
+            'statistics' => ['sizeOnDisk' => 100, 'episodeCount' => 2, 'episodeFileCount' => 1],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/503' => Http::response([
+            'id' => 503, 'seriesId' => 7, 'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'size' => 100, 'sceneName' => 'Example.Series.S01E03.OLD', 'releaseGroup' => 'OLD',
+            'mediaInfo' => ['subtitles' => 'Japanese'],
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([
+            ['id' => 70, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Example Pilot Episode', 'airDate' => '2026-02-18', 'hasFile' => false, 'monitored' => true],
+            ['id' => 73, 'seasonNumber' => 1, 'episodeNumber' => 3, 'title' => 'Example Third Episode', 'airDate' => '2026-03-04', 'hasFile' => true, 'episodeFileId' => 503, 'monitored' => true],
+        ]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+        'sonarr.local:8989/api/v3/release*' => Http::response([]),
+    ]);
+}
+
+/**
+ * An Inertia client-side visit, the way the chat's "Pick release" link makes one.
+ */
+function seriesSectionsInertiaVisitScript(string $url): string
+{
+    return sprintf(<<<'JS'
+        (() => {
+            const host = [...document.querySelectorAll('*')].find((element) => element.__vue_app__);
+            host.__vue_app__.config.globalProperties.$inertia.visit(%s);
+        })()
+        JS, json_encode($url, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+}
+
+/**
  * Fakes the series list Sonarr reads for the library index, with series 7 as
  * its only row, so a member can reach the show page through a real `<Link>`
  * (an SPA visit) rather than a fresh full navigation.
@@ -210,13 +257,34 @@ test("an episode's interactive search names the episode in its heading", functio
         ->assertNoSmoke();
 });
 
-test('the series page opens the replace dialog for the episode in the link', function (): void {
-    seriesSectionsFakeSonarr();
+test('the series page opens the replace dialog for the episode in the link and inspects its file', function (): void {
+    seriesSectionsFakeSonarrWithFile($this->sonarr);
     $this->actingAs(User::factory()->member()->create());
 
     visit(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false))
         ->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]')
         ->assertSeeIn('[data-replacement-dialog]', 'Replace file')
+        ->assertSeeIn('[data-replacement-current-file]', 'WEBDL-1080p')
+        ->assertPresent('[data-replacement-search]')
+        ->assertMissing('[data-replacement-error]')
+        ->assertNoSmoke();
+});
+
+test('following a replace link from the same series page opens and inspects the dialog', function (): void {
+    seriesSectionsFakeSonarrWithFile($this->sonarr);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))
+        ->assertSee('Example Series Title')
+        ->assertMissing('[data-replacement-dialog]')
+        ->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->script(seriesSectionsInertiaVisitScript(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false)));
+
+    $webpage->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]')
+        ->assertSeeIn('[data-replacement-current-file]', 'WEBDL-1080p')
+        ->assertMissing('[data-replacement-error]')
         ->assertNoSmoke();
 });
 

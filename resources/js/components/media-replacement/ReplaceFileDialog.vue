@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { AlertTriangle, Loader2, Search } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaReplacementController from '@/actions/App/Http/Controllers/Media/MediaReplacementController';
@@ -317,6 +317,17 @@ watch(
         }
     },
 );
+
+// A parent that mounts the dialog already open (the series page's first row
+// click or a replace link) never changes `open`, so the watcher above stays
+// silent. Inspect on mount instead — not with an immediate watcher, which
+// would fetch during SSR.
+onMounted(() => {
+    if (props.open) {
+        resetState();
+        void runInspect();
+    }
+});
 </script>
 
 <template>
