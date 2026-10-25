@@ -1,3 +1,25 @@
+# [1.50.0](https://github.com/pentacore/media-manager/compare/v1.49.1...v1.50.0) (2026-10-25)
+
+
+### Bug Fixes
+
+* **benchmarks:** count only finished results as common cases, bill unscored judge calls, cap the re-judge cost ([6f05629](https://github.com/pentacore/media-manager/commit/6f056297c0123e29fe050c04352e3952bbbee0b3))
+* **benchmarks:** size compare grid controls for touch ([0226d95](https://github.com/pentacore/media-manager/commit/0226d95a02c6ba635f606f283c9f9483fd6a43fb))
+* **benchmarks:** sweep only lost neutral judgements, not queued ones ([dd00173](https://github.com/pentacore/media-manager/commit/dd0017342a69e6fc427546c649fd4866fd7987e0))
+
+
+### Features
+
+* **benchmarks:** compare runs side by side with deltas and manual pairs ([bff9627](https://github.com/pentacore/media-manager/commit/bff962781f9b3cb1894d17d38648b73c1b9621e7))
+* **benchmarks:** line runs up against a baseline on their common cases ([4edbba8](https://github.com/pentacore/media-manager/commit/4edbba8e0a0e7814b9e5286530acf5d37b694d38))
+* **benchmarks:** open comparisons from the runs list, a run and its regression banner ([11902f1](https://github.com/pentacore/media-manager/commit/11902f13efd64eb6069c5d406ed9e22479c9e159))
+* **benchmarks:** re-judge compared runs with a neutral judge from the page ([53e0e6c](https://github.com/pentacore/media-manager/commit/53e0e6cb50be546294fd885f497819d929835e21))
+* **benchmarks:** re-score compared runs with a neutral judge within a cap ([a0daf8c](https://github.com/pentacore/media-manager/commit/a0daf8c6b239f710b818679b6fc595f67512e4b0))
+* **benchmarks:** serve the run comparison page ([64246ef](https://github.com/pentacore/media-manager/commit/64246ef220ca12905e2472398a865b4effb3cab8))
+* **benchmarks:** show changed cases and compare outputs side by side ([64a90b1](https://github.com/pentacore/media-manager/commit/64a90b10568db26aa96200ceaf3ebc55e1ce1b76))
+* **benchmarks:** start, estimate and cancel neutral re-judges ([c602b7b](https://github.com/pentacore/media-manager/commit/c602b7b29a63b034d9aad6f88738923c024a189e))
+* **benchmarks:** store neutral judgements and re-judges ([c457773](https://github.com/pentacore/media-manager/commit/c4577730553a6b88160c7fa59b78b018007ff518))
+
 ## [1.49.1](https://github.com/pentacore/media-manager/compare/v1.49.0...v1.49.1) (2026-10-25)
 
 # [1.49.0](https://github.com/pentacore/media-manager/compare/v1.48.1...v1.49.0) (2026-10-22)
