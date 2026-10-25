@@ -47,7 +47,10 @@ export type ModelOptions = {
     reasoningProviders: string[];
 };
 
-/** A routable tool group's key (`App\Ai\Routing\ToolGroup`). */
+/**
+ * A routable tool group's key. Mirrors `App\Ai\Routing\ToolGroup`, which
+ * sits outside `App\Enums`, so typefinder emits no enum for it.
+ */
 export type ToolGroupValue = string;
 
 /** Why a tool group was loaded for a turn. */

@@ -1,40 +1,39 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ToolGroupSource, TurnToolGroups } from './types';
+import { SOURCE_LABELS, sourceClasses } from './toolGroupSources';
+import type { TurnToolGroups } from './types';
 
 const props = defineProps<{
     /** The groups the reply had; null shows nothing. */
     groups: TurnToolGroups | undefined;
 }>();
 
-const SOURCE_LABELS: Record<ToolGroupSource, string> = {
-    pinned: 'Pinned',
-    assistant: 'Assistant',
-    carried_over: 'Carried over',
-    picked: 'Picked',
-};
-
 const list = computed(() => (Array.isArray(props.groups) ? props.groups : []));
+
+/** A list (even an empty one) always started from the core tools. */
+const hasCore = computed(() => Array.isArray(props.groups));
 </script>
 
 <template>
     <p
-        v-if="groups === 'all' || list.length > 0"
+        v-if="groups === 'all' || hasCore"
         class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-fg-subtle"
         data-turn-tools
     >
         <span>Tools this turn:</span>
         <span v-if="groups === 'all'" data-turn-tools-all>All tools</span>
         <span
+            v-if="hasCore"
+            class="inline-flex items-center rounded-full border border-border bg-bg-elev px-1.5 py-px text-muted-foreground"
+            data-turn-tool="core"
+            >Core</span
+        >
+        <span
             v-for="entry in list"
             :key="entry.group"
             :class="[
                 'inline-flex items-center gap-1 rounded-full border px-1.5 py-px',
-                entry.source === 'pinned'
-                    ? 'border-accent/28 bg-accent/10 text-accent'
-                    : entry.source === 'assistant'
-                      ? 'border-success/30 bg-success/10 text-success'
-                      : 'border-border bg-bg-elev text-muted-foreground',
+                sourceClasses(entry.source),
             ]"
             :data-turn-tool="entry.group"
             :data-turn-tool-source="entry.source"

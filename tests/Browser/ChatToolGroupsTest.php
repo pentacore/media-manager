@@ -159,6 +159,7 @@ test('each reply shows the tools it had and the toggle hides them', function ():
     $webpage->fill('[data-chat-input]', 'What is playing?')
         ->keys('[data-chat-input]', 'Enter')
         ->assertSee('Nothing is playing.')
+        ->assertPresent('[data-turn-tool="core"]')
         ->assertPresent('[data-turn-tool="playback"]')
         ->click('[data-tool-lines-toggle]')
         ->assertMissing('[data-turn-tool="playback"]')
@@ -203,16 +204,47 @@ test('a pinned group whose integration is gone shows as unavailable', function (
 });
 
 test('tool strip controls are disabled while a reply streams', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->assertEnabled('[data-tool-add]');
+    $webpage->assertEnabled('[data-tool-add]')
+        ->click('[data-tool-add]')
+        ->click('[data-tool-pin="indexers"]')
+        ->assertEnabled('[data-tool-unpin="indexers"]');
     $webpage->script(chatToolGroupsHoldStreamScript());
     $webpage->fill('[data-chat-input]', 'Hi')
         ->keys('[data-chat-input]', 'Enter')
         ->assertSeeIn('[data-chat-thread]', 'thinking…')
-        ->assertDisabled('[data-tool-add]');
+        ->assertDisabled('[data-tool-add]')
+        ->assertDisabled('[data-tool-unpin="indexers"]');
+});
+
+test('pinning in an existing conversation is saved and survives a reload', function (): void {
+    ServiceConnection::factory()->prowlarr()->create();
+    $admin = User::factory()->admin()->create();
+    $conversationId = chatToolGroupsConversation($admin, []);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertEnabled('[data-tool-add]')
+        ->click('[data-tool-add]')
+        ->click('[data-tool-pin="indexers"]')
+        ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
+
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-tool-unpin=\"indexers\"]')?.disabled === false"));
+
+    expect(json_decode((string) DB::table('agent_conversations')->where('id', $conversationId)->value('pinned_tool_groups'), true))->toBe(['indexers']);
+
+    $reloaded = $webpage->refresh()->assertNoSmoke();
+    $reloaded->script(appHydratedScript());
+    $reloaded->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
 });
 
 test('the admin transcript shows each reply\'s tools', function (): void {

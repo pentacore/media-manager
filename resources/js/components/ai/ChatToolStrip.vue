@@ -7,12 +7,8 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type {
-    ToolGroupOption,
-    ToolGroupSource,
-    ToolGroupValue,
-    TurnToolGroup,
-} from './types';
+import { SOURCE_LABELS, sourceClasses } from './toolGroupSources';
+import type { ToolGroupOption, ToolGroupValue, TurnToolGroup } from './types';
 
 const props = defineProps<{
     routingEnabled: boolean;
@@ -29,13 +25,6 @@ const emit = defineEmits<{
     (e: 'unpin', value: ToolGroupValue): void;
     (e: 'toggle-lines'): void;
 }>();
-
-const SOURCE_LABELS: Record<ToolGroupSource, string> = {
-    pinned: 'Pinned',
-    assistant: 'Assistant',
-    carried_over: 'Carried over',
-    picked: 'Picked',
-};
 
 /** The pinned groups, flagged when their integration is no longer there. */
 const pinnedChips = computed(() =>
@@ -85,9 +74,7 @@ const pinnable = computed(() =>
                 :key="`carried-${entry.group}`"
                 :class="[
                     'inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
-                    entry.source === 'assistant'
-                        ? 'border-success/30 bg-success/10 text-success'
-                        : 'border-border bg-bg-elev text-muted-foreground',
+                    sourceClasses(entry.source),
                 ]"
                 :data-tool-chip="entry.group"
                 :data-tool-source="entry.source"

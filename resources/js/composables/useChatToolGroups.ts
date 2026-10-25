@@ -14,6 +14,27 @@ import { jsonRequest } from '@/lib/http';
 
 const TURN_LINES_KEY = 'mm.chat.showTurnTools';
 
+type ToolGroupOptions = {
+    routing_enabled: boolean;
+    groups: ToolGroupOption[];
+};
+
+/** The options request, shared by every panel; cleared when it fails. */
+let optionsRequest: Promise<ToolGroupOptions> | null = null;
+
+function fetchOptions(): Promise<ToolGroupOptions> {
+    optionsRequest ??= jsonRequest<ToolGroupOptions>(
+        'GET',
+        ChatToolGroupsController.url(),
+    ).catch((e: unknown) => {
+        optionsRequest = null;
+
+        throw e;
+    });
+
+    return optionsRequest;
+}
+
 type ToolGroupState = {
     pinned_tool_groups: ToolGroupValue[];
     carried_over_tool_groups: TurnToolGroup[];
@@ -73,10 +94,7 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
         }
 
         try {
-            const data = await jsonRequest<{
-                routing_enabled: boolean;
-                groups: ToolGroupOption[];
-            }>('GET', ChatToolGroupsController.url());
+            const data = await fetchOptions();
             routingEnabled.value = data.routing_enabled;
             options.value = data.groups;
             loaded.value = true;
