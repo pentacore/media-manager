@@ -371,6 +371,7 @@ final readonly class CaseDraftFromUsage
                 'rubric_note' => null,
                 'pass_threshold' => 7,
             ],
+            BenchmarkScoringType::Verdict => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => null],
         };
     }
 

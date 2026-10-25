@@ -29,8 +29,8 @@ use Throwable;
 
 /**
  * Scores one case outcome by the case's scoring rule: deterministic checks
- * for decision actions and price-updater writes, the blind LLM judge for
- * every other task. Details never use the `tool_log` key: the run job merges
+ * for decision actions, price-updater writes and verifier verdicts, the blind
+ * LLM judge for every other task. Details never use the `tool_log` key: the run job merges
  * the tool log into the stored detail itself.
  */
 final readonly class BenchmarkScorer
@@ -61,6 +61,7 @@ final readonly class BenchmarkScorer
         return match ($scoringType) {
             BenchmarkScoringType::Actions => $this->scoreActions($scoring, $caseOutcome),
             BenchmarkScoringType::Prices => $this->scorePrices($scoring, $caseOutcome),
+            BenchmarkScoringType::Verdict => $this->scoreVerdict($scoring, $caseOutcome),
             BenchmarkScoringType::Judge => $this->judge($benchmarkCase, $caseOutcome),
         };
     }
@@ -190,6 +191,45 @@ final readonly class BenchmarkScorer
             'score' => $fields === 0 ? 1.0 : round($matchedFields / $fields, 4),
             'passed' => $mismatches === [],
             'detail' => ['mismatches' => $mismatches],
+            'judge_status' => BenchmarkJudgeStatus::None,
+            'judge_cost_usd' => 0.0,
+        ];
+    }
+
+    /**
+     * Compare the verifier's boolean verdict with the expected one. Agreeing
+     * with an action that should be stopped is a miss; objecting to one that
+     * should run is a false alarm; an output without a boolean verdict scores
+     * zero.
+     *
+     * @param  array<string, mixed>  $scoring
+     * @return array{score: float, passed: bool, detail: array<string, mixed>, judge_status: BenchmarkJudgeStatus, judge_cost_usd: float}
+     */
+    private function scoreVerdict(array $scoring, CaseOutcome $caseOutcome): array
+    {
+        $decoded = json_decode($caseOutcome->output, true);
+        $decoded = is_array($decoded) ? $decoded : [];
+
+        $agrees = is_bool($decoded['agrees'] ?? null) ? $decoded['agrees'] : null;
+        $reason = is_string($decoded['reason'] ?? null) ? $decoded['reason'] : null;
+        $expected = ($scoring['expected_agrees'] ?? null) === true;
+
+        $errorKind = match (true) {
+            $agrees === null => 'no_verdict',
+            ! $expected && $agrees => 'missed',
+            $expected && ! $agrees => 'false_alarm',
+            default => null,
+        };
+
+        return [
+            'score' => $errorKind === null ? 1.0 : 0.0,
+            'passed' => $errorKind === null,
+            'detail' => [
+                'expected_agrees' => $expected,
+                'agrees' => $agrees,
+                'reason' => $reason,
+                'error_kind' => $errorKind,
+            ],
             'judge_status' => BenchmarkJudgeStatus::None,
             'judge_cost_usd' => 0.0,
         ];

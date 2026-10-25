@@ -116,7 +116,7 @@ test('the index lists cases and filters by task and tag', function (): void {
             ->component('Admin/Benchmarks/Cases/Index')
             ->has('cases.data', 2)
             ->has('cases.meta')
-            ->has('tasks', count(AiTask::cases()) - 3)
+            ->has('tasks', count(AiTask::cases()) - 2)
             ->where('filters.task', null));
 
     $this->get(route('admin.benchmarks.cases.index', ['task' => 'decision']))
@@ -428,6 +428,9 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     expect(BenchmarkCase::query()->count())->toBe(0);
 })->with([
     'unknown task' => [['task' => 'nope'], 'task'],
+    'judge scoring for a verifier case' => [['task' => 'decision_verifier'], 'scoring.type'],
+    'verdict without an expected verdict' => [['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict']], 'scoring.expected_agrees'],
+    'expected verdict not a boolean' => [['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict', 'expected_agrees' => 'maybe']], 'scoring.expected_agrees'],
     'judge task' => [['task' => 'benchmark_judge'], 'task'],
     'failover task' => [['task' => 'failover'], 'task'],
     'name missing' => [['name' => ''], 'name'],
@@ -928,4 +931,29 @@ test('the index flags decision cases built from a webhook event', function (): v
         ->assertInertia(fn ($page) => $page
             ->where('cases.data', fn ($rows): bool => collect($rows)->firstWhere('id', $event->id)['webhook_event'] === true
                 && collect($rows)->firstWhere('id', $text->id)['webhook_event'] === false));
+});
+
+test('a raw-prompt verifier case saves its prompt and expected verdict', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $prompt = "PROPOSED ACTION\nType: delete_series (Delete series)";
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload([
+        'task' => 'decision_verifier',
+        'name' => 'Wrong series delete',
+        'input' => ['prompt' => $prompt],
+        'scoring' => ['type' => 'verdict', 'expected_agrees' => false],
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('admin.benchmarks.cases.index'));
+
+    $benchmarkCase = BenchmarkCase::query()->sole();
+
+    expect($benchmarkCase->task)->toBe(AiTask::DecisionVerifier)
+        ->and($benchmarkCase->input)->toEqual(['prompt' => $prompt])
+        ->and($benchmarkCase->scoring)->toEqual(['type' => 'verdict', 'expected_agrees' => false]);
+});
+
+test('a verifier case without an expected verdict is told to choose one', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->post(route('admin.benchmarks.cases.store'), benchmarkCasePayload(['task' => 'decision_verifier', 'scoring' => ['type' => 'verdict']]))
+        ->assertSessionHasErrors(['scoring.expected_agrees' => 'Choose the expected verdict.']);
 });

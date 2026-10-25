@@ -330,6 +330,7 @@ class BenchmarkCaseController extends Controller
                         'cache_write_per_mtok' => $price['cache_write_per_mtok'] ?? null,
                     ], $scoring['expected'] ?? []),
                 ],
+                'verdict' => ['type' => 'verdict', 'expected_agrees' => (bool) $scoring['expected_agrees']],
                 default => [
                     'type' => 'judge',
                     'rubric_note' => $scoring['rubric_note'] ?? null,

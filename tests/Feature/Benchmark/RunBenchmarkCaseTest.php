@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
@@ -1130,4 +1131,42 @@ test('a missing case attachment fails the result without being reported', functi
     expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
         ->and($benchmarkResult->error)->toBe('The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
     Exceptions::assertNotReported(CaseAttachmentMissing::class);
+});
+
+test('a verifier case is scored on its verdict without a judge', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, BenchmarkCase::factory()->expectingVerdict(false)->create(), 0)->create();
+    DecisionVerifierAgent::fake(fn (): StructuredTextResponse => new StructuredTextResponse(
+        ['agrees' => true, 'reason' => 'Looks routine.'],
+        '{"agrees":true,"reason":"Looks routine."}',
+        new TextUsage(1_000, 100),
+        new Meta('openai', 'gpt-candidate'),
+    ));
+    BenchmarkJudgeAgent::fake()->preventStrayPrompts();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Ok)
+        ->and($benchmarkResult->score)->toBe(0.0)
+        ->and($benchmarkResult->passed)->toBeFalse()
+        ->and($benchmarkResult->judge_status)->toBe(BenchmarkJudgeStatus::None)
+        ->and((float) $benchmarkResult->judge_cost_usd)->toBe(0.0)
+        ->and($benchmarkResult->score_detail)->toMatchArray(['expected_agrees' => false, 'agrees' => true, 'reason' => 'Looks routine.', 'error_kind' => 'missed']);
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
+test('a verifier answer without a verdict fails the result with a clear error', function (): void {
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, BenchmarkCase::factory()->expectingVerdict(true)->create(), 0)->create();
+    DecisionVerifierAgent::fake([['reason' => 'Unsure.']]);
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    $benchmarkResult->refresh();
+
+    expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
+        ->and($benchmarkResult->error)->toBe('The verifier returned no verdict.')
+        ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
 });

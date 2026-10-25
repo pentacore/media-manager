@@ -33,5 +33,7 @@ test('all() covers only benchmarkable tasks', function (): void {
     $all = resolve(BenchmarkTierCandidates::class)->all();
 
     expect(array_keys($all))->not->toContain(AiTask::BenchmarkJudge->value)
-        ->and(array_keys($all))->toContain(AiTask::Decision->value);
+        ->and(array_keys($all))->toContain(AiTask::Decision->value)
+        ->and(array_keys($all))->toContain(AiTask::DecisionVerifier->value)
+        ->and(array_keys($all))->not->toContain(AiTask::Failover->value);
 });

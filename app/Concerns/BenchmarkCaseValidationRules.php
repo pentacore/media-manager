@@ -70,6 +70,7 @@ trait BenchmarkCaseValidationRules
             'scoring.expected.*.cache_read_per_mtok' => ['nullable', 'numeric', 'min:0'],
             'scoring.expected.*.cache_write_per_mtok' => ['nullable', 'numeric', 'min:0'],
             'scoring.tolerance_percent' => ['nullable', 'numeric', 'min:0', 'max:50'],
+            'scoring.expected_agrees' => ['nullable', 'required_if:scoring.type,verdict', 'boolean'],
             'scoring.rubric_note' => ['nullable', 'string', 'max:2000'],
             'scoring.pass_threshold' => ['nullable', 'integer', 'min:1', 'max:10'],
             'source_invocation_id' => ['nullable', 'string', 'max:120'],
