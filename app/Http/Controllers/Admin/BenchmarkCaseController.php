@@ -13,6 +13,7 @@ use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\Routing\DecisionActionKind;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
+use App\Enums\BenchmarkScoringType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBenchmarkCaseRequest;
 use App\Models\ActionRequest;
@@ -69,7 +70,7 @@ class BenchmarkCaseController extends Controller
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
                     'attachment_count' => $benchmarkCase->attachments_count ?? 0,
                     'scripted' => $benchmarkCase->isScripted(),
-                    'expected_agrees' => ($benchmarkCase->scoring['type'] ?? null) === 'verdict' ? ($benchmarkCase->scoring['expected_agrees'] ?? null) : null,
+                    'expected_agrees' => ($benchmarkCase->scoring['type'] ?? null) === BenchmarkScoringType::Verdict->value ? ($benchmarkCase->scoring['expected_agrees'] ?? null) : null,
                     'webhook_event' => is_array($benchmarkCase->input['event'] ?? null),
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
@@ -351,7 +352,7 @@ class BenchmarkCaseController extends Controller
                         'cache_write_per_mtok' => $price['cache_write_per_mtok'] ?? null,
                     ], $scoring['expected'] ?? []),
                 ],
-                'verdict' => ['type' => 'verdict', 'expected_agrees' => (bool) $scoring['expected_agrees']],
+                BenchmarkScoringType::Verdict->value => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => (bool) $scoring['expected_agrees']],
                 default => [
                     'type' => 'judge',
                     'rubric_note' => $scoring['rubric_note'] ?? null,

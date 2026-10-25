@@ -7,6 +7,7 @@ namespace App\Services\Benchmark;
 use App\Ai\Decision\DecisionPrompt;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkScoringType;
 use App\Models\ActionRequest;
 use App\Models\AiUsageRecord;
 use Illuminate\Support\Arr;
@@ -24,9 +25,11 @@ final readonly class VerifierCaseCapture
 
     public const string NO_EVENT_WARNING = 'The triggering webhook event is gone, so the event type and payload are empty.';
 
-    public const string PROMPT_DIFFERS_WARNING = 'The rebuilt case file differs from the prompt the verifier saw; check the preview before saving.';
+    public const string PROMPT_DIFFERS_WARNING = 'The rebuilt case file differs from the prompt the verifier saw; check the preview before saving. Switch to Raw prompt to keep the recorded case file.';
 
-    public const string PAYLOAD_TOO_LARGE_WARNING = 'The event payload is too large to store as a structured case; the case keeps the rebuilt case file as its prompt.';
+    public const string PAYLOAD_TOO_LARGE_WARNING = 'The action or event payload is too large to store as a structured case; the case keeps the rebuilt case file as its prompt.';
+
+    public const string NO_DESCRIPTION_WARNING = 'This action request has no description to rebuild the case from, so the case keeps the recorded prompt; choose the expected verdict.';
 
     public const string NO_SECOND_OPINION = 'This action request has no second opinion to benchmark.';
 
@@ -43,8 +46,12 @@ final readonly class VerifierCaseCapture
             ->latest('id')
             ->first();
 
-        if ($actionRequest === null || blank($actionRequest->title) || blank($actionRequest->description)) {
+        if ($actionRequest === null) {
             return new VerifierCaseDraft(['prompt' => $prompt], null, [self::NO_REQUEST_WARNING], null);
+        }
+
+        if (blank($actionRequest->title) || blank($actionRequest->description)) {
+            return new VerifierCaseDraft(['prompt' => $prompt], null, [self::NO_DESCRIPTION_WARNING], null);
         }
 
         return $this->rebuild($actionRequest, $aiUsageRecord);
@@ -75,7 +82,7 @@ final readonly class VerifierCaseCapture
                 'input' => $verifierCaseDraft->input,
                 'draft_attachments' => [],
                 'fixtures' => [],
-                'scoring' => ['type' => 'verdict', 'expected_agrees' => $verifierCaseDraft->expectedAgrees],
+                'scoring' => ['type' => BenchmarkScoringType::Verdict->value, 'expected_agrees' => $verifierCaseDraft->expectedAgrees],
                 'source_invocation_id' => $aiUsageRecord?->invocation_id,
                 'source_prompt_tokens' => $aiUsageRecord?->prompt_tokens,
                 'source_completion_tokens' => $aiUsageRecord?->completion_tokens,
@@ -124,16 +131,17 @@ final readonly class VerifierCaseCapture
 
         $rebuiltPrompt = VerifierCaseInput::prompt($verifier);
 
-        if (mb_strlen($verifier['event_payload_json']) > DecisionPrompt::MAX_STORED_PAYLOAD_CHARS) {
+        $recorded = $aiUsageRecord?->prompt_text;
+        $recordedDiffers = filled($recorded) && ! str_ends_with((string) $recorded, '…') && $recorded !== $rebuiltPrompt;
+
+        if (mb_strlen($verifier['payload_json']) > DecisionPrompt::MAX_STORED_PAYLOAD_CHARS || mb_strlen($verifier['event_payload_json']) > DecisionPrompt::MAX_STORED_PAYLOAD_CHARS) {
             $input = ['prompt' => $rebuiltPrompt];
             $warnings[] = self::PAYLOAD_TOO_LARGE_WARNING;
         } else {
-            $input = ['prompt' => $rebuiltPrompt, 'verifier' => $verifier];
+            $input = ['prompt' => $recordedDiffers ? $recorded : $rebuiltPrompt, 'verifier' => $verifier];
         }
 
-        $recorded = $aiUsageRecord?->prompt_text;
-
-        if (filled($recorded) && ! str_ends_with((string) $recorded, '…') && $recorded !== $rebuiltPrompt) {
+        if ($recordedDiffers) {
             $warnings[] = self::PROMPT_DIFFERS_WARNING;
         }
 

@@ -9,6 +9,7 @@ use App\Enums\AiUsageKind;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Benchmark\VerifierCaseCapture;
@@ -197,3 +198,65 @@ test('members cannot capture a second opinion', function (): void {
 
     $this->get(route('admin.benchmarks.cases.create', ['action_request' => verifierCaptureRequest()->id]))->assertForbidden();
 });
+
+test('an action payload too large to store keeps the rebuilt case file as a raw prompt', function (): void {
+    $actionRequest = verifierCaptureRequest(['payload' => ['series_id' => 7, 'blob' => str_repeat('a', 70_000), 'agent_rationale' => 'Because.']]);
+
+    ['draft' => $draft, 'warnings' => $warnings] = resolve(VerifierCaseCapture::class)->draft($actionRequest);
+
+    expect(array_keys($draft['input']))->toBe(['prompt'])
+        ->and($warnings)->toContain(VerifierCaseCapture::PAYLOAD_TOO_LARGE_WARNING);
+});
+
+test('a differing recorded prompt becomes the draft prompt so a raw case keeps what production sent', function (): void {
+    verifierCaptureUsage('PROPOSED ACTION (older wording)');
+
+    ['draft' => $draft, 'warnings' => $warnings] = resolve(VerifierCaseCapture::class)->draft(verifierCaptureRequest());
+
+    expect($draft['input']['prompt'])->toBe('PROPOSED ACTION (older wording)')
+        ->and($draft['input']['verifier'])->toBe(verifierCaptureFields())
+        ->and($warnings)->toContain(VerifierCaseCapture::PROMPT_DIFFERS_WARNING)
+        ->and(VerifierCaseCapture::PROMPT_DIFFERS_WARNING)->toContain('Switch to Raw prompt');
+});
+
+test('a usage row whose request has no description keeps the recorded prompt with its own warning', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    verifierCaptureRequest(['title' => null, 'description' => null]);
+    $aiUsageRecord = verifierCaptureUsage('PROPOSED ACTION recorded');
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.input', ['prompt' => 'PROPOSED ACTION recorded'])
+            ->where('draftWarnings', [VerifierCaseCapture::NO_DESCRIPTION_WARNING]));
+});
+
+test('a captured draft saves as-is through the store the way the form posts it', function (string $source): void {
+    $this->actingAs($admin = User::factory()->admin()->create());
+    $actionRequest = verifierCaptureRequest(['status' => ActionRequestStatus::Completed, 'approved_by' => $admin->id]);
+    $aiUsageRecord = verifierCaptureUsage();
+    $query = $source === 'usage' ? ['from_usage' => $aiUsageRecord->id] : ['action_request' => $actionRequest->id];
+
+    $draft = null;
+    $this->get(route('admin.benchmarks.cases.create', $query))
+        ->assertInertia(function ($page) use (&$draft): void {
+            $draft = $page->toArray()['props']['draft'];
+        });
+
+    $body = [
+        'task' => $draft['task'],
+        'name' => $draft['name'],
+        'tags' => [],
+        'notes' => null,
+        'input' => ['prompt' => '', 'verifier' => $draft['input']['verifier']],
+        'fixtures' => [],
+        'scoring' => $draft['scoring'],
+    ];
+
+    $this->post(route('admin.benchmarks.cases.store'), ['payload' => json_encode($body)])
+        ->assertSessionHasNoErrors();
+
+    $input = BenchmarkCase::query()->sole()->input;
+
+    expect($input['verifier'])->toEqual($draft['input']['verifier'])
+        ->and($input['prompt'])->toBe(VerifierCaseInput::prompt($draft['input']['verifier']));
+})->with(['action request' => ['action_request'], 'usage row' => ['usage']]);
