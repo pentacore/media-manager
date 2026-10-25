@@ -9,12 +9,15 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Enums\AiTask;
+use App\Enums\BenchmarkConversationMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreBenchmarkCaseRequest;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
+use App\Models\BenchmarkCaseAttachment;
 use App\Services\Audit\AuditLogger;
 use App\Services\Benchmark\CaptureSource;
+use App\Services\Benchmark\CaseAttachmentSync;
 use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
@@ -22,6 +25,8 @@ use App\Settings\DecisionAgentSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\Tool;
@@ -56,6 +61,8 @@ class BenchmarkCaseController extends Controller
                     'fixture_count' => count($benchmarkCase->fixtures),
                     'scoring_type' => $benchmarkCase->scoring['type'] ?? null,
                     'source_invocation_id' => $benchmarkCase->source_invocation_id,
+                    'attachment_count' => $benchmarkCase->attachments_count ?? 0,
+                    'scripted' => $benchmarkCase->isScripted(),
                     'updated_at' => $benchmarkCase->updated_at?->toIso8601String(),
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
@@ -111,9 +118,15 @@ class BenchmarkCaseController extends Controller
         return $this->form(null, $draft, $warnings);
     }
 
-    public function store(StoreBenchmarkCaseRequest $storeBenchmarkCaseRequest, AuditLogger $auditLogger): RedirectResponse
+    public function store(StoreBenchmarkCaseRequest $storeBenchmarkCaseRequest, AuditLogger $auditLogger, CaseAttachmentSync $caseAttachmentSync): RedirectResponse
     {
-        $benchmarkCase = BenchmarkCase::create($this->attributes($storeBenchmarkCaseRequest->validated()));
+        $validated = $storeBenchmarkCaseRequest->validated();
+
+        [$benchmarkCase, $skipped] = DB::transaction(function () use ($validated, $caseAttachmentSync): array {
+            $benchmarkCase = BenchmarkCase::create($this->attributes($validated));
+
+            return [$benchmarkCase, $caseAttachmentSync->sync($benchmarkCase, null, $validated['draft_attachment_ids'] ?? [], $validated['attachments'] ?? [])];
+        });
 
         $auditLogger->record(
             'benchmark_case.created',
@@ -122,7 +135,7 @@ class BenchmarkCaseController extends Controller
             context: ['task' => $benchmarkCase->task->value],
         );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Benchmark case created.')]);
+        Inertia::flash('toast', $this->saveToast('created', $skipped));
 
         return to_route('admin.benchmarks.cases.index');
     }
@@ -132,9 +145,20 @@ class BenchmarkCaseController extends Controller
         return $this->form($benchmarkCase, null, []);
     }
 
-    public function update(StoreBenchmarkCaseRequest $storeBenchmarkCaseRequest, BenchmarkCase $benchmarkCase, AuditLogger $auditLogger): RedirectResponse
+    public function update(StoreBenchmarkCaseRequest $storeBenchmarkCaseRequest, BenchmarkCase $benchmarkCase, AuditLogger $auditLogger, CaseAttachmentSync $caseAttachmentSync): RedirectResponse
     {
-        $benchmarkCase->update($this->attributes($storeBenchmarkCaseRequest->validated()));
+        $validated = $storeBenchmarkCaseRequest->validated();
+
+        $skipped = DB::transaction(function () use ($validated, $benchmarkCase, $caseAttachmentSync): int {
+            $benchmarkCase->update($this->attributes($validated));
+
+            return $caseAttachmentSync->sync(
+                $benchmarkCase,
+                array_key_exists('keep_attachment_ids', $validated) ? ($validated['keep_attachment_ids'] ?? []) : null,
+                $validated['draft_attachment_ids'] ?? [],
+                $validated['attachments'] ?? [],
+            );
+        });
 
         $auditLogger->record(
             'benchmark_case.updated',
@@ -143,7 +167,7 @@ class BenchmarkCaseController extends Controller
             context: ['task' => $benchmarkCase->task->value],
         );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Benchmark case updated.')]);
+        Inertia::flash('toast', $this->saveToast('updated', $skipped));
 
         return to_route('admin.benchmarks.cases.index');
     }
@@ -165,11 +189,28 @@ class BenchmarkCaseController extends Controller
     }
 
     /**
+     * @return array{type: string, message: string}
+     */
+    private function saveToast(string $action, int $skipped): array
+    {
+        if ($skipped === 0) {
+            return ['type' => 'success', 'message' => __('Benchmark case :action.', ['action' => $action])];
+        }
+
+        return ['type' => 'info', 'message' => __('Benchmark case :action, but :count :attachments could not be copied because the file is no longer stored.', [
+            'action' => $action,
+            'count' => $skipped,
+            'attachments' => Str::plural('attachment', $skipped),
+        ])];
+    }
+
+    /**
      * @return Builder<BenchmarkCase>
      */
     private function casesQuery(?AiTask $task, string $tag): Builder
     {
         return BenchmarkCase::query()
+            ->withCount('attachments')
             ->when($task instanceof AiTask, static fn (Builder $builder): Builder => $builder->where('task', $task))
             ->when($tag !== '', static fn (Builder $builder): Builder => $builder->whereJsonContains('tags', $tag))
             ->latest('updated_at')
@@ -182,6 +223,8 @@ class BenchmarkCaseController extends Controller
      */
     private function form(?BenchmarkCase $benchmarkCase, ?array $draft, array $warnings): Response
     {
+        $benchmarkCase?->loadMissing('attachments');
+
         return Inertia::render('Admin/Benchmarks/Cases/Form', [
             'case' => $benchmarkCase instanceof BenchmarkCase ? [
                 'id' => $benchmarkCase->id,
@@ -196,6 +239,13 @@ class BenchmarkCaseController extends Controller
                 'source_prompt_tokens' => $benchmarkCase->source_prompt_tokens,
                 'source_completion_tokens' => $benchmarkCase->source_completion_tokens,
                 'source_truncated' => $benchmarkCase->source_truncated,
+                'attachments' => $benchmarkCase->attachments->sortBy('id')->values()->map(static fn (BenchmarkCaseAttachment $attachment): array => [
+                    'id' => $attachment->id,
+                    'turn' => $attachment->turn,
+                    'name' => $attachment->original_name,
+                    'mime_type' => $attachment->mime_type,
+                    'size' => $attachment->size,
+                ])->all(),
             ] : null,
             'draft' => $draft,
             'draftWarnings' => $warnings,
@@ -216,8 +266,9 @@ class BenchmarkCaseController extends Controller
         $input = ['prompt' => $validated['input']['prompt']];
 
         if ($aiTask === AiTask::Chat) {
-            $input['history'] = $validated['input']['history'] ?? [];
+            $input['history'] = array_map(static fn (array $turn): array => ['role' => $turn['role'], 'content' => $turn['content']], $validated['input']['history'] ?? []);
             $input['mode'] = $validated['input']['mode'] ?? null;
+            $input['conversation'] = $validated['input']['conversation'] ?? BenchmarkConversationMode::Context->value;
         }
 
         if ($aiTask === AiTask::Decision) {
