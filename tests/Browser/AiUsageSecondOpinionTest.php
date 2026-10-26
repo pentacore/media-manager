@@ -72,6 +72,7 @@ test('the breakdowns mark per-event rules and mute small samples', function (): 
     foreach (range(1, 5) as $ignored) {
         ActionRequest::factory()->secondOpinion(true, eventKey: 'sonarr:Download')->create(['status' => ActionRequestStatus::Completed, 'approved_by' => User::factory()->admin()]);
     }
+
     ActionRequest::factory()->secondOpinion(true, eventKey: 'radarr:Grab')->create(['status' => ActionRequestStatus::Completed, 'approved_by' => User::factory()->admin()]);
     $this->actingAs(User::factory()->admin()->create());
 
@@ -86,16 +87,16 @@ test('the breakdowns mark per-event rules and mute small samples', function (): 
 });
 
 test('recent disagreements link to the request and to benchmark capture', function (): void {
-    $falseAlarm = agreementBrowserReviewed(false, true, ['title' => 'Delete Example Show from Sonarr'], 'The series is still airing.');
+    $actionRequest = agreementBrowserReviewed(false, true, ['title' => 'Delete Example Show from Sonarr'], 'The series is still airing.');
     $miss = agreementBrowserReviewed(true, false, ['title' => 'Delete Another Show from Sonarr']);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-usage.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-kind]", 'False alarm')
-        ->assertSeeIn("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-reason]", 'The series is still airing.')
+        ->assertSeeIn("[data-disagreement=\"{$actionRequest->id}\"] [data-disagreement-kind]", 'False alarm')
+        ->assertSeeIn("[data-disagreement=\"{$actionRequest->id}\"] [data-disagreement-reason]", 'The series is still airing.')
         ->assertSeeIn("[data-disagreement=\"{$miss->id}\"] [data-disagreement-kind]", 'Miss')
-        ->assertAttribute("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'completed', 'request' => $falseAlarm->id], absolute: false))
+        ->assertAttribute("[data-disagreement=\"{$actionRequest->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'completed', 'request' => $actionRequest->id], absolute: false))
         ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'rejected', 'request' => $miss->id], absolute: false))
         ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-benchmark]", 'href', route('admin.benchmarks.cases.create', ['action_request' => $miss->id], absolute: false));
 });
