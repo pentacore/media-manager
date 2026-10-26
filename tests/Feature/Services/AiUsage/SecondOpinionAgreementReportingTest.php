@@ -128,7 +128,7 @@ test('the event comes from the stored override key, else the webhook event, else
 
 test('answered by names the LLM provider and model, Jev, or unknown', function (): void {
     agreementReviewed(true, true);
-    agreementReviewed(true, true, ['second_opinion' => ActionRequest::factory()->secondOpinion(true, engine: 'jev', confidence: 0.92)->make()->second_opinion]);
+    agreementReviewed(true, true, ['second_opinion' => agreementVerdict(['engine' => 'jev', 'confidence' => 0.92, 'provider' => null, 'model' => null])]);
     ActionRequest::factory()->create(['second_opinion' => agreementVerdict(['provider' => null, 'model' => null])]);
 
     $rows = agreementRowsByKey(agreementSummary(now()->subDays(7))['by_answered_by']);
@@ -251,14 +251,16 @@ test('a review whose reviewer was deleted is no longer scored', function (): voi
 
     agreementReviewed(true, true, ['approved_by' => $reviewer->id]);
     agreementReviewed(false, true, ['approved_by' => $reviewer->id]);
+    agreementReviewed(false, false, ['approved_by' => $reviewer->id]);
 
     $reviewer->delete();
 
     $summary = agreementSummary(now()->subDays(7));
 
     expect($summary['totals']['reviewed'])->toBe(0)
-        ->and($summary['totals']['auto_run'])->toBe(1)
-        ->and($summary['totals']['unattributed'])->toBe(1)
-        ->and($summary['totals']['verdicts'])->toBe(2)
+        ->and($summary['totals']['auto_run'])->toBe(0)
+        ->and($summary['totals']['rejected_by_verifier'])->toBe(0)
+        ->and($summary['totals']['unattributed'])->toBe(3)
+        ->and($summary['totals']['verdicts'])->toBe(3)
         ->and($summary['rates']['agreement'])->toBeNull();
 });

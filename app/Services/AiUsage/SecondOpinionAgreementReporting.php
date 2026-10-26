@@ -6,10 +6,11 @@ namespace App\Services\AiUsage;
 
 use App\Ai\Decision\SecondOpinionGroundTruth;
 use App\Ai\Decision\SecondOpinionPolicy;
+use App\Ai\Decision\SecondOpinionVerdict;
 use App\Ai\TaskModelResolver;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
-use App\Enums\SecondOpinionEngine;
+use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\AiTaskModel;
@@ -90,7 +91,7 @@ final readonly class SecondOpinionAgreementReporting
             }
 
             $approvedBy = $row->approved_by === null ? null : (int) $row->approved_by;
-            $bucket = $this->bucket($secondOpinion, $status, $approvedBy);
+            $bucket = $this->bucket($secondOpinion, $status, $approvedBy, (bool) $row->requires_approval);
             $createdAt = CarbonImmutable::parse((string) $row->created_at);
 
             $totals['verdicts']++;
@@ -105,20 +106,11 @@ final readonly class SecondOpinionAgreementReporting
             $eventKey = $this->eventKey($secondOpinion, $row->service_type ?? null, $row->event_type ?? null);
             $type = (string) $row->type;
 
-            foreach ([
-                [&$events, $eventKey ?? self::UNKNOWN_EVENT, $eventKey ?? 'Unknown event'],
-                [&$types, $type, $type],
-                [&$answeredBy, ...$this->answeredBy($secondOpinion)],
-            ] as [&$groups, $key, $label]) {
-                $groups[$key] ??= ['key' => $key, 'label' => $label, 'verdicts' => 0, 'reviewed' => 0, 'right' => 0, 'false_alarms' => 0, 'misses' => 0];
-                $groups[$key]['verdicts']++;
-                $groups[$key]['reviewed'] += (int) $reviewed;
-                $groups[$key]['right'] += (int) $right;
-                $groups[$key]['false_alarms'] += (int) $falseAlarm;
-                $groups[$key]['misses'] += (int) $miss;
-            }
+            [$answeredByKey, $answeredByLabel] = $this->answeredBy($secondOpinion);
 
-            unset($groups);
+            $this->tally($events, $eventKey ?? self::UNKNOWN_EVENT, $eventKey ?? 'Unknown event', $reviewed, $right, $falseAlarm, $miss);
+            $this->tally($types, $type, $type, $reviewed, $right, $falseAlarm, $miss);
+            $this->tally($answeredBy, $answeredByKey, $answeredByLabel, $reviewed, $right, $falseAlarm, $miss);
 
             if ($reviewed) {
                 $day = $createdAt->toDateString();
@@ -178,7 +170,7 @@ final readonly class SecondOpinionAgreementReporting
             ->leftJoin('service_connections', 'service_connections.id', '=', 'webhook_events.service_connection_id')
             ->whereNotNull('action_requests.second_opinion')
             ->when($since instanceof CarbonImmutable, fn (Builder $builder): Builder => $builder->where('action_requests.created_at', '>=', $since))
-            ->select(['action_requests.id', 'action_requests.title', 'action_requests.type', 'action_requests.status', 'action_requests.approved_by', 'action_requests.second_opinion', 'action_requests.created_at', 'webhook_events.event_type', 'service_connections.type as service_type'])
+            ->select(['action_requests.id', 'action_requests.title', 'action_requests.type', 'action_requests.status', 'action_requests.requires_approval', 'action_requests.approved_by', 'action_requests.second_opinion', 'action_requests.created_at', 'webhook_events.event_type', 'service_connections.type as service_type'])
             ->latest('action_requests.created_at')
             ->orderByDesc('action_requests.id');
     }
@@ -186,7 +178,7 @@ final readonly class SecondOpinionAgreementReporting
     /**
      * @param  array<string, mixed>  $secondOpinion
      */
-    private function bucket(array $secondOpinion, ActionRequestStatus $status, ?int $approvedBy): string
+    private function bucket(array $secondOpinion, ActionRequestStatus $status, ?int $approvedBy, bool $requiresApproval): string
     {
         if (($secondOpinion['failed'] ?? false) === true) {
             return 'failed';
@@ -206,10 +198,25 @@ final readonly class SecondOpinionAgreementReporting
 
         return match (true) {
             $status === ActionRequestStatus::Pending => 'awaiting_review',
-            $status === ActionRequestStatus::Rejected && ! $agrees && $approvedBy === null => 'rejected_by_verifier',
-            $agrees && $approvedBy === null && $status !== ActionRequestStatus::Rejected => 'auto_run',
+            $status === ActionRequestStatus::Rejected && ! $agrees && $approvedBy === null && ($secondOpinion['mode'] ?? null) === SecondOpinionMode::Reject->value => 'rejected_by_verifier',
+            $agrees && $approvedBy === null && ! $requiresApproval && $status !== ActionRequestStatus::Rejected => 'auto_run',
             default => 'unattributed',
         };
+    }
+
+    /**
+     * Counts one verdict towards its group, opening the group on first sight.
+     *
+     * @param  array<string, Group>  $groups
+     */
+    private function tally(array &$groups, string $key, string $label, bool $reviewed, bool $right, bool $falseAlarm, bool $miss): void
+    {
+        $groups[$key] ??= ['key' => $key, 'label' => $label, 'verdicts' => 0, 'reviewed' => 0, 'right' => 0, 'false_alarms' => 0, 'misses' => 0];
+        $groups[$key]['verdicts']++;
+        $groups[$key]['reviewed'] += (int) $reviewed;
+        $groups[$key]['right'] += (int) $right;
+        $groups[$key]['false_alarms'] += (int) $falseAlarm;
+        $groups[$key]['misses'] += (int) $miss;
     }
 
     /**
@@ -238,14 +245,14 @@ final readonly class SecondOpinionAgreementReporting
     {
         $engine = $secondOpinion['engine'] ?? null;
 
-        if ($engine === SecondOpinionEngine::Jev->value) {
+        if ($engine === SecondOpinionVerdict::ENGINE_JEV) {
             return ['jev', 'Jev'];
         }
 
         $provider = filled($secondOpinion['provider'] ?? null) && is_string($secondOpinion['provider']) ? $secondOpinion['provider'] : null;
         $model = filled($secondOpinion['model'] ?? null) && is_string($secondOpinion['model']) ? $secondOpinion['model'] : null;
 
-        if ($engine === SecondOpinionEngine::Llm->value && ($provider !== null || $model !== null)) {
+        if ($engine === SecondOpinionVerdict::ENGINE_LLM && ($provider !== null || $model !== null)) {
             return [sprintf('llm:%s/%s', $provider ?? '', $model ?? ''), implode(' · ', array_filter([$provider, $model]))];
         }
 
