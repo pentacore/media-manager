@@ -12,6 +12,7 @@ use App\Http\Controllers\AI\ChatTemplatePreviewController;
 use App\Http\Controllers\AI\ChatTemplateRenderController;
 use App\Http\Controllers\AI\ChatToolGroupsController;
 use App\Http\Controllers\AI\ConversationController;
+use App\Http\Controllers\AI\SubtitleAuditBatchController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled'])
@@ -25,6 +26,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::get('chat/attachments/{chatAttachment}', ChatAttachmentController::class)->name('chat.attachments.show');
         Route::get('chat/model-options', ChatModelOptionsController::class)->name('chat.model-options');
         Route::get('chat/tool-groups', ChatToolGroupsController::class)->name('chat.tool-groups');
+        Route::get('chat/subtitle-audit-batches/{subtitleAuditBatch}', SubtitleAuditBatchController::class)
+            ->whereNumber('subtitleAuditBatch')
+            ->name('chat.subtitle-audit-batches.show');
 
         Route::get('conversations', [ConversationController::class, 'index'])
             ->name('conversations.index');

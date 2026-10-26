@@ -38,7 +38,7 @@ test('the card lists episodes in order with their action status and the pending 
         ->and($card['episodes'][0])->toBe([
             'label' => 'S01E02', 'season_number' => 1, 'episode_number' => 2,
             'outcome' => SubtitleAuditEpisodeOutcome::Queued->value, 'missing_languages' => ['eng'],
-            'release_title' => 'Show.S01E02.CR', 'action_request_id' => $pending->id, 'action_status' => 'pending',
+            'release_title' => 'Show.S01E02.CR', 'failure_reason' => null, 'action_request_id' => $pending->id, 'action_status' => 'pending',
         ])
         ->and($card['episodes'][1]['action_request_id'])->toBeNull()
         ->and($card['episodes'][1]['action_status'])->toBeNull()
