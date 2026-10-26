@@ -65,12 +65,37 @@ function mobileLayoutSeries(int $id, string $title): array
 function mobileLayoutFakeServices(): void
 {
     $poster = [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
-    ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     ServiceConnection::factory()->radarr()->create(['name' => 'Radarr', 'url' => 'http://radarr.local:7878', 'api_key' => 'k']);
     ServiceConnection::factory()->sabnzbd()->create(['name' => 'SABnzbd', 'url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
     ServiceConnection::factory()->emby()->create(['name' => 'Emby', 'url' => 'http://emby.local:8096', 'api_key' => 'k']);
     ServiceConnection::factory()->whisparr()->whisparrVersion(WhisparrVersion::V3)->create(['name' => 'Whisparr', 'url' => 'http://whisparr.local:6969', 'api_key' => 'k']);
     ServiceConnection::factory()->seerr()->create(['name' => 'Seerr', 'url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    // Indexer search reads it; the admin connection rows edit it by id.
+    ServiceConnection::factory()->prowlarr()->create(['id' => 901, 'name' => 'Prowlarr', 'url' => 'http://prowlarr.local:9696', 'api_key' => 'k']);
+
+    // Indexer search results with long scene names; the search is admin-grabbable.
+    $releases = [];
+    foreach (range(1, 3) as $index) {
+        $releases[] = [
+            'guid' => 'https://tracker.example/download/'.$index, 'indexerId' => 3, 'title' => 'The.Extraordinarily.Long.Example.Series.Title.Of.Doom.S02E0'.$index.'.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP',
+            'indexer' => 'Example Usenet Indexer', 'size' => 2_500_000_000, 'seeders' => 412, 'age' => $index * 120, 'publishDate' => now()->subDays($index)->toIso8601String(),
+            'downloadUrl' => 'http://prowlarr.local:9696/3/download?link='.$index, 'infoUrl' => 'https://tracker.example/details/'.$index, 'protocol' => 'usenet', 'categories' => [['id' => 5040, 'name' => 'TV/HD']],
+        ];
+    }
+
+    // Wanted: two records a side, with 3-digit totals so both pagers show.
+    $wantedEpisodes = [];
+    foreach ([1, 2] as $number) {
+        $wantedEpisodes[] = ['id' => 80 + $number, 'seriesId' => 2, 'seasonNumber' => 1, 'episodeNumber' => $number, 'title' => 'Example Episode With A Fairly Long Name '.$number, 'airDateUtc' => '2026-02-1'.$number.'T02:00:00Z', 'hasFile' => false, 'monitored' => true, 'series' => ['title' => 'The Extraordinarily Long Example Series Title Of Doom']];
+    }
+
+    $wantedMovies = [
+        ['id' => 11, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-11', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'images' => $poster, 'digitalRelease' => '2026-01-01T00:00:00Z'],
+        ['id' => 13, 'title' => 'Dune', 'titleSlug' => 'example-13', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'images' => $poster],
+    ];
+    // Add series / Add movie lookups: one long title, one with no poster.
+    $lookupOverview = 'An example overview of a fictional title, long enough to fill the three lines the card clamps it to on a phone screen and then some more.';
 
     $slots = [];
     foreach (range(1, 3) as $index) {
@@ -106,6 +131,13 @@ function mobileLayoutFakeServices(): void
         'sonarr.local:8989/api/v3/rootfolder' => Http::response([['id' => 1, 'path' => '/data/tv', 'freeSpace' => 100_000_000_000], ['id' => 2, 'path' => '/data/anime-with-a-long-example-folder-name', 'freeSpace' => 100_000_000_000]]),
         'sonarr.local:8989/api/v3/tag' => Http::response([['id' => 1, 'label' => 'subtitle-check'], ['id' => 2, 'label' => 'example-tag']]),
         'sonarr.local:8989/api/v3/diskspace' => Http::response([['path' => '/data/tv', 'label' => 'TV', 'freeSpace' => 100_000_000_000, 'totalSpace' => 200_000_000_000], ['path' => '/data/anime-with-a-long-example-folder-name', 'label' => 'Anime', 'freeSpace' => 50_000_000_000, 'totalSpace' => 200_000_000_000]]),
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 1, 'pageSize' => 2, 'totalRecords' => 120, 'records' => $wantedEpisodes]),
+        // The cutoff tab is the failed-read state: each section shows its error.
+        'sonarr.local:8989/api/v3/wanted/cutoff*' => Http::response(['message' => 'Example upstream failure'], 500),
+        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
+            ['tvdbId' => 371980, 'title' => 'The Extraordinarily Long Example Series Title Of Doom', 'year' => 2022, 'overview' => $lookupOverview, 'remotePoster' => $poster[0]['remoteUrl']],
+            ['tvdbId' => 371981, 'title' => 'Severance', 'year' => 2022, 'overview' => $lookupOverview],
+        ]),
         'sonarr.local:8989/*' => Http::response([]),
         'radarr.local:7878/api/v3/movie' => Http::response([
             ['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => $poster],
@@ -114,6 +146,12 @@ function mobileLayoutFakeServices(): void
         'radarr.local:7878/api/v3/movie/10*' => Http::response(['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 12_000_000_000, 'images' => $poster, 'status' => 'released']),
         'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/calendar*' => Http::response([]),
+        'radarr.local:7878/api/v3/wanted/missing*' => Http::response(['page' => 1, 'pageSize' => 2, 'totalRecords' => 120, 'records' => $wantedMovies]),
+        'radarr.local:7878/api/v3/wanted/cutoff*' => Http::response(['message' => 'Example upstream failure'], 500),
+        'radarr.local:7878/api/v3/movie/lookup*' => Http::response([
+            ['tmdbId' => 438631, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'year' => 2021, 'overview' => $lookupOverview, 'remotePoster' => $poster[0]['remoteUrl']],
+            ['tmdbId' => 438632, 'title' => 'Dune', 'year' => 2021, 'overview' => $lookupOverview],
+        ]),
         'radarr.local:7878/*' => Http::response([]),
         'whisparr.local:6969/api/v3/movie/11*' => Http::response(['id' => 11, 'title' => 'Example Scene Title That Runs Long Enough To Wrap On A Phone', 'year' => 2024, 'monitored' => true, 'hasFile' => false, 'sizeOnDisk' => 0, 'qualityProfileId' => 1, 'images' => []]),
         'whisparr.local:6969/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'Any']]),
@@ -121,6 +159,8 @@ function mobileLayoutFakeServices(): void
         'whisparr.local:6969/*' => Http::response([]),
         // The Prowlarr connection's edit page lists its indexers (mobileLayoutSeedDetailModels()).
         'prowlarr.local:9696/api/v1/indexer*' => Http::response([['id' => 3, 'name' => 'Example Usenet Indexer', 'enable' => true, 'protocol' => 'usenet', 'priority' => 25]]),
+        // A query containing "failing" is the failed-search state.
+        'prowlarr.local:9696/api/v1/search*' => fn (Request $request) => str_contains($request->url(), 'failing') ? Http::response(['message' => 'Example upstream failure'], 500) : Http::response($releases),
         'prowlarr.local:9696/*' => Http::response([]),
         'sabnzbd.local:8080/api*' => function (Request $request) use ($slots) {
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
@@ -160,8 +200,11 @@ function mobileLayoutFakeServices(): void
         'seerr.local:5055/*' => Http::response([]),
     ]);
 
-    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "'.str_repeat('Severance', 6).'"']);
-    ActionRequest::factory()->described()->failed()->create();
+    // Both on a webhook event of the fakes' Sonarr: the factory default would
+    // bring a connection of a random type, and a random Prowlarr (a lower id
+    // than 901) would take over the indexer search.
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "'.str_repeat('Severance', 6).'"', 'webhook_event_id' => WebhookEvent::factory()->create(['service_connection_id' => $sonarr->id])->id]);
+    ActionRequest::factory()->described()->failed()->create(['webhook_event_id' => WebhookEvent::factory()->create(['service_connection_id' => $sonarr->id])->id]);
     // Played and without a series title, so Statistics' Top titles always
     // lists this long title (the factory's random action and series title
     // used to show it only sometimes, which made the statistics row flaky).
@@ -183,8 +226,8 @@ function mobileLayoutFakeServices(): void
  * The models the admin detail rows name by id (901 and up, clear of the ids
  * the factories hand out): a benchmark case, two finished runs on it, a
  * schedule, a chat template and an AI conversation, all owned by $admin; a
- * second Sonarr connection showing selected disk paths, a Prowlarr
- * connection, a processed webhook event on it (with an AI decision and a
+ * second Sonarr connection showing selected disk paths, a processed webhook
+ * event on the fakes' Prowlarr connection (id 901) (with an AI decision and a
  * dispatched action), a replacement attempt that needs attention, one
  * subtitle rule and a server with one open incident and one check.
  * Two prices and three usage records fill the AI prices table and the AI
@@ -206,8 +249,7 @@ function mobileLayoutSeedDetailModels(User $admin): void
     // Sonarr keeps the lower id, so pages that read the first Sonarr still
     // read that one.
     $sonarr = ServiceConnection::factory()->sonarr()->create(['id' => 902, 'name' => 'Sonarr Anime', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k', 'settings' => ['disk' => ['mode' => 'selected', 'paths' => ['/data/tv'], 'display' => ['/data/tv' => 'both']]]]);
-    $prowlarr = ServiceConnection::factory()->prowlarr()->create(['id' => 901, 'url' => 'http://prowlarr.local:9696', 'api_key' => 'k']);
-    WebhookEvent::factory()->processed()->create(['id' => 901, 'service_connection_id' => $prowlarr->id]);
+    WebhookEvent::factory()->processed()->create(['id' => 901, 'service_connection_id' => 901]);
     // The event's decision can become a benchmark case (a text usage row on
     // its invocation) and it dispatched one action, so the page shows both.
     AgentDecision::factory()->completed(1)->create(['webhook_event_id' => 901, 'invocation_id' => 'inv-example-901', 'summary' => 'Proposed a replacement for the example episode.']);
@@ -372,6 +414,19 @@ function mobileLayoutMemberPages(): array
         'profile' => ['profile.edit', null],
         'preferences' => ['settings.preferences.edit', null],
         'notification settings' => ['settings.notifications.edit', '[data-notification-save]'],
+        'appearance' => ['appearance.edit', null],
+        // Both sections list two records with 3-digit totals, so both pagers show.
+        'wanted' => ['media.wanted.index', '[data-wanted-monitored]', 'main:has([data-wanted-next="sonarr"]):has([data-wanted-next="radarr"])'],
+        'add series' => ['media.series.create', '[data-series-create-back]'],
+        // Its Back button has no hook.
+        'add movie' => ['media.movies.create', null],
+        // The widest state: lookup result cards, one with a poster and one without.
+        'add series results' => ['media.series.create', '[data-series-create-back]', 'main [data-slot="card"]', ['q' => 'severance']],
+        'add movie results' => ['media.movies.create', null, 'main [data-slot="card"]', ['q' => 'dune']],
+        'prowlarr search' => ['prowlarr.search', null, '[data-prowlarr-results]', ['q' => 'severance']],
+        // The failed upstream reads: both Wanted sections and the indexer search show their errors.
+        'wanted (failed reads)' => ['media.wanted.index', '[data-wanted-monitored]', 'main:has([data-wanted-section="sonarr"] [data-slot="alert"]):has([data-wanted-section="radarr"] [data-slot="alert"])', ['tab' => 'cutoff']],
+        'prowlarr search (failed)' => ['prowlarr.search', null, '[data-prowlarr-error]', ['q' => 'failing']],
     ];
 }
 
@@ -418,6 +473,8 @@ function mobileLayoutAdminPages(): array
         'ai chat' => ['ai.chat', '[data-chat-options]'],
         'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
         'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
+        // An admin's search adds a Grab button to every release row.
+        'prowlarr search (admin)' => ['prowlarr.search', null, '[data-prowlarr-results] [data-prowlarr-grab]', ['q' => 'severance']],
         'new connection' => ['admin.connections.create', null],
         // The deferred indexer row: the Prowlarr indexers card measures its row actions.
         'connection' => ['admin.connections.edit', null, '[data-prowlarr-indexer-test="3"]', ['serviceConnection' => 901]],
@@ -441,11 +498,25 @@ function mobileLayoutAdminPages(): array
 function mobileLayoutGuestPages(): array
 {
     return [
-        // 'welcome' (home) waits for a ruling: its decorative 438 px logo SVG ends past the screen inside an overflow-hidden frame.
+        'welcome' => ['home', null],
         // Login.vue has two [data-test="login-button"] branches (with and without SSO), so it gets no primary hook.
         'login' => ['login', null],
         'register' => ['register', '[data-test="register-user-button"]'],
         'forgot password' => ['password.request', '[data-test="email-password-reset-link-button"]'],
+    ];
+}
+
+/**
+ * Fortify's signed-in auth pages (auth layout, no `<main>`): measured on
+ * `body` like the guest pages, for a member whose email is not verified yet.
+ *
+ * @return array<string, array{0: string, 1: ?string, 2?: ?string, 3?: array<string, mixed>}>
+ */
+function mobileLayoutSignedInAuthPages(): array
+{
+    return [
+        'confirm password' => ['password.confirm', '[data-test="confirm-password-button"]'],
+        'verify email' => ['verification.notice', null],
     ];
 }
 
@@ -457,8 +528,19 @@ function mobileLayoutGuestPages(): array
 function mobileLayoutTouchPages(): array
 {
     return [
+        'dashboard' => ['dashboard', [], null],
         'notifications' => ['notifications.index', [], null],
         'profile' => ['profile.edit', [], null],
+        'preferences' => ['settings.preferences.edit', [], null],
+        'appearance' => ['appearance.edit', [], null],
+        'notification settings' => ['settings.notifications.edit', [], null],
+        'wanted' => ['media.wanted.index', [], 'main:has([data-wanted-next="sonarr"]):has([data-wanted-next="radarr"])'],
+        'add series' => ['media.series.create', [], null],
+        'add movie' => ['media.movies.create', [], null],
+        'add series results' => ['media.series.create', ['q' => 'severance'], 'main [data-slot="card"]'],
+        'add movie results' => ['media.movies.create', ['q' => 'dune'], 'main [data-slot="card"]'],
+        // As an admin, so every release row shows its Grab button.
+        'prowlarr search' => ['prowlarr.search', ['q' => 'severance'], '[data-prowlarr-results]'],
         'users' => ['admin.users.index', [], null],
         'connections' => ['admin.connections.index', [], null],
         'notification destinations' => ['admin.notification-destinations.index', [], null],
@@ -554,15 +636,7 @@ function mobileLayoutExcludedRouteNames(): array
 function mobileLayoutPendingRouteNames(): array
 {
     return [
-        // Fortify's auth pages (auth layout, no <main>): Task 7.
-        'verification.notice',
-        'password.confirm',
-        'appearance.edit',
-        'media.series.create',
-        'media.movies.create',
-        'media.wanted.index',
         'media.anime.index',
-        'prowlarr.search',
         'bazarr.overview',
         'bazarr.missing',
         'bazarr.library',
@@ -598,7 +672,7 @@ function mobileLayoutPageRouteNames(): array
  */
 function mobileLayoutUnclassifiedRouteNames(): array
 {
-    $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages()])
+    $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages()])
         ->map(fn (array $row): string => $row[0])
         ->merge(array_keys(mobileLayoutExcludedRouteNames()))
         ->merge(mobileLayoutPendingRouteNames());
@@ -609,6 +683,7 @@ function mobileLayoutUnclassifiedRouteNames(): array
 dataset('mobile layout member pages', mobileLayoutMemberPages());
 dataset('mobile layout admin pages', mobileLayoutAdminPages());
 dataset('mobile layout guest pages', mobileLayoutGuestPages());
+dataset('mobile layout signed-in auth pages', mobileLayoutSignedInAuthPages());
 dataset('mobile layout touch pages', mobileLayoutTouchPages());
 
 /**
@@ -644,6 +719,15 @@ test('a guest page fits a phone screen', function (string $routeName, ?string $p
 /**
  * @param  array<string, int|string>  $parameters
  */
+test('a signed-in auth page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
+    $this->actingAs(User::factory()->member()->unverified()->create());
+
+    mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred, 'body');
+})->with('mobile layout signed-in auth pages');
+
+/**
+ * @param  array<string, int|string>  $parameters
+ */
 test('every control on a page is a 40 px target on a phone', function (string $routeName, array $parameters, ?string $deferred): void {
     config()->set('mediamanager.ai.enabled', true);
     mobileLayoutFakeServices();
@@ -657,6 +741,24 @@ test('every control on a page is a 40 px target on a phone', function (string $r
 
     $webpage->assertScript(phoneSmallTargetsScript(), '');
 })->with('mobile layout touch pages');
+
+test('every control on a guest page is a 40 px target on a phone', function (string $routeName): void {
+    $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage);
+
+    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+})->with('mobile layout guest pages');
+
+test('every control on a signed-in auth page is a 40 px target on a phone', function (string $routeName): void {
+    $this->actingAs(User::factory()->member()->unverified()->create());
+
+    $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage);
+
+    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+})->with('mobile layout signed-in auth pages');
 
 test('an open dialog fits a phone screen', function (): void {
     $this->actingAs(User::factory()->admin()->create());
@@ -759,7 +861,7 @@ test('the sliver check names a scroller that scrolls by a few pixels', function 
 });
 
 test('the phone gate classifies every page route', function (): void {
-    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages()])->map(fn (array $row): string => $row[0])->unique();
+    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages()])->map(fn (array $row): string => $row[0])->unique();
     $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
     $pending = collect(mobileLayoutPendingRouteNames());
 

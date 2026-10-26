@@ -143,7 +143,7 @@ function searchAll(): void {
 
 function tabClass(active: boolean): string {
     return cn(
-        'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+        'touch-target inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
         active
             ? 'bg-accent text-accent-foreground'
             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -159,7 +159,7 @@ function tabClass(active: boolean): string {
             <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
                 Wanted
             </h1>
-            <div class="flex flex-wrap items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5 touch:gap-3">
                 <button
                     type="button"
                     :class="tabClass(filters.tab === 'missing')"
@@ -300,7 +300,7 @@ function tabClass(active: boolean): string {
                             <component
                                 :is="row.library_url ? Link : 'span'"
                                 :href="row.library_url ?? undefined"
-                                class="block truncate text-[13px] font-medium"
+                                class="block truncate text-[13px] font-medium touch:leading-10"
                             >
                                 {{ row.title
                                 }}<template v-if="row.year">
