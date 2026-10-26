@@ -4,6 +4,8 @@ import { computed } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import ClassificationGatesPanel from '@/components/ai/ClassificationGatesPanel.vue';
 import type { GateSummary } from '@/components/ai/ClassificationGatesPanel.vue';
+import type { SecondOpinionAgreement } from '@/components/ai/secondOpinionAgreement';
+import SecondOpinionAgreementPanel from '@/components/ai/SecondOpinionAgreementPanel.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import {
     FreePoolUsage,
@@ -58,6 +60,7 @@ const props = defineProps<{
     rate_limits_enforced: boolean;
     unpricedModels: { role: string; provider: string; model: string }[];
     classification_gates?: GateSummary[];
+    second_opinion_agreement?: SecondOpinionAgreement;
 }>();
 
 defineOptions({
@@ -175,6 +178,19 @@ const {
             <ClassificationGatesPanel
                 v-if="props.classification_gates"
                 :gates="props.classification_gates"
+            />
+        </Deferred>
+
+        <Deferred data="second_opinion_agreement">
+            <template #fallback>
+                <div
+                    class="h-64 animate-pulse rounded-xl border border-border bg-card"
+                    data-second-opinion-agreement-loading
+                />
+            </template>
+            <SecondOpinionAgreementPanel
+                v-if="props.second_opinion_agreement"
+                :agreement="props.second_opinion_agreement"
             />
         </Deferred>
 
