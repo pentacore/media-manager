@@ -33,7 +33,6 @@ export interface AgreementBreakdownRow {
     label: string;
     verdicts: number;
     reviewed: number;
-    agreed: number;
     agreement: number | null;
     false_alarms: number;
     misses: number;
