@@ -351,9 +351,10 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
  * A control is `a[href]`, `button`, a non-hidden `input`, `select`,
  * `textarea` or an element with a button, checkbox, switch, tab, combobox or
  * menuitem role. Skipped: zero-size controls, `visibility` other than
- * `visible`, `pointer-events: none`, anything inside `.sr-only`,
- * `[aria-hidden="true"]` or a reka-ui `VisuallyHidden` (the inline-style test
- * of `phoneOverflowScript()`), and anything that is, or sits in, a
+ * `visible`, `pointer-events: none` on an enabled control (a disabled
+ * Button is `pointer-events: none` yet keeps its box, so it stays in),
+ * anything inside `.sr-only`, `[aria-hidden="true"]` or a reka-ui
+ * `VisuallyHidden` (the inline-style test of `phoneOverflowScript()`), and anything that is, or sits in, a
  * `position: fixed` box below its root (a floating bar overlays content by
  * design). A control is measured by its visible rect: its border box — or,
  * when its computed `display` is `inline`, each of its line boxes — clipped by
@@ -377,7 +378,7 @@ function phoneOverlapScript(string $rootSelector = 'main, [role="dialog"]'): str
             const hidden = (el, root) => {
                 const rect = el.getBoundingClientRect();
                 const style = getComputedStyle(el);
-                if (rect.width === 0 || rect.height === 0 || style.visibility !== 'visible' || style.pointerEvents === 'none' || el.closest('.sr-only, [aria-hidden="true"]')) {
+                if (rect.width === 0 || rect.height === 0 || style.visibility !== 'visible' || (style.pointerEvents === 'none' && !el.matches(':disabled')) || el.closest('.sr-only, [aria-hidden="true"]')) {
                     return true;
                 }
                 for (let node = el; node && node !== root; node = node.parentElement) {
@@ -464,13 +465,14 @@ function phoneOverlapScript(string $rootSelector = 'main, [role="dialog"]'): str
  * Phone-width scroll-sliver check (Batch 3h-3). Returns '' when no visible
  * scroller — a root matching $rootSelector or an element inside one whose
  * computed `overflow-x`/`overflow-y` is `auto` or `scroll` — scrolls along such
- * an axis by 1–6 px (`scrollWidth − clientWidth` sideways, `scrollHeight −
+ * an axis by 1–12 px (`scrollWidth − clientWidth` sideways, `scrollHeight −
  * clientHeight` down). A scroll that small is no content, only an overhang: a
  * `touch-target` `::after` (40 px) sticking out of a smaller control in a
- * scroller, 6 px being the overhang of a 28 px control. Hidden scrollers are
- * skipped like `phoneOverlapScript()` skips hidden controls. Otherwise returns
- * up to ten `tag[data-…] "text" left..right scrolls sideways|down by Npx`
- * entries. Use with assertScript(phoneScrollSliverScript(), '').
+ * scroller, 12 px being the overhang of the smallest one, a 16 px checkbox or
+ * close X ((40 − 16) / 2). Hidden scrollers are skipped like
+ * `phoneOverlapScript()` skips hidden controls. Otherwise returns up to ten
+ * `tag[data-…] "text" left..right scrolls sideways|down by Npx` entries.
+ * Use with assertScript(phoneScrollSliverScript(), '').
  */
 function phoneScrollSliverScript(string $rootSelector = 'main, [role="dialog"]'): string
 {
@@ -513,10 +515,10 @@ function phoneScrollSliverScript(string $rootSelector = 'main, [role="dialog"]')
                     }
                     const dx = el.scrollWidth - el.clientWidth;
                     const dy = el.scrollHeight - el.clientHeight;
-                    if (scrolls(style.overflowX) && dx > 0 && dx <= 6) {
+                    if (scrolls(style.overflowX) && dx > 0 && dx <= 12) {
                         slivers.push(`\${describe(el)} scrolls sideways by \${dx}px`);
                     }
-                    if (scrolls(style.overflowY) && dy > 0 && dy <= 6) {
+                    if (scrolls(style.overflowY) && dy > 0 && dy <= 12) {
                         slivers.push(`\${describe(el)} scrolls down by \${dy}px`);
                     }
                 }

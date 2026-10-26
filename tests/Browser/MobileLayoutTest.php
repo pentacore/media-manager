@@ -15,6 +15,8 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+use Inertia\Response;
 use Pest\Browser\Api\AwaitableWebpage;
 use Pest\Browser\Api\PendingAwaitablePage;
 use Pest\Browser\Api\Webpage;
@@ -389,6 +391,11 @@ function mobileLayoutExcludedRouteNames(): array
         'monitoring.watch-history.export' => 'a CSV export download',
         'bazarr.capabilities' => 'JSON for the subtitle drawer capabilities',
         'bazarr.search' => 'JSON for the subtitle search',
+        'verification.verify' => 'a signed email-verification link that redirects',
+        'password.confirmation' => 'JSON for the password-confirmed status',
+        'two-factor.qr-code' => 'JSON for the two-factor QR code',
+        'two-factor.secret-key' => 'JSON for the two-factor secret key',
+        'two-factor.recovery-codes' => 'JSON for the two-factor recovery codes',
     ];
 }
 
@@ -401,6 +408,9 @@ function mobileLayoutExcludedRouteNames(): array
 function mobileLayoutPendingRouteNames(): array
 {
     return [
+        // Fortify's auth pages (auth layout, no <main>): Task 7.
+        'verification.notice',
+        'password.confirm',
         'ai.templates.index',
         'ai.templates.create',
         'ai.templates.edit',
@@ -437,6 +447,40 @@ function mobileLayoutPendingRouteNames(): array
         'bazarr.escalations',
         'bazarr.admin.index',
     ];
+}
+
+/**
+ * Named GET routes behind `auth` or `auth:<guard>` (Fortify registers its
+ * routes with `auth:web`): every one needs a dataset row, an exclusion or a
+ * pending entry.
+ *
+ * @return list<string>
+ */
+function mobileLayoutPageRouteNames(): array
+{
+    return collect(Route::getRoutes()->getRoutes())
+        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('GET', $route->methods(), true))
+        ->filter(fn (Illuminate\Routing\Route $route): bool => collect($route->gatherMiddleware())->contains(fn (mixed $middleware): bool => $middleware === 'auth' || (is_string($middleware) && str_starts_with($middleware, 'auth:'))))
+        ->map(fn (Illuminate\Routing\Route $route): ?string => $route->getName())
+        ->filter()
+        ->unique()
+        ->values()
+        ->all();
+}
+
+/**
+ * Page routes that are in no dataset, not excluded and not pending.
+ *
+ * @return list<string>
+ */
+function mobileLayoutUnclassifiedRouteNames(): array
+{
+    $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages()])
+        ->map(fn (array $row): string => $row[0])
+        ->merge(array_keys(mobileLayoutExcludedRouteNames()))
+        ->merge(mobileLayoutPendingRouteNames());
+
+    return collect(mobileLayoutPageRouteNames())->diff($classified)->values()->all();
 }
 
 dataset('mobile layout member pages', mobileLayoutMemberPages());
@@ -554,6 +598,10 @@ test('the overlap check names two overlapping controls and excuses nested or cli
     $overlap = $webpage->script(phoneOverlapScript());
     expect($overlap)->toContain('"One"')->toContain('"Two"')->toContain(' × ');
 
+    // A disabled Button is pointer-events: none yet keeps its box, so it still collides.
+    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:60px"><button disabled style="position:absolute;left:0;top:0;width:100px;height:40px;pointer-events:none">Off</button><button style="position:absolute;left:60px;top:10px;width:100px;height:40px">On</button></div>`');
+    expect($webpage->script(phoneOverlapScript()))->toContain('"Off"')->toContain('"On"');
+
     // A small control wholly inside a bigger one's box (a checkbox on a card link) is the overlay pattern.
     $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:120px"><a href="#" style="position:absolute;inset:0">Card</a><button style="position:absolute;left:8px;top:8px;width:40px;height:40px" aria-label="Pick">x</button></div>`');
     $webpage->assertScript(phoneOverlapScript(), '');
@@ -588,15 +636,16 @@ test('the phone gate classifies every page route', function (): void {
     $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
     $pending = collect(mobileLayoutPendingRouteNames());
 
-    $pageRoutes = collect(Route::getRoutes()->getRoutes())
-        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('GET', $route->methods(), true))
-        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('auth', $route->gatherMiddleware(), true))
-        ->map(fn (Illuminate\Routing\Route $route): ?string => $route->getName())
-        ->filter()
-        ->unique()
-        ->values();
+    $pageRoutes = collect(mobileLayoutPageRouteNames());
 
-    expect($pageRoutes->diff($listed->merge($excluded)->merge($pending))->values()->all())->toBe([])
+    expect(mobileLayoutUnclassifiedRouteNames())->toBe([])
         ->and($listed->merge($excluded)->merge($pending)->diff($pageRoutes)->diff(collect(mobileLayoutGuestPages())->map(fn (array $row): string => $row[0]))->values()->all())->toBe([])
         ->and($pending->intersect($listed->merge($excluded))->values()->all())->toBe([]);
+});
+
+test('the route guard catches an unlisted page behind auth or an auth guard', function (): void {
+    Route::middleware(['web', 'auth'])->get('example-auth-page', fn (): Response => Inertia::render('Welcome'))->name('example.auth-page');
+    Route::middleware(['web', 'auth:web'])->get('example-guarded-page', fn (): Response => Inertia::render('Welcome'))->name('example.guarded-page');
+
+    expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.auth-page', 'example.guarded-page']);
 });
