@@ -147,7 +147,9 @@ class ChatCardExtractor
     {
         return is_array($value)
             && ($value['type'] ?? null) === SubtitleAuditBatchCard::TYPE
-            && is_int($value['id'] ?? null);
+            && is_int($value['id'] ?? null)
+            && is_array($value['episodes'] ?? null)
+            && is_array($value['pending_action_request_ids'] ?? null);
     }
 
     /**

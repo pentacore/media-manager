@@ -140,7 +140,7 @@ test('the repair tool hands off when the batch is not ready by the deadline', fu
     expect($result['handed_off'])->toBeTrue()
         ->and($result['subtitle_audit_batch_id'])->toBe($subtitleAuditBatch->id)
         ->and($result['searching'])->toBe(1)
-        ->and($result['message'])->toBeString()
+        ->and($result['message'])->toBe('The release searches continue in the background. Tell the user the admins will be notified when the batch is ready to approve on the Actions page.')
         ->and($result['subtitle_audit_batch']['type'])->toBe('subtitle_audit_batch')
         ->and($result['subtitle_audit_batch']['id'])->toBe($subtitleAuditBatch->id)
         ->and($result['subtitle_audit_batch']['status'])->toBe('searching')

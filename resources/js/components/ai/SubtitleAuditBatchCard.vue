@@ -6,7 +6,11 @@ import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useAiChat } from '@/composables/useAiChat';
 import { useConfirm } from '@/composables/useConfirm';
-import { subtitleAuditPickUrl } from '@/lib/subtitleAudit';
+import {
+    failureLabel,
+    missingLanguagesLabel,
+    subtitleAuditPickUrl,
+} from '@/lib/subtitleAudit';
 import type {
     ActionRequestStatus,
     SubtitleAuditEpisodeOutcome,
@@ -42,16 +46,15 @@ const ACTION_STATUS_VARIANTS: Record<
     failed: 'danger',
 };
 
-/** What a row without a queued release says instead of a release title. */
+/** What a row without a queued release or a failure says instead of a release title. */
 const OUTCOME_COPY: Record<
-    Exclude<SubtitleAuditEpisodeOutcome, 'queued'>,
+    Exclude<SubtitleAuditEpisodeOutcome, 'queued' | 'failed'>,
     string
 > = {
     searching: 'Still searching',
     manual_pick: 'No confident match',
     nothing_found: 'No usable release',
     no_longer_missing: 'Subtitles present now',
-    failed: 'Search failed',
 };
 
 const pendingCount = computed(
@@ -64,10 +67,13 @@ function actionStatusVariant(
     return ACTION_STATUS_VARIANTS[status as ActionRequestStatus] ?? 'default';
 }
 
-function missingLanguages(episode: SubtitleAuditBatchEpisode): string {
-    return episode.missing_languages
-        .map((language) => language.toUpperCase())
-        .join(', ');
+/** A row's outcome in words; a failed row says why it failed. */
+function outcomeLabel(episode: SubtitleAuditBatchEpisode): string {
+    if (episode.outcome === 'failed') {
+        return failureLabel(episode.failure_reason);
+    }
+
+    return episode.outcome === 'queued' ? '' : OUTCOME_COPY[episode.outcome];
 }
 
 /** Episodes whose release search has not finished yet. */
@@ -133,7 +139,10 @@ async function declineAll(): Promise<void> {
                             v-if="episode.missing_languages.length"
                             class="text-[11px] text-fg-subtle"
                             data-subtitle-audit-languages
-                            >missing {{ missingLanguages(episode) }}</span
+                            >missing
+                            {{
+                                missingLanguagesLabel(episode.missing_languages)
+                            }}</span
                         >
                     </span>
                     <span
@@ -148,7 +157,7 @@ async function declineAll(): Promise<void> {
                         class="text-[11.5px] text-muted-foreground"
                         data-subtitle-audit-outcome
                     >
-                        {{ OUTCOME_COPY[episode.outcome] }}
+                        {{ outcomeLabel(episode) }}
                         <template v-if="episode.outcome === 'manual_pick'">
                             ·
                             <Link

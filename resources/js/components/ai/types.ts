@@ -100,6 +100,8 @@ export interface SubtitleAuditBatchEpisode {
     /** ISO-639-2 codes ('eng'). */
     missing_languages: string[];
     release_title: string | null;
+    /** Why a failed search failed ('replacement_in_flight', 'search_expired', …), else null. */
+    failure_reason: string | null;
     action_request_id: number | null;
     /** An ActionRequestStatus, 'changed' once a review lost a race, or null without a request. */
     action_status: string | null;

@@ -179,6 +179,26 @@ test('a live status change renders on a listed row under the batch filter', func
         ->assertNoSmoke();
 });
 
+test('a new request elsewhere does not raise the stale banner in a batch view', function (): void {
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Pending,
+        'payload' => ['subtitle_audit_batch_id' => 7],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueLiveWaitScript(actionQueueLiveListenerCountScript('ActionRequestCreated').' >= 4'));
+
+    $unrelated = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example unrelated request']);
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($unrelated)->broadcastWith(), 4));
+    $webpage->script('new Promise((resolve) => setTimeout(resolve, 1000))');
+
+    $webpage->assertMissing('[data-action-stale]')
+        ->assertMissing(sprintf('[data-action-row="%d"]', $unrelated->id))
+        ->assertNoSmoke();
+});
+
 /**
  * Runs the Action Queue page's mounted hooks a second time, which calls
  * useActionQueueLive's subscribe() again. The page is the first component,

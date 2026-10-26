@@ -16,7 +16,7 @@ final class SubtitleAuditBatchCard
     public const string TYPE = 'subtitle_audit_batch';
 
     /**
-     * @return array{type: string, id: int, series_id: int, series_title: string, status: string, episodes: list<array{label: string, season_number: int, episode_number: int, outcome: string, missing_languages: list<string>, release_title: string|null, action_request_id: int|null, action_status: string|null}>, pending_action_request_ids: list<int>}
+     * @return array{type: string, id: int, series_id: int, series_title: string, status: string, episodes: list<array{label: string, season_number: int, episode_number: int, outcome: string, missing_languages: list<string>, release_title: string|null, failure_reason: string|null, action_request_id: int|null, action_status: string|null}>, pending_action_request_ids: list<int>}
      */
     public static function present(SubtitleAuditBatch $subtitleAuditBatch): array
     {
@@ -78,7 +78,7 @@ final class SubtitleAuditBatchCard
     }
 
     /**
-     * @return array{label: string, season_number: int, episode_number: int, outcome: string, missing_languages: list<string>, release_title: string|null, action_request_id: int|null, action_status: string|null}
+     * @return array{label: string, season_number: int, episode_number: int, outcome: string, missing_languages: list<string>, release_title: string|null, failure_reason: string|null, action_request_id: int|null, action_status: string|null}
      */
     private static function presentEpisode(SubtitleAuditEpisode $subtitleAuditEpisode, ?ActionRequestStatus $actionStatus): array
     {
@@ -89,6 +89,7 @@ final class SubtitleAuditBatchCard
             'outcome' => $subtitleAuditEpisode->outcome->value,
             'missing_languages' => $subtitleAuditEpisode->missing_languages,
             'release_title' => $subtitleAuditEpisode->release_title,
+            'failure_reason' => $subtitleAuditEpisode->failure_reason,
             'action_request_id' => $subtitleAuditEpisode->action_request_id,
             'action_status' => $actionStatus?->value,
         ];

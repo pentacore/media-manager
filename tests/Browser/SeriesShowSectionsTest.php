@@ -318,3 +318,23 @@ test('a processed webhook reload does not reopen a closed replace dialog', funct
     $webpage->assertMissing('[data-replacement-dialog]')
         ->assertNoSmoke();
 });
+
+test('closing a deep-linked replace dialog drops the link params and a second click reopens it', function (): void {
+    seriesSectionsFakeSonarrWithFile($this->sonarr);
+    $this->actingAs(User::factory()->member()->create());
+    $linkUrl = route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false);
+
+    $webpage = visit($linkUrl)
+        ->assertPresent('[data-replacement-dialog]');
+    $webpage->script(appHydratedScript());
+    $webpage->script("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-replacement-dialog]') === null && !location.search.includes('replace_')"));
+
+    expect($webpage->script('location.search'))->not->toContain('replace_');
+    $webpage->assertMissing('[data-replacement-dialog]');
+
+    $webpage->script(seriesSectionsInertiaVisitScript($linkUrl));
+
+    $webpage->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]')
+        ->assertNoSmoke();
+});

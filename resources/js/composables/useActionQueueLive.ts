@@ -84,6 +84,9 @@ export function useActionQueueLive(
         // A late Created broadcast must not roll back a row a newer status
         // change already moved on.
         replaces: pushedRowIsCurrent,
+        // A batch's rows are fixed when its view opens; an unrelated new
+        // request never belongs there, so it raises no "new requests" notice.
+        countsAsStale: () => props.filters.subtitle_audit_batch === null,
     });
 
     watch(
