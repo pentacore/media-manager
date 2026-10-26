@@ -85,8 +85,15 @@ test('the breakdowns mark per-event rules and mute small samples', function (): 
         ->assertAttribute('[data-agreement-breakdown="event"] [data-breakdown-row="sonarr:Download"] [data-breakdown-agreement]', 'data-low-sample', 'false')
         ->assertAttribute('[data-agreement-breakdown="event"] [data-breakdown-row="radarr:Grab"] [data-breakdown-agreement]', 'data-low-sample', 'true')
         ->assertMissing('[data-agreement-breakdown="event"] [data-breakdown-row="radarr:Grab"] [data-breakdown-override]')
+        ->assertAttribute('[data-agreement-breakdown-tab="event"]', 'aria-pressed', 'true')
+        ->assertMissing('[data-agreement-breakdown="action_type"]')
+        ->click('[data-agreement-breakdown-tab="action_type"]')
         ->assertSeeIn('[data-agreement-breakdown="action_type"] [data-breakdown-row="delete_series"]', 'Delete series from Sonarr')
-        ->assertSeeIn('[data-agreement-breakdown="answered_by"] [data-breakdown-row="llm:openai/gpt-5-mini"]', 'openai · gpt-5-mini');
+        ->assertMissing('[data-agreement-breakdown="event"]')
+        ->click('[data-agreement-breakdown-tab="answered_by"]')
+        ->assertSeeIn('[data-agreement-breakdown="answered_by"] [data-breakdown-row="llm:openai/gpt-5-mini"]', 'openai · gpt-5-mini')
+        ->assertMissing('[data-agreement-breakdown="action_type"]')
+        ->assertNoSmoke();
 });
 
 test('recent disagreements link to the request and to benchmark capture', function (): void {

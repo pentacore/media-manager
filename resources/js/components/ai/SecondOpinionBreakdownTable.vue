@@ -6,7 +6,6 @@ import { formatCount } from '@/lib/format';
 
 withDefaults(
     defineProps<{
-        title: string;
         heading: string;
         dimension: 'event' | 'action_type' | 'answered_by';
         rows: AgreementBreakdownRow[];
@@ -20,11 +19,7 @@ const headerClass =
 </script>
 
 <template>
-    <div
-        class="flex min-w-0 flex-col gap-2"
-        :data-agreement-breakdown="dimension"
-    >
-        <span class="text-[13px] font-medium">{{ title }}</span>
+    <div class="min-w-0" :data-agreement-breakdown="dimension">
         <div class="overflow-x-auto rounded-lg border border-border">
             <table class="w-full border-collapse text-[13px]">
                 <thead>
@@ -54,9 +49,13 @@ const headerClass =
                         class="border-b border-border last:border-b-0"
                         :data-breakdown-row="row.key"
                     >
-                        <td class="px-3 py-2">
-                            <span class="flex items-center gap-2">
-                                <span class="break-all">{{ row.label }}</span>
+                        <td class="min-w-[10rem] px-3 py-2">
+                            <span
+                                class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                            >
+                                <span class="[overflow-wrap:anywhere]">{{
+                                    row.label
+                                }}</span>
                                 <Pill
                                     v-if="overriddenEvents.includes(row.key)"
                                     variant="info"

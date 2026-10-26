@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import { dailyBars, percent } from '@/components/ai/secondOpinionAgreement';
-import type { SecondOpinionAgreement } from '@/components/ai/secondOpinionAgreement';
-import { BarChart, StatCard } from '@/components/mm';
+import type {
+    AgreementBreakdownRow,
+    SecondOpinionAgreement,
+} from '@/components/ai/secondOpinionAgreement';
+import { BarChart, SegmentedControl, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { formatCount } from '@/lib/format';
 import SecondOpinionBreakdownTable from './SecondOpinionBreakdownTable.vue';
@@ -17,6 +20,33 @@ const rates = computed(() => props.agreement.rates);
 const reviewedHolds = computed(
     () => totals.value.disagreed_rejected + totals.value.disagreed_approved,
 );
+
+type BreakdownDimension = 'event' | 'action_type' | 'answered_by';
+
+const breakdownOptions: Array<{ value: BreakdownDimension; label: string }> = [
+    { value: 'event', label: 'By event' },
+    { value: 'action_type', label: 'By action type' },
+    { value: 'answered_by', label: 'Answered by' },
+];
+
+const breakdownDimension = ref<BreakdownDimension>('event');
+
+const breakdown = computed<{
+    heading: string;
+    rows: AgreementBreakdownRow[];
+}>(() => {
+    switch (breakdownDimension.value) {
+        case 'action_type':
+            return { heading: 'Action', rows: props.agreement.by_action_type };
+        case 'answered_by':
+            return {
+                heading: 'Verifier',
+                rows: props.agreement.by_answered_by,
+            };
+        default:
+            return { heading: 'Event', rows: props.agreement.by_event };
+    }
+});
 
 const countsLine = computed(() => {
     const parts = [
@@ -228,25 +258,23 @@ const headerClass =
                     />
                 </div>
             </div>
-            <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <SecondOpinionBreakdownTable
-                    title="By event"
-                    heading="Event"
-                    dimension="event"
-                    :rows="agreement.by_event"
-                    :overridden-events="agreement.overridden_events"
+            <div class="flex min-w-0 flex-col gap-2">
+                <SegmentedControl
+                    v-model="breakdownDimension"
+                    :options="breakdownOptions"
+                    option-attribute="agreement-breakdown-tab"
+                    aria-label="Break agreement down"
+                    class="self-start"
                 />
                 <SecondOpinionBreakdownTable
-                    title="By action type"
-                    heading="Action"
-                    dimension="action_type"
-                    :rows="agreement.by_action_type"
-                />
-                <SecondOpinionBreakdownTable
-                    title="Answered by"
-                    heading="Verifier"
-                    dimension="answered_by"
-                    :rows="agreement.by_answered_by"
+                    :heading="breakdown.heading"
+                    :dimension="breakdownDimension"
+                    :rows="breakdown.rows"
+                    :overridden-events="
+                        breakdownDimension === 'event'
+                            ? agreement.overridden_events
+                            : []
+                    "
                 />
             </div>
             <SecondOpinionDisagreements :rows="agreement.disagreements" />
