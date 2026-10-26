@@ -10,18 +10,22 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Route;
 use Pest\Browser\Api\AwaitableWebpage;
 use Pest\Browser\Api\PendingAwaitablePage;
 use Pest\Browser\Api\Webpage;
 
 /*
- * The phone-width gate (Batch 3h). At 375x812 every listed page must keep its
+ * The phone-width gate (Batch 3h). At 375x812 every page route must keep its
  * content inside the screen (or inside a horizontal scroller that fits), show
- * its primary action on screen, name every control and hide nothing behind
- * hover. Not listed yet, each for a named later fix:
- *   activity-log                 nowrap rows (3h-3)
- *   media.whisparr.show          detail toolbar (3h-3)
- *   other admin pages            reachability pass (3h-3)
+ * its primary action on screen, name every control, hide nothing behind
+ * hover, overlap no two controls and leave no scroller scrolling by a sliver.
+ * The gate covers every page route: `the phone gate classifies every page
+ * route` fails while a GET route behind `auth` is in no dataset and not in
+ * mobileLayoutExcludedRouteNames(). mobileLayoutPendingRouteNames() is the
+ * 3h-3 backlog of pages not gated yet; Task 13 empties and deletes it. The
+ * touch dataset sweeps every page PhoneJobsTouchTargetTest does not for
+ * controls under 40 px.
  */
 
 /**
@@ -170,12 +174,15 @@ function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpa
 }
 
 /**
- * Visible links and buttons in main with no accessible name, as a ' | ' list.
+ * Visible links and buttons in $root (the first match, default `main`) with no
+ * accessible name, as a ' | ' list.
  */
-function mobileLayoutUnnamedScript(): string
+function mobileLayoutUnnamedScript(string $root = 'main'): string
 {
-    return <<<'JS'
-        (() => [...document.querySelectorAll('main a[href], main button, main [role="button"]')]
+    $selector = json_encode($root, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => [...document.querySelector({$selector}).querySelectorAll('a[href], button, [role="button"]')]
             .filter((element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && getComputedStyle(element).visibility !== 'hidden'; })
             .filter((element) => !(element.getAttribute('aria-label') || element.getAttribute('aria-labelledby') || element.getAttribute('title') || (element.textContent || '').trim() || (element.closest('label')?.textContent || '').trim()))
             .map((element) => element.outerHTML.slice(0, 80))
@@ -185,22 +192,31 @@ function mobileLayoutUnnamedScript(): string
 }
 
 /**
- * Visible links and buttons in main whose own or inherited opacity is 0 —
- * controls a phone (no hover) could never see.
+ * Visible links and buttons in $root (the first match, default `main`) whose
+ * own or inherited opacity below the root is 0 — controls a phone (no hover)
+ * could never see.
  */
-function mobileLayoutHoverOnlyScript(): string
+function mobileLayoutHoverOnlyScript(string $root = 'main'): string
 {
-    return <<<'JS'
-        (() => [...document.querySelectorAll('main a[href], main button, main [role="button"], main [role="checkbox"]')]
+    $selector = json_encode($root, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => { const root = document.querySelector({$selector}); return [...root.querySelectorAll('a[href], button, [role="button"], [role="checkbox"]')]
             .filter((element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.height > 0; })
-            .filter((element) => { for (let node = element; node && node.tagName !== 'MAIN'; node = node.parentElement) { if (getComputedStyle(node).opacity === '0') { return true; } } return false; })
+            .filter((element) => { for (let node = element; node && node !== root; node = node.parentElement) { if (getComputedStyle(node).opacity === '0') { return true; } } return false; })
             .map((element) => element.outerHTML.slice(0, 80))
             .slice(0, 10)
-            .join(' | '))()
+            .join(' | '); })()
     JS;
 }
 
-function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $primary, ?string $deferred = null): void
+/**
+ * Runs every phone-gate check on $root (default `main`; the guest pages have
+ * no `<main>` and pass `body`): nothing past the screen, no sideways scroll,
+ * no unnamed or hover-only control, no two overlapping controls and no scroll
+ * sliver, plus the primary action on screen.
+ */
+function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $primary, ?string $deferred = null, string $root = 'main'): void
 {
     mobileLayoutSettle($webpage, $deferred);
 
@@ -208,10 +224,14 @@ function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $w
         $webpage->assertPresent($deferred);
     }
 
-    $webpage->assertScript(phoneOverflowScript(), '')
-        ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
-        ->assertScript(mobileLayoutUnnamedScript(), '')
-        ->assertScript(mobileLayoutHoverOnlyScript(), '');
+    $encodedRoot = json_encode($root, JSON_THROW_ON_ERROR);
+
+    $webpage->assertScript(phoneOverflowScript($root), '')
+        ->assertScript("document.querySelector({$encodedRoot}).scrollWidth - document.querySelector({$encodedRoot}).clientWidth", 0)
+        ->assertScript(mobileLayoutUnnamedScript($root), '')
+        ->assertScript(mobileLayoutHoverOnlyScript($root), '')
+        ->assertScript(phoneOverlapScript($root), '')
+        ->assertScript(phoneScrollSliverScript($root), '');
 
     if ($primary !== null) {
         $encoded = json_encode($primary, JSON_THROW_ON_ERROR);
@@ -219,52 +239,185 @@ function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $w
     }
 }
 
-dataset('mobile layout member pages', [
-    'dashboard' => ['dashboard', '[data-dashboard-review-queue]'],
-    'series' => ['media.series.index', '[data-add-series]'],
-    'movies' => ['media.movies.index', '[data-add-movie]'],
-    // The detail rows wait for their deferred episodes / quality profiles.
-    'series detail' => ['media.series.show', '[data-series-actions]', '[data-season-card="1"]', ['id' => 7]],
-    'movie detail' => ['media.movies.show', '[data-movie-actions]', '[data-movie-actions] [data-quality-profile-trigger]', ['id' => 10]],
-    'search' => ['media.search.index', null, '[data-search-title="movie-438631"]', ['q' => 'dune']],
-    'discover' => ['media.discover.index', null, '[data-discover-row="trending"] [data-title-card]'],
-    'requests' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
-    // The member is the fixture's Seerr requester, so this lists request 1.
-    'my requests' => ['media.requests.mine', null, '[data-my-request="1"]'],
-    // Agenda is the phone default; the settle waits for it.
-    'calendar' => ['media.calendar.index', null, '[data-calendar-agenda]'],
-    'grab queue' => ['media.library.activity.queue', '[data-activity-refresh]'],
-    'downloads' => ['sabnzbd.queue.index', '[data-sab-queue-toggle]'],
-    'now playing' => ['monitoring.now-playing', '[data-now-playing-refresh]'],
-    'watch history' => ['monitoring.watch-history', '[data-page-header-more]', '[data-watch-cards]'],
-    'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
-    // The third value is a deferred panel the settle waits for: the hour heatmap.
-    'statistics' => ['statistics.index', '[data-filter-strip]', '[data-statistics-heatmap]'],
-    'action queue' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
-    'notifications' => ['notifications.index', null],
-    'profile' => ['profile.edit', null],
-    'preferences' => ['settings.preferences.edit', null],
-    'notification settings' => ['settings.notifications.edit', '[data-notification-save]'],
-]);
+/**
+ * @return array<string, array{0: string, 1: ?string, 2?: ?string, 3?: array<string, mixed>}>
+ */
+function mobileLayoutMemberPages(): array
+{
+    return [
+        'dashboard' => ['dashboard', '[data-dashboard-review-queue]'],
+        'series' => ['media.series.index', '[data-add-series]'],
+        'movies' => ['media.movies.index', '[data-add-movie]'],
+        // The detail rows wait for their deferred episodes / quality profiles.
+        'series detail' => ['media.series.show', '[data-series-actions]', '[data-season-card="1"]', ['id' => 7]],
+        'movie detail' => ['media.movies.show', '[data-movie-actions]', '[data-movie-actions] [data-quality-profile-trigger]', ['id' => 10]],
+        'search' => ['media.search.index', null, '[data-search-title="movie-438631"]', ['q' => 'dune']],
+        'discover' => ['media.discover.index', null, '[data-discover-row="trending"] [data-title-card]'],
+        'requests' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
+        // The member is the fixture's Seerr requester, so this lists request 1.
+        'my requests' => ['media.requests.mine', null, '[data-my-request="1"]'],
+        // Agenda is the phone default; the settle waits for it.
+        'calendar' => ['media.calendar.index', null, '[data-calendar-agenda]'],
+        'grab queue' => ['media.library.activity.queue', '[data-activity-refresh]'],
+        'downloads' => ['sabnzbd.queue.index', '[data-sab-queue-toggle]'],
+        'now playing' => ['monitoring.now-playing', '[data-now-playing-refresh]'],
+        'watch history' => ['monitoring.watch-history', '[data-page-header-more]', '[data-watch-cards]'],
+        'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
+        // The third value is a deferred panel the settle waits for: the hour heatmap.
+        'statistics' => ['statistics.index', '[data-filter-strip]', '[data-statistics-heatmap]'],
+        'action queue' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
+        'notifications' => ['notifications.index', null],
+        'profile' => ['profile.edit', null],
+        'preferences' => ['settings.preferences.edit', null],
+        'notification settings' => ['settings.notifications.edit', '[data-notification-save]'],
+    ];
+}
 
-dataset('mobile layout admin pages', [
-    'whisparr' => ['media.whisparr.index', '[data-library-sync]'],
-    'users' => ['admin.users.index', '[data-users-invite]'],
-    'connections' => ['admin.connections.index', '[data-connection-add]'],
-    'operational statistics' => ['admin.statistics.index', '[data-filter-strip]'],
-    'ai settings' => ['admin.ai-settings.index', null],
-    'decision agent' => ['admin.decision-agent.index', null],
-    'media replacement' => ['admin.media-replacement.index', null],
-    'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
-    'webhook log' => ['admin.webhook-log.index', null],
-    'jobs' => ['admin.jobs.index', '[data-jobs-refresh]'],
-    'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
-    'servers' => ['admin.servers.index', '[data-server-add]'],
-    'server incidents' => ['admin.servers.incidents.index', null],
-    'ai chat' => ['ai.chat', '[data-chat-options]'],
-    'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
-    'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
-]);
+/**
+ * @return array<string, array{0: string, 1: ?string, 2?: ?string, 3?: array<string, mixed>}>
+ */
+function mobileLayoutAdminPages(): array
+{
+    return [
+        'whisparr' => ['media.whisparr.index', '[data-library-sync]'],
+        'users' => ['admin.users.index', '[data-users-invite]'],
+        'connections' => ['admin.connections.index', '[data-connection-add]'],
+        'operational statistics' => ['admin.statistics.index', '[data-filter-strip]'],
+        'ai settings' => ['admin.ai-settings.index', null],
+        'decision agent' => ['admin.decision-agent.index', null],
+        'media replacement' => ['admin.media-replacement.index', null],
+        'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
+        'webhook log' => ['admin.webhook-log.index', null],
+        'jobs' => ['admin.jobs.index', '[data-jobs-refresh]'],
+        'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
+        'servers' => ['admin.servers.index', '[data-server-add]'],
+        'server incidents' => ['admin.servers.incidents.index', null],
+        'ai chat' => ['ai.chat', '[data-chat-options]'],
+        'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
+        'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
+    ];
+}
+
+/**
+ * The guest pages render no `<main>`: their rows are measured on `body`.
+ *
+ * @return array<string, array{0: string, 1: ?string, 2?: ?string, 3?: array<string, mixed>}>
+ */
+function mobileLayoutGuestPages(): array
+{
+    return [
+        // 'welcome' (home) waits for a ruling: its decorative 438 px logo SVG ends past the screen inside an overflow-hidden frame.
+        // Login.vue has two [data-test="login-button"] branches (with and without SSO), so it gets no primary hook.
+        'login' => ['login', null],
+        'register' => ['register', '[data-test="register-user-button"]'],
+        'forgot password' => ['password.request', '[data-test="email-password-reset-link-button"]'],
+    ];
+}
+
+/**
+ * Pages swept for controls under 40 px, as [routeName, parameters, deferred].
+ *
+ * @return array<string, array{0: string, 1: array<string, mixed>, 2: ?string}>
+ */
+function mobileLayoutTouchPages(): array
+{
+    return [
+        'notifications' => ['notifications.index', [], null],
+        'profile' => ['profile.edit', [], null],
+    ];
+}
+
+/**
+ * GET routes behind `auth` that render no page of their own, each with the
+ * reason the gate leaves it out.
+ *
+ * @return array<string, string>
+ */
+function mobileLayoutExcludedRouteNames(): array
+{
+    return [
+        'ai.chat.pending-workflow' => 'JSON for the chat workflow resume',
+        'ai.chat.attachments.show' => 'a chat attachment file download',
+        'ai.chat.model-options' => 'JSON for the chat model picker',
+        'ai.chat.tool-groups' => 'JSON for the chat tool-group picker',
+        'ai.conversations.index' => 'JSON for the chat conversation list',
+        'ai.conversations.show' => 'JSON for one chat conversation',
+        'ai.conversations.tool-groups.show' => "JSON for a conversation's pinned tool groups",
+        'ai.templates.options' => 'JSON for the chat template picker',
+        'ai.templates.library' => 'JSON for the chat template library search',
+        'activity-log.export' => 'a CSV export download',
+        'security.edit' => 'password confirmation first (R6)',
+        'admin.ai-usage.export' => 'a CSV export download',
+        'admin.ai-usage.show' => 'JSON for the AI usage record drawer',
+        'admin.ai-prices.catalog.index' => 'JSON for the AI price catalog picker',
+        'media.search.instant' => 'JSON for the instant search dropdown',
+        'media.discover.title' => 'JSON for the title sheet',
+        'media.replacement.inspect' => 'JSON for the media replacement dialog',
+        'media.replacement.candidates' => 'JSON for the media replacement candidates',
+        'media.library.actions.releases' => 'JSON for the interactive release search',
+        'media.library.activity.manual-import.candidates' => 'JSON for the manual import dialog',
+        'media.requests.edit-options' => 'JSON for the request edit dialog',
+        'monitoring.watch-history.export' => 'a CSV export download',
+        'bazarr.capabilities' => 'JSON for the subtitle drawer capabilities',
+        'bazarr.search' => 'JSON for the subtitle search',
+    ];
+}
+
+/**
+ * The 3h-3 backlog: page routes not gated yet, in route-file order. Each
+ * later task moves its pages into a dataset; Task 13 empties and deletes it.
+ *
+ * @return list<string>
+ */
+function mobileLayoutPendingRouteNames(): array
+{
+    return [
+        'ai.templates.index',
+        'ai.templates.create',
+        'ai.templates.edit',
+        'activity-log',
+        'appearance.edit',
+        'admin.connections.create',
+        'admin.connections.edit',
+        'admin.media-replacement.attempts.index',
+        'admin.media-replacement.attempts.show',
+        'admin.notification-destinations.index',
+        'admin.ai-models.index',
+        'admin.benchmarks.cases.index',
+        'admin.benchmarks.cases.create',
+        'admin.benchmarks.cases.edit',
+        'admin.benchmarks.compare.show',
+        'admin.benchmarks.schedules.create',
+        'admin.benchmarks.schedules.edit',
+        'admin.benchmarks.runs.index',
+        'admin.benchmarks.runs.create',
+        'admin.benchmarks.runs.show',
+        'admin.ai-conversations.index',
+        'admin.ai-conversations.show',
+        'admin.ai-prices.index',
+        'admin.webhook-log.show',
+        'admin.servers.show',
+        'media.series.create',
+        'media.movies.create',
+        'media.wanted.index',
+        'media.anime.index',
+        'media.whisparr.show',
+        'emby.links.index',
+        'prowlarr.search',
+        'actions.rules.index',
+        'bazarr.overview',
+        'bazarr.missing',
+        'bazarr.library',
+        'bazarr.history',
+        'bazarr.escalations',
+        'bazarr.admin.index',
+    ];
+}
+
+dataset('mobile layout member pages', mobileLayoutMemberPages());
+dataset('mobile layout admin pages', mobileLayoutAdminPages());
+dataset('mobile layout guest pages', mobileLayoutGuestPages());
+dataset('mobile layout touch pages', mobileLayoutTouchPages());
 
 /**
  * @param  array<string, int|string>  $parameters
@@ -287,6 +440,28 @@ test('an admin page fits a phone screen', function (string $routeName, ?string $
     mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout admin pages');
 
+/**
+ * @param  array<string, int|string>  $parameters
+ */
+test('a guest page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
+    mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred, 'body');
+})->with('mobile layout guest pages');
+
+/**
+ * @param  array<string, int|string>  $parameters
+ */
+test('every control on a page is a 40 px target on a phone', function (string $routeName, array $parameters, ?string $deferred): void {
+    config()->set('mediamanager.ai.enabled', true);
+    mobileLayoutFakeServices();
+    $this->actingAs(User::factory()->admin()->create(['name' => 'Example Admin']));
+
+    $webpage = visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage, $deferred);
+
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
+})->with('mobile layout touch pages');
+
 test('an open dialog fits a phone screen', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -297,6 +472,8 @@ test('an open dialog fits a phone screen', function (): void {
     mobileLayoutSettle($webpage);
 
     $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
+        ->assertScript(phoneOverlapScript('[role="dialog"]'), '')
+        ->assertScript(phoneScrollSliverScript('[role="dialog"]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
 });
 
@@ -312,6 +489,8 @@ test('an open action sheet fits a phone screen', function (): void {
     mobileLayoutSettle($webpage);
 
     $webpage->assertScript(phoneOverflowScript('[data-action-sheet]'), '')
+        ->assertScript(phoneOverlapScript('[data-action-sheet]'), '')
+        ->assertScript(phoneScrollSliverScript('[data-action-sheet]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[data-action-sheet]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
 });
 
@@ -326,6 +505,8 @@ test('the open chat sheet fits a phone screen', function (): void {
     mobileLayoutSettle($webpage, '[data-chat-options]');
 
     $webpage->assertScript(phoneOverflowScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneOverlapScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneScrollSliverScript('[data-slot="sheet-content"]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[data-slot=\"sheet-content\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
 });
 
@@ -336,4 +517,61 @@ test('the settle wait fails loudly when the deferred content never renders', fun
 
     expect(fn () => mobileLayoutSettle($webpage, '[data-never-rendered]'))
         ->toThrow('the deferred content [data-never-rendered] never rendered');
+});
+
+test('the overlap check names two overlapping controls and excuses nested or clipped ones', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-overlap-fixture style="position:relative;height:60px"><button style="position:absolute;left:0;top:0;width:100px;height:40px">One</button><button style="position:absolute;left:60px;top:10px;width:100px;height:40px">Two</button></div>`)');
+
+    $overlap = $webpage->script(phoneOverlapScript());
+    expect($overlap)->toContain('"One"')->toContain('"Two"')->toContain(' × ');
+
+    // A small control wholly inside a bigger one's box (a checkbox on a card link) is the overlay pattern.
+    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:120px"><a href="#" style="position:absolute;inset:0">Card</a><button style="position:absolute;left:8px;top:8px;width:40px;height:40px" aria-label="Pick">x</button></div>`');
+    $webpage->assertScript(phoneOverlapScript(), '');
+
+    // A control its scroller clips away overlaps nothing on screen.
+    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:60px"><div style="width:100px;overflow:hidden;white-space:nowrap"><button style="margin-left:150px;width:80px;height:40px">Hidden</button></div><button style="position:absolute;left:150px;top:0;width:80px;height:40px">Shown</button></div>`');
+    $webpage->assertScript(phoneOverlapScript(), '');
+
+    // An inline link wrapping onto a second line is measured by its line boxes, not its bounding box,
+    // so a taller button after it on the second line overlaps nothing.
+    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="width:200px;font-size:16px;line-height:20px"><a href="#">An inline link that wraps here</a> <button style="height:40px;vertical-align:top">Next</button></div>`');
+    $webpage->assertScript('(() => { const link = document.querySelector("[data-overlap-fixture] a"); const button = document.querySelector("[data-overlap-fixture] button"); const box = link.getBoundingClientRect(); const target = button.getBoundingClientRect(); return link.getClientRects().length === 2 && target.top < box.bottom && target.left < box.right && target.bottom > box.bottom; })()', true);
+    $webpage->assertScript(phoneOverlapScript(), '');
+});
+
+test('the sliver check names a scroller that scrolls by a few pixels', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // A 32 px touch-target in a 32 px scroller: its 40 px ::after overhangs 4 px below.
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-sliver-fixture style="height:32px;overflow-y:auto"><button class="touch-target" style="display:block;height:32px">Sliver</button></div>`)');
+    expect($webpage->script(phoneScrollSliverScript()))->toContain('[data-sliver-fixture]')->toContain('by 4px');
+
+    // Content that really scrolls is not a sliver.
+    $webpage->script('document.querySelector("[data-sliver-fixture]").outerHTML = `<div data-sliver-fixture style="height:100px;overflow-y:auto"><div style="height:300px">Tall</div></div>`');
+    $webpage->assertScript(phoneScrollSliverScript(), '');
+});
+
+test('the phone gate classifies every page route', function (): void {
+    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages()])->map(fn (array $row): string => $row[0])->unique();
+    $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
+    $pending = collect(mobileLayoutPendingRouteNames());
+
+    $pageRoutes = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('GET', $route->methods(), true))
+        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('auth', $route->gatherMiddleware(), true))
+        ->map(fn (Illuminate\Routing\Route $route): ?string => $route->getName())
+        ->filter()
+        ->unique()
+        ->values();
+
+    expect($pageRoutes->diff($listed->merge($excluded)->merge($pending))->values()->all())->toBe([])
+        ->and($listed->merge($excluded)->merge($pending)->diff($pageRoutes)->diff(collect(mobileLayoutGuestPages())->map(fn (array $row): string => $row[0]))->values()->all())->toBe([])
+        ->and($pending->intersect($listed->merge($excluded))->values()->all())->toBe([]);
 });

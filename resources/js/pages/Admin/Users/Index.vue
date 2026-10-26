@@ -359,13 +359,18 @@ async function importFromEmby(): Promise<void> {
                                 <Button
                                     type="button"
                                     variant="outline"
+                                    class="touch:min-h-10"
                                     @click="
                                         showCreateDialog = false;
                                         setPassword = false;
                                     "
                                     >Cancel</Button
                                 >
-                                <Button type="submit" :disabled="processing">
+                                <Button
+                                    type="submit"
+                                    class="touch:min-h-10"
+                                    :disabled="processing"
+                                >
                                     {{
                                         setPassword
                                             ? 'Create user'
