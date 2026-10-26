@@ -9,6 +9,8 @@ use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Models\ActionRequest;
 use App\Models\SubtitleAuditEpisode;
 use App\Services\Actions\ActionOrchestrator;
+use Closure;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Searches releases for one episode of a subtitle audit batch and records its
@@ -37,15 +39,34 @@ final readonly class SubtitleAuditEpisodeSearcher
             return;
         }
 
-        $subtitleAuditEpisode->update($this->outcome($subtitleAuditEpisode));
+        $decision = $this->outcome($subtitleAuditEpisode);
 
-        $this->subtitleAuditBatchSettler->settle($subtitleAuditEpisode->batch);
+        // The expiry sweep may have failed this row while the search ran. Re-read it
+        // under a lock so a late result neither overwrites that outcome nor queues
+        // a request nobody tracks.
+        $written = DB::transaction(function () use ($subtitleAuditEpisode, $decision): bool {
+            $locked = SubtitleAuditEpisode::query()->lockForUpdate()->find($subtitleAuditEpisode->id);
+
+            if (! $locked instanceof SubtitleAuditEpisode || $locked->outcome !== SubtitleAuditEpisodeOutcome::Searching) {
+                return false;
+            }
+
+            $locked->update($decision instanceof Closure ? $decision() : $decision);
+
+            return true;
+        });
+
+        if ($written) {
+            $this->subtitleAuditBatchSettler->settle($subtitleAuditEpisode->batch);
+        }
     }
 
     /**
-     * @return array{outcome: SubtitleAuditEpisodeOutcome, missing_languages?: list<string>, failure_reason?: string, action_request_id?: int, release_title?: string}
+     * The final write is a closure when it still has to dispatch an action request.
+     *
+     * @return Closure(): array{outcome: SubtitleAuditEpisodeOutcome, missing_languages?: list<string>, failure_reason?: string, action_request_id?: int, release_title?: string}|array{outcome: SubtitleAuditEpisodeOutcome, missing_languages?: list<string>, failure_reason?: string, action_request_id?: int, release_title?: string}
      */
-    private function outcome(SubtitleAuditEpisode $subtitleAuditEpisode): array
+    private function outcome(SubtitleAuditEpisode $subtitleAuditEpisode): array|Closure
     {
         $subtitleAuditBatch = $subtitleAuditEpisode->batch;
         $serviceConnection = $subtitleAuditBatch->serviceConnection;
@@ -112,6 +133,19 @@ final readonly class SubtitleAuditEpisodeSearcher
         if ($this->pendingReplacementGuard->inFlightFor($snapshot)) {
             return ['outcome' => SubtitleAuditEpisodeOutcome::Failed, 'failure_reason' => 'replacement_in_flight', 'missing_languages' => $missing];
         }
+
+        return fn (): array => $this->queue($subtitleAuditEpisode, $built, $missing, $candidate);
+    }
+
+    /**
+     * @param  array{payload: array<string, mixed>, description: mixed}  $built
+     * @param  list<string>  $missing
+     * @param  array<string, mixed>  $candidate
+     * @return array{outcome: SubtitleAuditEpisodeOutcome, missing_languages: list<string>, failure_reason?: string, action_request_id?: int, release_title?: string}
+     */
+    private function queue(SubtitleAuditEpisode $subtitleAuditEpisode, array $built, array $missing, array $candidate): array
+    {
+        $subtitleAuditBatch = $subtitleAuditEpisode->batch;
 
         $actionRequest = $this->actionOrchestrator->dispatch(
             type: 'replace_media_file',
