@@ -1,3 +1,41 @@
+# [1.56.0](https://github.com/pentacore/media-manager/compare/v1.55.0...v1.56.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **actions:** live status updates under the batch filter ([86bf655](https://github.com/pentacore/media-manager/commit/86bf6559e9eba8849a64db5176b3178058d1719b))
+* **ai-models:** clear stale event override errors on remove ([d8b5a6e](https://github.com/pentacore/media-manager/commit/d8b5a6ede828a189987284761ef7445dd15564a0))
+* **chat:** show a searching batch card and approve big batches in chunks ([570f48b](https://github.com/pentacore/media-manager/commit/570f48b56528e0247caf5245e645efc45fec3f3e))
+* **second-opinion:** drop an event's Jev threshold when its engine is the LLM ([871ec85](https://github.com/pentacore/media-manager/commit/871ec8518b74142f7153b8197345100ed2c55990))
+* **second-opinion:** show when an event's Off skipped the check ([3b4646c](https://github.com/pentacore/media-manager/commit/3b4646cfdf305acd708de3a8629388a204fb285a))
+* **series:** inspect the replace dialog when it mounts open ([7da9f11](https://github.com/pentacore/media-manager/commit/7da9f11df68b69114ad357a6e69224457434ab8b))
+* **subtitles:** defer the batch notification to commit ([6dc0697](https://github.com/pentacore/media-manager/commit/6dc069738f3d2f7bed6f88d6e57059cd24bb7965))
+* **subtitles:** never orphan a subtitle audit batch ([ea950cd](https://github.com/pentacore/media-manager/commit/ea950cdb7817ca434b3b03a1250658a975930e5a))
+* **subtitles:** run audit release searches on the maintenance lane ([932f199](https://github.com/pentacore/media-manager/commit/932f199e1813acbf68fc3cc5817948c9e3719bab))
+* **subtitles:** scale the search window with the batch size ([9462d0d](https://github.com/pentacore/media-manager/commit/9462d0d73987145576a0418ba287f9afdbf6dba0))
+* **subtitles:** skip an audit episode with a replacement in flight ([7ea12cc](https://github.com/pentacore/media-manager/commit/7ea12cc9689663edac7037e04eb328546ead4897))
+
+
+### Features
+
+* **actions:** filter the action queue to a subtitle audit batch ([badba8d](https://github.com/pentacore/media-manager/commit/badba8db008a354572d904e9f5a81f7fbe94782a))
+* **actions:** list a subtitle audit batch's manual picks ([652e9e2](https://github.com/pentacore/media-manager/commit/652e9e2393c6be9f022293252483d7a85d296fa2))
+* **ai-models:** edit decision verifier event overrides on the AI Models page ([bcea487](https://github.com/pentacore/media-manager/commit/bcea4875d9ba96c12c74fd20cbac3e05853b1fd5))
+* **ai-models:** let the decision verifier take per-event model tiers ([0d3390e](https://github.com/pentacore/media-manager/commit/0d3390ebb62b8f5e39bd829624490d173ee718ae))
+* **ai-models:** save decision verifier event overrides ([0db1099](https://github.com/pentacore/media-manager/commit/0db109959fe8dd46586e165ceebb71427c0a0ecb))
+* **chat:** audit and repair a series' subtitles from chat ([7190a59](https://github.com/pentacore/media-manager/commit/7190a59c5b96581b814ec90dad99eb7fed834a7a))
+* **chat:** show a subtitle audit batch card with one-click approval ([577a1e6](https://github.com/pentacore/media-manager/commit/577a1e60d0dbd7f011c278d59112656343e47fc1))
+* **second-opinion:** apply per-event verifier overrides to agent proposals ([99f395e](https://github.com/pentacore/media-manager/commit/99f395e0449a09c5d4fa33419d9468493fad55b8))
+* **second-opinion:** edit per-event verifier overrides on the decision agent page ([2c05b7d](https://github.com/pentacore/media-manager/commit/2c05b7d82296bf053755ca75e4c032fdc4a278d6))
+* **second-opinion:** save per-event verifier overrides from the decision agent settings ([b40f090](https://github.com/pentacore/media-manager/commit/b40f090c5804bcb08b37a37d0d729bf5e176889f))
+* **second-opinion:** show when a per-event rule decided the second opinion ([98a7707](https://github.com/pentacore/media-manager/commit/98a77073417c0779376522d65d330efb006091f2))
+* **second-opinion:** store per-event verifier overrides in decision agent settings ([09c6119](https://github.com/pentacore/media-manager/commit/09c61193f4235ac5bc0a55e888b288f4c82bcdd6))
+* **series:** open the replace dialog from a link ([fcdf735](https://github.com/pentacore/media-manager/commit/fcdf735593ab5f4f85e322940791d27cbdad8bfb))
+* **subtitles:** add subtitle audit batch tables ([b6543d7](https://github.com/pentacore/media-manager/commit/b6543d72db438ba0038eece378dccfcad9126770))
+* **subtitles:** audit a whole series for missing subtitles ([1da9495](https://github.com/pentacore/media-manager/commit/1da9495e4f572c33d1181abb4c3ae59a6efc63f0))
+* **subtitles:** repair a series' missing subtitles as one batch ([32ab0bd](https://github.com/pentacore/media-manager/commit/32ab0bdc20e838942ab3c88e91c5a433516c484a))
+* **subtitles:** settle subtitle audit batches and notify on hand-off ([491d711](https://github.com/pentacore/media-manager/commit/491d7117640c2e2cfeaf6c1019442dbba9a09626))
+
 # [1.55.0](https://github.com/pentacore/media-manager/compare/v1.54.0...v1.55.0) (2026-10-25)
 
 

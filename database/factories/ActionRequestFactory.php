@@ -37,12 +37,13 @@ class ActionRequestFactory extends Factory
     /**
      * A request carrying a stored second-opinion verdict.
      */
-    public function secondOpinion(bool $agrees, bool $failed = false, ?string $reason = 'Looks right.', string $engine = 'llm', string $mode = 'hold', ?float $confidence = null, ?string $invocationId = null): static
+    public function secondOpinion(bool $agrees, bool $failed = false, ?string $reason = 'Looks right.', string $engine = 'llm', string $mode = 'hold', ?float $confidence = null, ?string $invocationId = null, ?string $eventKey = null): static
     {
         return $this->state(fn (array $attributes): array => [
             'second_opinion' => [
                 'engine' => $engine,
                 'mode' => $mode,
+                'event_key' => $eventKey,
                 'agrees' => $agrees,
                 'failed' => $failed,
                 'confidence' => $confidence,
@@ -51,6 +52,16 @@ class ActionRequestFactory extends Factory
                 'model' => $engine === 'llm' ? 'gpt-5-mini' : null,
                 'invocation_id' => $invocationId,
             ],
+        ]);
+    }
+
+    /**
+     * A request whose event's Off mode skipped the check its action rule would run.
+     */
+    public function secondOpinionSkipped(string $eventKey): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'second_opinion' => ['skipped' => true, 'mode' => 'off', 'event_key' => $eventKey],
         ]);
     }
 

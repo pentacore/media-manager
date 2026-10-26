@@ -291,3 +291,18 @@ test('a confident import the second opinion rejects is recorded as resolved and 
     // Nothing was suggested or acted, so the Action Queue is the only place it shows.
     Notification::assertNothingSent();
 });
+
+test('the fast path takes the second opinion mode of its event', function (): void {
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides([
+        'sonarr:ManualInteractionRequired' => ['mode' => SecondOpinionMode::Reject, 'engine' => null, 'jev_threshold' => null],
+    ]);
+    fakeStuckImportApis(stuckImportCandidates());
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+    DecisionVerifierAgent::fake([['agrees' => false, 'reason' => 'The files belong to another show.']]);
+
+    runStuckImportJob();
+
+    expect(ActionRequest::sole())->status->toBe(ActionRequestStatus::Rejected)
+        ->and(ActionRequest::sole()->second_opinion)->toMatchArray(['mode' => 'reject', 'event_key' => 'sonarr:ManualInteractionRequired']);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});

@@ -29,9 +29,10 @@ test('task and scope are unique together', function (): void {
     AiTaskModel::factory()->task(AiTask::Decision)->event('sonarr:Download')->create();
 })->throws(UniqueConstraintViolationException::class);
 
-test('only the decision task accepts event scopes', function (): void {
+test('the decision agent and its verifier accept event scopes', function (): void {
     expect(array_values(array_filter(AiTask::cases(), fn (AiTask $aiTask): bool => $aiTask->acceptsEventScopes())))
-        ->toBe([AiTask::Decision]);
+        ->toBe([AiTask::Decision, AiTask::DecisionVerifier])
+        ->and(AiTask::eventScoped())->toBe([AiTask::Decision, AiTask::DecisionVerifier]);
 });
 
 test('provider default is not a sendable level and sorts below none', function (): void {
