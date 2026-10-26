@@ -11,6 +11,8 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ClassificationOutcome;
 use App\Models\MediaReplacementAttempt;
+use App\Models\SubtitleAuditBatch;
+use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use App\Services\Actions\ActionRequestBrowserPayload;
 use App\Services\Actions\ActionRequestReviewer;
@@ -241,6 +243,63 @@ test('status filter narrows results', function (): void {
         ->assertInertia(fn ($page) => $page
             ->has('requests.data', 2)
             ->where('filters.status', 'pending')
+        );
+});
+
+test('the action queue can be filtered to one subtitle audit batch', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['subtitle_audit_batch' => 7]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.total', 2)
+            ->where('filters.subtitle_audit_batch', 7)
+            ->where('statusCounts.pending', 2)
+        );
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.total', 3)
+            ->where('filters.subtitle_audit_batch', null)
+        );
+});
+
+test('the batch filter brings the batch card and pages a hundred rows', function (): void {
+    $member = User::factory()->member()->create();
+    $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Show']);
+    SubtitleAuditEpisode::factory()->manualPick()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 4]);
+    SubtitleAuditEpisode::factory()->nothingFound()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 5]);
+    ActionRequest::factory()->count(101)->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['subtitle_audit_batch' => $batch->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.per_page', 100)
+            ->where('requests.meta.total', 101)
+            ->where('requests.meta.last_page', 2)
+            ->has('requests.data', 100)
+            ->where('subtitleAuditBatch.type', 'subtitle_audit_batch')
+            ->where('subtitleAuditBatch.id', $batch->id)
+            ->where('subtitleAuditBatch.series_id', 42)
+            ->where('subtitleAuditBatch.episodes.0.outcome', 'manual_pick')
+            ->where('subtitleAuditBatch.episodes.1.outcome', 'nothing_found')
+        );
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['subtitle_audit_batch' => $batch->id + 1000]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('subtitleAuditBatch', null));
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.meta.per_page', 25)
+            ->where('subtitleAuditBatch', null)
         );
 });
 

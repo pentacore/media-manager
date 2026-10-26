@@ -2,6 +2,7 @@ import type {
     ChatCard,
     ChoiceOption,
     ChoicesCard,
+    SubtitleAuditBatchCard,
     ToolRequestCard,
 } from './types';
 
@@ -63,11 +64,25 @@ function toolRequestCard(
     };
 }
 
+/** The presenter's batch payload, recognised by its type and integer id. */
+function isSubtitleAuditBatchCard(
+    value: unknown,
+): value is SubtitleAuditBatchCard {
+    return (
+        isRecord(value) &&
+        value.type === 'subtitle_audit_batch' &&
+        Number.isInteger(value.id) &&
+        Array.isArray(value.episodes) &&
+        Array.isArray(value.pending_action_request_ids)
+    );
+}
+
 /**
  * The card one tool result shows under the reply, or null. Mirrors
  * `ChatCardExtractor::fromToolResults()` for a single result: an
  * OfferChoicesTool result with a `choices` object becomes a choices card
- * (keyed by its tool call id), a queued action becomes an approval card.
+ * (keyed by its tool call id), a repair result's `subtitle_audit_batch`
+ * becomes a batch card, a queued action becomes an approval card.
  */
 export function cardFromToolResult(
     content: unknown,
@@ -94,6 +109,10 @@ export function cardFromToolResult(
 
     if (toolName === TOOL_REQUEST_NAME && isRecord(result.tool_request)) {
         return toolRequestCard(toolCallId, result.tool_request);
+    }
+
+    if (isSubtitleAuditBatchCard(result.subtitle_audit_batch)) {
+        return result.subtitle_audit_batch;
     }
 
     if (result.queued === true && Number.isInteger(result.action_request_id)) {

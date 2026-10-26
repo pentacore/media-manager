@@ -44,7 +44,7 @@ final readonly class ImportedSubtitleAuditor
         private ReplacementRequestBuilder $replacementRequestBuilder,
         private MediaReplacementTracker $mediaReplacementTracker,
         private ActionOrchestrator $actionOrchestrator,
-        private LanguageNormalizer $languageNormalizer,
+        private SubtitleCheckRules $subtitleCheckRules,
         private AdminNotifier $adminNotifier,
         private ArrConnections $arrConnections,
     ) {}
@@ -186,8 +186,14 @@ final readonly class ImportedSubtitleAuditor
             return;
         }
 
-        $autoCheckKey = $this->autoCheckKey($serviceConnection, $snapshot, $isRadarr);
-        $missing = $this->missingLanguages($snapshot, $scope);
+        $autoCheckKey = $this->subtitleCheckRules->autoCheckKey($serviceConnection, $snapshot);
+        $missing = $this->subtitleCheckRules->missingLanguages(
+            array_values(array_filter(
+                is_array($snapshot['subtitles'] ?? null) ? $snapshot['subtitles'] : [],
+                is_string(...),
+            )),
+            $scope,
+        );
 
         // Checked before the attempt cap: the cap's notification claims a
         // language is still missing, and it may only say so once that is known.
@@ -234,7 +240,7 @@ final readonly class ImportedSubtitleAuditor
         ?WebhookEvent $webhookEvent,
         bool $isRadarr,
     ): void {
-        if ($this->capReached($autoCheckKey)) {
+        if ($this->subtitleCheckRules->capReached($autoCheckKey)) {
             $this->notify(
                 $serviceConnection,
                 (string) ($snapshot['display_name'] ?? 'Imported media'),
@@ -343,25 +349,6 @@ final readonly class ImportedSubtitleAuditor
     }
 
     /**
-     * Required languages for the scope that the inspected file does not carry.
-     *
-     * @param  array<string, mixed>  $snapshot
-     * @return list<string>
-     */
-    private function missingLanguages(array $snapshot, MediaReplacementScope $mediaReplacementScope): array
-    {
-        $required = $this->mediaReplacementSettings->effectiveLanguages($mediaReplacementScope);
-        $found = $this->languageNormalizer->normalizeMany(
-            array_values(array_filter(
-                is_array($snapshot['subtitles'] ?? null) ? $snapshot['subtitles'] : [],
-                is_string(...),
-            )),
-        );
-
-        return array_values(array_diff($required, $found));
-    }
-
-    /**
      * @param  list<string>  $configuredTags
      */
     private function hasConfiguredTag(
@@ -406,53 +393,6 @@ final readonly class ImportedSubtitleAuditor
         }
 
         return false;
-    }
-
-    /**
-     * Stable per-target key for the attempt cap, written into the request
-     * payload by ReplacementRequestBuilder and read back by capReached().
-     *
-     * A non-ambiguous Sonarr snapshot carries exactly one episode id today, so
-     * the sort is currently a no-op; it is kept because the key is a loop guard
-     * and a widened snapshot must not silently produce two keys for one target.
-     *
-     * An episode id list that is somehow empty yields a trailing-dash key shared
-     * by every such episode of the series. That over-blocks rather than
-     * under-blocks — the cap fires sooner, never later — so it is left alone.
-     *
-     * @param  array<string, mixed>  $snapshot
-     */
-    private function autoCheckKey(ServiceConnection $serviceConnection, array $snapshot, bool $isRadarr): string
-    {
-        if ($isRadarr) {
-            return sprintf('radarr:%d:%d', $serviceConnection->id, (int) ($snapshot['movie_id'] ?? 0));
-        }
-
-        $episodeIds = array_map(intval(...), array_values(array_filter(
-            is_array($snapshot['episode_ids'] ?? null) ? $snapshot['episode_ids'] : [],
-            static fn (mixed $id): bool => is_int($id) || is_string($id),
-        )));
-        sort($episodeIds, SORT_NUMERIC);
-
-        return sprintf(
-            'sonarr:%d:%d-%s',
-            $serviceConnection->id,
-            (int) ($snapshot['series_id'] ?? 0),
-            implode('-', $episodeIds),
-        );
-    }
-
-    private function capReached(string $autoCheckKey): bool
-    {
-        $cutoff = now()->subHours($this->mediaReplacementSettings->subtitleCheckCooldownHours());
-
-        $attempts = ActionRequest::query()
-            ->where('type', 'replace_media_file')
-            ->where('payload->auto_check_key', $autoCheckKey)
-            ->where('created_at', '>=', $cutoff)
-            ->count();
-
-        return $attempts >= $this->mediaReplacementSettings->subtitleCheckMaxAttempts();
     }
 
     /**

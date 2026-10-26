@@ -3,6 +3,9 @@ import { toast } from 'vue-sonner';
 import { jsonRequest } from '@/lib/http';
 import type { BulkSummary } from '@/types';
 
+/** The most ids one bulk request takes (`BulkRunner::MAX_ITEMS` on the server). */
+export const BULK_MAX_ITEMS = 100;
+
 /**
  * Posts one bulk request and shows the server-worded summary toast (a fetch
  * path, so vue-sonner is called directly). Resolves to the summary, or to

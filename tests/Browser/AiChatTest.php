@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Tools\Arr\RepairSeriesSubtitlesTool;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Jobs\Ai\GenerateConversationTitle;
@@ -11,8 +12,11 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\AiProposedWorkflow;
 use App\Models\ChatAttachment;
+use App\Models\SubtitleAuditBatch;
+use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\Chat\SubtitleAuditBatchCard;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +26,7 @@ use Illuminate\Support\Str;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -903,4 +908,293 @@ test('a queued action card reviewed elsewhere first shows it changed and leaves 
         ->status->toBe(ActionRequestStatus::Approved)
         ->approved_by->toBeNull();
     Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+/**
+ * A ready subtitle audit batch for series 42 with two queued episodes (each
+ * with a pending replacement request), one manual pick (S01E03) and one
+ * episode nothing was found for.
+ *
+ * @return array{batch: SubtitleAuditBatch, requests: list<ActionRequest>}
+ */
+function aiChatSubtitleAuditBatch(): array
+{
+    $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Severance']);
+    $requests = [];
+
+    foreach ([1, 2] as $episodeNumber) {
+        $requests[] = $actionRequest = ActionRequest::factory()->create([
+            'type' => 'replace_media_file',
+            'status' => ActionRequestStatus::Pending,
+            'title' => "Replace Severance S01E0{$episodeNumber}",
+        ]);
+        SubtitleAuditEpisode::factory()->queued()->create([
+            'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => $episodeNumber,
+            'action_request_id' => $actionRequest->id, 'release_title' => "Severance.S01E0{$episodeNumber}.1080p.WEB",
+        ]);
+    }
+
+    SubtitleAuditEpisode::factory()->manualPick()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 3,
+    ]);
+    SubtitleAuditEpisode::factory()->nothingFound()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 4,
+    ]);
+
+    return ['batch' => $batch, 'requests' => $requests];
+}
+
+/**
+ * A conversation whose assistant reply carries the stored RepairSeriesSubtitlesTool call for the batch.
+ */
+function aiChatInsertSubtitleAuditConversation(User $user, SubtitleAuditBatch $subtitleAuditBatch): string
+{
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($user, $conversationId, 'Subtitle repair chat');
+    aiChatInsertMessage($user, $conversationId, 1, 'user', 'Fix the subtitles of Severance');
+    aiChatInsertMessage($user, $conversationId, 2, 'assistant', 'Two replacements are ready to approve.', toolCalls: [[
+        'id' => 'call_repair',
+        'name' => 'RepairSeriesSubtitlesTool',
+        'arguments' => ['series_id' => 42, 'season_number' => null],
+        'result' => json_encode(['subtitle_audit_batch' => SubtitleAuditBatchCard::present($subtitleAuditBatch)]),
+        'result_id' => null,
+    ]]);
+
+    return $conversationId;
+}
+
+test('a handed off repair shows a searching batch card with nothing to approve yet', function (): void {
+    $admin = User::factory()->admin()->create();
+    $batch = SubtitleAuditBatch::factory()->create(['series_id' => 42, 'series_title' => 'Severance', 'handed_off_at' => now()]);
+    SubtitleAuditEpisode::factory()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 1]);
+    SubtitleAuditEpisode::factory()->manualPick()->create(['subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 2]);
+    $conversationId = (string) Str::uuid7();
+    aiChatInsertConversation($admin, $conversationId, 'Subtitle repair chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix the subtitles of Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'The searches continue in the background.', toolCalls: [[
+        'id' => 'call_repair',
+        'name' => 'RepairSeriesSubtitlesTool',
+        'arguments' => ['series_id' => 42, 'season_number' => null],
+        'result' => json_encode([
+            'handed_off' => true, 'subtitle_audit_batch_id' => $batch->id, 'searching' => 1, 'message' => 'Later.',
+            'subtitle_audit_batch' => SubtitleAuditBatchCard::present($batch),
+        ]),
+        'result_id' => null,
+    ]]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-status]', 'searching')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="searching"]', 'Still searching')
+        ->assertSeeIn('[data-subtitle-audit-searching]', 'Still searching 1 episode.')
+        ->assertCount('[data-subtitle-audit-pick]', 1)
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-decline]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('approving a batch larger than one bulk request approves it in chunks', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Severance']);
+
+    // No webhook event: a batch request has none, and creating one per row
+    // would build a connection per row.
+    foreach (range(1, 101) as $episodeNumber) {
+        $actionRequest = ActionRequest::factory()->create(['webhook_event_id' => null, 'type' => 'replace_media_file', 'status' => ActionRequestStatus::Pending]);
+        SubtitleAuditEpisode::factory()->queued()->create([
+            'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => $episodeNumber,
+            'action_request_id' => $actionRequest->id,
+        ]);
+    }
+
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (101)')
+        ->click('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertScript("new Set(Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())).size", 1)
+        ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(101) [data-subtitle-audit-action-status]', 'approved')
+        ->assertNoJavaScriptErrors();
+
+    expect(ActionRequest::query()->where('status', ActionRequestStatus::Approved)->count())->toBe(101);
+});
+
+test('a subtitle audit batch card approves every pending replacement at once', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-card]', 'Subtitle audit · Severance')
+        ->assertSeeIn('[data-subtitle-audit-status]', 'ready')
+        ->assertCount('[data-subtitle-audit-episode]', 4)
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(1) [data-subtitle-audit-release]', 'Severance.S01E01.1080p.WEB')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(1) [data-subtitle-audit-languages]', 'ENG')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="nothing_found"]', 'No usable release')
+        ->assertCount('[data-subtitle-audit-action-status]', 2)
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(2) [data-subtitle-audit-action-status]', 'pending')
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (2)')
+        ->click('[data-subtitle-audit-approve]')
+        ->assertSee('2 approved')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-decline]')
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['approved', 'approved'])
+        ->assertNoJavaScriptErrors();
+
+    expect(array_map(fn (ActionRequest $actionRequest): ActionRequestStatus => $actionRequest->fresh()->status, $requests))
+        ->toBe([ActionRequestStatus::Approved, ActionRequestStatus::Approved]);
+});
+
+test('a manual pick row links to the series page with the replace dialog target', function (): void {
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch] = aiChatSubtitleAuditBatch();
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="manual_pick"]', 'S01E03')
+        ->assertCount('[data-subtitle-audit-pick]', 1)
+        ->assertVisible('[data-subtitle-audit-episode][data-outcome="manual_pick"] a[data-subtitle-audit-pick][href*="/media/series/42?"][href*="replace_season=1"][href*="replace_episode=3"]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('declining the batch asks first and rejects every pending replacement', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-decline]', 'Decline all')
+        ->click('[data-subtitle-audit-decline]')
+        ->assertSee('Decline 2 subtitle replacements?')
+        ->click('[data-confirm-accept]')
+        ->assertSee('2 rejected')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertMissing('[data-subtitle-audit-decline]')
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['rejected', 'rejected'])
+        ->assertNoJavaScriptErrors();
+
+    expect(array_map(fn (ActionRequest $actionRequest): ActionRequestStatus => $actionRequest->fresh()->status, $requests))
+        ->toBe([ActionRequestStatus::Rejected, ActionRequestStatus::Rejected]);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('a reloaded subtitle audit batch card shows the statuses from the database', function (): void {
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    // Both reviewed in the Action Queue after the chat reply was stored.
+    foreach ($requests as $request) {
+        $request->update(['status' => ActionRequestStatus::Approved]);
+    }
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertCount('[data-subtitle-audit-episode]', 4)
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['approved', 'approved'])
+        ->assertNoJavaScriptErrors();
+});
+
+test('a streamed repair result renders the subtitle audit batch card under the reply', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    ['batch' => $batch] = aiChatSubtitleAuditBatch();
+    // The real tool audits Sonarr and waits on searches; this one answers with the finished batch.
+    app()->bind(RepairSeriesSubtitlesTool::class, fn (): RepairSeriesSubtitlesTool => new class($batch) extends RepairSeriesSubtitlesTool
+    {
+        public function __construct(private readonly SubtitleAuditBatch $subtitleAuditBatch) {}
+
+        /** An anonymous class would otherwise resolve to a mangled SDK tool name. */
+        public function name(): string
+        {
+            return 'RepairSeriesSubtitlesTool';
+        }
+
+        /**
+         * @return array<string, mixed>
+         */
+        protected function execute(Request $request): array
+        {
+            return ['subtitle_audit_batch' => SubtitleAuditBatchCard::present($this->subtitleAuditBatch)];
+        }
+    });
+    $calls = 0;
+    MediaAgent::fake(function () use (&$calls): ToolCall|string {
+        $calls++;
+
+        return $calls === 1
+            ? new ToolCall(id: 'call_repair', name: 'RepairSeriesSubtitlesTool', arguments: ['series_id' => 42, 'season_number' => null])
+            : 'Two replacements are ready to approve.';
+    });
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Fix the subtitles of Severance')
+        ->click('Send')
+        ->assertSeeIn('[data-chat-thread]', 'Two replacements are ready to approve.')
+        ->assertSeeIn('[data-chat-thread] [data-subtitle-audit-card]', 'Subtitle audit · Severance')
+        ->assertCount('[data-subtitle-audit-episode]', 4)
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (2)')
+        ->assertNoJavaScriptErrors();
+});
+
+test('a batch review that loses a race marks the reviewed replacements changed', function (): void {
+    Queue::fake([ExecuteActionRequest::class]);
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (2)');
+
+    // Rejected from the Action Queue after the chat loaded.
+    $requests[0]->update(['status' => ActionRequestStatus::Rejected]);
+
+    $webpage->click('[data-subtitle-audit-approve]')
+        ->assertSee('1 skipped')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['Changed elsewhere', 'Changed elsewhere'])
+        ->assertNoJavaScriptErrors();
+
+    expect($requests[0]->fresh()->status)->toBe(ActionRequestStatus::Rejected)
+        ->and($requests[1]->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });

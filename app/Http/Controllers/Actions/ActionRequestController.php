@@ -12,9 +12,11 @@ use App\Http\Requests\Actions\BulkReviewActionRequestsRequest;
 use App\Http\Resources\ActionRequestResource;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\SubtitleAuditBatch;
 use App\Services\Actions\ActionRequestReviewer;
 use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
+use App\Services\Chat\SubtitleAuditBatchCard;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -30,6 +32,8 @@ class ActionRequestController extends Controller
     {
         $status = $request->string('status')->toString();
         $preselect = $request->integer('request');
+        $batchId = $request->integer('subtitle_audit_batch');
+        $batchId = $batchId > 0 ? $batchId : null;
 
         $builder = ActionRequest::with([
             'webhookEvent.serviceConnection:id,name,type',
@@ -41,7 +45,13 @@ class ActionRequestController extends Controller
             $builder->where('status', $status);
         }
 
-        $lengthAwarePaginator = $builder->paginate(25)->withQueryString();
+        if ($batchId !== null) {
+            $builder->where('payload->subtitle_audit_batch_id', $batchId);
+        }
+
+        // A batch can be large and is approved as a whole, so its filtered
+        // view pages as many rows as one bulk review takes.
+        $lengthAwarePaginator = $builder->paginate($batchId === null ? 25 : 100)->withQueryString();
 
         return Inertia::render('Actions/Index', [
             'requests' => [
@@ -58,18 +68,32 @@ class ActionRequestController extends Controller
             // can't drive these accurately, especially when the user is
             // already filtered to a single status. Refreshed via partial
             // Inertia reload on each ActionRequestStatusChanged broadcast.
-            'statusCounts' => $this->statusCounts(),
-            'filters' => ['status' => $status],
+            'statusCounts' => $this->statusCounts($batchId),
+            'filters' => ['status' => $status, 'subtitle_audit_batch' => $batchId],
             'preselect' => $preselect > 0 ? $preselect : null,
+            // The filtered batch, for the episodes left to pick by hand; null
+            // without the filter or once the batch is gone.
+            'subtitleAuditBatch' => fn (): ?array => $this->subtitleAuditBatch($batchId),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function subtitleAuditBatch(?int $batchId): ?array
+    {
+        $subtitleAuditBatch = $batchId === null ? null : SubtitleAuditBatch::query()->find($batchId);
+
+        return $subtitleAuditBatch instanceof SubtitleAuditBatch ? SubtitleAuditBatchCard::present($subtitleAuditBatch) : null;
     }
 
     /**
      * @return array<string, int>
      */
-    private function statusCounts(): array
+    private function statusCounts(?int $batchId = null): array
     {
         $counts = ActionRequest::query()
+            ->when($batchId !== null, fn ($query) => $query->where('payload->subtitle_audit_batch_id', $batchId))
             ->selectRaw('status, COUNT(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status')
