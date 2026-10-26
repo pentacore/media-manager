@@ -22,7 +22,6 @@ use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
 use App\Enums\AiTask;
-use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\App;
 use Laravel\Ai\Attributes\CacheInstructions;
 use Laravel\Ai\Attributes\CacheToolDefinitions;
@@ -69,11 +68,7 @@ class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTool
             return null;
         }
 
-        $decisionRunContext = resolve(DecisionRunContext::class);
-
-        return $decisionRunContext->eventType === null
-            ? null
-            : DecisionAgentSettings::eventKey($decisionRunContext->sourceService, $decisionRunContext->eventType);
+        return resolve(DecisionRunContext::class)->eventKey();
     }
 
     /**

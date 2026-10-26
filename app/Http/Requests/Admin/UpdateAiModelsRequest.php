@@ -15,11 +15,11 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
  * `tasks` and `event_overrides` are overridden because typefinder cannot render
- * the nested per-task tier lists.
+ * the nested per-task tier lists; each event override names its event-scoped task.
  */
 #[TypefinderOverrides([
     'tasks' => 'Record<string, { tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>',
-    'event_overrides' => 'Array<{ event_key: string; tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>',
+    'event_overrides' => "Array<{ task: 'decision' | 'decision_verifier'; event_key: string; tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>",
 ])]
 class UpdateAiModelsRequest extends FormRequest
 {
@@ -40,8 +40,9 @@ class UpdateAiModelsRequest extends FormRequest
             'failover' => ['present', 'array:provider,model'],
             ...$this->selectionRules('failover', withReasoning: false),
             'event_overrides' => ['present', 'array'],
-            'event_overrides.*' => ['array:event_key,tiers'],
-            'event_overrides.*.event_key' => ['required', 'string', 'distinct', Rule::in(DecisionAgentSettings::availableEventKeys())],
+            'event_overrides.*' => ['array:task,event_key,tiers'],
+            'event_overrides.*.task' => ['required', 'string', Rule::in(array_map(static fn (AiTask $aiTask): string => $aiTask->value, AiTask::eventScoped()))],
+            'event_overrides.*.event_key' => ['required', 'string', Rule::in(DecisionAgentSettings::availableEventKeys())],
             'event_overrides.*.tiers' => ['required', 'array', 'list', 'min:1'],
             ...$this->tierRules('event_overrides.*.tiers.*'),
         ];
@@ -72,7 +73,31 @@ class UpdateAiModelsRequest extends FormRequest
                     $this->validateTierList($validator, sprintf('event_overrides.%d.tiers', $index), $override['tiers'] ?? null);
                 }
             }
+
+            $this->validateDistinctEventOverrides($validator);
         }];
+    }
+
+    /**
+     * Each (task, event) pair may be overridden once; every duplicate index is flagged.
+     */
+    private function validateDistinctEventOverrides(Validator $validator): void
+    {
+        $indexesByPair = [];
+
+        foreach ((array) $this->input('event_overrides', []) as $index => $override) {
+            if (is_array($override) && is_string($override['task'] ?? null) && is_string($override['event_key'] ?? null)) {
+                $indexesByPair[sprintf('%s|%s', $override['task'], $override['event_key'])][] = $index;
+            }
+        }
+
+        foreach ($indexesByPair as $indexes) {
+            if (count($indexes) > 1) {
+                foreach ($indexes as $index) {
+                    $validator->errors()->add(sprintf('event_overrides.%d.event_key', $index), 'This event already has an override for this task.');
+                }
+            }
+        }
     }
 
     /**
