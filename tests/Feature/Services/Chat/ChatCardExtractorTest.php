@@ -181,3 +181,12 @@ test('hydrating several messages keeps each card in its group and order', functi
         ->and($groups[0][1]['status'])->toBe('rejected')
         ->and($groups[2][0]['series_title'])->toBe('Second');
 });
+
+test('a subtitle audit batch result missing its episodes yields no card', function (): void {
+    $cards = resolve(ChatCardExtractor::class)->fromToolResults([[
+        'id' => 'call_1', 'name' => 'RepairSeriesSubtitlesTool', 'arguments' => [], 'result_id' => null,
+        'result' => json_encode(['subtitle_audit_batch' => ['type' => 'subtitle_audit_batch', 'id' => 7, 'pending_action_request_ids' => []]]),
+    ]]);
+
+    expect($cards)->toBe([]);
+});

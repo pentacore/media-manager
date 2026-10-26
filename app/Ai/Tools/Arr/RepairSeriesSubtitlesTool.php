@@ -103,7 +103,7 @@ class RepairSeriesSubtitlesTool extends BaseTool
             'handed_off' => true,
             'subtitle_audit_batch_id' => $subtitleAuditBatch->id,
             'searching' => $subtitleAuditBatch->episodes()->where('outcome', SubtitleAuditEpisodeOutcome::Searching->value)->count(),
-            'message' => 'The release searches continue in the background. Tell the user they will be notified when the batch is ready to approve on the Actions page.',
+            'message' => 'The release searches continue in the background. Tell the user the admins will be notified when the batch is ready to approve on the Actions page.',
             // The card as it stands; reopening the conversation shows it afresh.
             'subtitle_audit_batch' => SubtitleAuditBatchCard::present($subtitleAuditBatch),
         ];

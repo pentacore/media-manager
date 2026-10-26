@@ -93,6 +93,14 @@ test('a file with no subtitles at all is missing', function (): void {
     expect($audit['missing'])->toBe([['label' => 'S01E01', 'missing_languages' => ['eng']]]);
 });
 
+test('an episode whose file is absent from the episode files is reported missing', function (): void {
+    fakeSeriesAudit([auditEpisode(101, 1, 501)], []);
+
+    $audit = resolve(SeriesSubtitleAuditor::class)->audit($this->connection, 42)->toArray();
+
+    expect($audit['missing'])->toBe([['label' => 'S01E01', 'missing_languages' => ['eng']]]);
+});
+
 test('subtitle strings and arrays are read alike', function (): void {
     fakeSeriesAudit(
         [auditEpisode(101, 1, 501), auditEpisode(102, 2, 502)],

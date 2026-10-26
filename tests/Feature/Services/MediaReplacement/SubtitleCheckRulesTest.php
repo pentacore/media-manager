@@ -43,6 +43,27 @@ test('the auto check key matches the import check format', function (): void {
     expect($key)->toBe(sprintf('sonarr:%d:42-101-102', $connection->id));
 });
 
+test('a scoped language override replaces the global languages', function (): void {
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+    $mediaReplacementSettings->setConfiguration([
+        ...$mediaReplacementSettings->configuration(),
+        'scoped_languages' => ['anime' => ['Japanese'], 'tv' => null, 'movie' => null],
+    ]);
+
+    $subtitleCheckRules = resolve(SubtitleCheckRules::class);
+
+    expect($subtitleCheckRules->missingLanguages([], MediaReplacementScope::Anime))->toBe(['jpn'])
+        ->and($subtitleCheckRules->missingLanguages([], MediaReplacementScope::Tv))->toBe(['eng']);
+});
+
+test('the auto check key for a Radarr connection is built from the movie id', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create();
+
+    $key = resolve(SubtitleCheckRules::class)->autoCheckKey($connection, ['movie_id' => 7]);
+
+    expect($key)->toBe(sprintf('radarr:%d:7', $connection->id));
+});
+
 test('the cap counts replace requests for the key inside the cooldown', function (): void {
     $key = 'sonarr:1:42-101';
 
