@@ -119,7 +119,7 @@ function ruleError(index: number): string {
                     placeholder="Rule name"
                     class="h-8 flex-1 text-sm"
                 />
-                <label class="flex items-center gap-1.5 text-xs">
+                <label class="flex items-center gap-1.5 text-xs touch:min-h-10">
                     <input v-model="rule.enabled" type="checkbox" />
                     Enabled
                 </label>

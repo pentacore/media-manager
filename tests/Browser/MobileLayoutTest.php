@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\AiUsageKind;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
+use App\Models\AgentDecision;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
@@ -21,6 +23,7 @@ use App\Models\ServerIncident;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Settings\MediaReplacementSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,6 +101,10 @@ function mobileLayoutFakeServices(): void
             ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long', 'airDateUtc' => now()->startOfMonth()->addDays(9)->setTime(2, 0)->toIso8601String(), 'hasFile' => false, 'monitored' => true,
                 'series' => ['title' => 'The Extraordinarily Long Example Series Title Of Doom', 'monitored' => true, 'images' => $poster]],
         ]),
+        // The Sonarr connection's edit page: root folders, tags and disk paths.
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([['id' => 1, 'path' => '/data/tv', 'freeSpace' => 100_000_000_000], ['id' => 2, 'path' => '/data/anime-with-a-long-example-folder-name', 'freeSpace' => 100_000_000_000]]),
+        'sonarr.local:8989/api/v3/tag' => Http::response([['id' => 1, 'label' => 'subtitle-check'], ['id' => 2, 'label' => 'example-tag']]),
+        'sonarr.local:8989/api/v3/diskspace' => Http::response([['path' => '/data/tv', 'label' => 'TV', 'freeSpace' => 100_000_000_000, 'totalSpace' => 200_000_000_000], ['path' => '/data/anime-with-a-long-example-folder-name', 'label' => 'Anime', 'freeSpace' => 50_000_000_000, 'totalSpace' => 200_000_000_000]]),
         'sonarr.local:8989/*' => Http::response([]),
         'radarr.local:7878/api/v3/movie' => Http::response([
             ['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => $poster],
@@ -171,9 +178,10 @@ function mobileLayoutFakeServices(): void
  * The models the admin detail rows name by id (901 and up, clear of the ids
  * the factories hand out): a benchmark case, two finished runs on it, a
  * schedule, a chat template and an AI conversation, all owned by $admin; a
- * Prowlarr connection, a processed webhook event on it, a replacement
- * attempt that needs attention and a server with one open incident and
- * one check.
+ * second Sonarr connection showing selected disk paths, a Prowlarr
+ * connection, a processed webhook event on it (with an AI decision and a
+ * dispatched action), a replacement attempt that needs attention, one
+ * subtitle rule and a server with one open incident and one check.
  * Two prices and three usage records fill the AI prices table and the AI
  * usage invocations table, so those rows measure their row controls.
  */
@@ -188,15 +196,34 @@ function mobileLayoutSeedDetailModels(User $admin): void
     BenchmarkSchedule::factory()->create(['id' => 901, 'name' => 'Example nightly schedule', 'created_by' => $admin->id]);
     ChatTemplate::factory()->create(['id' => 901, 'name' => 'Example stuck downloads check', 'user_id' => $admin->id]);
     DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $admin->getMorphClass(), 'participant_id' => $admin->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
+    // A second Sonarr connection on the same fake host, for the edit row: it
+    // shows selected disk paths with their metric toggles. The fakes' own
+    // Sonarr keeps the lower id, so pages that read the first Sonarr still
+    // read that one.
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['id' => 902, 'name' => 'Sonarr Anime', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k', 'settings' => ['disk' => ['mode' => 'selected', 'paths' => ['/data/tv'], 'display' => ['/data/tv' => 'both']]]]);
     $prowlarr = ServiceConnection::factory()->prowlarr()->create(['id' => 901, 'url' => 'http://prowlarr.local:9696', 'api_key' => 'k']);
     WebhookEvent::factory()->processed()->create(['id' => 901, 'service_connection_id' => $prowlarr->id]);
+    // The event's decision can become a benchmark case (a text usage row on
+    // its invocation) and it dispatched one action, so the page shows both.
+    AgentDecision::factory()->completed(1)->create(['webhook_event_id' => 901, 'invocation_id' => 'inv-example-901', 'summary' => 'Proposed a replacement for the example episode.']);
+    AiUsageRecord::factory()->create(['invocation_id' => 'inv-example-901', 'kind' => AiUsageKind::Text, 'prompt_text' => 'Decide.', 'is_benchmark' => false]);
+    ActionRequest::factory()->completed()->create(['webhook_event_id' => 901, 'type' => 'replace_media_file', 'target_service' => 'sonarr']);
     // The factory's own action request would bring a webhook event on a
-    // random connection; the attempt hangs off the fakes' Sonarr instead.
+    // random connection; the attempt hangs off the seeded Sonarr instead.
     MediaReplacementAttempt::factory()->needsAttention()->create([
         'id' => 901,
         'action_request_id' => ActionRequest::factory()->create(['type' => 'replace_media_file', 'webhook_event_id' => null])->id,
-        'service_connection_id' => ServiceConnection::query()->where('name', 'Sonarr')->value('id'),
+        'service_connection_id' => $sonarr->id,
     ]);
+    // One subtitle rule, so the media replacement settings show a rule row.
+    resolve(MediaReplacementSettings::class)->setConfiguration(['guidance' => ['anime' => ['notes' => '', 'rules' => [[
+        'name' => 'Example English release rule',
+        'enabled' => true,
+        'strength' => 'guarantee',
+        'languages' => ['English'],
+        'conditions' => [['field' => 'title', 'value' => 'EXAMPLE']],
+        'explanation' => 'The EXAMPLE tag marks releases with English subtitles.',
+    ]]], 'tv' => ['notes' => '', 'rules' => []], 'movie' => ['notes' => '', 'rules' => []]]]);
     $server = Server::factory()->create(['id' => 901, 'name' => 'example-host-01']);
     ServerIncident::factory()->open()->create(['server_id' => $server->id]);
     // A check fills the server's check list, so the row measures its row actions.
@@ -388,6 +415,8 @@ function mobileLayoutAdminPages(): array
         'new connection' => ['admin.connections.create', null],
         // The deferred indexer row: the Prowlarr indexers card measures its row actions.
         'connection' => ['admin.connections.edit', null, '[data-prowlarr-indexer-test="3"]', ['serviceConnection' => 901]],
+        // Waits for all three deferred sections: disk paths, root folders and tags.
+        'sonarr connection' => ['admin.connections.edit', null, 'main:has([data-disk-metric="both"]):has([data-sonarr-library-types] select):has([data-subtitle-check-tags] input[type="checkbox"])', ['serviceConnection' => 902]],
         'webhook event' => ['admin.webhook-log.show', null, null, ['webhookEvent' => 901]],
         'replacement attempts' => ['admin.media-replacement.attempts.index', null],
         'replacement attempt' => ['admin.media-replacement.attempts.show', '[data-attempt-header]', null, ['mediaReplacementAttempt' => 901]],
@@ -453,6 +482,7 @@ function mobileLayoutTouchPages(): array
         'chat template' => ['ai.templates.edit', ['chatTemplate' => 901], null],
         'new connection' => ['admin.connections.create', [], null],
         'connection' => ['admin.connections.edit', ['serviceConnection' => 901], '[data-prowlarr-indexer-test="3"]'],
+        'sonarr connection' => ['admin.connections.edit', ['serviceConnection' => 902], 'main:has([data-disk-metric="both"]):has([data-sonarr-library-types] select):has([data-subtitle-check-tags] input[type="checkbox"])'],
         'webhook log' => ['admin.webhook-log.index', [], null],
         'webhook event' => ['admin.webhook-log.show', ['webhookEvent' => 901], null],
         'jobs' => ['admin.jobs.index', [], null],

@@ -305,7 +305,7 @@ function sync(): void {
                 </div>
 
                 <div
-                    class="flex items-center gap-1 rounded-md border border-border bg-bg-elev p-0.5"
+                    class="flex items-center gap-1 rounded-md border border-border bg-bg-elev p-0.5 max-sm:flex-wrap"
                 >
                     <button
                         v-for="option in FILTERS"
