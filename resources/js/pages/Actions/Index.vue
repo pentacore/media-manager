@@ -3,12 +3,14 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import {
+    ActionBatchFilterChip,
     ActionQueueHeader,
     ActionQueuePagination,
     ActionRequestDetail,
     ActionRequestTable,
     ActionStatusTabs,
     BulkRejectDialog,
+    SubtitleAuditManualPicks,
     isUncertainOutcome,
     retryConfirmation,
 } from '@/components/actions';
@@ -16,6 +18,7 @@ import type {
     ActionQueueRequests,
     ActionRequestRow,
 } from '@/components/actions';
+import type { SubtitleAuditBatchCard } from '@/components/ai/types';
 import { BulkActionBar } from '@/components/bulk';
 import { Button } from '@/components/ui/button';
 import { useActionQueueLive } from '@/composables/useActionQueueLive';
@@ -23,13 +26,16 @@ import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
 import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { hasSubtitleAuditFollowUps } from '@/lib/subtitleAudit';
 import { dashboard } from '@/routes';
 
 const props = defineProps<{
     requests: ActionQueueRequests;
     statusCounts: Record<string, number>;
-    filters: { status: string };
+    filters: { status: string; subtitle_audit_batch: number | null };
     preselect: number | null;
+    /** The batch the queue is filtered to; null without the filter or once it is gone. */
+    subtitleAuditBatch?: SubtitleAuditBatchCard | null;
 }>();
 
 defineOptions({
@@ -45,6 +51,12 @@ defineOptions({
 });
 
 const { isAdmin } = useCan();
+
+const showSubtitleAuditFollowUps = computed(
+    () =>
+        props.subtitleAuditBatch != null &&
+        hasSubtitleAuditFollowUps(props.subtitleAuditBatch.episodes),
+);
 const { confirm } = useConfirm();
 
 const {
@@ -94,6 +106,7 @@ const {
     retain: retainBulk,
 } = useBulkSelection<number>([
     () => props.filters.status,
+    () => props.filters.subtitle_audit_batch,
     () => props.requests.meta.current_page,
 ]);
 
@@ -148,7 +161,12 @@ onMounted(subscribeLive);
 function setFilter(id: string): void {
     router.get(
         ActionRequestController.index.url(),
-        id === 'all' ? {} : { status: id },
+        {
+            ...(id === 'all' ? {} : { status: id }),
+            ...(props.filters.subtitle_audit_batch === null
+                ? {}
+                : { subtitle_audit_batch: props.filters.subtitle_audit_batch }),
+        },
         { preserveState: true, preserveScroll: true, replace: true },
     );
 }
@@ -212,6 +230,17 @@ function goToPage(url: string | null): void {
             :stale-count="staleCount"
             :refreshing="refreshing"
             @refresh="refresh"
+        />
+
+        <ActionBatchFilterChip
+            v-if="filters.subtitle_audit_batch !== null"
+            :batch-id="filters.subtitle_audit_batch"
+            :status="filters.status"
+        />
+
+        <SubtitleAuditManualPicks
+            v-if="showSubtitleAuditFollowUps && subtitleAuditBatch"
+            :batch="subtitleAuditBatch"
         />
 
         <ActionStatusTabs

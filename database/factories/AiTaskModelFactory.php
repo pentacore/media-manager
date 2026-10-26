@@ -36,9 +36,9 @@ class AiTaskModelFactory extends Factory
         return $this->state(fn (array $attributes): array => ['task' => $aiTask]);
     }
 
-    public function event(string $eventKey): static
+    public function event(string $eventKey, AiTask $aiTask = AiTask::Decision): static
     {
-        return $this->state(fn (array $attributes): array => ['task' => AiTask::Decision, 'scope' => $eventKey]);
+        return $this->state(fn (array $attributes): array => ['task' => $aiTask, 'scope' => $eventKey]);
     }
 
     public function selecting(string $provider, string $model): static

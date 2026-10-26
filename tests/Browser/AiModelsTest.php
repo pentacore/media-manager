@@ -150,3 +150,43 @@ test('the decision verifier row shows the same-model warning', function (): void
         ->assertNoSmoke()
         ->assertSeeIn('[data-task="decision_verifier"] [data-task-warning]', 'less independent');
 });
+
+test('admin can add and remove a decision verifier event override beside the decision ones', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-decision-verifier-add-event-override] button')
+        ->click('[data-decision-verifier-event-option="sonarr:Download"]')
+        ->assertMissing('[data-event-override="sonarr:Download"]')
+        ->click('[data-decision-verifier-event-override="sonarr:Download"] [data-reasoning-select] button')
+        ->click('[data-reasoning-option="none"]')
+        ->click('Save models')
+        ->assertSee('AI models updated.')
+        ->assertVisible('[data-decision-verifier-event-override="sonarr:Download"] [data-decision-verifier-override-resolved]');
+
+    expect(AiTaskModel::query()->forTask(AiTask::DecisionVerifier)->where('scope', 'sonarr:Download')->first()?->reasoning)->toBe(AiReasoningLevel::None)
+        ->and(AiTaskModel::query()->forTask(AiTask::Decision)->where('scope', 'sonarr:Download')->exists())->toBeFalse();
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-decision-verifier-event-override="sonarr:Download"] [data-decision-verifier-remove-override]')
+        ->assertMissing('[data-decision-verifier-event-override="sonarr:Download"]')
+        ->click('Save models')
+        ->assertSee('AI models updated.');
+
+    expect(AiTaskModel::query()->forTask(AiTask::DecisionVerifier)->where('scope', 'sonarr:Download')->exists())->toBeFalse();
+});
+
+test('a verifier event override is flagged and warns when it shares the decision model', function (): void {
+    AiTaskModel::factory()->event('radarr:Grab', AiTask::DecisionVerifier)->reasoning(AiReasoningLevel::Low)->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-decision-verifier-event-override="radarr:Grab"]', 'Event not enabled')
+        ->assertSeeIn('[data-decision-verifier-event-override="radarr:Grab"] [data-decision-verifier-override-warning]', 'less independent')
+        ->assertAttribute('[data-event-overrides="decision_verifier"]', 'id', 'event-overrides-decision_verifier')
+        ->assertMissing('[data-event-override="radarr:Grab"]');
+});

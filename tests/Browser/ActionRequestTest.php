@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
+use App\Models\SubtitleAuditBatch;
+use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 
 test('a member sees a pending action request and can approve it', function (): void {
@@ -203,4 +205,69 @@ test('a legacy action request still shows its payload title', function (): void 
         ->assertNoSmoke()
         ->assertSeeIn('[data-action-title]', 'Legacy title')
         ->assertSeeIn('[data-action-description]', 'Legacy detail');
+});
+
+test('a batch filter shows only that batch and can be cleared', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->count(2)->create(['payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-action-batch-filter]')
+        ->assertSeeIn('[data-action-batch-filter]', 'Subtitle audit batch #7')
+        ->assertCount('[data-action-row]', 2)
+        ->click('[data-action-batch-filter-clear]')
+        ->assertMissing('[data-action-batch-filter]')
+        ->assertCount('[data-action-row]', 3);
+});
+
+test('a status tab keeps the batch filter', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 7]]);
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => 8]]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-test="tab-pending"]')
+        ->assertQueryStringHas('subtitle_audit_batch', '7')
+        ->assertQueryStringHas('status', 'pending')
+        ->assertPresent('[data-action-batch-filter]')
+        ->assertCount('[data-action-row]', 2);
+});
+
+test('a batch filter lists the episodes left to pick by hand', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $batch = SubtitleAuditBatch::factory()->handedOff()->create(['series_id' => 42, 'series_title' => 'Example Audit Series']);
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->queued()->create(['season_number' => 1, 'episode_number' => 1, 'action_request_id' => $queued->id]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->manualPick()->create(['season_number' => 1, 'episode_number' => 4, 'missing_languages' => ['eng']]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->manualPick()->create(['season_number' => 2, 'episode_number' => 6, 'missing_languages' => ['eng']]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->nothingFound()->create(['season_number' => 1, 'episode_number' => 7]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->create(['season_number' => 1, 'episode_number' => 8]);
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => $batch->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-subtitle-audit-manual-picks]', 'Example Audit Series')
+        ->assertCount('[data-subtitle-audit-manual-picks] [data-subtitle-audit-pick]', 2)
+        ->assertSeeIn('[data-subtitle-audit-manual-picks]', 'S01E04')
+        ->assertSeeIn('[data-subtitle-audit-manual-picks]', 'S02E06')
+        ->assertSeeIn('[data-subtitle-audit-misses]', '1 had no usable release, 1 failed.')
+        ->assertCount('[data-action-row]', 1);
+
+    expect($webpage->script("document.querySelector('[data-subtitle-audit-pick]').getAttribute('href')"))
+        ->toBe(route('media.series.show', ['id' => 42, 'replace_season' => 1, 'replace_episode' => 4], absolute: false));
+});
+
+test('a batch with nothing left to pick shows no manual pick section', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $batch = SubtitleAuditBatch::factory()->handedOff()->create();
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->queued()->create(['action_request_id' => $queued->id]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => $batch->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-action-batch-filter]')
+        ->assertCount('[data-action-row]', 1)
+        ->assertMissing('[data-subtitle-audit-manual-picks]');
 });

@@ -210,6 +210,10 @@ return [
 
         // Jev probability at or above which the classifier agrees.
         'second_opinion_jev_threshold' => 0.8,
+
+        // Per-event verifier overrides ({"sonarr:Download": {mode, engine,
+        // jev_threshold}}); edited on the Decision Agent page.
+        'second_opinion_event_overrides' => [],
     ],
 
     /*

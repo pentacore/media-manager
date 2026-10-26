@@ -1,3 +1,4 @@
+export { default as ActionBatchFilterChip } from './ActionBatchFilterChip.vue';
 export { default as ActionFailureDetails } from './ActionFailureDetails.vue';
 export { default as ActionPipeline } from './ActionPipeline.vue';
 export { default as ActionQueueHeader } from './ActionQueueHeader.vue';
@@ -7,6 +8,7 @@ export { default as ActionRequestTable } from './ActionRequestTable.vue';
 export { default as ActionStatusTabs } from './ActionStatusTabs.vue';
 export { default as BulkRejectDialog } from './BulkRejectDialog.vue';
 export { default as SecondOpinionVerdict } from './SecondOpinionVerdict.vue';
+export { default as SubtitleAuditManualPicks } from './SubtitleAuditManualPicks.vue';
 export {
     failureMessage,
     failureReasonLabel,

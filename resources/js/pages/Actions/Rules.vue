@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
+import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import { SegmentedControl, Toggle } from '@/components/mm';
 import { dashboard } from '@/routes';
 import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
@@ -118,6 +119,22 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
                                 class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
                                 {{ h }}
+                                <p
+                                    v-if="h === 'Second opinion'"
+                                    class="mt-0.5 text-[11px] font-normal tracking-normal text-fg-subtle normal-case"
+                                    data-second-opinion-event-note
+                                >
+                                    Per-event overrides on the
+                                    <Link
+                                        :href="
+                                            DecisionAgentSettingsController.index.url()
+                                        "
+                                        class="underline underline-offset-2"
+                                        data-second-opinion-event-note-link
+                                        >Decision Agent page</Link
+                                    >
+                                    take precedence.
+                                </p>
                             </th>
                         </tr>
                     </thead>

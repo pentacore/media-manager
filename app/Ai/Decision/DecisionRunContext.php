@@ -10,6 +10,7 @@ use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -65,6 +66,17 @@ class DecisionRunContext
         public readonly ?DecisionActionKind $actionKind = null,
         public readonly ?CarbonImmutable $deadline = null,
     ) {}
+
+    /**
+     * The webhook event key (service and event type) event overrides are
+     * stored under, or null when the run's event type is unknown.
+     */
+    public function eventKey(): ?string
+    {
+        return $this->eventType === null
+            ? null
+            : DecisionAgentSettings::eventKey($this->sourceService, $this->eventType);
+    }
 
     /**
      * The triggering event's download id, read the way the arr webhook

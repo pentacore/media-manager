@@ -13,7 +13,7 @@
         "Tests\\Browser\\AiEmbeddingsSettingsTest": 1.5669,
         "Tests\\Browser\\AiFreeUsagePoolTest": 4.9109,
         "Tests\\Browser\\AiModelTiersTest": 18.143,
-        "Tests\\Browser\\AiModelsTest": 11.2201,
+        "Tests\\Browser\\AiModelsTest": 18.6085,
         "Tests\\Browser\\AiNavVisibilityTest": 2.7359,
         "Tests\\Browser\\AiPricesTest": 43.1152,
         "Tests\\Browser\\AiPricingSourcesTest": 1.0055,
@@ -75,7 +75,8 @@
         "Tests\\Browser\\SabnzbdBulkTest": 29.404,
         "Tests\\Browser\\SabnzbdDownloadsTest": 17.9967,
         "Tests\\Browser\\SearchTitleSheetTest": 1.6563,
-        "Tests\\Browser\\SecondOpinionTest": 8.0682,
+        "Tests\\Browser\\SecondOpinionEventOverridesTest": 6.3324,
+        "Tests\\Browser\\SecondOpinionTest": 9.1007,
         "Tests\\Browser\\SeerrDeletedTitleTest": 2.3379,
         "Tests\\Browser\\SeerrRequestEditTest": 1.3377,
         "Tests\\Browser\\SeerrRequestsOutageTest": 0.5725,
@@ -96,6 +97,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.207,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
-    "checksum": "c525b1f3d4a9b7ee4e817c4fb600259c",
-    "updated_at": "2026-10-25T17:28:43+00:00"
+    "checksum": "1736101b4e29864fbe397fa08c0cd659",
+    "updated_at": "2026-10-25T20:47:13+00:00"
 }

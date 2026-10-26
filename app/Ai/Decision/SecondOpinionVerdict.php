@@ -78,13 +78,14 @@ final readonly class SecondOpinionVerdict
     /**
      * The shape stored on action_requests.second_opinion.
      *
-     * @return array{engine: string, mode: string, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null, invocation_id: string|null}
+     * @return array{engine: string, mode: string, event_key: string|null, agrees: bool, failed: bool, confidence: float|null, reason: string|null, provider: string|null, model: string|null, invocation_id: string|null}
      */
-    public function toArray(SecondOpinionMode $secondOpinionMode): array
+    public function toArray(SecondOpinionMode $secondOpinionMode, ?string $eventKey = null): array
     {
         return [
             'engine' => $this->engine,
             'mode' => $secondOpinionMode->value,
+            'event_key' => $eventKey,
             'agrees' => $this->agrees,
             'failed' => $this->failed,
             'confidence' => $this->confidence,

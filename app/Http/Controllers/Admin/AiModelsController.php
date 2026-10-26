@@ -78,6 +78,7 @@ class AiModelsController extends Controller
                 'has_reasoning' => $aiTask->hasReasoning(),
                 'allow_auto' => $aiTask === AiTask::Title,
                 'allow_tiers' => $aiTask->allowsTiers(),
+                'accepts_event_scopes' => $aiTask->acceptsEventScopes(),
                 'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask)),
                 'resolved' => $this->summary($resolvedByTask[$aiTask->value], $modelCapabilities),
                 'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask), $modelCapabilities),
@@ -85,20 +86,30 @@ class AiModelsController extends Controller
             ];
         }
 
-        $eventOverrides = $taskModelResolver->rows()
-            ->filter(fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === AiTask::Decision && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE)
-            ->pluck('scope')
-            ->unique()
-            ->sort()
-            ->map(fn (string $scope): array => [
-                'event_key' => $scope,
-                'enabled' => in_array($scope, $allowlist, true),
-                'tiers' => $this->tierRows($taskModelResolver->tiers(AiTask::Decision, $scope)),
-                'resolved' => $this->summary($taskModelResolver->resolve(AiTask::Decision, $scope), $modelCapabilities),
-                'inherited' => $this->summary($taskModelResolver->inheritedSelection(AiTask::Decision, $scope), $modelCapabilities),
-            ])
-            ->values()
-            ->all();
+        $eventOverrides = [];
+
+        foreach (AiTask::eventScoped() as $aiTask) {
+            $scopes = $taskModelResolver->rows()
+                ->filter(fn (AiTaskModel $aiTaskModel): bool => $aiTaskModel->task === $aiTask && $aiTaskModel->scope !== AiTaskModel::DEFAULT_SCOPE)
+                ->pluck('scope')
+                ->unique()
+                ->sort()
+                ->values();
+
+            foreach ($scopes as $scope) {
+                $resolved = $taskModelResolver->resolve($aiTask, $scope);
+
+                $eventOverrides[] = [
+                    'task' => $aiTask->value,
+                    'event_key' => $scope,
+                    'enabled' => in_array($scope, $allowlist, true),
+                    'tiers' => $this->tierRows($taskModelResolver->tiers($aiTask, $scope)),
+                    'resolved' => $this->summary($resolved, $modelCapabilities),
+                    'inherited' => $this->summary($taskModelResolver->inheritedSelection($aiTask, $scope), $modelCapabilities),
+                    'warning' => $aiTask === AiTask::DecisionVerifier ? $this->sameModelWarning($resolved, $taskModelResolver->resolve(AiTask::Decision, $scope)) : null,
+                ];
+            }
+        }
 
         $failover = $taskModelResolver->failover();
 
@@ -129,10 +140,15 @@ class AiModelsController extends Controller
             return null;
         }
 
-        $resolvedSelection = $resolvedByTask[AiTask::DecisionVerifier->value];
-        $decision = $resolvedByTask[AiTask::Decision->value];
+        return $this->sameModelWarning($resolvedByTask[AiTask::DecisionVerifier->value], $resolvedByTask[AiTask::Decision->value]);
+    }
 
-        return $resolvedSelection->provider === $decision->provider && $resolvedSelection->model === $decision->model
+    /**
+     * A caution when the verifier would run on the same model as the Decision agent.
+     */
+    private function sameModelWarning(ResolvedSelection $verifier, ResolvedSelection $decision): ?string
+    {
+        return $verifier->provider === $decision->provider && $verifier->model === $decision->model
             ? __('Runs on the same model as the Decision agent, so its second opinion is less independent.')
             : null;
     }
@@ -198,17 +214,19 @@ class AiModelsController extends Controller
 
             $this->storeFailover($validated['failover']);
 
-            $keptScopes = array_column($validated['event_overrides'], 'event_key');
+            foreach (AiTask::eventScoped() as $aiTask) {
+                $overrides = array_filter($validated['event_overrides'], static fn (array $override): bool => $override['task'] === $aiTask->value);
 
-            AiTaskModel::query()
-                ->forTask(AiTask::Decision)
-                ->where('scope', '!=', AiTaskModel::DEFAULT_SCOPE)
-                ->whereNotIn('scope', $keptScopes)
-                ->get()
-                ->each->delete();
+                AiTaskModel::query()
+                    ->forTask($aiTask)
+                    ->where('scope', '!=', AiTaskModel::DEFAULT_SCOPE)
+                    ->whereNotIn('scope', array_column($overrides, 'event_key'))
+                    ->get()
+                    ->each->delete();
 
-            foreach ($validated['event_overrides'] as $override) {
-                $this->storeTiers(AiTask::Decision, $override['event_key'], $override['tiers']);
+                foreach ($overrides as $override) {
+                    $this->storeTiers($aiTask, $override['event_key'], $override['tiers']);
+                }
             }
 
             $auditLogger->settingsUpdated(SettingsGroup::AiModels, $before, $this->snapshot());

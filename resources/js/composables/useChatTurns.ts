@@ -15,13 +15,14 @@ import type {
     ChatMode,
     ChatOverride,
     ComposerSubmission,
+    SubtitleAuditBatchCard,
     ToolGroupValue,
     TurnToolGroups,
     WorkflowProposal,
 } from '@/components/ai/types';
 import { useAiChat } from '@/composables/useAiChat';
 import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
-import { submitBulk } from '@/lib/bulk';
+import { BULK_MAX_ITEMS, submitBulk } from '@/lib/bulk';
 import { csrfToken, jsonRequest } from '@/lib/http';
 
 export type UseChatTurnsOptions = {
@@ -77,16 +78,21 @@ export type UseChatTurnsReturn = {
         card: ActionRequestCard,
         action: 'approve' | 'reject',
     ) => Promise<void>;
+    /** Approves or rejects every pending replacement of a subtitle audit batch at once. */
+    reviewBatch: (
+        card: SubtitleAuditBatchCard,
+        action: 'approve' | 'reject',
+    ) => Promise<void>;
 };
 
 /**
  * One chat panel's turns: the thread's messages, sending a turn (streamed, or
  * blocking for a workflow continuation), stopping it, approving or declining
  * a proposed workflow, answering a choices card and reviewing a queued action
- * inline. The stream in flight is aborted when the panel unmounts (the
- * assistant sheet closes). The active conversation is `useAiChat()`'s, which
- * the panel shares, so a turn that creates a conversation makes it the
- * panel's active one.
+ * or a subtitle audit batch inline. The stream in flight is aborted when the
+ * panel unmounts (the assistant sheet closes). The active conversation is
+ * `useAiChat()`'s, which the panel shares, so a turn that creates a
+ * conversation makes it the panel's active one.
  */
 export function useChatTurns({
     mode,
@@ -577,6 +583,74 @@ export function useChatTurns({
         card.status = action === 'approve' ? 'approved' : 'rejected';
     }
 
+    /**
+     * Approve or reject a subtitle audit batch's pending replacements through
+     * the bulk review, in chunks of at most BULK_MAX_ITEMS ids (the bulk
+     * endpoint's cap), sent one after another. While they run their ids sit
+     * in `reviewingActionIds`. Each chunk's episodes take the new status when
+     * every request in it started; otherwise (some were reviewed elsewhere
+     * first, or are gone) they read 'changed', as a single card does, and the
+     * server's toast gives the counts. A refused chunk stops the run and
+     * leaves its episodes and the ones after it pending, as they were.
+     */
+    async function reviewBatch(
+        card: SubtitleAuditBatchCard,
+        action: 'approve' | 'reject',
+    ): Promise<void> {
+        const ids = [...card.pending_action_request_ids];
+
+        if (
+            ids.length === 0 ||
+            ids.some((id) => reviewingActionIds.value.includes(id))
+        ) {
+            return;
+        }
+
+        reviewingActionIds.value = [...reviewingActionIds.value, ...ids];
+
+        try {
+            for (
+                let offset = 0;
+                offset < ids.length;
+                offset += BULK_MAX_ITEMS
+            ) {
+                const chunk = ids.slice(offset, offset + BULK_MAX_ITEMS);
+                const summary = await submitBulk(
+                    ActionRequestController.bulk.url(),
+                    { ids: chunk, action },
+                );
+
+                if (summary === null) {
+                    return;
+                }
+
+                const status =
+                    summary.started === chunk.length
+                        ? action === 'approve'
+                            ? 'approved'
+                            : 'rejected'
+                        : 'changed';
+
+                card.episodes.forEach((episode) => {
+                    if (
+                        episode.action_request_id !== null &&
+                        chunk.includes(episode.action_request_id)
+                    ) {
+                        episode.action_status = status;
+                    }
+                });
+                card.pending_action_request_ids =
+                    card.pending_action_request_ids.filter(
+                        (id) => !chunk.includes(id),
+                    );
+            }
+        } finally {
+            reviewingActionIds.value = reviewingActionIds.value.filter(
+                (id) => !ids.includes(id),
+            );
+        }
+    }
+
     /** The newest message, when it is an assistant reply. */
     const latestAssistant = computed<ChatMessage | null>(() => {
         const last = messages.value[messages.value.length - 1];
@@ -601,5 +675,6 @@ export function useChatTurns({
         choose,
         answerToolRequest,
         reviewAction,
+        reviewBatch,
     };
 }

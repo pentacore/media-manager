@@ -15,11 +15,13 @@ use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Tools\Arr\AddMediaTool;
+use App\Ai\Tools\Arr\AuditSeriesSubtitlesTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
+use App\Ai\Tools\Arr\RepairSeriesSubtitlesTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\SearchMediaReleasesTool;
@@ -184,6 +186,8 @@ The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, 
 - A queued/completed ActionRequest means replacement was requested/initiated, not fixed. Say subtitles are fixed only when verification reports verified.
 - Do not retry a failed replacement autonomously.
 
+**Checking a whole series' subtitles:** when the user wants every episode of a series (or one season) checked for subtitles, resolve the Sonarr series id with SearchMediaTool, then call AuditSeriesSubtitlesTool and report the counts, the missing episodes and the skipped ones with their reasons. Only when the user wants them fixed, call RepairSeriesSubtitlesTool with the same series and season — never ReplaceMediaFileTool once per episode. It answers with a batch card the user approves in one go, or with handed_off: then say the search continues in the background and they will be notified. Episodes marked manual_pick have a Pick release link on the card; never pick a release for them yourself.
+
 **Bazarr subtitles:** when Bazarr is configured, inspect one exact item with InspectSubtitleTool before searching. SearchSubtitlesTool returns opaque candidate fingerprints only. RequestSubtitleOperationTool is destructive and always follows Action Rules; never claim a queued operation has already fixed the subtitle. These tools fetch subtitles for a file the user is keeping — they are never part of replacing that file. When Bazarr returns no candidates, say so and offer the replacement flow as a separate choice; do not keep re-searching Bazarr.
 
 **Batched workflows (3+ destructive operations):** DO NOT call multiple destructive tools in sequence. Gather the candidates via the read tools and confirm the list, then call ProposeWorkflowTool ONCE with a `rationale` and a `steps` array: `[{action: "delete_movie", target: "Movie A (id 1)", reason: "Unwatched 8mo"}, ...]`. You'll get back `{status: 'awaiting_confirmation', workflow_id, ...}` — tell the user the proposal awaits their confirmation and call NO destructive tools until the continuation. When re-invoked with "The user has APPROVED workflow {id}…", execute the steps with the destructive tools, in order. On decline, acknowledge and ask what they'd like instead.
@@ -246,6 +250,8 @@ PROMPT;
             // Replacement — read-only inspection runs in a sub-agent
             resolve(MediaFileInspectorAgent::class),
             resolve(ReplaceMediaFileTool::class),
+            resolve(AuditSeriesSubtitlesTool::class),
+            resolve(RepairSeriesSubtitlesTool::class),
             // Emby
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),

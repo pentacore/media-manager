@@ -45,7 +45,17 @@ enum AiTask: string
      */
     public function acceptsEventScopes(): bool
     {
-        return $this === self::Decision;
+        return in_array($this, [self::Decision, self::DecisionVerifier], true);
+    }
+
+    /**
+     * The tasks that take per-webhook-event override rows, in enum order.
+     *
+     * @return list<self>
+     */
+    public static function eventScoped(): array
+    {
+        return array_values(array_filter(self::cases(), static fn (self $aiTask): bool => $aiTask->acceptsEventScopes()));
     }
 
     /**

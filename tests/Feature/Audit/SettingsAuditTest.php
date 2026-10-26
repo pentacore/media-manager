@@ -326,3 +326,22 @@ test('a bulk price delete audits each removed row with what it held', function (
         ])
         ->and($rows[1]->description)->toBe(sprintf('Removed the AI model price for %s/%s.', $selected[1]->provider, $selected[1]->model));
 });
+
+test('a decision agent save audits each per-event override field', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->put(route('admin.decision-agent.update'), [
+        'enabled' => true,
+        'event_allowlist' => [],
+        'allow_manual_import' => false,
+        'notify_on_suggest' => true,
+        'notify_on_act' => true,
+        'max_actions_per_run' => 3,
+        'second_opinion_engine' => 'llm',
+        'second_opinion_jev_threshold' => 0.8,
+        'second_opinion_event_overrides' => [['event_key' => 'sonarr:Download', 'mode' => 'reject', 'engine' => null, 'jev_threshold' => null]],
+    ])->assertRedirect(route('admin.decision-agent.index'));
+
+    expect(settingsAuditRows('decision_agent')->last()->metadata['changes']['decision_agent.second_opinion_event_overrides.sonarr:Download.mode'])
+        ->toBe(['from' => null, 'to' => 'reject']);
+});

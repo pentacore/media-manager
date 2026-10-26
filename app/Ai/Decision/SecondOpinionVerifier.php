@@ -7,11 +7,15 @@ namespace App\Ai\Decision;
 use App\Ai\Agents\DecisionVerifierAgent;
 use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
+use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Decision\ProposeActionTool;
+use App\Enums\AiTask;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
 use App\Enums\SecondOpinionEngine;
+use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
+use App\Models\AiTaskModel;
 use App\Models\ClassificationOutcome;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
@@ -24,10 +28,11 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Gives the second opinion on an automated proposal with the engine the
- * Decision Agent settings choose, and tracks Jev's answers under the
- * SecondOpinion classification gate. Never throws: every failure is a
- * failed verdict, which the orchestrator treats as Hold.
+ * Gives the second opinion on an automated proposal with the engine and
+ * threshold of its policy (falling back to the Decision Agent defaults),
+ * and tracks Jev's answers under the SecondOpinion classification gate.
+ * Never throws: every failure is a failed verdict, which the orchestrator
+ * treats as Hold.
  */
 final readonly class SecondOpinionVerifier
 {
@@ -66,6 +71,7 @@ final readonly class SecondOpinionVerifier
         private Classifier $classifier,
         private ClassificationOutcomeRecorder $classificationOutcomeRecorder,
         private AiBudgetGuard $aiBudgetGuard,
+        private TaskModelResolver $taskModelResolver,
     ) {}
 
     /**
@@ -87,24 +93,53 @@ final readonly class SecondOpinionVerifier
     }
 
     /**
+     * The policy for one proposed action: the event's mode override replaces
+     * the action type's rule (for supported types only), and the event's
+     * engine, threshold and verifier model tiers apply.
+     */
+    public function policyFor(string $actionType, SecondOpinionMode $actionMode, ?string $eventKey): SecondOpinionPolicy
+    {
+        $eventOverride = $this->decisionAgentSettings->secondOpinionEventOverride($eventKey);
+        $eventMode = $eventOverride['mode'] ?? null;
+        $supported = self::supportsActionType($actionType);
+        $secondOpinionEngine = $this->decisionAgentSettings->secondOpinionEngine($eventKey);
+
+        return new SecondOpinionPolicy(
+            mode: match (true) {
+                ! $eventMode instanceof SecondOpinionMode => $actionMode,
+                $supported => $eventMode,
+                default => SecondOpinionMode::Off,
+            },
+            engine: $secondOpinionEngine,
+            jevThreshold: $this->decisionAgentSettings->secondOpinionJevThreshold($eventKey),
+            eventKey: $eventKey,
+            overridden: $eventKey !== null && $this->eventOverrideTookEffect($eventOverride, $secondOpinionEngine, $eventKey),
+            skipsActionRule: $supported && $eventMode === SecondOpinionMode::Off && $actionMode !== SecondOpinionMode::Off,
+        );
+    }
+
+    /**
      * $deadline is when the decision run must be done (null outside a run):
      * a check too close to it is skipped, and the LLM call is cut to fit.
      */
-    public function verify(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline = null): SecondOpinionVerdict
+    public function verify(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline = null, ?SecondOpinionPolicy $secondOpinionPolicy = null): SecondOpinionVerdict
     {
         $secondOpinionEngine = null;
 
         try {
-            $secondOpinionEngine = $this->decisionAgentSettings->secondOpinionEngine();
+            $secondOpinionEngine = $secondOpinionPolicy instanceof SecondOpinionPolicy
+                ? $secondOpinionPolicy->engine
+                : $this->decisionAgentSettings->secondOpinionEngine();
+            $secondOpinionPolicy ??= $this->globalPolicy($secondOpinionEngine);
 
             if ($deadline instanceof CarbonImmutable && $this->secondsLeft($deadline) < self::MIN_RUN_SECONDS_LEFT) {
                 return SecondOpinionVerdict::failure($this->failureEngine($secondOpinionEngine), self::OUT_OF_TIME_REASON);
             }
 
             return match ($secondOpinionEngine) {
-                SecondOpinionEngine::Llm => $this->askLlm($secondOpinionCase, $deadline),
-                SecondOpinionEngine::Jev => $this->jevDecides($secondOpinionCase),
-                SecondOpinionEngine::JevThenLlm => $this->jevThenLlm($secondOpinionCase, $deadline),
+                SecondOpinionEngine::Llm => $this->askLlm($secondOpinionCase, $deadline, $secondOpinionPolicy->eventKey),
+                SecondOpinionEngine::Jev => $this->jevDecides($secondOpinionCase, $secondOpinionPolicy->jevThreshold),
+                SecondOpinionEngine::JevThenLlm => $this->jevThenLlm($secondOpinionCase, $deadline, $secondOpinionPolicy),
             };
         } catch (Throwable $throwable) {
             Log::warning('SecondOpinionVerifier: check failed unexpectedly', [
@@ -159,7 +194,7 @@ final readonly class SecondOpinionVerifier
      */
     public function resolveFromReview(ActionRequest $actionRequest, bool $approved): void
     {
-        if ($actionRequest->second_opinion === null) {
+        if ($actionRequest->second_opinion === null || SecondOpinionPolicy::isSkipMarker($actionRequest->second_opinion)) {
             return;
         }
 
@@ -172,9 +207,8 @@ final readonly class SecondOpinionVerifier
         );
     }
 
-    private function jevDecides(SecondOpinionCase $secondOpinionCase): SecondOpinionVerdict
+    private function jevDecides(SecondOpinionCase $secondOpinionCase, float $threshold): SecondOpinionVerdict
     {
-        $threshold = $this->decisionAgentSettings->secondOpinionJevThreshold();
         $probability = $this->askJev($secondOpinionCase);
 
         if ($probability === null) {
@@ -198,13 +232,13 @@ final readonly class SecondOpinionVerifier
      * unavailable classifier go to the LLM, whose verdict is final. Jev
      * never rejects alone here.
      */
-    private function jevThenLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline): SecondOpinionVerdict
+    private function jevThenLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline, SecondOpinionPolicy $secondOpinionPolicy): SecondOpinionVerdict
     {
-        $threshold = $this->decisionAgentSettings->secondOpinionJevThreshold();
+        $threshold = $secondOpinionPolicy->jevThreshold;
         $probability = $this->askJev($secondOpinionCase);
 
         if ($probability === null) {
-            return $this->askLlm($secondOpinionCase, $deadline);
+            return $this->askLlm($secondOpinionCase, $deadline, $secondOpinionPolicy->eventKey);
         }
 
         $confident = $probability >= $threshold;
@@ -220,7 +254,7 @@ final readonly class SecondOpinionVerifier
             );
         }
 
-        return $this->askLlm($secondOpinionCase, $deadline)->withJev(
+        return $this->askLlm($secondOpinionCase, $deadline, $secondOpinionPolicy->eventKey)->withJev(
             $probability,
             $confident ? ClassificationVerdict::AuditRun : ClassificationVerdict::Fallback,
             $threshold,
@@ -232,12 +266,12 @@ final readonly class SecondOpinionVerifier
         return $this->classifier->probability(self::class, $secondOpinionCase->toClassificationState(), self::JEV_QUESTION);
     }
 
-    private function askLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline): SecondOpinionVerdict
+    private function askLlm(SecondOpinionCase $secondOpinionCase, ?CarbonImmutable $deadline, ?string $eventKey): SecondOpinionVerdict
     {
         try {
             $this->aiBudgetGuard->enforce();
 
-            $decisionVerifierAgent = resolve(DecisionVerifierAgent::class);
+            $decisionVerifierAgent = resolve(DecisionVerifierAgent::class)->forEvent($eventKey);
             $timeout = $this->llmTimeout($decisionVerifierAgent, $deadline);
 
             if ($timeout === null) {
@@ -293,6 +327,37 @@ final readonly class SecondOpinionVerifier
         );
 
         return $timeout >= self::MIN_LLM_TIMEOUT_SECONDS ? $timeout : null;
+    }
+
+    /**
+     * Whether the event's override changed how the check runs: its mode or
+     * engine, its threshold under an engine that asks Jev, or verifier tiers
+     * that pick a provider, model or reasoning (not all-inherit) under an
+     * engine that can ask the LLM.
+     *
+     * @param  array{mode: SecondOpinionMode|null, engine: SecondOpinionEngine|null, jev_threshold: float|null}|null  $eventOverride
+     */
+    private function eventOverrideTookEffect(?array $eventOverride, SecondOpinionEngine $secondOpinionEngine, string $eventKey): bool
+    {
+        if ($eventOverride !== null && ($eventOverride['mode'] instanceof SecondOpinionMode || $eventOverride['engine'] instanceof SecondOpinionEngine)) {
+            return true;
+        }
+
+        if (($eventOverride['jev_threshold'] ?? null) !== null && $secondOpinionEngine->usesClassifier()) {
+            return true;
+        }
+
+        return $secondOpinionEngine->canAskLlm() && $this->taskModelResolver->tiers(AiTask::DecisionVerifier, $eventKey)->contains(
+            static fn (AiTaskModel $aiTaskModel): bool => filled($aiTaskModel->provider) || filled($aiTaskModel->model) || $aiTaskModel->reasoning !== null,
+        );
+    }
+
+    /**
+     * The Decision Agent defaults; verify() ignores the mode.
+     */
+    private function globalPolicy(SecondOpinionEngine $secondOpinionEngine): SecondOpinionPolicy
+    {
+        return new SecondOpinionPolicy(SecondOpinionMode::Off, $secondOpinionEngine, $this->decisionAgentSettings->secondOpinionJevThreshold());
     }
 
     private function secondsLeft(CarbonImmutable $deadline): int

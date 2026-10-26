@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { FlaskConical, Plus, Trash2 } from '@lucide/vue';
+import { FlaskConical } from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
 import TierListEditor from '@/components/ai/TierListEditor.vue';
 import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
+import { EventOverridesSection } from '@/components/ai-models';
+import type {
+    EventOverrideForm,
+    EventOverrideRow,
+    ResolvedSummary,
+} from '@/components/ai-models';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill } from '@/components/mm';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -22,20 +28,6 @@ import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
 import type { AiReasoningLevel, AiTask } from '@/typefinder';
 
-type ResolvedSummary = {
-    provider: string;
-    model: string;
-    reasoning: AiReasoningLevel;
-    reasoning_label: string;
-    reasoning_hint: string | null;
-    tier: {
-        position: number;
-        count: number;
-        reason: string | null;
-        via: string | null;
-    } | null;
-};
-
 type TaskRow = {
     task: AiTask;
     label: string;
@@ -43,18 +35,11 @@ type TaskRow = {
     has_reasoning: boolean;
     allow_auto: boolean;
     allow_tiers: boolean;
+    accepts_event_scopes: boolean;
     tiers: TierForm[];
     inherited: ResolvedSummary;
     resolved: ResolvedSummary;
     warning: string | null;
-};
-
-type EventOverride = {
-    event_key: string;
-    enabled: boolean;
-    tiers: TierForm[];
-    inherited: ResolvedSummary;
-    resolved: ResolvedSummary;
 };
 
 type BenchmarkPrefill = {
@@ -70,7 +55,7 @@ const props = defineProps<{
     prefill: BenchmarkPrefill | null;
     tasks: TaskRow[];
     failover: { provider: string | null; model: string | null };
-    eventOverrides: EventOverride[];
+    eventOverrides: EventOverrideRow[];
     allowlistedEvents: string[];
     models: Record<string, string[]>;
     providers: string[];
@@ -104,7 +89,8 @@ const form = useForm({
         ]),
     ) as Record<string, { tiers: TierForm[] }>,
     failover: { ...props.failover },
-    event_overrides: props.eventOverrides.map((row) => ({
+    event_overrides: props.eventOverrides.map((row): EventOverrideForm => ({
+        task: row.task,
         event_key: row.event_key,
         tiers: row.tiers.map((tier) => ({ ...tier })),
     })),
@@ -156,28 +142,6 @@ onMounted(() => {
     });
 });
 
-const resolvedByEvent = computed<Record<string, ResolvedSummary>>(() =>
-    Object.fromEntries(
-        props.eventOverrides.map((row) => [row.event_key, row.resolved]),
-    ),
-);
-
-function eventResolved(eventKey: string): ResolvedSummary | undefined {
-    return resolvedByEvent.value[eventKey];
-}
-
-const inheritedByEvent = computed<Record<string, ResolvedSummary>>(() =>
-    Object.fromEntries(
-        props.eventOverrides.map((row) => [row.event_key, row.inherited]),
-    ),
-);
-
-const addableEvents = computed<string[]>(() =>
-    props.allowlistedEvents.filter(
-        (key) => !form.event_overrides.some((row) => row.event_key === key),
-    ),
-);
-
 /**
  * ModelSelect speaks '' for "inherit"; the form stores null.
  */
@@ -193,36 +157,8 @@ function modelSelectInheritLabel(row: TaskRow): string | undefined {
     return row.task === 'chat' ? undefined : 'Default';
 }
 
-/**
- * What an override's inherit tier runs on: a saved override's own summary; a
- * newly added one hands off to the Decision default list until it is saved.
- */
-function overrideInherited(
-    eventKey: string,
-    decisionRow: TaskRow,
-): ResolvedSummary {
-    return inheritedByEvent.value[eventKey] ?? decisionRow.resolved;
-}
-
-function addOverride(eventKey: string): void {
-    form.event_overrides.push({
-        event_key: eventKey,
-        tiers: [
-            {
-                provider: null,
-                model: null,
-                reasoning: null,
-                min_pool_percent: null,
-                min_pool_tokens: null,
-            },
-        ],
-    });
-}
-
-function removeOverride(eventKey: string): void {
-    form.event_overrides = form.event_overrides.filter(
-        (row) => row.event_key !== eventKey,
-    );
+function savedOverrides(task: AiTask): EventOverrideRow[] {
+    return props.eventOverrides.filter((row) => row.task === task);
 }
 
 function setFailoverProvider(value: unknown): void {
@@ -350,190 +286,22 @@ function submit(): void {
                             {{ row.warning }}
                         </p>
 
-                        <!-- Decision event overrides -->
-                        <div
-                            v-if="row.task === 'decision'"
-                            class="mt-2 flex flex-col gap-3 rounded-lg border border-border p-3"
-                        >
-                            <div
-                                class="text-[12px] font-semibold text-muted-foreground"
-                            >
-                                Event overrides
-                            </div>
-                            <div
-                                v-for="(
-                                    override, index
-                                ) in form.event_overrides"
-                                :key="override.event_key"
-                                class="flex flex-col gap-2"
-                                :data-event-override="override.event_key"
-                            >
-                                <div class="flex items-center gap-2">
-                                    <span class="font-mono-tabular text-[13px]">
-                                        {{ override.event_key }}
-                                    </span>
-                                    <Pill
-                                        v-if="
-                                            !allowlistedEvents.includes(
-                                                override.event_key,
-                                            )
-                                        "
-                                        variant="warn"
-                                    >
-                                        Event not enabled
-                                    </Pill>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        class="ml-auto"
-                                        :aria-label="`Remove the ${override.event_key} override`"
-                                        data-remove-override
-                                        @click="
-                                            removeOverride(override.event_key)
-                                        "
-                                    >
-                                        <Trash2 class="size-4" />
-                                    </Button>
-                                </div>
-                                <TierListEditor
-                                    v-model="override.tiers"
-                                    :label="override.event_key"
-                                    :models="models"
-                                    :reasoning-levels="reasoningLevels"
-                                    :model-capabilities="modelCapabilities"
-                                    :reasoning-providers="reasoningProviders"
-                                    :model-pools="modelPools"
-                                    :inherited-provider="
-                                        overrideInherited(
-                                            override.event_key,
-                                            row,
-                                        ).provider
-                                    "
-                                    :inherited-model="
-                                        overrideInherited(
-                                            override.event_key,
-                                            row,
-                                        ).model
-                                    "
-                                    inherit-label="Same as decision agent"
-                                    reasoning-inherit-label="Same as decision agent"
-                                    :error-prefix="`event_overrides.${index}.tiers`"
-                                    :errors="formErrors"
-                                    @structure-change="
-                                        clearTierErrors(
-                                            `event_overrides.${index}.tiers`,
-                                        )
-                                    "
-                                />
-                                <div
-                                    v-if="eventResolved(override.event_key)"
-                                    class="flex flex-wrap items-center gap-2"
-                                >
-                                    <p
-                                        class="font-mono-tabular text-[12px] text-muted-foreground"
-                                        data-override-resolved
-                                    >
-                                        →
-                                        {{
-                                            eventResolved(override.event_key)
-                                                ?.provider
-                                        }}
-                                        ·
-                                        {{
-                                            eventResolved(override.event_key)
-                                                ?.model
-                                        }}
-                                        ·
-                                        {{
-                                            eventResolved(override.event_key)
-                                                ?.reasoning_label
-                                        }}
-                                    </p>
-                                    <Pill
-                                        v-if="
-                                            eventResolved(override.event_key)
-                                                ?.tier
-                                        "
-                                        :title="
-                                            eventResolved(override.event_key)
-                                                ?.tier?.reason ?? undefined
-                                        "
-                                        data-tier-live
-                                    >
-                                        Live:
-                                        <template
-                                            v-if="
-                                                eventResolved(
-                                                    override.event_key,
-                                                )?.tier?.via
-                                            "
-                                        >
-                                            via
-                                            {{
-                                                eventResolved(
-                                                    override.event_key,
-                                                )?.tier?.via
-                                            }}
-                                            ·
-                                        </template>
-                                        tier
-                                        {{
-                                            eventResolved(override.event_key)
-                                                ?.tier?.position
-                                        }}
-                                        of
-                                        {{
-                                            eventResolved(override.event_key)
-                                                ?.tier?.count
-                                        }}
-                                    </Pill>
-                                </div>
-                                <InputError
-                                    :message="
-                                        errorFor(
-                                            `event_overrides.${index}.event_key`,
-                                        )
-                                    "
-                                />
-                            </div>
-                            <div
-                                v-if="addableEvents.length > 0"
-                                data-add-event-override
-                            >
-                                <!-- Held empty so every pick emits and the placeholder returns. -->
-                                <Select
-                                    :model-value="''"
-                                    @update:model-value="
-                                        (value) => addOverride(String(value))
-                                    "
-                                >
-                                    <SelectTrigger
-                                        class="h-8 max-w-[320px] text-sm"
-                                    >
-                                        <Plus class="size-4" />
-                                        <SelectValue
-                                            placeholder="Add an event override"
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="eventKey in addableEvents"
-                                            :key="eventKey"
-                                            :value="eventKey"
-                                            :data-event-option="eventKey"
-                                        >
-                                            {{ eventKey }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <p v-else class="text-[12px] text-muted-foreground">
-                                Every enabled event already has an override, or
-                                no events are enabled on the Decision Agent
-                                page.
-                            </p>
-                        </div>
+                        <EventOverridesSection
+                            v-if="row.accepts_event_scopes"
+                            v-model:overrides="form.event_overrides"
+                            :task="row.task"
+                            :task-label="row.label"
+                            :saved="savedOverrides(row.task)"
+                            :fallback-inherited="row.resolved"
+                            :allowlisted-events="allowlistedEvents"
+                            :models="models"
+                            :reasoning-levels="reasoningLevels"
+                            :model-capabilities="modelCapabilities"
+                            :reasoning-providers="reasoningProviders"
+                            :model-pools="modelPools"
+                            :errors="formErrors"
+                            @structure-change="clearTierErrors"
+                        />
                     </div>
                 </div>
                 <Separator />

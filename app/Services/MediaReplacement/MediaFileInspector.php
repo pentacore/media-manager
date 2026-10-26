@@ -188,7 +188,7 @@ final readonly class MediaFileInspector
             'quality' => $this->quality($episodeFile['quality'] ?? null),
             'size' => $this->integer($episodeFile['size'] ?? null),
             'date_added' => $this->nonEmptyString($episodeFile['dateAdded'] ?? null),
-            'subtitles' => $this->normalizeSubtitles($episodeFile['mediaInfo']['subtitles'] ?? null),
+            'subtitles' => $this->subtitleLanguages($episodeFile['mediaInfo']['subtitles'] ?? null),
             'original_history_id' => $this->originalHistoryId(
                 $sonarrClient->getHistory(['episodeId' => $episodeId, 'pageSize' => 100]),
                 'episodeId',
@@ -231,7 +231,7 @@ final readonly class MediaFileInspector
             'quality' => $this->quality($movieFile['quality'] ?? null),
             'size' => $this->integer($movieFile['size'] ?? null),
             'date_added' => $this->nonEmptyString($movieFile['dateAdded'] ?? null),
-            'subtitles' => $this->normalizeSubtitles($movieFile['mediaInfo']['subtitles'] ?? null),
+            'subtitles' => $this->subtitleLanguages($movieFile['mediaInfo']['subtitles'] ?? null),
             'original_history_id' => $this->originalHistoryId(
                 $radarrClient->getHistory(['movieId' => $movieId, 'pageSize' => 100]),
                 'movieId',
@@ -311,9 +311,12 @@ final readonly class MediaFileInspector
     }
 
     /**
+     * Normalized language names from Sonarr/Radarr's raw `mediaInfo.subtitles`,
+     * a slash- or comma-joined string or a list.
+     *
      * @return list<string>
      */
-    private function normalizeSubtitles(mixed $subtitles): array
+    public function subtitleLanguages(mixed $subtitles): array
     {
         if (is_string($subtitles)) {
             $subtitles = preg_split('#[/,]#', $subtitles) ?: [];
