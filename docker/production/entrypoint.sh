@@ -61,14 +61,16 @@ case "$role" in
             }
         fi
         # Octane worker mode on FrankenPHP: framework boots once per worker and is reused
-        # across requests. --workers=auto sizes to CPU count; --max-requests recycles workers
-        # to bound any per-request state leaks. Octane generates its own Caddyfile in
-        # storage/octane/frankenphp/ at startup.
+        # across requests. Each worker holds a booted app, and Octane's "auto" lets
+        # FrankenPHP start two per CPU core, so the count is fixed via OCTANE_WORKERS
+        # instead; a streaming AI chat holds one for its whole turn. --max-requests
+        # recycles workers to bound any per-request state leaks. Octane generates its
+        # own Caddyfile in storage/octane/frankenphp/ at startup.
         exec php artisan octane:start \
             --server=frankenphp \
             --host=0.0.0.0 \
             --port=8080 \
-            --workers=auto \
+            --workers="${OCTANE_WORKERS:-8}" \
             --max-requests=500 \
             --log-level=info \
             --no-interaction

@@ -282,3 +282,29 @@ test('production documentation covers backups, restore and the APP_KEY', functio
         ->toContain('Back up `APP_KEY` together with the database')
         ->and($environment)->toContain('# Back up APP_KEY with every database backup');
 });
+
+test('command-line roles run without opcache while the web server keeps it', function (): void {
+    $phpIni = (string) file_get_contents(base_path('docker/production/php.ini'));
+
+    expect($phpIni)->toMatch('/^opcache\.enable = 1$/m')
+        ->toMatch('/^opcache\.enable_cli = 0$/m');
+});
+
+test('the web role sizes its Octane workers from OCTANE_WORKERS', function (): void {
+    $web = dockerConfigRoleBlock((string) file_get_contents(base_path('docker/production/entrypoint.sh')), 'web');
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+
+    expect($web)->toContain('--workers="${OCTANE_WORKERS:-8}"')
+        ->not->toContain('--workers=auto')
+        ->and($environment)->toMatch('/^OCTANE_WORKERS=8$/m');
+});
+
+test('queue worker replicas come from the environment', function (): void {
+    $compose = (string) file_get_contents(base_path('docker/production/compose.yaml'));
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+
+    expect(dockerConfigComposeService($compose, 'queue'))->toContain('replicas: ${QUEUE_REPLICAS:-1}')
+        ->and(dockerConfigComposeService($compose, 'queue-ai'))->toContain('replicas: ${QUEUE_AI_REPLICAS:-1}')
+        ->and($environment)->toMatch('/^QUEUE_REPLICAS=1$/m')
+        ->toMatch('/^QUEUE_AI_REPLICAS=1$/m');
+});

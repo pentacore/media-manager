@@ -93,3 +93,12 @@ test('the connection edit page gives each upstream read its own deferred group',
         'arrTags' => ['arrTags'],
     ]);
 });
+
+test('the AI usage page loads the second-opinion agreement beside the gate calibration', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    expect(deferredPropGroups($this->get(route('admin.ai-usage.index'))))->toBe([
+        'default' => ['classification_gates'],
+        'secondOpinionAgreement' => ['second_opinion_agreement'],
+    ]);
+});
