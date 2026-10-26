@@ -135,6 +135,8 @@ Every page carries `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: f
 
 Jobs run on five named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) then `maintenance` (long housekeeping — bulk Seerr request clears, search index reconcile, anime mapping sync) so a slow model call or a long-running job never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all five queues by default — add the `queue-ai` service to split them.
 
+Each worker container runs one job at a time and holds about 100 MB. Scale them with `QUEUE_REPLICAS` and `QUEUE_AI_REPLICAS` in `.env` (both default to 1); raise `QUEUE_AI_REPLICAS` when several model calls should wait in parallel. The web container's Octane worker count is `OCTANE_WORKERS` (default 8, about 10 MB each); a streaming AI chat holds one worker for its whole turn.
+
 ### Health checks
 
 - `web`: `GET /up` answers 200 only when Postgres and the Valkey connections the app uses (cache and queue) respond. Upstream media services are not part of it.

@@ -109,6 +109,9 @@ services:
       # or an inbound webhook.
       QUEUE_LANES: actions,webhooks,default
     healthcheck: *heartbeat-healthcheck
+    # Each replica is one worker process (~100 MB) that runs one job at a time.
+    deploy:
+      replicas: ${QUEUE_REPLICAS:-1}
     # Docker's default 10s SIGTERM->SIGKILL window would kill workers mid-job
     # on every deploy; some jobs run non-idempotent external calls (e.g. arr
     # release grabs) that Redis would re-deliver after retry_after. Give the
@@ -120,6 +123,8 @@ services:
     environment:
       CONTAINER_ROLE: queue-ai
     healthcheck: *heartbeat-healthcheck
+    deploy:
+      replicas: ${QUEUE_AI_REPLICAS:-1}
     # Drains ai (model calls) then maintenance (long housekeeping — bulk Seerr
     # request clears, search index reconcile, anime mapping sync). Same
     # reasoning as queue: let an in-flight job finish (--timeout=300).
