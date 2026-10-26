@@ -5,6 +5,9 @@ x-app: &app
         args:
             WWWGROUP: '${WWWGROUP}'
     image: 'sail-8.5/app'
+    # An init process as PID 1 reaps exited children; `artisan serve` as PID 1
+    # never does, so dead Chrome processes from browser tests pile up.
+    init: true
     restart: unless-stopped
     extra_hosts:
         - 'host.docker.internal:host-gateway'
