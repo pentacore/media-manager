@@ -1,3 +1,10 @@
+## [1.58.1](https://github.com/pentacore/media-manager/compare/v1.58.0...v1.58.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **tests:** reap orphaned Playwright servers and zombie Chrome processes ([5ade0d7](https://github.com/pentacore/media-manager/commit/5ade0d7d80c5dbe852b0a029e6ff5b5e1ce2242b))
+
 # [1.58.0](https://github.com/pentacore/media-manager/compare/v1.57.0...v1.58.0) (2026-10-26)
 
 
