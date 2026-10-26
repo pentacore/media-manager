@@ -14,6 +14,7 @@ use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\ClassificationGateReporting;
 use App\Services\AiUsage\Scenario;
+use App\Services\AiUsage\SecondOpinionAgreementReporting;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
 use App\Settings\AiSettings;
@@ -33,6 +34,7 @@ class AiUsageController extends Controller
         AiSettings $aiSettings,
         UnpricedModelDetector $unpricedModelDetector,
         ClassificationGateReporting $classificationGateReporting,
+        SecondOpinionAgreementReporting $secondOpinionAgreementReporting,
     ): Response {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
@@ -81,6 +83,9 @@ class AiUsageController extends Controller
             // Calibration per classification gate; deferred so the page
             // paints before the aggregate runs.
             'classification_gates' => Inertia::defer(fn (): array => $classificationGateReporting->summary($since)),
+            // Verifier verdicts against the people who reviewed the same actions;
+            // its own group so it loads beside the gate calibration.
+            'second_opinion_agreement' => Inertia::defer(fn (): array => $secondOpinionAgreementReporting->summary($since), 'secondOpinionAgreement'),
         ];
 
         if ($scenario instanceof Scenario) {
