@@ -16,6 +16,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\OrphanedPlaywrightServers;
 use Tests\TestCase;
 
 /*
@@ -30,6 +31,13 @@ use Tests\TestCase;
 */
 
 pest()->browser()->timeout(30_000);
+
+// A browser run that is killed or whose tests time out leaves its Playwright
+// server running under PID 1; stop those before this run adds its own.
+// REAP_ORPHANED_PLAYWRIGHT=0 leaves them alone.
+if (getenv('REAP_ORPHANED_PLAYWRIGHT') !== '0') {
+    OrphanedPlaywrightServers::reap();
+}
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
