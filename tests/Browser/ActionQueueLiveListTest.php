@@ -153,6 +153,32 @@ test('leaving the Action Queue and coming back binds its live listeners once', f
         ->assertNoSmoke();
 });
 
+test('a live status change renders on a listed row under the batch filter', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Pending,
+        'payload' => ['subtitle_audit_batch_id' => 7],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'pending');
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueueLiveWaitScript(actionQueueLiveListenerCountScript('ActionRequestStatusChanged').' >= 3'));
+
+    $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', [
+        'id' => $actionRequest->id,
+        'status' => 'executing',
+        'result' => null,
+        'updated_at' => $actionRequest->updated_at->addSeconds(60)->toISOString(),
+        'status_version' => $actionRequest->status_version + 1,
+    ], 3));
+    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('[data-action-row=\"%d\"]')?.innerText.includes('executing')", $actionRequest->id)));
+
+    $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'executing')
+        ->assertNoSmoke();
+});
+
 /**
  * Runs the Action Queue page's mounted hooks a second time, which calls
  * useActionQueueLive's subscribe() again. The page is the first component,

@@ -16,7 +16,9 @@ use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\RefreshAiPricesJob;
 use App\Jobs\RunDecisionAgent;
 use App\Jobs\RunSubtitleAdvisor;
+use App\Jobs\SearchSubtitleAuditEpisode;
 use App\Jobs\SyncAnimeMappingJob;
+use App\Jobs\WatchSubtitleAuditBatch;
 use App\Models\ActionRequest;
 use App\Models\IndexedMovie;
 use App\Models\User;
@@ -46,6 +48,7 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     'search index reconcile' => [fn (): ReconcileSearchIndex => new ReconcileSearchIndex, QueueLane::Maintenance],
     'anime mapping sync' => [fn (): SyncAnimeMappingJob => new SyncAnimeMappingJob, QueueLane::Maintenance],
     'subtitle upload prune' => [fn (): PruneSubtitleUploads => new PruneSubtitleUploads, QueueLane::Maintenance],
+    'subtitle audit release search' => [fn (): SearchSubtitleAuditEpisode => new SearchSubtitleAuditEpisode(1, now()->addMinutes(30)), QueueLane::Maintenance],
 ]);
 
 test('jobs that neither execute actions, process webhooks nor call a model stay on the default lane', function (string $jobClass): void {
@@ -53,6 +56,7 @@ test('jobs that neither execute actions, process webhooks nor call a model stay 
 })->with([
     'dashboard stats rebroadcast' => [BroadcastDashboardStats::class],
     'bazarr connection reconcile (a user waits on it after a Bazarr webhook)' => [ReconcileBazarrConnection::class],
+    'subtitle audit batch watchdog (instant)' => [WatchSubtitleAuditBatch::class],
 ]);
 
 test('every queued job either stays on the default lane or names a known lane', function (): void {

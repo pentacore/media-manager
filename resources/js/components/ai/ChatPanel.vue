@@ -170,6 +170,7 @@ const {
     choose,
     answerToolRequest,
     reviewAction,
+    reviewBatch,
 } = useChatTurns({
     mode,
     override,
@@ -651,6 +652,7 @@ function newConversation(): void {
                     (card, load) => answerToolRequest(m, card, load)
                 "
                 @review="reviewAction"
+                @review-batch="reviewBatch"
             />
 
             <div

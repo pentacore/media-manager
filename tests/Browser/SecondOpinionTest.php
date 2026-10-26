@@ -64,7 +64,8 @@ test('the action queue card shows the second opinion', function (bool $agrees, b
         ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
         ->assertAttribute('[data-action-second-opinion]', 'data-second-opinion-state', $state)
         ->assertSeeIn('[data-action-second-opinion]', $text)
-        ->assertSeeIn('[data-action-second-opinion]', 'Checked the event.');
+        ->assertSeeIn('[data-action-second-opinion]', 'Checked the event.')
+        ->assertMissing('[data-second-opinion-override-event]');
 })->with([
     'agrees' => [true, false, 'agrees', 'Second opinion: agrees'],
     'disagrees' => [false, false, 'disagrees', 'Second opinion: disagrees'],
@@ -131,4 +132,42 @@ test('a request that is not rejected shows who approved it', function (): void {
         ->assertNoSmoke()
         ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
         ->assertSeeIn('[data-action-approved-by]', 'system');
+});
+
+test('the card says when a per-event rule decided the second opinion', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, reason: 'Checked the event.', eventKey: 'sonarr:Download')->create([
+        'origin' => 'agent', 'status' => ActionRequestStatus::Pending, 'requires_approval' => true,
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertSeeIn('[data-action-second-opinion] [data-second-opinion-override-event]', 'Per-event rule: sonarr:Download');
+});
+
+test('the approval rules page says per-event overrides take precedence', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'label' => 'Monitor series']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.rules.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-second-opinion-event-note]', 'Per-event overrides on the Decision Agent page take precedence.')
+        ->assertAttribute('[data-second-opinion-event-note-link]', 'href', route('admin.decision-agent.index', absolute: false));
+});
+
+test('the card says when a per-event rule skipped the second opinion and offers no benchmark', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $actionRequest = ActionRequest::factory()->described()->secondOpinionSkipped('sonarr:Download')->create([
+        'origin' => 'agent', 'status' => ActionRequestStatus::Pending, 'requires_approval' => true,
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
+        ->assertAttribute('[data-action-second-opinion]', 'data-second-opinion-state', 'skipped')
+        ->assertSeeIn('[data-action-second-opinion]', 'Second opinion skipped')
+        ->assertSeeIn('[data-action-second-opinion] [data-second-opinion-override-event]', 'Per-event rule: sonarr:Download')
+        ->assertMissing('[data-action-benchmark-verdict]');
 });

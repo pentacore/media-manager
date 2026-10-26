@@ -68,7 +68,7 @@ function aiModelsPayload(array $overrides = []): array
     $payload['tasks'] = array_map($asTiers, $payload['tasks']);
     $payload['event_overrides'] = array_map(
         static fn (mixed $override): mixed => is_array($override)
-            ? ['event_key' => $override['event_key'] ?? null, ...$asTiers(array_diff_key($override, ['event_key' => true]))]
+            ? ['task' => $override['task'] ?? 'decision', 'event_key' => $override['event_key'] ?? null, ...$asTiers(array_diff_key($override, ['event_key' => true, 'task' => true]))]
             : $override,
         $payload['event_overrides'],
     );
@@ -854,4 +854,79 @@ test('the warning clears once the verifier runs on another model', function (): 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-models.index'))
         ->assertInertia(fn ($page) => $page->where('tasks.3.warning', null));
+});
+
+test('the index marks the tasks that take event overrides', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('tasks.0.accepts_event_scopes', false)
+            ->where('tasks.2.accepts_event_scopes', true)
+            ->where('tasks.3.task', 'decision_verifier')
+            ->where('tasks.3.accepts_event_scopes', true));
+});
+
+test('verifier event overrides follow the decision ones with what they inherit', function (): void {
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
+    AiTaskModel::factory()->task(AiTask::DecisionVerifier)->selecting('openai', 'gpt-5-nano')->create();
+    AiTaskModel::factory()->event('radarr:Grab')->reasoning(AiReasoningLevel::Low)->create();
+    AiTaskModel::factory()->event('sonarr:Download', AiTask::DecisionVerifier)->reasoning(AiReasoningLevel::None)->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('eventOverrides.0.task', 'decision')
+            ->where('eventOverrides.0.event_key', 'radarr:Grab')
+            ->where('eventOverrides.0.warning', null)
+            ->where('eventOverrides.1.task', 'decision_verifier')
+            ->where('eventOverrides.1.event_key', 'sonarr:Download')
+            ->where('eventOverrides.1.enabled', true)
+            ->where('eventOverrides.1.inherited.model', 'gpt-5-nano')
+            ->where('eventOverrides.1.resolved.model', 'gpt-5-nano')
+            ->where('eventOverrides.1.resolved.reasoning', 'none')
+            ->where('eventOverrides.1.warning', null));
+});
+
+test('a verifier event override on the decision model for that event warns', function (): void {
+    AiTaskModel::factory()->event('sonarr:Download', AiTask::DecisionVerifier)->reasoning(AiReasoningLevel::None)->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-models.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('eventOverrides.0.task', 'decision_verifier')
+            ->where('eventOverrides.0.warning', 'Runs on the same model as the Decision agent, so its second opinion is less independent.'));
+});
+
+test('verifier event overrides save beside decision ones and are removed on their own', function (): void {
+    $admin = User::factory()->admin()->create();
+    $decisionOverride = ['task' => 'decision', 'event_key' => 'sonarr:Download', 'provider' => null, 'model' => null, 'reasoning' => 'low'];
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['event_overrides' => [
+            $decisionOverride,
+            ['task' => 'decision_verifier', 'event_key' => 'sonarr:Download', 'provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => null],
+        ]]))
+        ->assertSessionHasNoErrors();
+
+    expect(AiTaskModel::query()->forTask(AiTask::DecisionVerifier)->where('scope', 'sonarr:Download')->value('model'))->toBe('gpt-5-nano')
+        ->and(AiTaskModel::query()->forTask(AiTask::Decision)->where('scope', 'sonarr:Download')->first()?->reasoning)->toBe(AiReasoningLevel::Low);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['event_overrides' => [$decisionOverride]]))
+        ->assertSessionHasNoErrors();
+
+    expect(AiTaskModel::query()->forTask(AiTask::DecisionVerifier)->where('scope', 'sonarr:Download')->exists())->toBeFalse()
+        ->and(AiTaskModel::query()->forTask(AiTask::Decision)->where('scope', 'sonarr:Download')->exists())->toBeTrue();
+});
+
+test('an override names a task that takes event overrides, once per event', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-models.update'), aiModelsPayload(['event_overrides' => [
+            ['task' => 'chat', 'event_key' => 'sonarr:Download', 'provider' => null, 'model' => null, 'reasoning' => 'low'],
+            ['task' => 'decision_verifier', 'event_key' => 'radarr:Grab', 'provider' => null, 'model' => null, 'reasoning' => 'low'],
+            ['task' => 'decision_verifier', 'event_key' => 'radarr:Grab', 'provider' => null, 'model' => null, 'reasoning' => 'high'],
+            ['task' => 'decision', 'event_key' => 'radarr:Grab', 'provider' => null, 'model' => null, 'reasoning' => 'high'],
+        ]]))
+        ->assertSessionHasErrors(['event_overrides.0.task', 'event_overrides.1.event_key', 'event_overrides.2.event_key'])
+        ->assertSessionDoesntHaveErrors(['event_overrides.3.event_key']);
 });

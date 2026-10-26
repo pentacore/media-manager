@@ -300,3 +300,26 @@ test('a chat turn reasoning set after a resolve applies on the next resolve of t
 
     expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-5.6-luna', AiReasoningLevel::Low]);
 });
+
+test('a verifier event override resolves on its own scope and inherits the verifier row', function (): void {
+    AiTaskModel::factory()->task(AiTask::DecisionVerifier)->selecting('openai', 'gpt-verifier')->reasoning(AiReasoningLevel::High)->create();
+    AiTaskModel::factory()->event('sonarr:Download', AiTask::DecisionVerifier)->reasoning(AiReasoningLevel::None)->create();
+    AiTaskModel::factory()->event('radarr:Grab', AiTask::DecisionVerifier)->selecting('openai', 'gpt-grab-verifier')->create();
+    AiTaskModel::factory()->event('radarr:Grab')->selecting('openai', 'gpt-grab-decision')->create();
+
+    $resolvedSelection = resolver()->resolve(AiTask::DecisionVerifier, 'sonarr:Download');
+    $grab = resolver()->resolve(AiTask::DecisionVerifier, 'radarr:Grab');
+    $other = resolver()->resolve(AiTask::DecisionVerifier, 'sonarr:Grab');
+
+    expect([$resolvedSelection->model, $resolvedSelection->reasoning])->toBe(['gpt-verifier', AiReasoningLevel::None])
+        ->and($grab->model)->toBe('gpt-grab-verifier')
+        ->and([$other->model, $other->reasoning])->toBe(['gpt-verifier', AiReasoningLevel::High])
+        ->and(resolver()->resolve(AiTask::Decision, 'radarr:Grab')->model)->toBe('gpt-grab-decision');
+});
+
+test('a task without event scopes ignores the event key', function (): void {
+    AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('openai', 'gpt-inspector')->create();
+    AiTaskModel::factory()->event('sonarr:Download', AiTask::FileInspector)->selecting('openai', 'gpt-stray')->create();
+
+    expect(resolver()->resolve(AiTask::FileInspector, 'sonarr:Download')->model)->toBe('gpt-inspector');
+});

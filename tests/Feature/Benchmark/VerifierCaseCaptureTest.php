@@ -189,6 +189,7 @@ test('a request without a usable second opinion cannot be captured', function (a
         ->assertInertiaFlash('toast.message', $message);
 })->with([
     'no second opinion' => [['second_opinion' => null], VerifierCaseCapture::NO_SECOND_OPINION],
+    'a check an event skipped' => [['second_opinion' => ['skipped' => true, 'mode' => 'off', 'event_key' => 'sonarr:Download']], VerifierCaseCapture::NO_SECOND_OPINION],
     'a failed check' => [['second_opinion' => ['engine' => 'llm', 'mode' => 'hold', 'agrees' => false, 'failed' => true, 'confidence' => null, 'reason' => 'timeout', 'provider' => null, 'model' => null, 'invocation_id' => null]], VerifierCaseCapture::FAILED_SECOND_OPINION],
     'no description' => [['title' => null, 'description' => null], VerifierCaseCapture::NO_DESCRIPTION],
 ]);

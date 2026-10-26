@@ -16,14 +16,15 @@ use LogicException;
 /**
  * Resolves the provider, model and reasoning level each AI task runs on.
  *
- * Every task scope (`default`, or a Decision webhook event key) holds an
- * ordered tier list (ai_task_models rows by `position`). The first tier that
- * may run wins: every tier but the last is skipped while its model is
+ * Every task scope (`default`, or a webhook event key on the tasks that
+ * accept event scopes: Decision and Decision verifier) holds an ordered
+ * tier list (ai_task_models rows by `position`). The first tier that may
+ * run wins: every tier but the last is skipped while its model is
  * rate-limited or, when it has pool minimums, while its model's free pool has
  * less left (TierEligibility). A tier with no model is an "inherit tier"
  * (always last) and hands off to what the scope inherits:
  *
- * - an event scope → the Decision default list;
+ * - an event scope → the same task's default list;
  * - Chat → config `mediamanager.ai.model` on `config('ai.default')`;
  * - Title → config `mediamanager.ai.title_model` (`auto` becomes the
  *   provider's cheapest text model);
@@ -86,7 +87,7 @@ final class TaskModelResolver
             );
         }
 
-        $scope = $aiTask === AiTask::Decision && $eventKey !== null ? $eventKey : AiTaskModel::DEFAULT_SCOPE;
+        $scope = $aiTask->acceptsEventScopes() && $eventKey !== null ? $eventKey : AiTaskModel::DEFAULT_SCOPE;
         $tierPick = $this->pick($aiTask, $scope);
 
         return new ResolvedSelection(

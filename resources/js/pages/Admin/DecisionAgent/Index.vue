@@ -3,6 +3,8 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
+import { SecondOpinionEventOverrides } from '@/components/decision-agent';
+import type { SecondOpinionEventOverride } from '@/components/decision-agent';
 import InputError from '@/components/InputError.vue';
 import { Field, SettingsRow, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
+import type { SecondOpinionMode } from '@/typefinder';
 import type { SecondOpinionEngine } from '@/typefinder/enums/SecondOpinionEngine';
 
 interface DecisionAgentState {
@@ -27,6 +30,7 @@ interface DecisionAgentState {
     max_actions_per_run: number;
     second_opinion_engine: SecondOpinionEngine;
     second_opinion_jev_threshold: number;
+    second_opinion_event_overrides: SecondOpinionEventOverride[];
 }
 
 const props = defineProps<{
@@ -34,6 +38,10 @@ const props = defineProps<{
     eventCatalog: Record<string, string[]>;
     secondOpinionEngines: Array<{
         value: SecondOpinionEngine;
+        label: string;
+    }>;
+    secondOpinionModes: Array<{
+        value: SecondOpinionMode;
         label: string;
     }>;
     classifierConfigured: boolean;
@@ -60,6 +68,10 @@ const form = useForm<DecisionAgentState>({
     max_actions_per_run: props.settings.max_actions_per_run,
     second_opinion_engine: props.settings.second_opinion_engine,
     second_opinion_jev_threshold: props.settings.second_opinion_jev_threshold,
+    second_opinion_event_overrides:
+        props.settings.second_opinion_event_overrides.map((override) => ({
+            ...override,
+        })),
 });
 
 const usesClassifier = computed(() => form.second_opinion_engine !== 'llm');
@@ -81,6 +93,24 @@ function toggleEvent(service: string, event: string, on: boolean): void {
     }
 
     form.event_allowlist = next;
+}
+
+const formErrors = computed(
+    () => form.errors as Record<string, string | undefined>,
+);
+
+/** Override indexes shift on remove, so drop the list's stale errors. */
+function clearOverrideErrors(): void {
+    const staleKeys = Object.keys(form.errors).filter((key) =>
+        key.startsWith('second_opinion_event_overrides.'),
+    ) as Array<keyof typeof form.errors>;
+
+    // clearErrors() with no keys wipes every error on the page.
+    if (staleKeys.length === 0) {
+        return;
+    }
+
+    form.clearErrors(...staleKeys);
 }
 
 function submit(): void {
@@ -364,6 +394,21 @@ function submit(): void {
                         />
                         <InputError
                             :message="form.errors.second_opinion_jev_threshold"
+                        />
+                        <SecondOpinionEventOverrides
+                            v-model:overrides="
+                                form.second_opinion_event_overrides
+                            "
+                            :allowlist="form.event_allowlist"
+                            :modes="secondOpinionModes"
+                            :engines="secondOpinionEngines"
+                            :default-engine="form.second_opinion_engine"
+                            :default-threshold="
+                                form.second_opinion_jev_threshold
+                            "
+                            :classifier-configured="classifierConfigured"
+                            :errors="formErrors"
+                            @structure-change="clearOverrideErrors"
                         />
                     </div>
                 </SettingsRow>

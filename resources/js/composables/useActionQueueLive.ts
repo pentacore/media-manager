@@ -23,7 +23,7 @@ const ACTIONS_CHANNEL = 'members.actions';
 /** The page props the live queue reads; pass the page's `props` object. */
 export type ActionQueueLiveProps = {
     requests: ActionQueueRequests;
-    filters: { status: string };
+    filters: { status: string; subtitle_audit_batch: number | null };
     /** A deep-linked request the page does not list (its own lazy prop). */
     preselectedRequest?: ActionRequestRow | null;
 };
@@ -59,7 +59,11 @@ export function useActionQueueLive(
 ): UseActionQueueLiveReturn {
     const { isAdmin } = useCan();
 
-    const hasFilter = computed(() => props.filters.status !== '');
+    const hasFilter = computed(
+        () =>
+            props.filters.status !== '' ||
+            props.filters.subtitle_audit_batch !== null,
+    );
     const onFirstPage = computed(() => props.requests.meta.current_page === 1);
     const merge = computed(() => !hasFilter.value && onFirstPage.value);
 

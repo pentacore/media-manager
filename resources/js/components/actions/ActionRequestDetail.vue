@@ -66,12 +66,16 @@ const emit = defineEmits<{
 const { isAdmin } = useCan();
 const aiEnabled = computed(() => Boolean(usePage().props.ai?.enabled));
 
-/** A second opinion that reached a verdict can become a verifier benchmark case. */
+/**
+ * A second opinion that reached a verdict can become a verifier benchmark
+ * case; a skipped or failed check has no verdict.
+ */
 function canBenchmark(row: ActionRequestRow): boolean {
     return (
         isAdmin.value &&
         aiEnabled.value &&
         row.second_opinion != null &&
+        !('skipped' in row.second_opinion) &&
         !row.second_opinion.failed
     );
 }

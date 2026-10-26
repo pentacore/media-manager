@@ -11,8 +11,9 @@ use Laravel\Ai\Tools\ToolNameResolver;
 
 /**
  * Derives the cards shown under an assistant reply (choice buttons, tool-group
- * requests and inline approvals) from stored or live tool results. The frontend parses
- * the same JSON from the AG-UI stream, so the shapes are a contract.
+ * requests, inline approvals and subtitle audit batches) from stored or live
+ * tool results. The frontend parses the same JSON from the AG-UI stream, so
+ * the shapes are a contract.
  */
 class ChatCardExtractor
 {
@@ -58,6 +59,12 @@ class ChatCardExtractor
                 continue;
             }
 
+            if ($this->isSubtitleAuditBatchCard($result['subtitle_audit_batch'] ?? null)) {
+                $cards[] = $result['subtitle_audit_batch'];
+
+                continue;
+            }
+
             if (($result['queued'] ?? null) === true && is_int($result['action_request_id'] ?? null)) {
                 $cards[] = [
                     'type' => 'action_request',
@@ -82,15 +89,18 @@ class ChatCardExtractor
     }
 
     /**
-     * Hydrate several card lists (one per message) with a single query.
+     * Hydrate several card lists (one per message) with one query per card
+     * kind: action cards take their request's live title and status, batch
+     * cards are presented afresh. A card whose row is gone is dropped.
      *
      * @param  list<list<array<string, mixed>>>  $groups
      * @return list<list<array<string, mixed>>>
      */
     public function hydrateGroups(array $groups): array
     {
-        $ids = collect($groups)->flatten(1)
-            ->where('type', 'action_request')
+        $cards = collect($groups)->flatten(1);
+
+        $ids = $cards->where('type', 'action_request')
             ->pluck('id')
             ->unique()
             ->values();
@@ -99,8 +109,18 @@ class ChatCardExtractor
             ? collect()
             : ActionRequest::query()->whereIn('id', $ids)->get(['id', 'title', 'status'])->keyBy('id');
 
+        $batches = SubtitleAuditBatchCard::presentMany($cards->where('type', SubtitleAuditBatchCard::TYPE)
+            ->pluck('id')
+            ->unique()
+            ->values()
+            ->all());
+
         return array_map(fn (array $cards): array => collect($cards)
-            ->map(function (array $card) use ($rows): ?array {
+            ->map(function (array $card) use ($rows, $batches): ?array {
+                if ($card['type'] === SubtitleAuditBatchCard::TYPE) {
+                    return $batches[$card['id']] ?? null;
+                }
+
                 if ($card['type'] !== 'action_request') {
                     return $card;
                 }
@@ -116,6 +136,18 @@ class ChatCardExtractor
             ->filter()
             ->values()
             ->all(), $groups);
+    }
+
+    /**
+     * A repair result's card: the presenter's payload, recognised by its type and int id.
+     *
+     * @phpstan-assert-if-true array<string, mixed> $value
+     */
+    private function isSubtitleAuditBatchCard(mixed $value): bool
+    {
+        return is_array($value)
+            && ($value['type'] ?? null) === SubtitleAuditBatchCard::TYPE
+            && is_int($value['id'] ?? null);
     }
 
     /**

@@ -56,7 +56,9 @@ test('sub-agents use their own task selections', function (): void {
 
 test('a sub-agent called in the previous turn keeps its tool group loaded', function (): void {
     expect(ToolGroup::forToolName('InvestigateStuckDownload'))->toBe([ToolGroup::Downloads])
-        ->and(ToolGroup::forToolName('InspectMediaFile'))->toBe([ToolGroup::SubtitlesReplacement]);
+        ->and(ToolGroup::forToolName('InspectMediaFile'))->toBe([ToolGroup::SubtitlesReplacement])
+        ->and(ToolGroup::forToolName('AuditSeriesSubtitlesTool'))->toBe([ToolGroup::SubtitlesReplacement])
+        ->and(ToolGroup::forToolName('RepairSeriesSubtitlesTool'))->toBe([ToolGroup::SubtitlesReplacement]);
 });
 
 test('a streamed turn hands the investigator structured findings to the parent', function (): void {

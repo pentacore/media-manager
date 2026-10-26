@@ -123,6 +123,11 @@ test('a disagreement on a request that already needed approval is not counted as
         ->and($decisionRunContext->suggestedCount())->toBe(1);
 });
 
+test('eventKey joins the lower-cased service and the event type', function (): void {
+    expect(new DecisionRunContext(null, 3, 'Sonarr', eventType: 'Download')->eventKey())->toBe('sonarr:Download')
+        ->and(new DecisionRunContext(null, 3, 'sonarr')->eventKey())->toBeNull();
+});
+
 test('queuedActionRequestIds lists the queued requests but not the second-opinion rejections', function (): void {
     $context = new DecisionRunContext(null, 3, 'sonarr');
     $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
