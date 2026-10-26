@@ -153,7 +153,10 @@ async function remove(row: DestinationRow): Promise<void> {
 
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="sticky-first-column w-full border-collapse text-[13px]"
+                    data-admin-table="destinations"
+                >
                     <thead>
                         <tr>
                             <th
@@ -189,7 +192,7 @@ async function remove(row: DestinationRow): Promise<void> {
                             :data-destination-row="row.id"
                         >
                             <td class="px-3 py-2.5 font-medium">
-                                {{ row.label }}
+                                <span class="block">{{ row.label }}</span>
                             </td>
                             <td class="px-3 py-2.5">
                                 <Pill>{{ channelLabel(row.channel) }}</Pill>

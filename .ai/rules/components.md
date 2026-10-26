@@ -40,7 +40,10 @@ On the phone-job pages (Action Queue, SABnzbd queue and history, grab queue, wat
 - **What a card holds:** the row's key facts and every row action, with long file or release names in `break-all` and titles in `break-words`.
 - **One empty message:** a card list's `empty` slot must not repeat text that the table's own empty row already shows, because a strict `assertSeeIn` counts the hidden copy as a second match. The SABnzbd queue and history keep the table's empty row as the only message. Their table frame is `max-sm:hidden` only while it has rows, their `thead` is `max-sm:hidden`, and the `PhoneCardList` renders only when there are rows (`v-if`).
 
-Admin-only tables keep their columns and scroll inside their frame. `ActionQueuePhoneTest`, `DownloadsPhoneTest`, `InteractiveSearchPhoneTest` and `MonitoringPhoneTest` pin it.
+Admin-only tables keep their columns and scroll inside their frame. `ActionQueuePhoneTest`, `DownloadsPhoneTest`, `InteractiveSearchPhoneTest` and `MonitoringPhoneTest` pin the cards.
+
+## Admin tables scroll sideways with a sticky name column
+An admin table stays a table on a phone and scrolls inside its own `overflow-x-auto` frame (shadcn `Table`'s container, or the hand-rolled `overflow-hidden rounded-xl border` > `overflow-x-auto` pair). When its first column names the row and the table is wider than a phone, put `sticky-first-column` (`resources/css/app.css`, below `sm` only) on the `<table>` (`<Table class="sticky-first-column">`) with a `data-admin-table="<key>"` hook: each row's first cell stays at the frame's left edge, painted `bg-card` with a border line on its right, capped at 45vw and held at 8rem or more. `max-width` on a cell is not reliable, so keep the first cell's content in one block-level element (wrap bare text or an inline link in a `span` with `block`); an empty-state `colspan` cell is never sticky. The utility also gives the frame scroll padding, so focus and `scrollIntoView()` land a cell beside the sticky column, not under it. Never make a checkbox or timestamp column sticky. `AdminTablePhoneTest` pins it.
 
 ## The Action Queue detail has a pane and a sheet layout
 `ActionRequestDetail` is the one implementation of an action's detail, review buttons and failure/second-opinion cards:

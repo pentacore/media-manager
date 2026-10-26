@@ -463,6 +463,41 @@
 }
 
 /*
+ * Admin tables on a phone (put it on the <table>): the first column, the
+ * row's name, stays at the frame's left edge while the rest scrolls sideways
+ * inside the frame. Desktop is untouched. max-width on a table cell is not
+ * reliable, so the 45vw cap also applies to the cell's element children,
+ * which also hold the column at 8rem: overflow-wrap would otherwise let a
+ * table wider than the phone squeeze it to a glyph. An empty-state
+ * `colspan` cell is never sticky. The frame's scroll padding makes focus and
+ * scrollIntoView() bring a cell into view beside the sticky column, not
+ * under it.
+ */
+@utility sticky-first-column {
+    @media (width < 40rem) {
+        & :is(th, td):first-child:not([colspan]) {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            max-width: 45vw;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            background-color: var(--color-card);
+            box-shadow: inset -1px 0 0 var(--color-border);
+        }
+
+        & :is(th, td):first-child:not([colspan]) > * {
+            min-width: min(8rem, 45vw);
+            max-width: 45vw;
+        }
+
+        :has(> &) {
+            scroll-padding-inline-start: calc(45vw + 1.5rem);
+        }
+    }
+}
+
+/*
  * While a compact bulk bar is mounted (BulkActionBar sets
  * `data-bulk-bar-open` on <body>), a phone's bar is fixed to the bottom of
  * the screen. The page then ends with room for it, so whatever comes last

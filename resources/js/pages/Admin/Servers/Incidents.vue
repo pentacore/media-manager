@@ -150,7 +150,10 @@ onMounted(live.subscribe);
 
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="sticky-first-column w-full border-collapse text-[13px]"
+                    data-admin-table="incidents"
+                >
                     <thead>
                         <tr>
                             <th
@@ -191,13 +194,15 @@ onMounted(live.subscribe);
                             :data-incident-index-row="row.id"
                         >
                             <td class="px-3 py-2.5 whitespace-nowrap">
-                                <Link
-                                    :href="`${ServerController.show.url(row.server_id)}#incident-${row.id}`"
-                                    class="font-medium hover:underline"
-                                    data-incident-server
-                                >
-                                    {{ row.server_name }}
-                                </Link>
+                                <span class="block">
+                                    <Link
+                                        :href="`${ServerController.show.url(row.server_id)}#incident-${row.id}`"
+                                        class="font-medium hover:underline"
+                                        data-incident-server
+                                    >
+                                        {{ row.server_name }}
+                                    </Link>
+                                </span>
                             </td>
                             <td class="px-3 py-2.5 whitespace-nowrap">
                                 <Pill

@@ -396,7 +396,10 @@ async function importFromEmby(): Promise<void> {
         <!-- Users table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="sticky-first-column w-full border-collapse text-[13px]"
+                    data-admin-table="users"
+                >
                     <thead>
                         <tr>
                             <th
@@ -487,7 +490,7 @@ async function importFromEmby(): Promise<void> {
                                     </span>
                                     <button
                                         type="button"
-                                        class="text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                                        class="touch-target text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
                                         data-user-unlink-emby
                                         @click="unlinkEmby(user)"
                                     >
@@ -497,7 +500,7 @@ async function importFromEmby(): Promise<void> {
                                 <button
                                     v-else
                                     type="button"
-                                    class="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                    class="touch-target text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                                     @click="openLinkDialog(user)"
                                 >
                                     Link Emby

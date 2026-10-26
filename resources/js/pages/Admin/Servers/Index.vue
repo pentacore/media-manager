@@ -101,7 +101,10 @@ onMounted(() => {
 
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="sticky-first-column w-full border-collapse text-[13px]"
+                    data-admin-table="servers"
+                >
                     <thead>
                         <tr>
                             <th
@@ -136,13 +139,17 @@ onMounted(() => {
                             :data-server-row="row.id"
                         >
                             <td class="px-3 py-2.5">
-                                <Link
-                                    :href="ServerController.show.url(row.id)"
-                                    class="font-medium hover:underline"
-                                    data-server-link
-                                >
-                                    {{ row.name }}
-                                </Link>
+                                <span class="block">
+                                    <Link
+                                        :href="
+                                            ServerController.show.url(row.id)
+                                        "
+                                        class="font-medium hover:underline"
+                                        data-server-link
+                                    >
+                                        {{ row.name }}
+                                    </Link>
+                                </span>
                                 <div
                                     v-if="row.hostname"
                                     class="font-mono-tabular text-[11.5px] text-muted-foreground"

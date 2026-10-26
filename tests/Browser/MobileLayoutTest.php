@@ -6,9 +6,13 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
+use App\Models\EmbyUserLink;
+use App\Models\NotificationDestination;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Pest\Browser\Api\AwaitableWebpage;
@@ -108,6 +112,10 @@ function mobileLayoutFakeServices(): void
         'emby.local:8096/Sessions*' => Http::response([
             ['Id' => 's1', 'UserName' => 'Alice', 'UserId' => 'emby-1', 'Client' => 'Emby Web', 'DeviceName' => 'Living Room TV', 'NowPlayingItem' => ['Id' => 'i1', 'Name' => 'An Extremely Long Example Movie Title That Wraps Badly', 'Type' => 'Movie', 'RunTimeTicks' => 66_000_000_000], 'PlayState' => ['PositionTicks' => 6_000_000_000, 'IsPaused' => true]],
         ]),
+        'emby.local:8096/Users*' => Http::response([
+            ['Id' => 'emby-1', 'Name' => 'Alice', 'Policy' => ['IsAdministrator' => true], 'LastActivityDate' => '2026-09-28T20:15:00Z'],
+            ['Id' => 'emby-2', 'Name' => 'Bob', 'Policy' => ['IsAdministrator' => false], 'LastActivityDate' => null],
+        ]),
         'emby.local:8096/*' => Http::response([]),
         'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 0, 'tv' => 1]),
         'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1], 'results' => [
@@ -132,6 +140,14 @@ function mobileLayoutFakeServices(): void
     // lists this long title (the factory's random action and series title
     // used to show it only sometimes, which made the statistics row flaky).
     EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'action' => 'played']);
+    // The admin tables' rows: action rules, notification destinations, an
+    // Emby link and an AI conversation. The fake runs before the test's own
+    // user exists, so the link and the conversation get a user of their own.
+    test()->seed(ActionTypeConfigSeeder::class);
+    NotificationDestination::factory()->discord()->count(2)->create();
+    EmbyUserLink::factory()->create(['emby_user_id' => 'emby-1', 'emby_username' => 'Alice']);
+    $participant = User::factory()->create(['name' => 'Example Chat User']);
+    DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $participant->getMorphClass(), 'participant_id' => $participant->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
 }
 
 /**
@@ -292,6 +308,10 @@ function mobileLayoutAdminPages(): array
         'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
         'servers' => ['admin.servers.index', '[data-server-add]'],
         'server incidents' => ['admin.servers.incidents.index', null],
+        'action rules' => ['actions.rules.index', null],
+        'emby links' => ['emby.links.index', null],
+        'notification destinations' => ['admin.notification-destinations.index', '[data-destination-add]'],
+        'ai conversations' => ['admin.ai-conversations.index', null],
         'ai chat' => ['ai.chat', '[data-chat-options]'],
         'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
         'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
@@ -324,6 +344,15 @@ function mobileLayoutTouchPages(): array
     return [
         'notifications' => ['notifications.index', [], null],
         'profile' => ['profile.edit', [], null],
+        'users' => ['admin.users.index', [], null],
+        'connections' => ['admin.connections.index', [], null],
+        'notification destinations' => ['admin.notification-destinations.index', [], null],
+        'action rules' => ['actions.rules.index', [], null],
+        'servers' => ['admin.servers.index', [], null],
+        'server incidents' => ['admin.servers.incidents.index', [], null],
+        'benchmark schedules' => ['admin.benchmarks.schedules.index', [], null],
+        'ai conversations' => ['admin.ai-conversations.index', [], null],
+        'emby links' => ['emby.links.index', [], null],
     ];
 }
 
@@ -381,7 +410,6 @@ function mobileLayoutPendingRouteNames(): array
         'admin.connections.edit',
         'admin.media-replacement.attempts.index',
         'admin.media-replacement.attempts.show',
-        'admin.notification-destinations.index',
         'admin.ai-models.index',
         'admin.benchmarks.cases.index',
         'admin.benchmarks.cases.create',
@@ -392,7 +420,6 @@ function mobileLayoutPendingRouteNames(): array
         'admin.benchmarks.runs.index',
         'admin.benchmarks.runs.create',
         'admin.benchmarks.runs.show',
-        'admin.ai-conversations.index',
         'admin.ai-conversations.show',
         'admin.ai-prices.index',
         'admin.webhook-log.show',
@@ -402,9 +429,7 @@ function mobileLayoutPendingRouteNames(): array
         'media.wanted.index',
         'media.anime.index',
         'media.whisparr.show',
-        'emby.links.index',
         'prowlarr.search',
-        'actions.rules.index',
         'bazarr.overview',
         'bazarr.missing',
         'bazarr.library',
