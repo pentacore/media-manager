@@ -1,3 +1,26 @@
+# [1.58.0](https://github.com/pentacore/media-manager/compare/v1.57.0...v1.58.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ai-usage:** count automatic runs and tint false alarms as a warning ([604f01a](https://github.com/pentacore/media-manager/commit/604f01a8a11e246abd24ddb3ffdf09dac61ab2e8))
+* **ai-usage:** drop the phantom agreed field from breakdown rows ([f5bc2f8](https://github.com/pentacore/media-manager/commit/f5bc2f8edd8cef98841925c56a8356fc3e62fd57))
+* **ai-usage:** leave deleted-reviewer rows unattributed ([6ff46e0](https://github.com/pentacore/media-manager/commit/6ff46e0fd054e5f6a25af3305c1b34a600cef75a))
+* **ai-usage:** show agreement breakdowns as tabs with readable labels ([6e4fca7](https://github.com/pentacore/media-manager/commit/6e4fca79783f51e0ebb6fa80e036da0389baf5c7))
+
+
+### Features
+
+* **ai-usage:** add the second opinion agreement panel ([37fdae0](https://github.com/pentacore/media-manager/commit/37fdae0b3d9d8f68b23264a8bf558885e653b303))
+* **ai-usage:** break agreement down by event, action and verifier ([bfd8fcd](https://github.com/pentacore/media-manager/commit/bfd8fcdeed144970aca536cecc288ce5d0aa07f3))
+* **ai-usage:** defer the second-opinion agreement in its own group ([5d65228](https://github.com/pentacore/media-manager/commit/5d6522895f447d51285389527de9054104c513c0))
+* **ai-usage:** report second-opinion agreement with reviewers ([0c4e2c1](https://github.com/pentacore/media-manager/commit/0c4e2c165a59654d8218b15d713a40322d249b83))
+
+
+### Performance Improvements
+
+* **docker:** cut production container memory ([d45ba76](https://github.com/pentacore/media-manager/commit/d45ba76dbdc19ca22c6c5f7a695c98df8a8796f3))
+
 # [1.57.0](https://github.com/pentacore/media-manager/compare/v1.56.0...v1.57.0) (2026-10-26)
 
 
