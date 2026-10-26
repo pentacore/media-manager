@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
 use App\Models\User;
+use App\Settings\DecisionAgentSettings;
+use Database\Seeders\ActionTypeConfigSeeder;
 
 /**
  * @param  array<string, mixed>  $attributes
@@ -61,4 +64,62 @@ test('the second opinion panel says when the window has no verdicts', function (
         ->assertNoSmoke()
         ->assertSeeIn('[data-agreement-empty]', 'No second opinions in this window.')
         ->assertMissing('[data-agreement-stats]');
+});
+
+test('the breakdowns mark per-event rules and mute small samples', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides(['sonarr:Download' => ['mode' => SecondOpinionMode::Reject, 'engine' => null, 'jev_threshold' => null]]);
+    foreach (range(1, 5) as $ignored) {
+        ActionRequest::factory()->secondOpinion(true, eventKey: 'sonarr:Download')->create(['status' => ActionRequestStatus::Completed, 'approved_by' => User::factory()->admin()]);
+    }
+    ActionRequest::factory()->secondOpinion(true, eventKey: 'radarr:Grab')->create(['status' => ActionRequestStatus::Completed, 'approved_by' => User::factory()->admin()]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-agreement-breakdown="event"] [data-breakdown-row="sonarr:Download"]', 'per-event rule')
+        ->assertAttribute('[data-agreement-breakdown="event"] [data-breakdown-row="sonarr:Download"] [data-breakdown-agreement]', 'data-low-sample', 'false')
+        ->assertAttribute('[data-agreement-breakdown="event"] [data-breakdown-row="radarr:Grab"] [data-breakdown-agreement]', 'data-low-sample', 'true')
+        ->assertMissing('[data-agreement-breakdown="event"] [data-breakdown-row="radarr:Grab"] [data-breakdown-override]')
+        ->assertSeeIn('[data-agreement-breakdown="action_type"] [data-breakdown-row="delete_series"]', 'Delete series from Sonarr')
+        ->assertSeeIn('[data-agreement-breakdown="answered_by"] [data-breakdown-row="llm:openai/gpt-5-mini"]', 'openai · gpt-5-mini');
+});
+
+test('recent disagreements link to the request and to benchmark capture', function (): void {
+    $falseAlarm = agreementBrowserReviewed(false, true, ['title' => 'Delete Example Show from Sonarr'], 'The series is still airing.');
+    $miss = agreementBrowserReviewed(true, false, ['title' => 'Delete Another Show from Sonarr']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-kind]", 'False alarm')
+        ->assertSeeIn("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-reason]", 'The series is still airing.')
+        ->assertSeeIn("[data-disagreement=\"{$miss->id}\"] [data-disagreement-kind]", 'Miss')
+        ->assertAttribute("[data-disagreement=\"{$falseAlarm->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'completed', 'request' => $falseAlarm->id], absolute: false))
+        ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'rejected', 'request' => $miss->id], absolute: false))
+        ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-benchmark]", 'href', route('admin.benchmarks.cases.create', ['action_request' => $miss->id], absolute: false));
+});
+
+test('agreement per day shows a placeholder bar for days nothing was reviewed', function (): void {
+    agreementBrowserReviewed(true, true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', ['window' => '7d'], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-agreement-daily]', 'Agreement per day')
+        ->assertAttribute('[data-agreement-daily] rect[data-bar-placeholder]:nth-of-type(1)', 'data-bar-placeholder', 'true')
+        ->assertAttribute('[data-agreement-daily] rect[data-bar-placeholder]:nth-of-type(8)', 'data-bar-placeholder', 'false');
+});
+
+test('the second opinion panel fits a phone screen', function (): void {
+    agreementBrowserReviewed(false, true, [
+        'title' => str_repeat('Delete A Very Long Series Title From Sonarr ', 6),
+        'second_opinion' => ['engine' => 'llm', 'mode' => 'hold', 'event_key' => 'sonarr:'.str_repeat('VeryLongEventName', 6), 'agrees' => false, 'failed' => false, 'confidence' => null, 'reason' => str_repeat('The series is still airing and has unwatched episodes. ', 8), 'provider' => 'openai', 'model' => 'gpt-5-mini', 'invocation_id' => null],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))->on()->mobile()
+        ->assertNoSmoke()
+        ->assertVisible('[data-agreement-disagreements]')
+        ->assertScript(phoneOverflowScript(), '');
 });

@@ -1,3 +1,6 @@
+import type { BarChartPoint } from '@/components/mm';
+import { formatCount } from '@/lib/format';
+
 export type DisagreementKind = 'false_alarm' | 'miss';
 
 export type AgreementBucket = 'day' | 'week';
@@ -39,19 +42,18 @@ export interface AgreementBreakdownRow {
 export interface AgreementDailyPoint {
     date: string;
     reviewed: number;
-    agreed: number;
     agreement: number | null;
 }
 
 export interface AgreementDisagreement {
     id: number;
+    title: string | null;
+    type: string;
+    status: string;
+    event_key: string | null;
     kind: DisagreementKind;
-    event: string;
-    action_type: string;
     reason: string | null;
-    answered_by: string;
-    reviewed_at: string | null;
-    invocation_id: string | null;
+    created_at: string;
 }
 
 export interface SecondOpinionAgreement {
@@ -68,4 +70,22 @@ export interface SecondOpinionAgreement {
 
 export function percent(rate: number | null): string {
     return rate === null ? '—' : `${Math.round(rate * 100)}%`;
+}
+
+export function dailyBars(
+    points: AgreementDailyPoint[],
+    bucket: AgreementBucket,
+): BarChartPoint[] {
+    return points.map((point) => ({
+        label:
+            bucket === 'week'
+                ? `w/c ${point.date.slice(5)}`
+                : point.date.slice(5),
+        value: point.agreement === null ? 0 : Math.round(point.agreement * 100),
+        placeholder: point.reviewed === 0,
+        tooltip:
+            point.reviewed === 0
+                ? `${point.date}: nothing reviewed`
+                : `${point.date}: ${percent(point.agreement)} of ${formatCount(point.reviewed)} reviewed`,
+    }));
 }

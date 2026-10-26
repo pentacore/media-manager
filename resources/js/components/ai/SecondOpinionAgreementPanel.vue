@@ -2,11 +2,13 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
-import { percent } from '@/components/ai/secondOpinionAgreement';
+import { dailyBars, percent } from '@/components/ai/secondOpinionAgreement';
 import type { SecondOpinionAgreement } from '@/components/ai/secondOpinionAgreement';
-import { StatCard } from '@/components/mm';
+import { BarChart, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { formatCount } from '@/lib/format';
+import SecondOpinionBreakdownTable from './SecondOpinionBreakdownTable.vue';
+import SecondOpinionDisagreements from './SecondOpinionDisagreements.vue';
 
 const props = defineProps<{ agreement: SecondOpinionAgreement }>();
 
@@ -212,7 +214,43 @@ const headerClass =
                         </tbody>
                     </table>
                 </div>
+                <div class="flex min-w-0 flex-col gap-2" data-agreement-daily>
+                    <span class="text-[13px] font-medium">{{
+                        agreement.daily_bucket === 'week'
+                            ? 'Agreement per week'
+                            : 'Agreement per day'
+                    }}</span>
+                    <BarChart
+                        :data="
+                            dailyBars(agreement.daily, agreement.daily_bucket)
+                        "
+                        :height="90"
+                        :max="100"
+                    />
+                </div>
             </div>
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <SecondOpinionBreakdownTable
+                    title="By event"
+                    heading="Event"
+                    dimension="event"
+                    :rows="agreement.by_event"
+                    :overridden-events="agreement.overridden_events"
+                />
+                <SecondOpinionBreakdownTable
+                    title="By action type"
+                    heading="Action"
+                    dimension="action_type"
+                    :rows="agreement.by_action_type"
+                />
+                <SecondOpinionBreakdownTable
+                    title="Answered by"
+                    heading="Verifier"
+                    dimension="answered_by"
+                    :rows="agreement.by_answered_by"
+                />
+            </div>
+            <SecondOpinionDisagreements :rows="agreement.disagreements" />
         </div>
     </div>
 </template>
