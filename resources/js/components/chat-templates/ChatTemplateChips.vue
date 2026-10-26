@@ -33,7 +33,7 @@ onMounted(() => {
             v-for="template in pinnedTemplates"
             :key="template.id"
             type="button"
-            class="rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-bg-hover"
+            class="rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground hover:bg-bg-hover touch:min-h-10"
             :data-template-chip="template.id"
             @click="emit('pick', template)"
         >
@@ -42,7 +42,7 @@ onMounted(() => {
         <Link
             v-if="loaded && !loadFailed && pinnedTemplates.length === 0"
             :href="ChatTemplateController.index.url()"
-            class="text-[12.5px] text-muted-foreground hover:text-foreground"
+            class="touch-target text-[12.5px] text-muted-foreground hover:text-foreground"
             data-template-hint
             @click="closeChat()"
             >Save prompts you reuse as templates →</Link

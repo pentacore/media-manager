@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
+import { PhoneCardList } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -40,7 +41,11 @@ const props = withDefaults(
     { seasonNumber: null, episodeId: null },
 );
 
-const emit = defineEmits<{ 'update:open': [open: boolean] }>();
+const emit = defineEmits<{
+    'update:open': [open: boolean];
+    /** Reka's close focus restore, for a parent that opened it from a menu. */
+    'close-auto-focus': [event: Event];
+}>();
 
 const COLUMNS: { key: SortKey; label: string }[] = [
     { key: 'title', label: 'Release' },
@@ -239,6 +244,7 @@ watch(
         <DialogContent
             class="max-h-[85vh] overflow-y-auto sm:max-w-5xl"
             data-interactive-search-dialog
+            @close-auto-focus="(event) => emit('close-auto-focus', event)"
         >
             <DialogHeader>
                 <DialogTitle>Interactive search — {{ heading }}</DialogTitle>
@@ -270,55 +276,169 @@ watch(
                 No releases found.
             </p>
 
-            <div v-else class="overflow-x-auto" data-interactive-search-scroll>
-                <table class="w-full text-left text-[12.5px]">
-                    <thead
-                        class="text-[11px] tracking-[0.05em] text-muted-foreground uppercase"
-                    >
-                        <tr>
-                            <th
-                                v-for="column in COLUMNS"
-                                :key="column.key"
-                                class="px-2 py-1.5"
-                            >
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1"
-                                    :data-release-sort="column.key"
-                                    @click="sortBy(column.key)"
+            <template v-else>
+                <div
+                    class="overflow-x-auto max-sm:hidden"
+                    data-interactive-search-scroll
+                >
+                    <table class="w-full text-left text-[12.5px]">
+                        <thead
+                            class="text-[11px] tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th
+                                    v-for="column in COLUMNS"
+                                    :key="column.key"
+                                    class="px-2 py-1.5"
                                 >
-                                    {{ column.label }}
-                                    <template v-if="sortKey === column.key">
-                                        <ArrowDown
-                                            v-if="sortDescending"
-                                            class="size-3"
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-1"
+                                        :data-release-sort="column.key"
+                                        @click="sortBy(column.key)"
+                                    >
+                                        {{ column.label }}
+                                        <template v-if="sortKey === column.key">
+                                            <ArrowDown
+                                                v-if="sortDescending"
+                                                class="size-3"
+                                            />
+                                            <ArrowUp v-else class="size-3" />
+                                        </template>
+                                    </button>
+                                </th>
+                                <th class="px-2 py-1.5"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in sorted"
+                                :key="row.key"
+                                :class="
+                                    cn(
+                                        'border-t border-border align-top',
+                                        row.rejected && 'opacity-60',
+                                    )
+                                "
+                                :data-release-row="row.key"
+                            >
+                                <td class="max-w-[360px] px-2 py-2">
+                                    <div class="font-medium break-words">
+                                        {{ row.title }}
+                                    </div>
+                                    <ul
+                                        v-if="row.rejections.length > 0"
+                                        class="mt-1 space-y-0.5 text-[11.5px] text-warning"
+                                    >
+                                        <li
+                                            v-for="reason in row.rejections"
+                                            :key="reason"
+                                            class="flex items-start gap-1"
+                                        >
+                                            <AlertTriangle
+                                                class="mt-0.5 size-3 shrink-0"
+                                            />
+                                            {{ reason }}
+                                        </li>
+                                    </ul>
+                                </td>
+                                <td class="px-2 py-2">
+                                    {{ row.quality ?? '—' }}
+                                </td>
+                                <td class="font-mono-tabular px-2 py-2">
+                                    {{ formatBytes(row.size) }}
+                                </td>
+                                <td class="font-mono-tabular px-2 py-2">
+                                    {{ formatAge(row.age_hours) }}
+                                </td>
+                                <td class="font-mono-tabular px-2 py-2">
+                                    {{ row.peers ?? '—' }}
+                                </td>
+                                <td class="px-2 py-2">
+                                    {{ row.indexer ?? '—' }}
+                                </td>
+                                <td class="px-2 py-2 text-right">
+                                    <Button
+                                        size="sm"
+                                        class="h-7 text-xs"
+                                        :variant="
+                                            row.rejected ? 'outline' : 'default'
+                                        "
+                                        :disabled="grabbing !== null"
+                                        data-release-grab
+                                        @click="grab(row)"
+                                    >
+                                        <Loader2
+                                            v-if="grabbing === row.key"
+                                            class="size-3.5 animate-spin"
                                         />
-                                        <ArrowUp v-else class="size-3" />
-                                    </template>
-                                </button>
-                            </th>
-                            <th class="px-2 py-1.5"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in sorted"
-                            :key="row.key"
+                                        {{
+                                            row.rejected
+                                                ? 'Grab anyway'
+                                                : 'Grab'
+                                        }}
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div
+                    class="flex min-w-0 flex-col gap-3 sm:hidden"
+                    data-release-cards
+                >
+                    <div
+                        class="scrollbar-none flex max-w-full gap-1.5 overflow-x-auto overflow-y-hidden"
+                        role="group"
+                        aria-label="Sort releases"
+                    >
+                        <button
+                            v-for="column in COLUMNS"
+                            :key="column.key"
+                            type="button"
+                            :aria-pressed="sortKey === column.key"
+                            :data-release-card-sort="column.key"
                             :class="
                                 cn(
-                                    'border-t border-border align-top',
-                                    row.rejected && 'opacity-60',
+                                    'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium transition-colors touch:h-10',
+                                    sortKey === column.key
+                                        ? 'bg-accent text-accent-foreground'
+                                        : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
                                 )
                             "
-                            :data-release-row="row.key"
+                            @click="sortBy(column.key)"
                         >
-                            <td class="max-w-[360px] px-2 py-2">
-                                <div class="font-medium break-words">
+                            {{ column.label }}
+                            <template v-if="sortKey === column.key">
+                                <ArrowDown
+                                    v-if="sortDescending"
+                                    class="size-3"
+                                />
+                                <ArrowUp v-else class="size-3" />
+                            </template>
+                        </button>
+                    </div>
+                    <PhoneCardList
+                        :items="sorted"
+                        :item-key="(row) => row.key"
+                        label="Releases"
+                    >
+                        <template #card="{ item: row }">
+                            <div
+                                :class="
+                                    cn(
+                                        'flex flex-col gap-2',
+                                        row.rejected && 'opacity-60',
+                                    )
+                                "
+                                :data-release-card="row.key"
+                            >
+                                <div class="text-[13px] font-medium break-all">
                                     {{ row.title }}
                                 </div>
                                 <ul
                                     v-if="row.rejections.length > 0"
-                                    class="mt-1 space-y-0.5 text-[11.5px] text-warning"
+                                    class="space-y-0.5 text-[11.5px] text-warning"
                                 >
                                     <li
                                         v-for="reason in row.rejections"
@@ -331,27 +451,25 @@ watch(
                                         {{ reason }}
                                     </li>
                                 </ul>
-                            </td>
-                            <td class="px-2 py-2">{{ row.quality ?? '—' }}</td>
-                            <td class="font-mono-tabular px-2 py-2">
-                                {{ formatBytes(row.size) }}
-                            </td>
-                            <td class="font-mono-tabular px-2 py-2">
-                                {{ formatAge(row.age_hours) }}
-                            </td>
-                            <td class="font-mono-tabular px-2 py-2">
-                                {{ row.peers ?? '—' }}
-                            </td>
-                            <td class="px-2 py-2">{{ row.indexer ?? '—' }}</td>
-                            <td class="px-2 py-2 text-right">
+                                <div
+                                    class="font-mono-tabular flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground"
+                                >
+                                    <span>{{ row.quality ?? '—' }}</span>
+                                    <span>{{ formatBytes(row.size) }}</span>
+                                    <span>{{ formatAge(row.age_hours) }}</span>
+                                    <span v-if="row.peers !== null"
+                                        >{{ row.peers }} peers</span
+                                    >
+                                    <span>{{ row.indexer ?? '—' }}</span>
+                                </div>
                                 <Button
                                     size="sm"
-                                    class="h-7 text-xs"
+                                    class="h-10 w-full text-xs"
                                     :variant="
                                         row.rejected ? 'outline' : 'default'
                                     "
                                     :disabled="grabbing !== null"
-                                    data-release-grab
+                                    data-release-card-grab
                                     @click="grab(row)"
                                 >
                                     <Loader2
@@ -360,11 +478,11 @@ watch(
                                     />
                                     {{ row.rejected ? 'Grab anyway' : 'Grab' }}
                                 </Button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </template>
+                    </PhoneCardList>
+                </div>
+            </template>
         </DialogContent>
     </Dialog>
 </template>

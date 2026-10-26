@@ -17,7 +17,8 @@ withDefaults(
 
 <template>
     <div
-        class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5"
+        class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5 max-sm:min-h-0 max-sm:min-w-0 max-sm:p-3.5"
+        data-stat-card
     >
         <div class="flex items-center justify-between">
             <span
@@ -26,10 +27,10 @@ withDefaults(
             >
             <slot name="accent" />
         </div>
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <div class="flex items-end justify-between gap-3 max-sm:flex-wrap">
+            <div class="max-sm:min-w-0">
                 <div
-                    class="text-[28px] leading-none font-semibold tracking-tight tabular-nums"
+                    class="text-[28px] leading-none font-semibold tracking-tight tabular-nums max-sm:text-[22px]"
                 >
                     {{ value }}
                 </div>

@@ -157,7 +157,7 @@ defineExpose({
             @remove="removeFile"
         />
         <div
-            class="flex items-end gap-2.5 rounded-xl border border-border bg-card p-2.5"
+            class="flex items-end gap-2.5 rounded-xl border border-border bg-card p-2.5 touch:gap-3"
             @dragover.prevent
             @drop.prevent="addFiles($event.dataTransfer?.files ?? null)"
         >

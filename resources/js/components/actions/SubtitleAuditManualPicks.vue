@@ -5,6 +5,8 @@ import { computed } from 'vue';
 import type { SubtitleAuditBatchCard } from '@/components/ai/types';
 import { formatCount } from '@/lib/format';
 import {
+    failureLabel,
+    missingLanguagesLabel,
     subtitleAuditFollowUps,
     subtitleAuditPickUrl,
 } from '@/lib/subtitleAudit';
@@ -69,14 +71,37 @@ const missesLine = computed(() => {
                         class="text-[11px] text-fg-subtle"
                         >missing
                         {{
-                            episode.missing_languages
-                                .map((language) => language.toUpperCase())
-                                .join(', ')
+                            missingLanguagesLabel(episode.missing_languages)
                         }}</span
                     >
                 </li>
             </ul>
         </template>
+
+        <ul
+            v-if="followUps.replacementsInFlight.length > 0"
+            class="mb-2 flex flex-col gap-1"
+        >
+            <li
+                v-for="episode in followUps.replacementsInFlight"
+                :key="episode.label"
+                class="flex flex-wrap items-center gap-x-1.5 text-[12px]"
+                data-subtitle-audit-in-flight
+            >
+                <span class="font-mono-tabular font-medium">{{
+                    episode.label
+                }}</span>
+                <span class="text-muted-foreground">{{
+                    failureLabel(episode.failure_reason)
+                }}</span>
+                <span
+                    v-if="episode.missing_languages.length"
+                    class="text-[11px] text-fg-subtle"
+                    >missing
+                    {{ missingLanguagesLabel(episode.missing_languages) }}</span
+                >
+            </li>
+        </ul>
 
         <p
             v-if="missesLine !== ''"

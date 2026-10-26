@@ -146,7 +146,7 @@ const pinnable = computed(() =>
         </template>
         <button
             type="button"
-            class="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+            class="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:text-foreground touch:min-h-10"
             :title="
                 showTurnLines
                     ? 'Hide the tools under each reply'

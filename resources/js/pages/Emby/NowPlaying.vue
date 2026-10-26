@@ -316,7 +316,7 @@ function remainingTicks(session: Session): number {
                 class="overflow-hidden rounded-xl border border-border bg-card"
                 data-session-card
             >
-                <div class="flex gap-4 p-4">
+                <div class="flex gap-4 p-4 max-sm:gap-3 max-sm:p-3">
                     <Poster
                         :hint="
                             (session.now_playing?.name ?? 'media')
@@ -340,7 +340,9 @@ function remainingTicks(session: Session): number {
                                 >session #{{ session.id?.slice(-6) ?? i }}</span
                             >
                         </div>
-                        <div class="text-[17px] leading-tight font-semibold">
+                        <div
+                            class="text-[17px] leading-tight font-semibold max-sm:break-words"
+                        >
                             {{ session.now_playing?.name ?? 'Unknown' }}
                         </div>
                         <div
@@ -349,7 +351,9 @@ function remainingTicks(session: Session): number {
                         >
                             {{ session.now_playing.series_name }}
                         </div>
-                        <div class="mt-1 flex items-center gap-2.5">
+                        <div
+                            class="mt-1 flex items-center gap-2.5 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1"
+                        >
                             <InitialsAvatar
                                 :name="session.user_name ?? '?'"
                                 :size="22"
@@ -358,7 +362,9 @@ function remainingTicks(session: Session): number {
                                 session.user_name ?? 'Unknown user'
                             }}</span>
                             <span class="text-[12px] text-fg-subtle">·</span>
-                            <span class="text-[12px] text-fg-subtle">
+                            <span
+                                class="text-[12px] text-fg-subtle max-sm:min-w-0 max-sm:break-words"
+                            >
                                 {{ session.client ?? '—'
                                 }}<span v-if="session.device_name">
                                     · {{ session.device_name }}</span

@@ -1172,7 +1172,7 @@ test('a streamed repair result renders the subtitle audit batch card under the r
         ->assertNoJavaScriptErrors();
 });
 
-test('a batch review that loses a race marks the reviewed replacements changed', function (): void {
+test('a batch review that loses a race shows every replacement status from the server', function (): void {
     Queue::fake([ExecuteActionRequest::class]);
     $admin = User::factory()->admin()->create();
     ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
@@ -1192,9 +1192,35 @@ test('a batch review that loses a race marks the reviewed replacements changed',
     $webpage->click('[data-subtitle-audit-approve]')
         ->assertSee('1 skipped')
         ->assertMissing('[data-subtitle-audit-approve]')
-        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['Changed elsewhere', 'Changed elsewhere'])
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['rejected', 'approved'])
+        ->assertDontSeeIn('[data-subtitle-audit-card]', 'Changed elsewhere')
         ->assertNoJavaScriptErrors();
 
     expect($requests[0]->fresh()->status)->toBe(ActionRequestStatus::Rejected)
         ->and($requests[1]->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('a failed batch row says a replacement is already pending', function (): void {
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch] = aiChatSubtitleAuditBatch();
+    SubtitleAuditEpisode::factory()->failed()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 5,
+        'failure_reason' => 'replacement_in_flight',
+    ]);
+    SubtitleAuditEpisode::factory()->failed()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 6,
+    ]);
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertCount('[data-subtitle-audit-episode][data-outcome="failed"]', 2)
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="failed"]:nth-child(5) [data-subtitle-audit-outcome]', 'A replacement is already pending')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="failed"]:nth-child(6) [data-subtitle-audit-outcome]', 'Search failed')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(1) [data-subtitle-audit-languages]', 'missing ENG')
+        ->assertNoJavaScriptErrors();
 });

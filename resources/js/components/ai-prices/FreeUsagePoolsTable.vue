@@ -149,7 +149,7 @@ async function destroyPool(pool: PoolRow): Promise<void> {
                             <span v-else class="text-fg-subtle">—</span>
                         </td>
                         <td class="px-3 py-2.5 text-right">
-                            <div class="flex justify-end gap-1 touch:gap-2">
+                            <div class="flex justify-end gap-1 touch:gap-3">
                                 <Button
                                     variant="ghost"
                                     size="sm"

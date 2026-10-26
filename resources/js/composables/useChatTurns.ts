@@ -2,6 +2,7 @@ import type { ComputedRef, Ref } from 'vue';
 import { computed, onUnmounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import SubtitleAuditBatchController from '@/actions/App/Http/Controllers/AI/SubtitleAuditBatchController';
 import {
     inferChosenLabels,
     toolRequestAnswer,
@@ -24,6 +25,7 @@ import { useAiChat } from '@/composables/useAiChat';
 import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
 import { BULK_MAX_ITEMS, submitBulk } from '@/lib/bulk';
 import { csrfToken, jsonRequest } from '@/lib/http';
+import type { BulkSummary } from '@/types';
 
 export type UseChatTurnsOptions = {
     /** The panel's mode toggle; read when a turn is sent. */
@@ -84,6 +86,22 @@ export type UseChatTurnsReturn = {
         action: 'approve' | 'reject',
     ) => Promise<void>;
 };
+
+/**
+ * True when a bulk run did not start every id it was sent: some were skipped
+ * (reviewed elsewhere first), failed, or are missing from the counts.
+ */
+function isPartialBulkRun(summary: BulkSummary, sent: number): boolean {
+    return (
+        summary.failed.length > 0 ||
+        summary.skipped > 0 ||
+        summary.started +
+            summary.queued +
+            summary.skipped +
+            summary.failed.length !==
+            sent
+    );
+}
 
 /**
  * One chat panel's turns: the thread's messages, sending a turn (streamed, or
@@ -592,6 +610,10 @@ export function useChatTurns({
      * first, or are gone) they read 'changed', as a single card does, and the
      * server's toast gives the counts. A refused chunk stops the run and
      * leaves its episodes and the ones after it pending, as they were.
+     *
+     * A partial run's summary only counts, so the card is then re-read from
+     * the server, which replaces 'changed' with each row's true status. When
+     * that read fails the optimistic statuses stay, without another toast.
      */
     async function reviewBatch(
         card: SubtitleAuditBatchCard,
@@ -608,6 +630,8 @@ export function useChatTurns({
 
         reviewingActionIds.value = [...reviewingActionIds.value, ...ids];
 
+        let partial = false;
+
         try {
             for (
                 let offset = 0;
@@ -623,6 +647,8 @@ export function useChatTurns({
                 if (summary === null) {
                     return;
                 }
+
+                partial ||= isPartialBulkRun(summary, chunk.length);
 
                 const status =
                     summary.started === chunk.length
@@ -645,9 +671,34 @@ export function useChatTurns({
                     );
             }
         } finally {
+            if (partial) {
+                await refreshBatchCard(card);
+            }
+
             reviewingActionIds.value = reviewingActionIds.value.filter(
                 (id) => !ids.includes(id),
             );
+        }
+    }
+
+    /**
+     * Replace a batch card's statuses with the server's. A failed read keeps
+     * the card as it is: the bulk review already toasted its counts.
+     */
+    async function refreshBatchCard(
+        card: SubtitleAuditBatchCard,
+    ): Promise<void> {
+        try {
+            const fresh = await jsonRequest<SubtitleAuditBatchCard>(
+                'GET',
+                SubtitleAuditBatchController.url(card.id),
+            );
+
+            card.episodes = fresh.episodes;
+            card.status = fresh.status;
+            card.pending_action_request_ids = fresh.pending_action_request_ids;
+        } catch {
+            // The optimistic statuses stay.
         }
     }
 

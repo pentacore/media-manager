@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
+use App\Models\ActionRequest;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\BenchmarkSchedule;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Notifications\ServiceWarning;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * True when the element is shorter than 40 px and a point $outside px above
@@ -43,6 +47,19 @@ function touchTargetNeighbourScript(string $selector): string
     $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
 
     return "(() => { const later = document.querySelector({$encoded}); const earlier = later.previousElementSibling; later.scrollIntoView({ block: 'center', inline: 'center' }); const a = earlier.getBoundingClientRect(); const b = later.getBoundingClientRect(); const hitA = document.elementFromPoint(a.right - 2, a.top + a.height / 2); const hitB = document.elementFromPoint(b.left + 2, b.top + b.height / 2); return !!hitA && earlier.contains(hitA) && !!hitB && later.contains(hitB); })()";
+}
+
+/**
+ * True when neither of two neighbouring controls takes taps inside the
+ * other's full 40 px area: a tap 1 px inside the edge of $selector's previous
+ * sibling's 40 px area (its box, or the centred 40 px square when narrower)
+ * still hits that sibling, and the same holds for $selector itself.
+ */
+function touchTargetFullNeighbourScript(string $selector): string
+{
+    $encoded = json_encode($selector, JSON_THROW_ON_ERROR);
+
+    return "(() => { const later = document.querySelector({$encoded}); const earlier = later.previousElementSibling; later.scrollIntoView({ block: 'center', inline: 'center' }); const a = earlier.getBoundingClientRect(); const b = later.getBoundingClientRect(); const reach = (rect) => Math.max(rect.width, 40) / 2 - 1; const hitA = document.elementFromPoint(a.left + a.width / 2 + reach(a), a.top + a.height / 2); const hitB = document.elementFromPoint(b.left + b.width / 2 - reach(b), b.top + b.height / 2); return !!hitA && earlier.contains(hitA) && !!hitB && later.contains(hitB); })()";
 }
 
 /**
@@ -187,22 +204,54 @@ test('neighbouring row actions keep their own taps on a phone', function (): voi
 
     $webpage = visit(route('admin.connections.index', absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->assertScript(touchTargetNeighbourScript('[data-connection-menu]'), true);
+    $webpage->assertScript(touchTargetFullNeighbourScript('[data-connection-menu]'), true);
 
     $webpage->navigate(route('admin.ai-prices.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-pool-delete]'));
-    $webpage->assertScript(touchTargetNeighbourScript('[data-price-delete]'), true)
-        ->assertScript(touchTargetNeighbourScript('[data-pool-delete]'), true);
+    $webpage->assertScript(touchTargetFullNeighbourScript('[data-price-delete]'), true)
+        ->assertScript(touchTargetFullNeighbourScript('[data-pool-delete]'), true);
 
     $webpage->navigate(route('sabnzbd.queue.index', absolute: false));
-    $webpage->script(touchTargetLibraryLoadedScript('[data-sab-slot-delete]'));
-    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-slot-delete]'), true)
-        ->assertAttribute('[data-sab-slot-delete]', 'aria-label', 'Delete Example.Show.S01E01')
-        ->assertScript('document.querySelector("[data-sab-slot-delete]").previousElementSibling.getAttribute("aria-label")', 'Pause Example.Show.S01E01');
+    $webpage->script(touchTargetLibraryLoadedScript('[data-sab-card-delete]'));
+    $webpage->assertScript(touchTargetNeighbourScript('[data-sab-card-delete]'), true)
+        ->assertAttribute('[data-sab-card-delete]', 'aria-label', 'Delete Example.Show.S01E01')
+        ->assertScript('document.querySelector("[data-sab-card-delete]").previousElementSibling.getAttribute("aria-label")', 'Pause Example.Show.S01E01');
 
     $webpage->navigate(route('admin.benchmarks.schedules.index', absolute: false));
     $webpage->script(touchTargetLibraryLoadedScript('[data-benchmark-schedule-delete]'));
-    $webpage->assertScript(touchTargetNeighbourScript('[data-benchmark-schedule-delete]'), true);
+    $webpage->assertScript(touchTargetFullNeighbourScript('[data-benchmark-schedule-delete]'), true);
+});
+
+test("a touch screen's SABnzbd and notification row actions keep their own full 40 px", function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
+    Http::fake(['sabnzbd.local:8080/api*' => Http::response([
+        'status' => true,
+        'queue' => ['paused' => false, 'speed' => '10 M', 'speedlimit' => '', 'speedlimit_abs' => '', 'noofslots' => 1, 'slots' => [
+            ['nzo_id' => 'SABnzbd_nzo_1', 'filename' => 'Example.Show.S01E01', 'cat' => 'tv', 'size' => '1.0 GB', 'sizeleft' => '0.5 GB', 'percentage' => '50', 'timeleft' => '0:05:00', 'status' => 'Downloading', 'priority' => '0'],
+        ]],
+        'history' => ['noofslots' => 1, 'slots' => [
+            ['nzo_id' => 'SABnzbd_nzo_2', 'name' => 'Example.Show.S01E02', 'category' => 'tv', 'bytes' => 1_000_000_000, 'status' => 'Failed', 'fail_message' => 'Example failure', 'completed' => 1_760_000_000, 'storage' => ''],
+        ]],
+    ])]);
+    $admin = User::factory()->admin()->create();
+    $admin->notifications()->create([
+        'id' => (string) Str::uuid(),
+        'type' => ServiceWarning::class,
+        'data' => ['service' => 'sabnzbd', 'title' => 'Disk warning', 'message' => 'Less than 1 GB free', 'level' => 'disk_full'],
+    ]);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))->on()->iPadPro()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(touchTargetLibraryLoadedScript('[data-history-delete]'));
+    $webpage->assertScript('matchMedia("(pointer: coarse)").matches && innerWidth >= 640', true)
+        ->assertScript(touchTargetFullNeighbourScript('[data-sab-slot-delete]'), true)
+        ->assertScript(touchTargetFullNeighbourScript('[data-history-delete]'), true);
+
+    $webpage->navigate(route('notifications.index', absolute: false));
+    $webpage->script(touchTargetLibraryLoadedScript('[data-notification-dismiss]'));
+    $webpage->assertScript(touchTargetFullNeighbourScript('[data-notification-dismiss]'), true)
+        ->assertNoSmoke();
 });
 
 test('the hand-rolled activity strips give each option a 40 px target on a phone', function (): void {
@@ -246,4 +295,21 @@ test('a touch screen at desktop width gets the hit areas and the touch reveal', 
     $webpage->script(touchTargetLibraryLoadedScript('[data-movie-open-external]'));
     $webpage->assertScript('getComputedStyle(document.querySelector("[data-movie-open-external]")).opacity', '1')
         ->assertScript(touchTargetTappableScript('[data-movie-open-external]'), true);
+});
+
+test("the dashboard's per-action Review link is a 40 px target that opens that action's sheet on a phone", function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Severance"']);
+    $this->actingAs(User::factory()->member()->create());
+
+    $selector = sprintf('[data-dashboard-review-action="%d"]', $actionRequest->id);
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertScript(touchTargetTappableScript($selector), true)
+        ->assertAttribute($selector, 'href', route('actions.requests.index', ['request' => $actionRequest->id], absolute: false))
+        ->click($selector);
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet] [data-action-title]")'));
+
+    $webpage->assertSeeIn('[data-action-sheet] [data-action-title]', 'Severance')
+        ->assertNoSmoke();
 });

@@ -27,6 +27,7 @@ use App\Console\Commands\RefreshWantedCount;
 use App\Console\Commands\RollupServerMetrics;
 use App\Console\Commands\RunDueBenchmarkSchedules;
 use App\Console\Commands\SettleStalledBenchmarkRuns;
+use App\Console\Commands\SweepSubtitleAuditBatches;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\ReconcileSearchIndex;
@@ -119,6 +120,10 @@ Schedule::command(ReconcileMediaReplacementAttempts::class)
 
 Schedule::command(ReconcileStuckActionRequests::class)
     ->everyFifteenMinutes()
+    ->withoutOverlapping(10);
+
+Schedule::command(SweepSubtitleAuditBatches::class)
+    ->everyTenMinutes()
     ->withoutOverlapping(10);
 
 Schedule::command(ReconcileBazarrSubtitles::class)

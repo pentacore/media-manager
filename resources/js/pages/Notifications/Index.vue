@@ -160,7 +160,7 @@ function shortType(type: string): string {
                         <span>{{ shortType(n.type) }}</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-1 touch:gap-2">
+                <div class="flex items-center gap-1 touch:gap-3">
                     <Button
                         v-if="!n.read_at"
                         variant="ghost"
@@ -175,6 +175,7 @@ function shortType(type: string): string {
                         size="icon"
                         class="size-7"
                         title="Dismiss"
+                        data-notification-dismiss
                         @click="destroy(n.id)"
                     >
                         <Trash2 class="size-3.5" />

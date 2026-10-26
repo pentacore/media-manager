@@ -96,7 +96,7 @@ const monthLabel = computed(() =>
 
 function toggleClass(active: boolean): string {
     return cn(
-        'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+        'touch-target inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
         active
             ? 'bg-accent text-accent-foreground'
             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -147,7 +147,7 @@ function toggleClass(active: boolean): string {
                     ></Button
                 >
             </div>
-            <div class="flex flex-wrap items-center gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5 touch:gap-y-3">
                 <button
                     type="button"
                     :class="toggleClass(view === 'month')"

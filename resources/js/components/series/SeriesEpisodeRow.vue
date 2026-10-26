@@ -33,9 +33,9 @@ const { can } = useCan();
 
 <template>
     <div
-        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover/30 px-3 py-2"
+        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover/30 px-3 py-2 max-sm:flex-wrap max-sm:gap-2"
     >
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0 flex-1 max-sm:basis-full">
             <p class="text-[13px] font-medium">
                 <span class="font-mono-tabular text-muted-foreground">
                     {{ episode.episode_number }}.
@@ -49,7 +49,7 @@ const { can } = useCan();
                 {{ episode.overview }}
             </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-2">
             <span
                 v-if="episode.air_date"
                 class="font-mono-tabular flex items-center gap-1.5 text-[12px] text-muted-foreground"

@@ -135,7 +135,7 @@ onMounted(() => {
                 <div class="border-t border-border px-4 py-3">
                     <div
                         v-if="can('manage-library')"
-                        class="mb-3 flex flex-wrap items-center gap-2"
+                        class="mb-3 flex flex-wrap items-center gap-2 touch:gap-3"
                         :data-season-actions="season.season_number"
                     >
                         <template

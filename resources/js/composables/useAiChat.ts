@@ -3,6 +3,7 @@ import ConversationController from '@/actions/App/Http/Controllers/AI/Conversati
 import type {
     AnsweredBy,
     ChatCard,
+    ChatMode,
     ChatOverride,
     ToolGroupValue,
     TurnToolGroup,
@@ -74,6 +75,12 @@ const recent = ref<ConversationSummary[]>([]);
 const recentLoaded = ref(false);
 const recentLoading = ref(false);
 const pendingStep = ref<AgentStep | null>(null);
+/**
+ * The chat sheet's mode. The sheet unmounts its panel on close, so the mode
+ * lives here and survives a reopen, as it does on the chat page (whose panel
+ * stays mounted). Module-level like the rest: only client handlers set it.
+ */
+const sheetMode = ref<ChatMode>('executive');
 
 let keyboardInitialized = false;
 
@@ -231,6 +238,7 @@ export function useAiChat() {
         recent,
         recentLoading,
         pendingStep,
+        sheetMode,
         openChat,
         closeChat,
         startNewConversation,

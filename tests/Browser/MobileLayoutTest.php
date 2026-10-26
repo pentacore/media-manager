@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
+use App\Models\ActionRequest;
+use App\Models\EmbyActivity;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
@@ -16,11 +19,8 @@ use Pest\Browser\Api\Webpage;
  * content inside the screen (or inside a horizontal scroller that fits), show
  * its primary action on screen, name every control and hide nothing behind
  * hover. Not listed yet, each for a named later fix:
- *   media.requests.index         card action row (3h-2)
- *   media.calendar.index         agenda rows, month grid (3h-2)
- *   media.series.show/movies.show detail toolbars (3h-2)
- *   ai.chat                      chat header (3h-2)
  *   activity-log                 nowrap rows (3h-3)
+ *   media.whisparr.show          detail toolbar (3h-3)
  *   other admin pages            reachability pass (3h-3)
  */
 
@@ -45,6 +45,7 @@ function mobileLayoutFakeServices(): void
     ServiceConnection::factory()->sabnzbd()->create(['name' => 'SABnzbd', 'url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
     ServiceConnection::factory()->emby()->create(['name' => 'Emby', 'url' => 'http://emby.local:8096', 'api_key' => 'k']);
     ServiceConnection::factory()->whisparr()->whisparrVersion(WhisparrVersion::V3)->create(['name' => 'Whisparr', 'url' => 'http://whisparr.local:6969', 'api_key' => 'k']);
+    ServiceConnection::factory()->seerr()->create(['name' => 'Seerr', 'url' => 'http://seerr.local:5055', 'api_key' => 'k']);
 
     $slots = [];
     foreach (range(1, 3) as $index) {
@@ -65,11 +66,25 @@ function mobileLayoutFakeServices(): void
             'size' => 1_000_000_000, 'sizeleft' => 500_000_000, 'timeleft' => '00:05:00', 'statusMessages' => [],
             'added' => '2026-09-29T10:00:00Z', 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'downloadId' => 'SABnzbd_nzo_41',
         ]]]),
+        'sonarr.local:8989/api/v3/series/7*' => Http::response(array_merge(mobileLayoutSeries(7, 'Severance'), [
+            'overview' => 'An example overview.',
+            'seasons' => [['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 1, 'episodeFileCount' => 1, 'totalEpisodeCount' => 1, 'sizeOnDisk' => 1_000_000_000]]],
+        ])),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([
+            ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long', 'airDate' => '2022-02-18', 'hasFile' => true, 'monitored' => true],
+        ]),
+        'sonarr.local:8989/api/v3/calendar*' => Http::response([
+            ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long', 'airDateUtc' => now()->startOfMonth()->addDays(9)->setTime(2, 0)->toIso8601String(), 'hasFile' => false, 'monitored' => true,
+                'series' => ['title' => 'The Extraordinarily Long Example Series Title Of Doom', 'monitored' => true, 'images' => $poster]],
+        ]),
         'sonarr.local:8989/*' => Http::response([]),
         'radarr.local:7878/api/v3/movie' => Http::response([
             ['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => $poster],
         ]),
         'radarr.local:7878/api/v3/queue*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+        'radarr.local:7878/api/v3/movie/10*' => Http::response(['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 12_000_000_000, 'images' => $poster, 'status' => 'released']),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+        'radarr.local:7878/api/v3/calendar*' => Http::response([]),
         'radarr.local:7878/*' => Http::response([]),
         'whisparr.local:6969/api/v3/movie*' => Http::response([['id' => 11, 'title' => 'Example Scene Title', 'year' => 2024, 'monitored' => true, 'hasFile' => false, 'sizeOnDisk' => 0, 'qualityProfileId' => 1, 'images' => []]]),
         'whisparr.local:6969/*' => Http::response([]),
@@ -90,7 +105,29 @@ function mobileLayoutFakeServices(): void
             ['Id' => 's1', 'UserName' => 'Alice', 'UserId' => 'emby-1', 'Client' => 'Emby Web', 'DeviceName' => 'Living Room TV', 'NowPlayingItem' => ['Id' => 'i1', 'Name' => 'An Extremely Long Example Movie Title That Wraps Badly', 'Type' => 'Movie', 'RunTimeTicks' => 66_000_000_000], 'PlayState' => ['PositionTicks' => 6_000_000_000, 'IsPaused' => true]],
         ]),
         'emby.local:8096/*' => Http::response([]),
+        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 0, 'tv' => 1]),
+        'seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1], 'results' => [
+            ['id' => 1, 'status' => 1, 'type' => 'tv', 'media' => ['mediaType' => 'tv', 'tmdbId' => 95396, 'tvdbId' => 371980, 'status' => 3],
+                'requestedBy' => ['id' => 7, 'displayName' => 'Example Requester With A Long Name', 'email' => 'requester@example.com'], 'createdAt' => '2026-10-01T00:00:00Z', 'seasons' => [['seasonNumber' => 1]]],
+        ]]),
+        'seerr.local:5055/api/v1/tv/*' => Http::response(['id' => 95396, 'name' => 'The Extraordinarily Long Example Series Title Of Doom', 'posterPath' => '/example.jpg', 'firstAirDate' => '2022-02-17']),
+        'seerr.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [['id' => 7, 'email' => 'requester@example.com', 'displayName' => 'Example Requester']]]),
+        'seerr.local:5055/api/v1/discover/trending*' => Http::response(['results' => [
+            ['id' => 95396, 'mediaType' => 'tv', 'name' => 'The Extraordinarily Long Example Series Title Of Doom', 'firstAirDate' => '2022-02-17', 'posterPath' => '/example.jpg'],
+            ['id' => 438631, 'mediaType' => 'movie', 'title' => 'Dune', 'releaseDate' => '2021-10-22', 'posterPath' => '/dune.jpg'],
+        ]]),
+        'seerr.local:5055/api/v1/search*' => Http::response(['results' => [
+            ['id' => 438631, 'mediaType' => 'movie', 'title' => 'Dune: An Extremely Long Example Movie Title That Wraps', 'releaseDate' => '2021-10-22', 'posterPath' => '/dune.jpg'],
+        ]]),
+        'seerr.local:5055/*' => Http::response([]),
     ]);
+
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "'.str_repeat('Severance', 6).'"']);
+    ActionRequest::factory()->described()->failed()->create();
+    // Played and without a series title, so Statistics' Top titles always
+    // lists this long title (the factory's random action and series title
+    // used to show it only sometimes, which made the statistics row flaky).
+    EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'action' => 'played']);
 }
 
 /**
@@ -186,16 +223,24 @@ dataset('mobile layout member pages', [
     'dashboard' => ['dashboard', '[data-dashboard-review-queue]'],
     'series' => ['media.series.index', '[data-add-series]'],
     'movies' => ['media.movies.index', '[data-add-movie]'],
-    'search' => ['media.search.index', null],
-    'discover' => ['media.discover.index', null],
+    // The detail rows wait for their deferred episodes / quality profiles.
+    'series detail' => ['media.series.show', '[data-series-actions]', '[data-season-card="1"]', ['id' => 7]],
+    'movie detail' => ['media.movies.show', '[data-movie-actions]', '[data-movie-actions] [data-quality-profile-trigger]', ['id' => 10]],
+    'search' => ['media.search.index', null, '[data-search-title="movie-438631"]', ['q' => 'dune']],
+    'discover' => ['media.discover.index', null, '[data-discover-row="trending"] [data-title-card]'],
+    'requests' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
+    // The member is the fixture's Seerr requester, so this lists request 1.
+    'my requests' => ['media.requests.mine', null, '[data-my-request="1"]'],
+    // Agenda is the phone default; the settle waits for it.
+    'calendar' => ['media.calendar.index', null, '[data-calendar-agenda]'],
     'grab queue' => ['media.library.activity.queue', '[data-activity-refresh]'],
     'downloads' => ['sabnzbd.queue.index', '[data-sab-queue-toggle]'],
     'now playing' => ['monitoring.now-playing', '[data-now-playing-refresh]'],
-    'watch history' => ['monitoring.watch-history', '[data-page-header-more]'],
+    'watch history' => ['monitoring.watch-history', '[data-page-header-more]', '[data-watch-cards]'],
     'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
     // The third value is a deferred panel the settle waits for: the hour heatmap.
     'statistics' => ['statistics.index', '[data-filter-strip]', '[data-statistics-heatmap]'],
-    'action queue' => ['actions.requests.index', '[data-action-refresh]'],
+    'action queue' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
     'notifications' => ['notifications.index', null],
     'profile' => ['profile.edit', null],
     'preferences' => ['settings.preferences.edit', null],
@@ -216,21 +261,30 @@ dataset('mobile layout admin pages', [
     'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
     'servers' => ['admin.servers.index', '[data-server-add]'],
     'server incidents' => ['admin.servers.incidents.index', null],
+    'ai chat' => ['ai.chat', '[data-chat-options]'],
+    'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
+    'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
 ]);
 
-test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
+/**
+ * @param  array<string, int|string>  $parameters
+ */
+test('a member page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
     mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create(['name' => 'Example Member']));
+    $this->actingAs(User::factory()->member()->create(['name' => 'Example Member', 'email' => 'requester@example.com']));
 
-    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
+    mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout member pages');
 
-test('an admin page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null): void {
+/**
+ * @param  array<string, int|string>  $parameters
+ */
+test('an admin page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
     config()->set('mediamanager.ai.enabled', true);
     mobileLayoutFakeServices();
     $this->actingAs(User::factory()->admin()->create(['name' => 'Example Admin']));
 
-    mobileLayoutAssertPage(visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
+    mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout admin pages');
 
 test('an open dialog fits a phone screen', function (): void {
@@ -244,6 +298,35 @@ test('an open dialog fits a phone screen', function (): void {
 
     $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
+});
+
+test('an open action sheet fits a phone screen', function (): void {
+    mobileLayoutFakeServices();
+    $actionRequest = ActionRequest::query()->where('status', ActionRequestStatus::Pending)->sole();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet]") && document.querySelector("[data-action-sheet]").getAnimations().length === 0'));
+    mobileLayoutSettle($webpage);
+
+    $webpage->assertScript(phoneOverflowScript('[data-action-sheet]'), '')
+        ->assertScript('(() => { const rect = document.querySelector("[data-action-sheet]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
+});
+
+test('the open chat sheet fits a phone screen', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('dashboard', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-header-ai-chat-sheet]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"] [data-chat-input]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
+    mobileLayoutSettle($webpage, '[data-chat-options]');
+
+    $webpage->assertScript(phoneOverflowScript('[data-slot="sheet-content"]'), '')
+        ->assertScript('(() => { const rect = document.querySelector("[data-slot=\"sheet-content\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
 });
 
 test('the settle wait fails loudly when the deferred content never renders', function (): void {

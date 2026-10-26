@@ -24,6 +24,8 @@ const ACTIONS_CHANNEL = 'members.actions';
 export type ActionQueueLiveProps = {
     requests: ActionQueueRequests;
     filters: { status: string; subtitle_audit_batch: number | null };
+    /** A deep-linked request the page does not list (its own lazy prop). */
+    preselectedRequest?: ActionRequestRow | null;
 };
 
 export type UseActionQueueLiveReturn = {
@@ -82,6 +84,9 @@ export function useActionQueueLive(
         // A late Created broadcast must not roll back a row a newer status
         // change already moved on.
         replaces: pushedRowIsCurrent,
+        // A batch's rows are fixed when its view opens; an unrelated new
+        // request never belongs there, so it raises no "new requests" notice.
+        countsAsStale: () => props.filters.subtitle_audit_batch === null,
     });
 
     watch(
@@ -208,6 +213,13 @@ export function useActionQueueLive(
         const target = liveRequests.value.find((row) => row.id === payload.id);
 
         if (!target) {
+            // The off-page deep-linked request is not in the live list: the
+            // server's copy is the truth, so the debounced counts reload
+            // brings it along (its prop is lazy, so only then is it re-read).
+            if (props.preselectedRequest?.id === payload.id) {
+                preselectedChanged = true;
+            }
+
             return;
         }
 
@@ -258,6 +270,7 @@ export function useActionQueueLive(
     // list can't compute (it's capped at one page). Reload the prop on every
     // status-change event so the strip stays in sync with the DB.
     let statusCountsReloadTimer: ReturnType<typeof setTimeout> | null = null;
+    let preselectedChanged = false;
     function scheduleStatusCountsReload(): void {
         if (statusCountsReloadTimer !== null) {
             return;
@@ -265,7 +278,11 @@ export function useActionQueueLive(
 
         statusCountsReloadTimer = setTimeout(() => {
             statusCountsReloadTimer = null;
-            router.reload({ only: ['statusCounts'] });
+            const only = preselectedChanged
+                ? ['statusCounts', 'preselectedRequest']
+                : ['statusCounts'];
+            preselectedChanged = false;
+            router.reload({ only });
         }, 500);
     }
 

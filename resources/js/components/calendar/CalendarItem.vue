@@ -36,15 +36,15 @@ const state = computed(() => STATES[props.item.state]);
     </span>
     <div
         v-else
-        class="flex items-center gap-3 px-3 py-2.5"
+        class="flex items-center gap-3 px-3 py-2.5 max-sm:flex-wrap max-sm:gap-y-2"
         :data-calendar-item="item.key"
     >
         <Poster :hint="item.title" size="sm" :src="item.poster_url" />
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0 flex-1 max-sm:basis-[calc(100%-3rem)]">
             <component
                 :is="item.library_url ? Link : 'span'"
                 :href="item.library_url ?? undefined"
-                class="block truncate text-[13px] font-medium"
+                class="block truncate text-[13px] font-medium max-sm:break-words max-sm:whitespace-normal touch:relative touch:-my-3 touch:py-3"
                 data-calendar-item-title
             >
                 {{ item.title }}
@@ -61,7 +61,10 @@ const state = computed(() => STATES[props.item.state]);
             </div>
         </div>
         <Pill :variant="state.variant">{{ state.label }}</Pill>
-        <div v-if="can('manage-library')" class="flex items-center gap-1.5">
+        <div
+            v-if="can('manage-library')"
+            class="flex items-center gap-1.5 max-sm:ml-auto"
+        >
             <SearchButton
                 v-if="item.service === 'sonarr' && item.episode_id !== null"
                 service="sonarr"

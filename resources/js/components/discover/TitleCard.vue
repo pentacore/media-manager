@@ -15,7 +15,7 @@ const pill = computed(() => titleStatusPill(props.item.status));
 <template>
     <button
         type="button"
-        class="flex w-[132px] shrink-0 cursor-pointer flex-col gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="flex w-[132px] shrink-0 cursor-pointer snap-start flex-col gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:w-[40vw]"
         :data-title-card="`${item.media_type}-${item.tmdb_id}`"
         @click="emit('open')"
     >

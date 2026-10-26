@@ -461,3 +461,18 @@
         }
     }
 }
+
+/*
+ * While a compact bulk bar is mounted (BulkActionBar sets
+ * `data-bulk-bar-open` on <body>), a phone's bar is fixed to the bottom of
+ * the screen. The page then ends with room for it, so whatever comes last
+ * (pagination, a history list) scrolls clear of the bar.
+ */
+@media (width < 40rem) {
+    body[data-bulk-bar-open] main[data-slot='sidebar-inset']::after {
+        content: '';
+        display: block;
+        flex-shrink: 0;
+        height: calc(4.5rem + env(safe-area-inset-bottom));
+    }
+}

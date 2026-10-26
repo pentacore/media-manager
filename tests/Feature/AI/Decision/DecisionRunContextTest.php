@@ -127,3 +127,16 @@ test('eventKey joins the lower-cased service and the event type', function (): v
     expect(new DecisionRunContext(null, 3, 'Sonarr', eventType: 'Download')->eventKey())->toBe('sonarr:Download')
         ->and(new DecisionRunContext(null, 3, 'sonarr')->eventKey())->toBeNull();
 });
+
+test('queuedActionRequestIds lists the queued requests but not the second-opinion rejections', function (): void {
+    $context = new DecisionRunContext(null, 3, 'sonarr');
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
+    $rejected = ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected]);
+
+    $context->recordDispatched($queued);
+    $context->recordDispatched($rejected);
+    $context->recordQueued(77, false);
+
+    expect($context->queuedActionRequestIds())->toBe([$queued->id, 77])
+        ->and($context->actionRequestIds())->toBe([$queued->id, $rejected->id, 77]);
+});
