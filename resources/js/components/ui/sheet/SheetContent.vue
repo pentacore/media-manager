@@ -52,7 +52,11 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       <slot />
 
       <DialogClose
-        class="touch-target ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
+        data-sheet-close
+        :class="cn(
+          'touch-target ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none',
+          side === 'right' && 'max-sm:fixed max-sm:z-10 max-sm:rounded-full max-sm:bg-background',
+        )"
       >
         <X class="size-4" />
         <span class="sr-only">Close</span>

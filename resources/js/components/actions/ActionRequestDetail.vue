@@ -36,10 +36,26 @@ import {
 import SecondOpinionVerdict from './SecondOpinionVerdict.vue';
 import type { ActionRequestRow } from './types';
 
-defineProps<{
-    /** The row open in the pane; null shows the "select an action" hint. */
-    selected: ActionRequestRow | null;
-}>();
+withDefaults(
+    defineProps<{
+        /** The row open in the pane; null shows the "select an action" hint. */
+        selected: ActionRequestRow | null;
+        /**
+         * `pane`: the desktop detail beside the table (hidden below `sm`).
+         * `sheet`: the same detail inside the phone's full-screen sheet, with
+         * the review buttons pinned to the bottom of the screen.
+         */
+        layout?: 'pane' | 'sheet';
+    }>(),
+    { layout: 'pane' },
+);
+
+/**
+ * The sheet's bottom bar. It is sticky inside the sheet's scroll, so the card
+ * around it must not clip (no `overflow-hidden`).
+ */
+const pinnedBar =
+    'sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]';
 
 const emit = defineEmits<{
     approve: [id: number];
@@ -66,7 +82,9 @@ function canBenchmark(row: ActionRequestRow): boolean {
 </script>
 
 <template>
-    <aside class="lg:sticky lg:top-16">
+    <aside
+        :class="cn(layout === 'pane' && 'max-sm:hidden lg:sticky lg:top-16')"
+    >
         <div
             v-if="!selected"
             class="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-9 text-fg-subtle"
@@ -76,17 +94,30 @@ function canBenchmark(row: ActionRequestRow): boolean {
         </div>
         <div
             v-else
-            class="overflow-hidden rounded-xl border border-border bg-card"
+            :class="
+                cn(
+                    'overflow-hidden rounded-xl border border-border bg-card',
+                    layout === 'sheet' &&
+                        'overflow-visible rounded-none border-0',
+                )
+            "
         >
             <div class="flex flex-col gap-1.5 border-b border-border p-4">
-                <div class="flex items-center justify-between">
+                <div
+                    :class="
+                        cn(
+                            'flex items-center justify-between',
+                            layout === 'sheet' && 'pr-10',
+                        )
+                    "
+                >
                     <span class="font-mono-tabular text-[11px] text-fg-subtle"
                         >act_{{ selected.id }}</span
                     >
                     <StatusPill :status="selected.status" />
                 </div>
                 <h2
-                    class="font-serif text-[22px] leading-tight text-foreground italic"
+                    class="font-serif text-[22px] leading-tight text-foreground italic max-sm:break-words"
                     data-action-title
                 >
                     {{ payloadTitle(selected) }}
@@ -346,7 +377,9 @@ function canBenchmark(row: ActionRequestRow): boolean {
 
                 <div
                     v-if="selected.status === 'pending'"
-                    class="mt-1 flex gap-2"
+                    :class="
+                        cn('mt-1 flex gap-2', layout === 'sheet' && pinnedBar)
+                    "
                 >
                     <Button
                         class="flex-1"
@@ -363,14 +396,20 @@ function canBenchmark(row: ActionRequestRow): boolean {
                         Decline
                     </Button>
                 </div>
-                <Button
+                <div
                     v-else-if="selected.status === 'failed' && isAdmin"
-                    variant="outline"
-                    data-action-retry
-                    @click="emit('retry', selected)"
+                    :class="
+                        cn('flex flex-col', layout === 'sheet' && pinnedBar)
+                    "
                 >
-                    Retry
-                </Button>
+                    <Button
+                        variant="outline"
+                        data-action-retry
+                        @click="emit('retry', selected)"
+                    >
+                        Retry
+                    </Button>
+                </div>
             </div>
         </div>
     </aside>

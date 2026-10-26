@@ -8,6 +8,7 @@ import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useAiChat } from '@/composables/useAiChat';
 import { useCan } from '@/composables/useCan';
 import { useCommandPalette } from '@/composables/useCommandPalette';
 import type { BreadcrumbItem } from '@/types';
@@ -24,12 +25,16 @@ withDefaults(
 const palette = useCommandPalette();
 const page = usePage();
 const { isAdmin } = useCan();
+const { openChat } = useAiChat();
 
 const unreadNotifications = computed<number>(
     () => page.props.nav?.unreadNotifications ?? 0,
 );
 
 const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
+
+/** The chat page already shows the chat; the phone sheet would stack a second one over it. */
+const onChatPage = computed(() => page.component === 'AI/Chat');
 </script>
 
 <template>
@@ -100,13 +105,24 @@ const aiEnabled = computed(() => Boolean(page.props.ai?.enabled));
                 as-child
                 variant="ghost"
                 size="icon"
-                class="size-8"
+                class="size-8 max-sm:hidden"
                 title="AI assistant"
                 data-header-ai-chat
             >
                 <Link :href="AIChatController.index.url()">
                     <Sparkles class="size-4" />
                 </Link>
+            </Button>
+            <Button
+                v-if="aiEnabled && isAdmin && !onChatPage"
+                variant="ghost"
+                size="icon"
+                class="size-10 sm:hidden"
+                aria-label="AI assistant"
+                data-header-ai-chat-sheet
+                @click="openChat()"
+            >
+                <Sparkles class="size-4" />
             </Button>
             <ConnectionStatusIndicator />
         </div>

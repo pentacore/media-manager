@@ -75,7 +75,7 @@ const alignClasses = {
             data-page-header-actions
             :class="
                 cn(
-                    'flex flex-wrap items-center gap-2 sm:flex-nowrap',
+                    'flex flex-wrap items-center gap-2 sm:flex-nowrap touch:gap-y-3',
                     props.actionsClass,
                 )
             "
@@ -83,7 +83,7 @@ const alignClasses = {
             <div
                 v-if="$slots.filters"
                 data-page-header-filters
-                class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:contents"
+                class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:contents touch:gap-y-3"
             >
                 <slot name="filters" />
             </div>

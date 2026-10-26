@@ -11,6 +11,7 @@ import {
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiChatWidth } from '@/composables/useAiChatWidth';
 import { useCan } from '@/composables/useCan';
+import { useVisualViewport } from '@/composables/useVisualViewport';
 import { cn } from '@/lib/utils';
 import ChatPanel from './ai/ChatPanel.vue';
 
@@ -36,9 +37,32 @@ const {
 /** Below `sm` the sheet stays full-width, so the pixel width doesn't apply. */
 const isResizable = useMediaQuery('(min-width: 640px)');
 
-const contentStyle = computed(() =>
-    isResizable.value ? { width: `${width.value}px` } : undefined,
-);
+/** A touch screen has an on-screen keyboard, at any width (a phone in landscape). */
+const isCoarsePointer = useMediaQuery('(pointer: coarse)');
+
+const { height: visibleHeight, offsetTop: visibleTop } = useVisualViewport();
+
+/**
+ * From `sm` the sheet is resizable; below `sm` it is full width. Below `sm`,
+ * and on any touch screen, it fills the *visible* viewport, so the on-screen
+ * keyboard shrinks it and the composer stays above the keyboard. A desktop
+ * with a mouse keeps the window-tall sheet.
+ */
+const contentStyle = computed(() => {
+    const size = isResizable.value ? { width: `${width.value}px` } : {};
+    const followsKeyboard = !isResizable.value || isCoarsePointer.value;
+
+    if (!followsKeyboard || visibleHeight.value === null) {
+        return isResizable.value ? size : undefined;
+    }
+
+    return {
+        ...size,
+        top: `${visibleTop.value}px`,
+        bottom: 'auto',
+        height: `${visibleHeight.value}px`,
+    };
+});
 </script>
 
 <template>
@@ -46,12 +70,15 @@ const contentStyle = computed(() =>
         <SheetContent
             side="right"
             :style="contentStyle"
-            class="flex w-full flex-col gap-0 p-0 sm:max-w-none"
+            class="flex w-full flex-col gap-0 p-0 sm:max-w-none max-sm:[&>[data-sheet-close]]:absolute"
         >
             <SheetTitle class="sr-only">AI Assistant</SheetTitle>
-            <SheetDescription class="sr-only">
+            <SheetDescription v-if="isResizable" class="sr-only">
                 Chat with MediaAgent. Press Cmd or Ctrl + J to toggle. Drag the
                 left edge to resize.
+            </SheetDescription>
+            <SheetDescription v-else class="sr-only">
+                Chat with MediaAgent.
             </SheetDescription>
             <div
                 v-if="isResizable"

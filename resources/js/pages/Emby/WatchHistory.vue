@@ -7,6 +7,7 @@ import {
     InitialsAvatar,
     OpenInServiceButton,
     PageHeader,
+    PhoneCardList,
     Pill,
     StatCard,
     SvcChip,
@@ -371,7 +372,9 @@ function currentFilter(): string {
         </PageHeader>
 
         <!-- Stats -->
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div
+            class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-2 xl:grid-cols-4"
+        >
             <StatCard
                 label="Total watch time"
                 :value="`${totalsView.hours.toFixed(1)}h`"
@@ -388,7 +391,7 @@ function currentFilter(): string {
                 hint="≥90% counted as complete"
             />
             <div
-                class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5"
+                class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5 max-sm:min-h-0 max-sm:min-w-0 max-sm:p-3.5"
             >
                 <span
                     class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
@@ -402,8 +405,10 @@ function currentFilter(): string {
                         :name="totalsView.topUser.name"
                         :size="32"
                     />
-                    <div>
-                        <div class="text-[15px] font-semibold">
+                    <div class="max-sm:min-w-0">
+                        <div
+                            class="text-[15px] font-semibold max-sm:break-words"
+                        >
                             {{ totalsView.topUser.name }}
                         </div>
                         <div
@@ -432,10 +437,13 @@ function currentFilter(): string {
         </div>
 
         <!-- Table -->
-        <div class="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            :class="{ 'max-sm:hidden': visibleActivities.length > 0 }"
+        >
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse text-[13px]">
-                    <thead>
+                    <thead class="max-sm:hidden">
                         <tr>
                             <th
                                 v-for="h in [
@@ -568,6 +576,105 @@ function currentFilter(): string {
                 </table>
             </div>
         </div>
+
+        <PhoneCardList
+            v-if="visibleActivities.length > 0"
+            :items="visibleActivities"
+            :item-key="(activity) => activity.id"
+            label="Watch history"
+            data-watch-cards
+        >
+            <template #card="{ item: activity }">
+                <div class="flex flex-col gap-2" :data-watch-card="activity.id">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-medium break-words">
+                                {{ activity.media_title ?? '—' }}
+                            </div>
+                            <div
+                                v-if="activity.series_title"
+                                class="text-[11.5px] break-words text-muted-foreground"
+                            >
+                                {{ activity.series_title }}
+                            </div>
+                        </div>
+                        <Pill v-if="activity.media_type">{{
+                            activity.media_type
+                        }}</Pill>
+                        <span
+                            v-else
+                            class="text-fg-subtle"
+                            :data-watch-card-no-type="activity.id"
+                            >—</span
+                        >
+                    </div>
+                    <div
+                        class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground"
+                    >
+                        <span class="flex items-center gap-1.5">
+                            <InitialsAvatar
+                                :name="activity.emby_username ?? '?'"
+                                :size="18"
+                            />
+                            {{ activity.emby_username ?? '—' }}
+                        </span>
+                        <TimeStamp
+                            :iso="activity.created_at"
+                            class="font-mono-tabular text-[11.5px]"
+                        />
+                        <span class="font-mono-tabular">{{
+                            ticksToText(activity.play_position)
+                        }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div
+                            class="h-1 flex-1 overflow-hidden rounded-full bg-bg-elev"
+                        >
+                            <div
+                                :class="[
+                                    'h-full rounded-full',
+                                    completionPct(activity) < 50
+                                        ? 'bg-warning'
+                                        : 'bg-accent',
+                                ]"
+                                :style="{
+                                    width: `${completionPct(activity)}%`,
+                                }"
+                            />
+                        </div>
+                        <span
+                            class="font-mono-tabular w-10 text-right text-[11.5px]"
+                            >{{ Math.round(completionPct(activity)) }}%</span
+                        >
+                    </div>
+                    <div
+                        v-if="activity.can_toggle_played === true"
+                        class="flex justify-end gap-2"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-9 text-xs"
+                            :disabled="togglingPlayed === activity.id"
+                            :data-watch-card-played="activity.id"
+                            @click="setPlayed(activity, true)"
+                        >
+                            Mark played
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-9 text-xs"
+                            :disabled="togglingPlayed === activity.id"
+                            :data-watch-card-unplayed="activity.id"
+                            @click="setPlayed(activity, false)"
+                        >
+                            Mark unplayed
+                        </Button>
+                    </div>
+                </div>
+            </template>
+        </PhoneCardList>
 
         <!-- Pagination -->
         <div

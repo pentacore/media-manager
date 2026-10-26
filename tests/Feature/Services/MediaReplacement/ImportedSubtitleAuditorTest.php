@@ -152,7 +152,8 @@ test('a tagged import missing a required language dispatches a replacement', fun
     Notification::assertSentTo(
         $this->admin,
         MediaReplacementStatusChanged::class,
-        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'requested a replacement (automatic selection)'),
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'requested a replacement (automatic selection)')
+            && $notification->url === route('actions.requests.index', ['request' => $actionRequest->id], absolute: false),
     );
 });
 
@@ -294,7 +295,8 @@ test('a disabled replacement action is not reported as a successful request', fu
     Notification::assertSentTo(
         $this->admin,
         MediaReplacementStatusChanged::class,
-        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'missing or disabled'),
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'missing or disabled')
+            && $notification->url === '/actions/requests',
     );
     Notification::assertNotSentTo(
         $this->admin,

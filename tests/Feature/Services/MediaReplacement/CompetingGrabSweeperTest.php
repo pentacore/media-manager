@@ -257,7 +257,8 @@ test('it notifies admins about each competing grab it removed', function (): voi
         fn (MediaReplacementStatusChanged $notification): bool => $notification->service === 'sonarr'
             && $notification->level === 'warning'
             && $notification->title === 'Trusted.Anime.S01E01.CR'
-            && str_contains($notification->message, 'Random.Anime.S01E01.OTHER'),
+            && str_contains($notification->message, 'Random.Anime.S01E01.OTHER')
+            && $notification->url === route('actions.requests.index', ['request' => $mediaReplacementAttempt->action_request_id], absolute: false),
     );
 });
 

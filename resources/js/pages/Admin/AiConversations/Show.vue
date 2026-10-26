@@ -22,6 +22,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 
 interface TranscriptToolCall {
@@ -238,6 +239,7 @@ function formatDate(iso: string | null): string {
                     size="sm"
                     variant="destructive"
                     class="h-8 gap-1.5 text-xs"
+                    data-conversation-delete
                     @click="confirming = true"
                 >
                     <Trash2 class="size-3.5" />
@@ -381,7 +383,15 @@ function formatDate(iso: string | null): string {
         </div>
 
         <Dialog v-model:open="confirming">
-            <DialogContent>
+            <DialogContent
+                @close-auto-focus="
+                    (event) =>
+                        returnFocusToPageHeaderMenu(
+                            event,
+                            '[data-conversation-delete]',
+                        )
+                "
+            >
                 <DialogHeader>
                     <DialogTitle>Delete this conversation?</DialogTitle>
                     <DialogDescription>

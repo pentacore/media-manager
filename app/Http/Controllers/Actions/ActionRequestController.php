@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -28,6 +30,17 @@ use Inertia\Response;
 
 class ActionRequestController extends Controller
 {
+    /**
+     * The relations every Action Queue row is rendered with.
+     *
+     * @var list<string>
+     */
+    private const array ROW_RELATIONS = [
+        'webhookEvent.serviceConnection:id,name,type',
+        'approvedByUser:id,name',
+        'mediaReplacementAttempt:id,action_request_id,status,failure_reason',
+    ];
+
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
@@ -35,11 +48,7 @@ class ActionRequestController extends Controller
         $batchId = $request->integer('subtitle_audit_batch');
         $batchId = $batchId > 0 ? $batchId : null;
 
-        $builder = ActionRequest::with([
-            'webhookEvent.serviceConnection:id,name,type',
-            'approvedByUser:id,name',
-            'mediaReplacementAttempt:id,action_request_id,status,failure_reason',
-        ])->latest();
+        $builder = ActionRequest::with(self::ROW_RELATIONS)->latest();
 
         if ($status !== '') {
             $builder->where('status', $status);
@@ -50,8 +59,9 @@ class ActionRequestController extends Controller
         }
 
         // A batch can be large and is approved as a whole, so its filtered
-        // view pages as many rows as one bulk review takes.
-        $lengthAwarePaginator = $builder->paginate($batchId === null ? 25 : 100)->withQueryString();
+        // view pages as many rows as one bulk review takes. A deep link is
+        // one-shot: the page links never carry `?request=`.
+        $lengthAwarePaginator = $builder->paginate($batchId === null ? 25 : 100)->appends(Arr::except($request->query(), ['request', 'page']));
 
         return Inertia::render('Actions/Index', [
             'requests' => [
@@ -74,6 +84,8 @@ class ActionRequestController extends Controller
             // The filtered batch, for the episodes left to pick by hand; null
             // without the filter or once the batch is gone.
             'subtitleAuditBatch' => fn (): ?array => $this->subtitleAuditBatch($batchId),
+            // Lazy: the live status-count reloads skip it unless they name it.
+            'preselectedRequest' => fn (): ?array => $this->preselectedOffPage($request, $preselect, $lengthAwarePaginator->getCollection()),
         ]);
     }
 
@@ -85,6 +97,25 @@ class ActionRequestController extends Controller
         $subtitleAuditBatch = $batchId === null ? null : SubtitleAuditBatch::query()->find($batchId);
 
         return $subtitleAuditBatch instanceof SubtitleAuditBatch ? SubtitleAuditBatchCard::present($subtitleAuditBatch) : null;
+    }
+
+    /**
+     * The deep-linked request when the listed page does not hold it (more than
+     * a page of newer requests, or another status tab), in the listed rows'
+     * shape, so the page can still open it. Null when it is listed or missing.
+     *
+     * @param  Collection<int, ActionRequest>  $listed
+     * @return array<string, mixed>|null
+     */
+    private function preselectedOffPage(Request $request, int $preselect, Collection $listed): ?array
+    {
+        if ($preselect <= 0 || $listed->contains('id', $preselect)) {
+            return null;
+        }
+
+        $actionRequest = ActionRequest::with(self::ROW_RELATIONS)->find($preselect);
+
+        return $actionRequest === null ? null : new ActionRequestResource($actionRequest)->toArray($request);
     }
 
     /**

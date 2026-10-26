@@ -272,20 +272,20 @@ function openTitle(item: DiscoverTitle): void {
                 <button
                     v-if="query"
                     type="button"
-                    class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                    class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                     aria-label="Clear search"
                     @click="clearQuery"
                 >
                     <X class="size-3.5" />
                 </button>
                 <kbd
-                    class="font-mono-tabular flex items-center gap-0.5 rounded border border-border bg-card px-1 py-px text-[10px] text-muted-foreground"
+                    class="font-mono-tabular flex items-center gap-0.5 rounded border border-border bg-card px-1 py-px text-[10px] text-muted-foreground max-sm:hidden"
                 >
                     <Command class="size-2.5" />K
                 </kbd>
             </form>
 
-            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+            <div class="mt-3 flex flex-wrap items-center gap-1.5 touch:gap-y-3">
                 <template v-if="can('manage-library')">
                     <button
                         v-for="s in SCOPES"
@@ -294,7 +294,7 @@ function openTitle(item: DiscoverTitle): void {
                         data-search-scope
                         :class="
                             cn(
-                                'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                                'touch-target inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
                                 scope === s.id
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -457,7 +457,7 @@ function openTitle(item: DiscoverTitle): void {
                             :href="sonarrSeriesUrl(series.title_slug)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                            class="touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
                         >
                             <ExternalLink class="size-3" />
                         </a>
@@ -499,7 +499,7 @@ function openTitle(item: DiscoverTitle): void {
                             :href="radarrMovieUrl(movie.title_slug)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                            class="touch-target absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
                         >
                             <ExternalLink class="size-3" />
                         </a>

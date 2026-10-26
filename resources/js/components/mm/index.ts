@@ -20,3 +20,4 @@ export { default as Heatmap } from './Heatmap.vue';
 export { default as BreakdownMeter } from './BreakdownMeter.vue';
 export { default as PageHeader } from './PageHeader.vue';
 export { default as SettingsRow } from './SettingsRow.vue';
+export { default as PhoneCardList } from './PhoneCardList.vue';
