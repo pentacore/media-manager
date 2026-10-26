@@ -6,6 +6,7 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\AiUsageKind;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
+use App\Models\ActivityLog;
 use App\Models\AgentDecision;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
@@ -172,6 +173,10 @@ function mobileLayoutFakeServices(): void
     test()->seed(ActionTypeConfigSeeder::class);
     NotificationDestination::factory()->discord()->count(2)->create();
     EmbyUserLink::factory()->create(['emby_user_id' => 'emby-1', 'emby_username' => 'Alice']);
+    // The activity log's rows: one short, one with a long unbroken path the
+    // phone row must wrap and break.
+    ActivityLog::factory()->create(['action' => 'sabnzbd.queue.paused', 'description' => 'Paused the SABnzbd queue.']);
+    ActivityLog::factory()->create(['action' => 'media.library.episode.imported', 'description' => 'Imported /data/media/tv/'.str_repeat('Example-Unbroken-Path-Segment-', 4).'S01E01.mkv']);
 }
 
 /**
@@ -361,6 +366,7 @@ function mobileLayoutMemberPages(): array
         'service health' => ['monitoring.service-health', '[data-run-health-checks]'],
         // The third value is a deferred panel the settle waits for: the hour heatmap.
         'statistics' => ['statistics.index', '[data-filter-strip]', '[data-statistics-heatmap]'],
+        'activity log' => ['activity-log', '[data-filter-strip]', '[data-activity-feed]'],
         'action queue' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
         'notifications' => ['notifications.index', null],
         'profile' => ['profile.edit', null],
@@ -490,6 +496,8 @@ function mobileLayoutTouchPages(): array
         'replacement attempts' => ['admin.media-replacement.attempts.index', [], null],
         'replacement attempt' => ['admin.media-replacement.attempts.show', ['mediaReplacementAttempt' => 901], null],
         'operational statistics' => ['admin.statistics.index', [], null],
+        'activity log' => ['activity-log', [], null],
+        'statistics' => ['statistics.index', [], '[data-statistics-heatmap]'],
         'server' => ['admin.servers.show', ['server' => 901], null],
         'whisparr' => ['media.whisparr.index', [], null],
         'whisparr scene' => ['media.whisparr.show', ['id' => 11], '[data-whisparr-show-title]'],
@@ -549,7 +557,6 @@ function mobileLayoutPendingRouteNames(): array
         // Fortify's auth pages (auth layout, no <main>): Task 7.
         'verification.notice',
         'password.confirm',
-        'activity-log',
         'appearance.edit',
         'media.series.create',
         'media.movies.create',

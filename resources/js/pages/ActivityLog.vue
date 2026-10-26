@@ -529,7 +529,7 @@ function formatAuditValue(value: unknown): string {
                     type="button"
                     :class="
                         cn(
-                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors touch:h-10 touch:min-w-10 touch:justify-center',
                             actorFilter === actor
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -547,7 +547,7 @@ function formatAuditValue(value: unknown): string {
                     type="button"
                     :class="
                         cn(
-                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors touch:h-10 touch:min-w-10 touch:justify-center',
                             filters.service_id === null
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -563,7 +563,7 @@ function formatAuditValue(value: unknown): string {
                     type="button"
                     :class="
                         cn(
-                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors',
+                            'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium transition-colors touch:h-10 touch:min-w-10 touch:justify-center',
                             filters.service_id === service.id
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -591,7 +591,7 @@ function formatAuditValue(value: unknown): string {
                         :data-category-option="value"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium capitalize transition-colors',
+                                'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium capitalize transition-colors touch:h-10 touch:min-w-10 touch:justify-center',
                                 (filters.category ?? 'all') === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -643,11 +643,13 @@ function formatAuditValue(value: unknown): string {
                     i < filteredLogs.length - 1 ? 'border-b border-border' : ''
                 "
             >
-                <div class="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+                <div
+                    class="flex items-center gap-3 px-4 py-2.5 text-[13px] max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1"
+                >
                     <TimeStamp
                         :iso="log.created_at"
                         mode="datetime"
-                        class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle"
+                        class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle max-sm:w-auto"
                     />
                     <span
                         v-if="!log.user_name"
@@ -655,7 +657,10 @@ function formatAuditValue(value: unknown): string {
                     >
                         <Cpu class="size-3" />system
                     </span>
-                    <span v-else class="flex w-32 items-center gap-2 truncate">
+                    <span
+                        v-else
+                        class="flex w-32 items-center gap-2 truncate max-sm:w-auto"
+                    >
                         <InitialsAvatar :name="log.user_name" :size="20" />
                         <span class="truncate text-[12.5px]">{{
                             log.user_name
@@ -668,13 +673,14 @@ function formatAuditValue(value: unknown): string {
                     />
                     <span v-else class="text-[12px] text-fg-subtle">—</span>
                     <span
-                        class="min-w-[160px] text-[12px] text-foreground"
+                        class="min-w-[160px] text-[12px] text-foreground max-sm:min-w-0"
                         :title="log.action"
                     >
                         {{ humanizeAction(log.action) }}
                     </span>
                     <span
-                        class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"
+                        class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground max-sm:order-last max-sm:basis-full max-sm:wrap-anywhere max-sm:whitespace-normal"
+                        data-activity-description
                     >
                         {{ log.description }}
                     </span>
@@ -780,7 +786,7 @@ function formatAuditValue(value: unknown): string {
                 <span class="font-mono-tabular">{{ logs.meta.total }}</span>
                 entries
             </p>
-            <div class="flex flex-wrap gap-1">
+            <div class="flex flex-wrap gap-1 touch:gap-3">
                 <Button
                     v-for="link in logs.links"
                     :key="link.label"

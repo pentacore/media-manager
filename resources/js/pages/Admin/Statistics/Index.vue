@@ -127,7 +127,7 @@ const aiCostTotal = computed(() =>
             />
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="mb-4 text-sm font-semibold">Webhooks over time</h2>
                 <BarChart :data="webhookBars" :height="160" />
@@ -143,7 +143,7 @@ const aiCostTotal = computed(() =>
             </div>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <BreakdownMeter
                 title="Webhooks by service"
                 :rows="webhooksByService"
@@ -184,7 +184,9 @@ const aiCostTotal = computed(() =>
                         :key="row.connection"
                         class="border-t border-border"
                     >
-                        <td class="py-2">{{ row.connection }}</td>
+                        <td class="py-2 max-lg:wrap-anywhere">
+                            {{ row.connection }}
+                        </td>
                         <td class="py-2">
                             <div class="flex items-center gap-2">
                                 <div
@@ -214,7 +216,7 @@ const aiCostTotal = computed(() =>
             </p>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="mb-4 text-sm font-semibold">Disk free (avg)</h2>
                 <BarChart :data="diskBars" :height="140" />
