@@ -24,6 +24,12 @@ export interface UseRealtimeListOptions<T, TPayload = T> {
      * listed is always added.
      */
     replaces?: (current: T, incoming: T) => boolean;
+    /**
+     * Whether an event that arrives while paused counts toward `staleCount`
+     * (default: always). A list paused on a view that no event can ever join
+     * (a batch's own rows) returns false, so no "N new" notice is raised.
+     */
+    countsAsStale?: (payload: TPayload) => boolean;
 }
 
 export interface UseRealtimeList<T> {
@@ -55,6 +61,7 @@ export function useRealtimeList<T, TPayload = T>({
     prepend = true,
     map,
     replaces,
+    countsAsStale,
 }: UseRealtimeListOptions<T, TPayload>): UseRealtimeList<T> {
     const { acquirePrivateChannel } = useWebSocket();
     const channels: string[] =
@@ -97,7 +104,9 @@ export function useRealtimeList<T, TPayload = T>({
 
     function receive(payload: TPayload): void {
         if (isPaused.value) {
-            staleCount.value += 1;
+            if (countsAsStale === undefined || countsAsStale(payload)) {
+                staleCount.value += 1;
+            }
 
             return;
         }

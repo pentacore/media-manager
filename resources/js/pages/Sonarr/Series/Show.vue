@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { onMounted, ref, watch } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { InteractiveSearchDialog } from '@/components/library-actions';
@@ -104,6 +104,35 @@ watch(
     },
     { immediate: true },
 );
+
+/**
+ * Closing the dialog drops the deep-link params from the URL, as a client-side
+ * replace (no request, no remount), so a reload does not reopen it and
+ * following the same link again changes `page.url` and reopens it.
+ */
+watch(replaceDialogOpen, (open) => {
+    if (open) {
+        return;
+    }
+
+    const url = new URL(page.url, 'http://localhost');
+
+    if (
+        !url.searchParams.has('replace_season') &&
+        !url.searchParams.has('replace_episode')
+    ) {
+        return;
+    }
+
+    url.searchParams.delete('replace_season');
+    url.searchParams.delete('replace_episode');
+
+    router.replace({
+        url: url.pathname + url.search + url.hash,
+        preserveState: true,
+        preserveScroll: true,
+    });
+});
 
 const interactiveOpen = ref(false);
 const interactive = ref<{
