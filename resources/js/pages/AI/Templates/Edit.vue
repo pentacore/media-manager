@@ -398,7 +398,7 @@ function save(): void {
                 <label
                     v-for="group in toolGroupOptions"
                     :key="group.value"
-                    class="flex items-center gap-2 text-[13px]"
+                    class="flex items-center gap-2 text-[13px] touch:min-h-10"
                 >
                     <Checkbox
                         :model-value="form.tool_groups.includes(group.value)"

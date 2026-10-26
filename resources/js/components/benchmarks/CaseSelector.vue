@@ -87,7 +87,7 @@ function toggleTask(cases: BenchmarkRunCaseOption[]): void {
             :data-benchmark-case-group="group.task.value"
         >
             <label
-                class="flex items-center gap-2 border-b border-border px-3 py-2 text-[12.5px] font-semibold"
+                class="flex items-center gap-2 border-b border-border px-3 py-2 text-[12.5px] font-semibold touch:min-h-10"
             >
                 <input
                     type="checkbox"
@@ -102,7 +102,7 @@ function toggleTask(cases: BenchmarkRunCaseOption[]): void {
                 <label
                     v-for="benchmarkCase in group.cases"
                     :key="benchmarkCase.id"
-                    class="flex items-center gap-2 text-[13px]"
+                    class="flex items-center gap-2 text-[13px] touch:min-h-10"
                 >
                     <input
                         v-model="selectedCaseIds"

@@ -206,7 +206,7 @@ function submitNew(): void {
 
         <section class="grid gap-2">
             <h2 class="text-[13px] font-semibold">Add a variable</h2>
-            <div class="flex flex-wrap gap-1">
+            <div class="flex flex-wrap gap-1 touch:gap-3">
                 <Button
                     v-for="option in types"
                     :key="option.value"

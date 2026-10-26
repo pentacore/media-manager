@@ -5,6 +5,12 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
+use App\Models\AiModelPrice;
+use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
+use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
+use App\Models\ChatTemplate;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\NotificationDestination;
@@ -142,14 +148,33 @@ function mobileLayoutFakeServices(): void
     // lists this long title (the factory's random action and series title
     // used to show it only sometimes, which made the statistics row flaky).
     EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'action' => 'played']);
-    // The admin tables' rows: action rules, notification destinations, an
-    // Emby link and an AI conversation. The fake runs before the test's own
-    // user exists, so the link and the conversation get a user of their own.
+    // The admin tables' rows: action rules, notification destinations and an
+    // Emby link. The fake runs before the test's own user exists, so the link
+    // gets a user of its own; the AI conversation is the admin's own
+    // (mobileLayoutSeedDetailModels()).
     test()->seed(ActionTypeConfigSeeder::class);
     NotificationDestination::factory()->discord()->count(2)->create();
     EmbyUserLink::factory()->create(['emby_user_id' => 'emby-1', 'emby_username' => 'Alice']);
-    $participant = User::factory()->create(['name' => 'Example Chat User']);
-    DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $participant->getMorphClass(), 'participant_id' => $participant->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
+}
+
+/**
+ * The models the admin detail rows name by id (901 and up, clear of the ids
+ * the factories hand out): a benchmark case, two finished runs on it, a
+ * schedule, a chat template and an AI conversation, all owned by $admin.
+ * Two prices and three usage records fill the AI prices table and the AI
+ * usage invocations table, so those rows measure their row controls.
+ */
+function mobileLayoutSeedDetailModels(User $admin): void
+{
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'example-model-with-a-very-long-unbroken-name-0123456789']);
+    AiUsageRecord::factory()->count(3)->create(['prompt_text' => 'Find the example series and tell me about it.']);
+    BenchmarkCase::factory()->create(['id' => 901, 'name' => 'Example stuck download case']);
+    BenchmarkRun::factory()->completed()->create(['id' => 901, 'name' => 'Example baseline run', 'case_ids' => [901]]);
+    BenchmarkRun::factory()->completed()->create(['id' => 902, 'name' => 'Example candidate run', 'case_ids' => [901]]);
+    BenchmarkSchedule::factory()->create(['id' => 901, 'name' => 'Example nightly schedule', 'created_by' => $admin->id]);
+    ChatTemplate::factory()->create(['id' => 901, 'name' => 'Example stuck downloads check', 'user_id' => $admin->id]);
+    DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $admin->getMorphClass(), 'participant_id' => $admin->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
 }
 
 /**
@@ -314,6 +339,23 @@ function mobileLayoutAdminPages(): array
         'emby links' => ['emby.links.index', null],
         'notification destinations' => ['admin.notification-destinations.index', '[data-destination-add]'],
         'ai conversations' => ['admin.ai-conversations.index', null],
+        'ai models' => ['admin.ai-models.index', null],
+        'ai prices' => ['admin.ai-prices.index', '[data-create-price]'],
+        'ai conversation' => ['admin.ai-conversations.show', null, null, ['conversation' => '01900000-0000-7000-8000-000000000901']],
+        'benchmark runs' => ['admin.benchmarks.runs.index', '[data-benchmark-run-new]'],
+        'new benchmark run' => ['admin.benchmarks.runs.create', null],
+        'benchmark run' => ['admin.benchmarks.runs.show', null, null, ['benchmarkRun' => 901]],
+        // The request rebuilds run_ids from the comma list in `runs`; a bad
+        // list redirects to the runs index, which has no [data-compare-page].
+        'benchmark comparison' => ['admin.benchmarks.compare.show', null, '[data-compare-page]', ['runs' => '901,902']],
+        'benchmark cases' => ['admin.benchmarks.cases.index', '[data-benchmark-case-new]'],
+        'new benchmark case' => ['admin.benchmarks.cases.create', null],
+        'benchmark case' => ['admin.benchmarks.cases.edit', null, null, ['benchmarkCase' => 901]],
+        'new benchmark schedule' => ['admin.benchmarks.schedules.create', null],
+        'benchmark schedule' => ['admin.benchmarks.schedules.edit', null, null, ['benchmarkSchedule' => 901]],
+        'chat templates' => ['ai.templates.index', '[data-template-new]'],
+        'new chat template' => ['ai.templates.create', null],
+        'chat template' => ['ai.templates.edit', null, null, ['chatTemplate' => 901]],
         'ai chat' => ['ai.chat', '[data-chat-options]'],
         'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
         'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
@@ -355,6 +397,24 @@ function mobileLayoutTouchPages(): array
         'benchmark schedules' => ['admin.benchmarks.schedules.index', [], null],
         'ai conversations' => ['admin.ai-conversations.index', [], null],
         'emby links' => ['emby.links.index', [], null],
+        'ai settings' => ['admin.ai-settings.index', [], null],
+        'decision agent' => ['admin.decision-agent.index', [], null],
+        'ai usage' => ['admin.ai-usage.index', [], '[data-classification-gates]'],
+        'ai models' => ['admin.ai-models.index', [], null],
+        'ai prices' => ['admin.ai-prices.index', [], null],
+        'ai conversation' => ['admin.ai-conversations.show', ['conversation' => '01900000-0000-7000-8000-000000000901'], null],
+        'benchmark runs' => ['admin.benchmarks.runs.index', [], null],
+        'new benchmark run' => ['admin.benchmarks.runs.create', [], null],
+        'benchmark run' => ['admin.benchmarks.runs.show', ['benchmarkRun' => 901], null],
+        'benchmark comparison' => ['admin.benchmarks.compare.show', ['runs' => '901,902'], '[data-compare-page]'],
+        'benchmark cases' => ['admin.benchmarks.cases.index', [], null],
+        'new benchmark case' => ['admin.benchmarks.cases.create', [], null],
+        'benchmark case' => ['admin.benchmarks.cases.edit', ['benchmarkCase' => 901], null],
+        'new benchmark schedule' => ['admin.benchmarks.schedules.create', [], null],
+        'benchmark schedule' => ['admin.benchmarks.schedules.edit', ['benchmarkSchedule' => 901], null],
+        'chat templates' => ['ai.templates.index', [], null],
+        'new chat template' => ['ai.templates.create', [], null],
+        'chat template' => ['ai.templates.edit', ['chatTemplate' => 901], null],
     ];
 }
 
@@ -411,27 +471,12 @@ function mobileLayoutPendingRouteNames(): array
         // Fortify's auth pages (auth layout, no <main>): Task 7.
         'verification.notice',
         'password.confirm',
-        'ai.templates.index',
-        'ai.templates.create',
-        'ai.templates.edit',
         'activity-log',
         'appearance.edit',
         'admin.connections.create',
         'admin.connections.edit',
         'admin.media-replacement.attempts.index',
         'admin.media-replacement.attempts.show',
-        'admin.ai-models.index',
-        'admin.benchmarks.cases.index',
-        'admin.benchmarks.cases.create',
-        'admin.benchmarks.cases.edit',
-        'admin.benchmarks.compare.show',
-        'admin.benchmarks.schedules.create',
-        'admin.benchmarks.schedules.edit',
-        'admin.benchmarks.runs.index',
-        'admin.benchmarks.runs.create',
-        'admin.benchmarks.runs.show',
-        'admin.ai-conversations.show',
-        'admin.ai-prices.index',
         'admin.webhook-log.show',
         'admin.servers.show',
         'media.series.create',
@@ -504,7 +549,9 @@ test('a member page fits a phone screen', function (string $routeName, ?string $
 test('an admin page fits a phone screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
     config()->set('mediamanager.ai.enabled', true);
     mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->admin()->create(['name' => 'Example Admin']));
+    $admin = User::factory()->admin()->create(['name' => 'Example Admin']);
+    mobileLayoutSeedDetailModels($admin);
+    $this->actingAs($admin);
 
     mobileLayoutAssertPage(visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke(), $primary, $deferred);
 })->with('mobile layout admin pages');
@@ -522,7 +569,9 @@ test('a guest page fits a phone screen', function (string $routeName, ?string $p
 test('every control on a page is a 40 px target on a phone', function (string $routeName, array $parameters, ?string $deferred): void {
     config()->set('mediamanager.ai.enabled', true);
     mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->admin()->create(['name' => 'Example Admin']));
+    $admin = User::factory()->admin()->create(['name' => 'Example Admin']);
+    mobileLayoutSeedDetailModels($admin);
+    $this->actingAs($admin);
 
     $webpage = visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());

@@ -243,7 +243,7 @@ async function remove(run: BenchmarkRunRow): Promise<void> {
                             )
                         "
                     >
-                        <TableCell class="w-[1%]" @click.stop>
+                        <TableCell class="w-[1%] touch:pl-4" @click.stop>
                             <Checkbox
                                 :model-value="selected.includes(run.id)"
                                 :disabled="!run.comparable"
