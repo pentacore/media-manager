@@ -471,7 +471,9 @@
  * table wider than the phone squeeze it to a glyph. An empty-state
  * `colspan` cell is never sticky. The frame's scroll padding makes focus and
  * scrollIntoView() bring a cell into view beside the sticky column, not
- * under it.
+ * under it. The cell paints over the table's collapsed row dividers, so it
+ * draws its own (none under the last body row, as `last:border-b-0` and
+ * shadcn's TableBody do), and it takes the row's hover tint.
  */
 @utility sticky-first-column {
     @media (width < 40rem) {
@@ -483,7 +485,32 @@
             white-space: normal;
             overflow-wrap: anywhere;
             background-color: var(--color-card);
+            box-shadow:
+                inset -1px 0 0 var(--color-border),
+                inset 0 -1px 0 var(--color-border);
+        }
+
+        & tbody tr:last-child > td:first-child:not([colspan]) {
             box-shadow: inset -1px 0 0 var(--color-border);
+        }
+
+        @media (hover: hover) {
+            & tbody tr:hover > td:first-child:not([colspan]) {
+                background-image: linear-gradient(
+                    var(--color-bg-hover),
+                    var(--color-bg-hover)
+                );
+            }
+
+            &[data-slot='table']
+                tbody
+                tr:hover
+                > td:first-child:not([colspan]) {
+                background-image: linear-gradient(
+                    color-mix(in oklab, var(--color-muted) 50%, transparent),
+                    color-mix(in oklab, var(--color-muted) 50%, transparent)
+                );
+            }
         }
 
         & :is(th, td):first-child:not([colspan]) > * {

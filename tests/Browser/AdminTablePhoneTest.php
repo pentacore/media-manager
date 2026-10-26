@@ -54,7 +54,9 @@ function adminTablePhoneSeed(): User
 /**
  * Scrolls the table's frame fully right, then returns 'ok' or the first
  * failed condition: the frame scrolled, the first header and body cells sit
- * at the frame's left edge, and a tap on the first body cell lands in it.
+ * at the frame's left edge with an opaque background (painted on a canvas,
+ * so any colour space reads as alpha 255), and a tap on the first body cell
+ * lands in it.
  */
 function adminTableStickyScript(string $key): string
 {
@@ -81,6 +83,15 @@ function adminTableStickyScript(string $key): string
             const rect = cell.getBoundingClientRect();
             if (Math.abs(rect.left - left) > 1) {
                 return 'the first td left ' + rect.left + ' vs frame ' + left;
+            }
+            const alpha = (element) => {
+                const context = document.createElement('canvas').getContext('2d');
+                context.fillStyle = getComputedStyle(element).backgroundColor;
+                context.fillRect(0, 0, 1, 1);
+                return context.getImageData(0, 0, 1, 1).data[3];
+            };
+            if (alpha(head) !== 255 || alpha(cell) !== 255) {
+                return 'the sticky cells are not opaque: ' + getComputedStyle(head).backgroundColor + ' / ' + getComputedStyle(cell).backgroundColor;
             }
             const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
             if (!hit || !cell.contains(hit)) {
@@ -132,6 +143,15 @@ test('a control scrolled into view in an admin table lands beside the sticky col
     // The table sits inside a card, so the sticky column covers the frame's
     // centre: without the frame's scroll padding a centred control sits under it.
     $webpage->assertScript('(() => { const control = document.querySelector("[data-admin-table=\"emby-unlinked\"] [data-emby-link-trigger=\"emby-2\"]"); control.scrollIntoView({ block: "center", inline: "center" }); const rect = control.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return !!hit && control.contains(hit); })()', true);
+});
+
+test('an empty-state cell spanning the table is not sticky on a phone', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.servers.index', absolute: false))->on()->mobile()->assertNoSmoke();
+
+    $webpage->assertScript('getComputedStyle(document.querySelector("[data-admin-table=\"servers\"] th")).position', 'sticky')
+        ->assertScript('getComputedStyle(document.querySelector("[data-admin-table=\"servers\"] [data-server-empty]")).position', 'static');
 });
 
 test('admin tables keep a plain first column on desktop', function (): void {
