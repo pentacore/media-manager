@@ -644,12 +644,12 @@ function formatAuditValue(value: unknown): string {
                 "
             >
                 <div
-                    class="flex items-center gap-3 px-4 py-2.5 text-[13px] max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1"
+                    class="flex items-center gap-3 px-4 py-2.5 text-[13px] max-lg:flex-wrap max-lg:gap-x-2 max-lg:gap-y-1"
                 >
                     <TimeStamp
                         :iso="log.created_at"
                         mode="datetime"
-                        class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle max-sm:w-auto"
+                        class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle max-lg:w-auto"
                     />
                     <span
                         v-if="!log.user_name"
@@ -659,7 +659,7 @@ function formatAuditValue(value: unknown): string {
                     </span>
                     <span
                         v-else
-                        class="flex w-32 items-center gap-2 truncate max-sm:w-auto"
+                        class="flex w-32 items-center gap-2 truncate max-lg:w-auto"
                     >
                         <InitialsAvatar :name="log.user_name" :size="20" />
                         <span class="truncate text-[12.5px]">{{
@@ -670,16 +670,17 @@ function formatAuditValue(value: unknown): string {
                         v-if="log.service_name"
                         :id="svcId(log.service_name)"
                         :label="log.service_name"
+                        class="max-lg:min-w-0 max-lg:wrap-anywhere"
                     />
                     <span v-else class="text-[12px] text-fg-subtle">—</span>
                     <span
-                        class="min-w-[160px] text-[12px] text-foreground max-sm:min-w-0"
+                        class="min-w-[160px] text-[12px] text-foreground max-lg:min-w-0"
                         :title="log.action"
                     >
                         {{ humanizeAction(log.action) }}
                     </span>
                     <span
-                        class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground max-sm:order-last max-sm:basis-full max-sm:wrap-anywhere max-sm:whitespace-normal"
+                        class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground max-lg:order-last max-lg:basis-full max-lg:wrap-anywhere max-lg:whitespace-normal"
                         data-activity-description
                     >
                         {{ log.description }}

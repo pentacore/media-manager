@@ -50,11 +50,12 @@ test('an activity-log row stays one truncated line on desktop', function (): voi
 test('the busiest activity log fits a phone with every control a 40 px target', function (): void {
     $admin = User::factory()->admin()->create(['name' => 'Example Administrator With A Long Name']);
     $this->actingAs($admin);
-    foreach (['sonarr', 'radarr', 'sabnzbd', 'emby', 'seerr'] as $type) {
+    foreach (['radarr', 'sabnzbd', 'emby', 'seerr'] as $type) {
         ServiceConnection::factory()->{$type}()->create(['name' => 'Example '.ucfirst($type).' Connection']);
     }
 
-    $serviceConnection = ServiceConnection::query()->where('name', 'Example Sonarr Connection')->sole();
+    // A connection name with no break opportunity: the row's service chip must break it.
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create(['name' => 'ExampleUnbrokenConnectionNameThatRunsPastAPhone']);
     ActivityLog::factory()->for($admin)->count(118)->create(['action' => 'sabnzbd.queue.paused', 'description' => 'Paused the SABnzbd queue.', 'created_at' => now()->subHour()]);
     ActivityLog::factory()->for($admin)->create(['service_connection_id' => $serviceConnection->id, 'action' => 'media.library.episode.imported', 'created_at' => now()->subMinute(), 'description' => 'Imported /data/media/tv/'.str_repeat('Example-Unbroken-Path-Segment-', 4).'S01E01.mkv']);
     resolve(AuditLogger::class)->record('connection.updated', null, 'Updated Sonarr connection "Example".', [
@@ -77,7 +78,8 @@ test('the busiest activity log fits a phone with every control a 40 px target', 
         ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
         ->assertScript(phoneOverlapScript('main'), '')
         ->assertScript(phoneScrollSliverScript('main'), '')
-        ->assertScript(phoneSmallTargetsScript(), '');
+        ->assertScript(phoneSmallTargetsScript(), '')
+        ->assertScript('(() => { const chip = [...document.querySelectorAll("[data-activity-feed] span")].find((span) => span.textContent.trim() === "ExampleUnbrokenConnectionNameThatRunsPastAPhone"); const rect = chip.getBoundingClientRect(); return rect.width > 0 && rect.right <= window.innerWidth && rect.right <= document.querySelector("[data-activity-feed]").getBoundingClientRect().right && chip.scrollWidth <= chip.clientWidth; })()', true);
 });
 
 test('the statistics grids keep a long title inside their cards from 640 to 1023 px', function (int $width): void {
@@ -90,7 +92,7 @@ test('the statistics grids keep a long title inside their cards from 640 to 1023
 
     $webpage->assertScript('(() => { const grid = document.querySelector("[data-statistics-watch-grid]").getBoundingClientRect(); return [...document.querySelectorAll("[data-statistics-watch-grid] > *")].every((card) => card.getBoundingClientRect().right <= grid.right + 1); })()', true)
         ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
-})->with([640, 800, 1023]);
+})->with([640, 768, 800, 1023]);
 
 test('the busiest statistics page fits a phone and holds a long viewer name up to 1023 px', function (): void {
     $viewer = User::factory()->create(['name' => 'ExampleUnbrokenViewerNameThatRunsPastAPhoneScreen']);
@@ -109,7 +111,7 @@ test('the busiest statistics page fits a phone and holds a long viewer name up t
         ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
         ->assertScript(activityStatisticsWatchGridHoldsScript(), true);
 
-    foreach ([800, 1023] as $width) {
+    foreach ([640, 768, 769, 800, 1023] as $width) {
         $webpage->resize($width, 1000);
         $webpage->assertScript(activityStatisticsWatchGridHoldsScript(), true)
             ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
@@ -130,9 +132,32 @@ test('the busiest operational statistics page fits a phone and holds a long conn
         ->assertScript(phoneOverflowScript('main'), '')
         ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
 
-    foreach ([800, 1023] as $width) {
+    foreach ([640, 768, 769, 800, 1023] as $width) {
         $webpage->resize($width, 1000);
         $webpage->assertScript(phoneOverflowScript('main'), '')
             ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
     }
 });
+
+test('an activity-log row keeps every cell inside the feed at tablet widths with the sidebar expanded', function (int $width): void {
+    $admin = User::factory()->admin()->create(['name' => 'Example Administrator']);
+    $this->actingAs($admin);
+    $serviceConnection = ServiceConnection::factory()->sonarr()->create(['name' => 'Example Sonarr']);
+    ActivityLog::factory()->for($admin)->create(['service_connection_id' => $serviceConnection->id, 'action' => 'media.library.episode.imported', 'created_at' => now()->subMinute(), 'description' => 'Imported Severance S01E01 into the example library.']);
+    resolve(AuditLogger::class)->record('connection.updated', null, 'Updated Sonarr connection "Example".', [
+        'name' => ['from' => 'Sonarr', 'to' => 'Example Sonarr'],
+    ]);
+
+    $webpage = visit(route('activity-log', absolute: false))->assertNoSmoke();
+    $webpage->resize($width, 1000);
+    $webpage->script(appHydratedScript());
+
+    // SidebarProvider treats (max-width: 768px) as mobile, so the inset
+    // sidebar first renders, expanded, at 769 px: the narrowest feed.
+    if ($width > 768) {
+        $webpage->assertScript('document.querySelector("[data-slot=\\"sidebar\\"][data-state]")?.dataset.state', 'expanded');
+    }
+
+    $webpage->assertScript('(() => { const feed = document.querySelector("[data-activity-feed]").getBoundingClientRect(); return [...document.querySelectorAll("[data-activity-row]")].flatMap((row) => [...row.firstElementChild.children].filter((cell) => { const rect = cell.getBoundingClientRect(); return rect.width < 1 || rect.left < feed.left - 1 || rect.right > feed.right + 1; }).map((cell) => `${row.dataset.activityRow}: ${(cell.textContent || cell.tagName).trim().slice(0, 24)} ${Math.round(cell.getBoundingClientRect().left)}..${Math.round(cell.getBoundingClientRect().right)} (feed ..${Math.round(feed.right)})`)).join(" | "); })()', '')
+        ->assertScript('[...document.querySelectorAll("[data-audit-expand]")].length', 1);
+})->with([768, 769, 820]);
