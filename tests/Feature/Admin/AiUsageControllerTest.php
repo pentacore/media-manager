@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\TitleAgent;
+use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
 use App\Enums\ClassificationGate;
 use App\Enums\FreePoolOverflowBehavior;
+use App\Models\ActionRequest;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
@@ -908,3 +910,32 @@ test('the scenario recent list honours the tier filter', function (): void {
             ->where('scenario_recent.0.model', 'gpt-no-tier')
             ->where('scenario_recent.1.model', 'gpt-tier-one'));
 });
+
+test('the AI usage page defers the second-opinion agreement in its own group', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->missing('second_opinion_agreement')
+            ->loadDeferredProps('secondOpinionAgreement', fn ($reload) => $reload
+                ->where('second_opinion_agreement.totals.verdicts', 0)
+                ->where('second_opinion_agreement.rates.agreement', null)
+                ->where('second_opinion_agreement.daily_bucket', 'day')));
+});
+
+test('the second-opinion agreement follows the page window', function (string $window, int $verdicts): void {
+    ActionRequest::factory()->secondOpinion(true)->create([
+        'status' => ActionRequestStatus::Completed,
+        'approved_by' => User::factory()->admin(),
+        'created_at' => now()->subDays(20),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['window' => $window]))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('secondOpinionAgreement', fn ($reload) => $reload
+                ->where('second_opinion_agreement.totals.verdicts', $verdicts)));
+})->with([
+    'last 7 days' => ['7d', 0],
+    'last 30 days' => ['30d', 1],
+]);
