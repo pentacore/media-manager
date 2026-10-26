@@ -15,6 +15,11 @@ use App\Models\SubtitleAuditBatch;
  */
 class SubtitleAuditBatchSweeper
 {
+    /**
+     * Safe only while SearchSubtitleAuditEpisode's #[Timeout(270)] stays below
+     * 300 s (the 5 minute grace past the deadline): a live search never looks
+     * expired. The searcher's guarded outcome write makes any overlap harmless.
+     */
     private const int GRACE_MINUTES = 5;
 
     public function __construct(private readonly SubtitleAuditBatchSettler $subtitleAuditBatchSettler) {}
@@ -38,6 +43,9 @@ class SubtitleAuditBatchSweeper
                 ]);
 
             $this->subtitleAuditBatchSettler->settle($subtitleAuditBatch);
+            // A batch nobody handed off or showed (chat turn and watchdog both lost)
+            // would otherwise be ready without a notification and unclaimable.
+            $this->subtitleAuditBatchSettler->adopt($subtitleAuditBatch);
         }
 
         return $expired->count();

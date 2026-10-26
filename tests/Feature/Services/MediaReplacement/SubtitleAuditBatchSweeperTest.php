@@ -64,3 +64,14 @@ test('an expired handed-off batch notifies admins once', function (): void {
 
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 });
+
+test('an expired batch nobody handed off or showed notifies admins once', function (): void {
+    $batch = SubtitleAuditBatch::factory()->create(['search_deadline_at' => now()->subMinutes(10)]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->create();
+
+    resolve(SubtitleAuditBatchSweeper::class)->sweep();
+    resolve(SubtitleAuditBatchSweeper::class)->sweep();
+
+    Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    expect($batch->refresh()->handed_off_at)->not->toBeNull();
+});

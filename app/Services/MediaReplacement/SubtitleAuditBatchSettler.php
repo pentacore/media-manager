@@ -16,8 +16,9 @@ use Illuminate\Support\Facades\DB;
  *
  * A batch is ready once no episode is still searching. Exactly one of two
  * things then happens: the chat tool claims the card (the wait saw it ready),
- * or the batch was handed off first — by the tool, or by the watchdog when the
- * chat turn died before it could do either — and admins get a notification.
+ * or the batch was handed off first — by the tool, by the watchdog when the
+ * chat turn died before it could do either, or by the expiry sweep when the
+ * watchdog was lost too — and admins get a notification.
  */
 class SubtitleAuditBatchSettler
 {
