@@ -96,7 +96,7 @@ watch(
 );
 
 const selectClass =
-    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground';
+    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground touch:h-10';
 const textareaClass =
     'rounded-md border border-input bg-background px-3 py-2 font-mono text-[12.5px] text-foreground';
 </script>

@@ -367,10 +367,10 @@ function mobileLayoutAdminPages(): array
         'ai conversations' => ['admin.ai-conversations.index', null],
         'ai models' => ['admin.ai-models.index', null],
         'ai prices' => ['admin.ai-prices.index', '[data-create-price]'],
-        'ai conversation' => ['admin.ai-conversations.show', null, null, ['conversation' => '01900000-0000-7000-8000-000000000901']],
+        'ai conversation' => ['admin.ai-conversations.show', '[data-conversation-archive]', null, ['conversation' => '01900000-0000-7000-8000-000000000901']],
         'benchmark runs' => ['admin.benchmarks.runs.index', '[data-benchmark-run-new]'],
         'new benchmark run' => ['admin.benchmarks.runs.create', null],
-        'benchmark run' => ['admin.benchmarks.runs.show', null, null, ['benchmarkRun' => 901]],
+        'benchmark run' => ['admin.benchmarks.runs.show', '[data-benchmark-delete]', null, ['benchmarkRun' => 901]],
         // The request rebuilds run_ids from the comma list in `runs`; a bad
         // list redirects to the runs index, which has no [data-compare-page].
         'benchmark comparison' => ['admin.benchmarks.compare.show', null, '[data-compare-page]', ['runs' => '901,902']],
