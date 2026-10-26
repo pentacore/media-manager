@@ -26,6 +26,7 @@
         "Tests\\Browser\\AiUnpricedModelWarningTest": 2.4983,
         "Tests\\Browser\\AiUsageClassificationGatesTest": 1.2793,
         "Tests\\Browser\\AiUsageDetailAbortTest": 74.0094,
+        "Tests\\Browser\\AiUsageSecondOpinionTest": 7.9397,
         "Tests\\Browser\\AiUsageSectionsTest": 9.2572,
         "Tests\\Browser\\AiUsageTelemetryTest": 12.2304,
         "Tests\\Browser\\AnimeSeasonTest": 11.3002,
@@ -109,6 +110,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.207,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
-    "checksum": "68b7bf3a9098c5b071a7c82e75cbb240",
-    "updated_at": "2026-10-26T06:37:08+00:00"
+    "checksum": "6d0fe2a286dee6a87f0135b9fdc74b43",
+    "updated_at": "2026-10-26T08:19:09+00:00"
 }
