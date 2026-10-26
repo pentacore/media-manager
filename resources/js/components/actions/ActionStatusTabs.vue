@@ -28,7 +28,7 @@ function statusCount(id: string): number {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-1.5 touch:gap-y-3">
         <button
             v-for="tab in ACTION_TABS"
             :key="tab.id"
@@ -36,7 +36,7 @@ function statusCount(id: string): number {
             :data-test="`tab-${tab.id}`"
             :class="
                 cn(
-                    'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                    'touch-target inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
                     currentFilter() === tab.id
                         ? 'bg-accent text-accent-foreground'
                         : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

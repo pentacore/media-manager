@@ -1,6 +1,7 @@
 import { nextTick } from 'vue';
 import { toast } from 'vue-sonner';
 import { jsonRequest } from '@/lib/http';
+import { returnFocusToMoreButton } from '@/lib/pageHeader';
 import type { BulkSummary } from '@/types';
 
 /** The most ids one bulk request takes (`BulkRunner::MAX_ITEMS` on the server). */
@@ -78,6 +79,10 @@ function waitForDialogToLeave(dialog: Element, frame: number): void {
     window.setTimeout(moveFocusToBulkTarget, 0);
 }
 
+/**
+ * A select-all with no box (inside a table hidden on a phone) cannot take
+ * focus, so it is skipped and the page heading stands in for it.
+ */
 function moveFocusToBulkTarget(): void {
     const active = document.activeElement;
 
@@ -85,18 +90,51 @@ function moveFocusToBulkTarget(): void {
         return;
     }
 
-    const target =
-        document.querySelector<HTMLElement>(
+    const selectAll = Array.from(
+        document.querySelectorAll<HTMLElement>(
             '[data-bulk-select-all] button:not([disabled])',
-        ) ?? document.querySelector<HTMLElement>('h1');
+        ),
+    ).find((element) => element.getClientRects().length > 0);
 
-    if (target === null) {
+    if (selectAll === undefined) {
+        focusPageHeading();
+
         return;
     }
 
-    if (target.tagName === 'H1' && !target.hasAttribute('tabindex')) {
-        target.setAttribute('tabindex', '-1');
+    selectAll.focus();
+}
+
+/**
+ * Focuses the page's `h1`, made programmatically focusable first: where focus
+ * goes when the control it belongs on is gone. It never scrolls: the heading
+ * is a focus anchor, and jumping a phone user to the top of a long list would
+ * lose their place.
+ */
+export function focusPageHeading(options?: FocusOptions): void {
+    const heading = document.querySelector<HTMLElement>('h1');
+
+    if (heading === null) {
+        return;
     }
 
-    target.focus();
+    if (!heading.hasAttribute('tabindex')) {
+        heading.setAttribute('tabindex', '-1');
+    }
+
+    heading.focus({ ...options, preventScroll: true });
+}
+
+/**
+ * `@close-auto-focus` for a dialog the compact bulk bar's ⋯ menu (or its
+ * phone primary action) opens: on a phone, Cancel or Escape returns focus to
+ * the bar's ⋯ (`[data-bulk-more]`) instead of `<body>`. `triggerSelector` is
+ * the desktop inline button; while it has a box, nothing changes. A run that
+ * succeeded unmounts the bar, and `focusAfterBulk()` takes over.
+ */
+export function returnFocusToBulkMenu(
+    event: Event,
+    triggerSelector: string,
+): void {
+    returnFocusToMoreButton(event, triggerSelector, '[data-bulk-more]');
 }

@@ -14,6 +14,7 @@ import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import {
     OpenInServiceButton,
     PageHeader,
+    PhoneCardList,
     Pill,
     StatCard,
 } from '@/components/mm';
@@ -38,7 +39,7 @@ import {
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
-import { focusAfterBulk, submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, returnFocusToBulkMenu, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {
@@ -460,7 +461,9 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
 
         <template v-else>
             <!-- Stats -->
-            <div class="grid gap-4 md:grid-cols-4">
+            <div
+                class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-4"
+            >
                 <StatCard
                     label="Speed"
                     :value="queue.speed ?? '—'"
@@ -502,9 +505,12 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         filter</span
                     >
                 </div>
-                <div class="overflow-x-auto">
+                <div
+                    class="overflow-x-auto"
+                    :class="{ 'max-sm:hidden': (queue.slots ?? []).length > 0 }"
+                >
                     <table class="w-full border-collapse text-[13px]">
-                        <thead>
+                        <thead class="max-sm:hidden">
                             <tr>
                                 <th
                                     v-if="isAdmin"
@@ -605,7 +611,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                 </td>
                                 <td class="px-3 py-2.5 text-right">
                                     <div
-                                        class="flex justify-end gap-1 touch:gap-2"
+                                        class="flex justify-end gap-1 touch:gap-3"
                                     >
                                         <Button
                                             v-if="slot.status === 'Paused'"
@@ -660,6 +666,120 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         </tbody>
                     </table>
                 </div>
+                <PhoneCardList
+                    v-if="(queue.slots ?? []).length > 0"
+                    :items="queue.slots ?? []"
+                    :item-key="(slot) => slot.nzo_id"
+                    label="Active queue"
+                    class="p-3"
+                    data-sab-cards
+                >
+                    <template #card="{ item: slot }">
+                        <div
+                            class="flex flex-col gap-2"
+                            :data-sab-card="slot.nzo_id"
+                        >
+                            <div class="flex items-start gap-3">
+                                <BulkCheckbox
+                                    v-if="isAdmin"
+                                    class="pt-0.5"
+                                    :checked="isSlotSelected(slot.nzo_id)"
+                                    :disabled="slotBulkBusy"
+                                    :label="`Select ${slot.filename ?? slot.nzo_id}`"
+                                    :data-sab-card-select="slot.nzo_id"
+                                    @update:checked="
+                                        (value) =>
+                                            toggleSlot(slot.nzo_id, value)
+                                    "
+                                />
+                                <div
+                                    class="font-mono-tabular min-w-0 flex-1 text-[12.5px] font-medium break-all"
+                                >
+                                    {{ slot.filename }}
+                                </div>
+                            </div>
+                            <div
+                                class="font-mono-tabular flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground"
+                            >
+                                <Pill v-if="slot.cat">{{ slot.cat }}</Pill>
+                                <span>{{ slot.size }}</span>
+                                <span>{{ slot.percentage }}%</span>
+                                <span>{{ slot.timeleft }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Select
+                                    :model-value="String(slot.priority)"
+                                    @update:model-value="
+                                        (v) =>
+                                            changePriority(
+                                                slot.nzo_id,
+                                                String(v),
+                                            )
+                                    "
+                                >
+                                    <SelectTrigger
+                                        class="h-9 w-32 text-xs"
+                                        :aria-label="`Priority of ${slot.filename ?? slot.nzo_id}`"
+                                        :data-sab-card-priority="slot.nzo_id"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="(
+                                                label, value
+                                            ) in PRIORITY_LABELS"
+                                            :key="value"
+                                            :value="value"
+                                        >
+                                            {{ label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <div class="ml-auto flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-9 gap-1.5 text-xs"
+                                        :aria-label="`${slot.status === 'Paused' ? 'Resume' : 'Pause'} ${slot.filename ?? slot.nzo_id}`"
+                                        :data-sab-card-toggle="slot.nzo_id"
+                                        @click="
+                                            slot.status === 'Paused'
+                                                ? resumeSlot(slot.nzo_id)
+                                                : pauseSlot(slot.nzo_id)
+                                        "
+                                    >
+                                        <Play
+                                            v-if="slot.status === 'Paused'"
+                                            class="size-3.5"
+                                        />
+                                        <Pause v-else class="size-3.5" />
+                                        {{
+                                            slot.status === 'Paused'
+                                                ? 'Resume'
+                                                : 'Pause'
+                                        }}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="size-9 p-0 text-destructive hover:text-destructive"
+                                        :aria-label="`Delete ${slot.filename ?? slot.nzo_id}`"
+                                        :data-sab-card-delete="slot.nzo_id"
+                                        @click="
+                                            deleteSlot(
+                                                slot.nzo_id,
+                                                slot.filename,
+                                            )
+                                        "
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </PhoneCardList>
             </div>
 
             <BulkActionBar
@@ -700,10 +820,54 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         <Trash2 class="size-3.5" />Delete…
                     </Button>
                 </template>
+                <template #primary="{ disabled }">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-10 gap-1.5 px-4 text-xs"
+                        :disabled="disabled"
+                        data-bulk-sab-phone="pause"
+                        @click="runSlotBulk('pause')"
+                    >
+                        <Pause class="size-3.5" />Pause
+                    </Button>
+                </template>
+                <template #menu="{ disabled }">
+                    <DropdownMenuItem
+                        :disabled="slotBulkBusy"
+                        data-bulk-select-all-phone
+                        @select="setAllSlots(slotIds, true)"
+                    >
+                        Select all on this page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        :disabled="disabled"
+                        data-bulk-menu-item="resume"
+                        @select="runSlotBulk('resume')"
+                    >
+                        <Play class="size-3.5" />Resume
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        :disabled="disabled"
+                        class="text-destructive focus:text-destructive"
+                        data-bulk-menu-item="delete"
+                        @select="slotDeleteOpen = true"
+                    >
+                        <Trash2 class="size-3.5" />Delete…
+                    </DropdownMenuItem>
+                </template>
             </BulkActionBar>
 
             <Dialog v-model:open="slotDeleteOpen">
-                <DialogContent>
+                <DialogContent
+                    @close-auto-focus="
+                        (event) =>
+                            returnFocusToBulkMenu(
+                                event,
+                                '[data-bulk-sab-action=delete]',
+                            )
+                    "
+                >
                     <DialogHeader>
                         <DialogTitle
                             >Delete {{ selectedSlotCount }}
@@ -757,9 +921,12 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         >
                     </span>
                 </div>
-                <div class="overflow-x-auto">
+                <div
+                    class="overflow-x-auto"
+                    :class="{ 'max-sm:hidden': history.slots.length > 0 }"
+                >
                     <table class="w-full border-collapse text-[13px]">
-                        <thead>
+                        <thead class="max-sm:hidden">
                             <tr>
                                 <th
                                     v-for="h in [
@@ -808,7 +975,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                     class="px-3 py-2.5 text-right"
                                 >
                                     <div
-                                        class="flex justify-end gap-1 touch:gap-2"
+                                        class="flex justify-end gap-1 touch:gap-3"
                                     >
                                         <Button
                                             v-if="slot.status === 'Failed'"
@@ -851,6 +1018,67 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         </tbody>
                     </table>
                 </div>
+                <PhoneCardList
+                    v-if="history.slots.length > 0"
+                    :items="history.slots"
+                    :item-key="(slot) => slot.nzo_id"
+                    label="Download history"
+                    class="p-3"
+                    data-sab-history-cards
+                >
+                    <template #card="{ item: slot }">
+                        <div
+                            class="flex flex-col gap-2"
+                            :data-sab-history-card="slot.nzo_id"
+                        >
+                            <div
+                                class="font-mono-tabular text-[12.5px] font-medium break-all"
+                            >
+                                {{ slot.name }}
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <Pill v-if="slot.category">{{
+                                    slot.category
+                                }}</Pill>
+                                <Pill :variant="statusVariant(slot.status)">
+                                    {{ slot.status ?? '—' }}
+                                </Pill>
+                            </div>
+                            <p
+                                v-if="slot.fail_message"
+                                class="text-xs break-words text-fg-subtle"
+                            >
+                                {{ slot.fail_message }}
+                            </p>
+                            <div
+                                v-if="isAdmin"
+                                class="flex items-center justify-end gap-2"
+                            >
+                                <Button
+                                    v-if="slot.status === 'Failed'"
+                                    variant="outline"
+                                    size="sm"
+                                    class="h-9 gap-1.5 text-xs"
+                                    :disabled="retrying !== null"
+                                    :data-sab-history-card-retry="slot.nzo_id"
+                                    @click="retryHistory(slot.nzo_id)"
+                                >
+                                    <RotateCcw class="size-3.5" />Retry
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="size-9 p-0 text-destructive hover:text-destructive"
+                                    :aria-label="`Remove ${slot.name ?? slot.nzo_id} from history`"
+                                    :data-sab-history-card-delete="slot.nzo_id"
+                                    @click="deletingSlot = slot"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                </Button>
+                            </div>
+                        </div>
+                    </template>
+                </PhoneCardList>
                 <div
                     v-if="historyLastPage > 1 || historyPage > historyLastPage"
                     class="flex items-center justify-between gap-2 border-t border-border px-4 py-2.5"

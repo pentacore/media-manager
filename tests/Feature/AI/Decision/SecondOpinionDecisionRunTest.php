@@ -166,9 +166,32 @@ test('the run notification counts only queued actions and names the held and rej
 
     expect(ActionRequest::query()->pluck('status', 'type')->all())
         ->toBe(['monitor_series' => ActionRequestStatus::Pending, 'delete_series' => ActionRequestStatus::Rejected]);
+    $actionRequest = ActionRequest::query()->where('type', 'monitor_series')->sole();
     Notification::assertSentTo($admin, DecisionAgentActed::class, fn (DecisionAgentActed $decisionAgentActed): bool => $decisionAgentActed->actionCount === 1
         && $decisionAgentActed->heldBySecondOpinion === 1
-        && $decisionAgentActed->rejectedBySecondOpinion === 1);
+        && $decisionAgentActed->rejectedBySecondOpinion === 1
+        && $decisionAgentActed->actionRequestId === $actionRequest->id);
+});
+
+test('a run that queues two requests links its notification to the bare queue', function (): void {
+    Notification::fake();
+    $admin = User::factory()->admin()->create();
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true, 'second_opinion' => SecondOpinionMode::Off]);
+    secondOpinionDeleteRule(SecondOpinionMode::Off);
+    DecisionAgent::fake([
+        new ToolCall(id: 'c1', name: 'ProposeActionTool', arguments: ['type' => 'monitor_series', 'target_service' => 'sonarr', 'rationale' => 'It was unmonitored.', 'payload' => ['series_id' => 7, 'monitored' => true]]),
+        new ToolCall(id: 'c2', name: 'ProposeActionTool', arguments: secondOpinionDeleteProposal()),
+        'Queued a monitor and a deletion.',
+    ]);
+    $webhookEvent = secondOpinionSeriesEvent();
+    IndexedSeries::factory()->create(['service_connection_id' => $webhookEvent->service_connection_id, 'sonarr_id' => 7, 'title' => 'Severance', 'year' => 2022]);
+
+    app()->call([new RunDecisionAgent($webhookEvent->id, 'sonarr', 'SeriesDelete', $webhookEvent->payload, $webhookEvent->service_connection_id), 'handle']);
+
+    expect(ActionRequest::query()->where('status', ActionRequestStatus::Pending)->count())->toBe(2);
+    Notification::assertSentTo($admin, DecisionAgentActed::class, fn (DecisionAgentActed $decisionAgentActed): bool => $decisionAgentActed->actionCount === 2
+        && $decisionAgentActed->actionRequestId === null
+        && $decisionAgentActed->toPush($admin)->url === route('actions.requests.index'));
 });
 
 test('a run gives its proposals a deadline inside the job timeout', function (): void {

@@ -162,7 +162,7 @@ function formatHours(seconds: number): string {
             </div>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div class="grid gap-6 max-sm:grid-cols-1 lg:grid-cols-2">
             <Deferred data="leaderboard">
                 <template #fallback>
                     <div class="h-56 animate-pulse rounded-xl bg-muted" />

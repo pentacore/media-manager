@@ -343,7 +343,9 @@ onMounted(() => {
         </PageHeader>
 
         <!-- Stat Cards -->
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div
+            class="grid gap-4 max-sm:grid-cols-2 max-sm:gap-3 md:grid-cols-2 xl:grid-cols-4"
+        >
             <StatCard
                 label="Services online"
                 :value="`${healthyServices} / ${totalServices}`"
@@ -655,7 +657,9 @@ onMounted(() => {
                             <span>act_{{ action.id }}</span>
                             <TimeStamp :iso="action.created_at" />
                         </div>
-                        <div class="mt-1 text-sm font-medium">
+                        <div
+                            class="mt-1 text-sm font-medium max-sm:break-words"
+                        >
                             <span
                                 :class="
                                     isDestructive(action.type)
@@ -682,8 +686,13 @@ onMounted(() => {
                                 {{ action.requested_by }}
                             </span>
                             <Link
-                                :href="ActionRequestController.index.url()"
-                                class="inline-flex h-6 items-center rounded-md border border-destructive/35 px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                                :href="
+                                    ActionRequestController.index.url({
+                                        query: { request: action.id },
+                                    })
+                                "
+                                class="touch-target inline-flex h-6 items-center rounded-md border border-destructive/35 px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                                :data-dashboard-review-action="action.id"
                             >
                                 Review
                             </Link>

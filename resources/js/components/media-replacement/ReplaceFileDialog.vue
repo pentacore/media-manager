@@ -90,6 +90,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     'update:open': [open: boolean];
+    /** Reka's close focus restore, for a parent that opened it from a menu. */
+    'close-auto-focus': [event: Event];
 }>();
 
 const phase = ref<Phase>('idle');
@@ -337,6 +339,7 @@ onMounted(() => {
             data-replacement-dialog
             :data-replacement-season="seasonNumber"
             :data-replacement-episode="episodeNumber"
+            @close-auto-focus="(event) => emit('close-auto-focus', event)"
         >
             <DialogHeader>
                 <DialogTitle>Replace file</DialogTitle>

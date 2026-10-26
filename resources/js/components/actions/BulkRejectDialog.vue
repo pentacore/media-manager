@@ -8,6 +8,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { returnFocusToBulkMenu } from '@/lib/bulk';
 
 defineProps<{
     /** Requests in the bulk selection. */
@@ -27,7 +28,11 @@ const emit = defineEmits<{
 
 <template>
     <Dialog v-model:open="open">
-        <DialogContent>
+        <DialogContent
+            @close-auto-focus="
+                (event) => returnFocusToBulkMenu(event, '[data-bulk-reject]')
+            "
+        >
             <DialogHeader>
                 <DialogTitle
                     >Reject {{ count }}

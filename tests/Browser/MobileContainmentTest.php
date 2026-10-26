@@ -52,7 +52,7 @@ test('the settings column fits a phone and the notification matrices scroll insi
         ->assertScript(phoneOverflowScript('main'), '');
 });
 
-test('the interactive search releases scroll inside the dialog and Grab can be reached', function (): void {
+test('the interactive search shows its releases as cards inside the dialog and Grab can be reached', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     mobileContainmentFakeSonarr();
     $this->actingAs(User::factory()->member()->create());
@@ -60,13 +60,12 @@ test('the interactive search releases scroll inside the dialog and Grab can be r
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
     $webpage->click('Season 1');
-    // The season actions sit in a 3h-2 toolbar row that may still be clipped; the dialog is what this test measures.
-    $webpage->script('document.querySelector("[data-season-actions=\"1\"] [data-interactive-search]").click()');
-    $webpage->script(confirmDialogWaitUntilScript('document.querySelectorAll("[data-interactive-search-dialog] [data-release-grab]").length === 3 && document.querySelector("[data-interactive-search-dialog]").getAnimations().length === 0'));
+    $webpage->click('[data-season-actions="1"] [data-interactive-search]');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelectorAll("[data-interactive-search-dialog] [data-release-card-grab]").length === 3 && document.querySelector("[data-interactive-search-dialog]").getAnimations().length === 0'));
 
     $webpage->assertScript('(() => { const rect = document.querySelector("[data-interactive-search-dialog]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true)
-        ->assertScript('(() => { const frame = document.querySelector("[data-interactive-search-scroll]"); return frame.scrollWidth > frame.clientWidth; })()', true)
-        ->assertScript('(() => { const grab = document.querySelector("[data-release-grab]"); grab.scrollIntoView({ inline: "end", block: "nearest" }); const rect = grab.getBoundingClientRect(); const dialog = document.querySelector("[data-interactive-search-dialog]").getBoundingClientRect(); return rect.right <= dialog.right + 1 && rect.left >= dialog.left - 1; })()', true)
+        ->assertMissing('[data-interactive-search-scroll]')
+        ->assertScript('(() => { const grab = document.querySelector("[data-release-card-grab]"); grab.scrollIntoView({ block: "nearest" }); const rect = grab.getBoundingClientRect(); const dialog = document.querySelector("[data-interactive-search-dialog]").getBoundingClientRect(); return rect.left >= dialog.left - 1 && rect.right <= dialog.right + 1; })()', true)
         ->assertScript(phoneOverflowScript('[role="dialog"]'), '');
 });
 
@@ -81,7 +80,9 @@ test('a dialog taller than the phone viewport scrolls inside itself', function (
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
 
     $webpage->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= window.innerHeight && rect.left >= 0 && rect.right <= window.innerWidth; })()', true)
-        ->assertScript('(() => { const dialog = document.querySelector("[role=\"dialog\"]"); return dialog.scrollHeight > dialog.clientHeight; })()', true)
+        // The dialog's own box never scrolls; `[data-slot="dialog-body"]` does
+        // (OverlayCloseTest / `.ai/rules/components.md`).
+        ->assertScript('(() => { const body = document.querySelector("[data-slot=\"dialog-body\"]"); return body.scrollHeight > body.clientHeight; })()', true)
         ->assertScript('(() => { const dialog = document.querySelector("[role=\"dialog\"]"); const submit = dialog.querySelector("button[type=\"submit\"]"); submit.scrollIntoView({ block: "nearest" }); const rect = submit.getBoundingClientRect(); const frame = dialog.getBoundingClientRect(); return rect.top >= frame.top - 1 && rect.bottom <= frame.bottom + 1; })()', true);
 });
 

@@ -12,6 +12,12 @@ export type ConfirmOptions = {
     cancelLabel?: string;
     /** Styles the confirm button as destructive (deletes, removals, blocklists). */
     destructive?: boolean;
+    /**
+     * The dialog's `@close-auto-focus` handler. The app-wide dialog has no
+     * trigger, so a question asked from a phone ⋯ menu passes
+     * `(event) => returnFocusToPageHeaderMenu(event, '<desktop trigger>')`.
+     */
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 export type ConfirmRequest = {
@@ -20,6 +26,7 @@ export type ConfirmRequest = {
     confirmLabel: string;
     cancelLabel: string;
     destructive: boolean;
+    onCloseAutoFocus: ((event: Event) => void) | null;
 };
 
 export type UseConfirmReturn = {
@@ -54,6 +61,7 @@ function confirm(options: ConfirmOptions): Promise<boolean> {
         confirmLabel: options.confirmLabel ?? 'Confirm',
         cancelLabel: options.cancelLabel ?? 'Cancel',
         destructive: options.destructive ?? false,
+        onCloseAutoFocus: options.onCloseAutoFocus ?? null,
     };
     open.value = true;
 

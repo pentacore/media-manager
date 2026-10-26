@@ -258,6 +258,17 @@ class DecisionRunContext
         return $this->actionRequestIds;
     }
 
+    /**
+     * The requests this run queued (suggested or acted), in the order it
+     * queued them. Second-opinion rejections are not among them.
+     *
+     * @return list<int>
+     */
+    public function queuedActionRequestIds(): array
+    {
+        return array_column($this->queued, 'action_request_id');
+    }
+
     public function count(): int
     {
         return count($this->actionRequestIds);

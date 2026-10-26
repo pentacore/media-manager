@@ -23,7 +23,10 @@ const emit = defineEmits<{ open: [item: DiscoverTitle] }>();
         >
             Nothing here right now.
         </p>
-        <div v-else class="flex gap-3 overflow-x-auto pb-2">
+        <div
+            v-else
+            class="flex gap-3 overflow-x-auto pb-2 max-sm:snap-x max-sm:snap-mandatory"
+        >
             <TitleCard
                 v-for="item in row.results"
                 :key="`${item.media_type}-${item.tmdb_id}`"

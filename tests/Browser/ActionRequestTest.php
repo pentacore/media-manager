@@ -271,3 +271,21 @@ test('a batch with nothing left to pick shows no manual pick section', function 
         ->assertCount('[data-action-row]', 1)
         ->assertMissing('[data-subtitle-audit-manual-picks]');
 });
+
+test('a batch filter lists the episodes a pending replacement blocked', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $batch = SubtitleAuditBatch::factory()->handedOff()->create(['series_id' => 42, 'series_title' => 'Example Audit Series']);
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->queued()->create(['season_number' => 1, 'episode_number' => 1, 'action_request_id' => $queued->id]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->create(['season_number' => 1, 'episode_number' => 2, 'failure_reason' => 'replacement_in_flight', 'missing_languages' => ['eng', 'swe']]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->create(['season_number' => 1, 'episode_number' => 3]);
+
+    visit(route('actions.requests.index', ['subtitle_audit_batch' => $batch->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertCount('[data-subtitle-audit-manual-picks] [data-subtitle-audit-in-flight]', 1)
+        ->assertSeeIn('[data-subtitle-audit-in-flight]', 'S01E02')
+        ->assertSeeIn('[data-subtitle-audit-in-flight]', 'A replacement is already pending')
+        ->assertSeeIn('[data-subtitle-audit-in-flight]', 'missing ENG, SWE')
+        ->assertSeeIn('[data-subtitle-audit-misses]', '1 failed.')
+        ->assertMissing('[data-subtitle-audit-manual-picks] [data-subtitle-audit-pick]');
+});

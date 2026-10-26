@@ -218,24 +218,30 @@ jobs:
         include:
           - name: unit & feature
             suite: unit-feature
-          - name: browser 1/6
+          - name: browser 1/8
             suite: browser
-            shard: 1/6
-          - name: browser 2/6
+            shard: 1/8
+          - name: browser 2/8
             suite: browser
-            shard: 2/6
-          - name: browser 3/6
+            shard: 2/8
+          - name: browser 3/8
             suite: browser
-            shard: 3/6
-          - name: browser 4/6
+            shard: 3/8
+          - name: browser 4/8
             suite: browser
-            shard: 4/6
-          - name: browser 5/6
+            shard: 4/8
+          - name: browser 5/8
             suite: browser
-            shard: 5/6
-          - name: browser 6/6
+            shard: 5/8
+          - name: browser 6/8
             suite: browser
-            shard: 6/6
+            shard: 6/8
+          - name: browser 7/8
+            suite: browser
+            shard: 7/8
+          - name: browser 8/8
+            suite: browser
+            shard: 8/8
 
     services:
       pgsql:

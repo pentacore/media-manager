@@ -109,7 +109,7 @@ function searcherRelease(array $overrides = []): array
 /**
  * @param  list<array<string, mixed>>|null  $releases
  */
-function fakeSearcherSonarr(string $subtitles = 'Japanese', ?array $releases = null): void
+function fakeSearcherSonarr(string $subtitles = 'Japanese', ?array $releases = null, ?Closure $onReleaseSearch = null): void
 {
     Http::fake([
         'sonarr.local:8989/api/v3/series/42' => Http::response([
@@ -128,7 +128,13 @@ function fakeSearcherSonarr(string $subtitles = 'Japanese', ?array $releases = n
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [[
             'id' => 9001, 'eventType' => 'downloadFolderImported', 'episodeId' => 101, 'episodeFileId' => 501,
         ]]]),
-        'sonarr.local:8989/api/v3/release*' => Http::response($releases ?? [searcherRelease()]),
+        'sonarr.local:8989/api/v3/release*' => function () use ($releases, $onReleaseSearch) {
+            if ($onReleaseSearch instanceof Closure) {
+                $onReleaseSearch();
+            }
+
+            return Http::response($releases ?? [searcherRelease()]);
+        },
     ]);
 }
 
@@ -251,6 +257,24 @@ test('an episode whose row is no longer searching is left alone', function (): v
     expect($this->episode->fresh()->outcome)->toBe(SubtitleAuditEpisodeOutcome::ManualPick)
         ->and(ActionRequest::query()->count())->toBe(0);
     Http::assertNothingSent();
+});
+
+test('a search whose episode was swept meanwhile neither queues a request nor overwrites the outcome', function (): void {
+    fakeSearcherSonarr(onReleaseSearch: fn (): int => SubtitleAuditEpisode::query()->whereKey($this->episode->id)->update([
+        'outcome' => SubtitleAuditEpisodeOutcome::Failed,
+        'failure_reason' => 'search_expired',
+    ]));
+
+    $this->mock(SubtitleAuditBatchSettler::class)->shouldReceive('settle')->never();
+
+    resolve(SubtitleAuditEpisodeSearcher::class)->search($this->episode);
+
+    $episode = $this->episode->fresh();
+
+    expect(ActionRequest::query()->count())->toBe(0)
+        ->and($episode->outcome)->toBe(SubtitleAuditEpisodeOutcome::Failed)
+        ->and($episode->failure_reason)->toBe('search_expired')
+        ->and($episode->action_request_id)->toBeNull();
 });
 
 test('an episode with a replacement already in flight fails instead of queueing a second one', function (): void {

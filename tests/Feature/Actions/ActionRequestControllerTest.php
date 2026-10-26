@@ -16,6 +16,7 @@ use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use App\Services\Actions\ActionRequestBrowserPayload;
 use App\Services\Actions\ActionRequestReviewer;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -335,6 +336,71 @@ test('the request query parameter preselects a row', function (): void {
     $this->actingAs(User::factory()->member()->create())
         ->get(route('actions.requests.index', ['request' => 'abc']))
         ->assertInertia(fn ($page) => $page->where('preselect', null));
+});
+
+test('a deep link to a request past the first page sends it as its own prop', function (): void {
+    $oldest = ActionRequest::factory()->create(['title' => 'Example oldest request', 'created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(29)->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('preselect', $oldest->id)
+            ->has('requests.data', 25)
+            ->where('preselectedRequest.id', $oldest->id)
+            ->where('preselectedRequest.title', 'Example oldest request')
+            ->where('preselectedRequest.status', 'pending')
+            ->where('requests.links', fn ($links): bool => collect($links)->every(fn (array $link): bool => ! str_contains((string) $link['url'], 'request=')))
+        );
+});
+
+test('a deep link to a listed or missing request sends no separate prop', function (): void {
+    $listed = ActionRequest::factory()->create();
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['request' => $listed->id]))
+        ->assertInertia(fn ($page) => $page->where('preselect', $listed->id)->where('preselectedRequest', null));
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['request' => $listed->id + 100]))
+        ->assertInertia(fn ($page) => $page->where('preselectedRequest', null));
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page->where('preselectedRequest', null));
+});
+
+test('a partial reload that does not name the deep-linked request does not read it', function (): void {
+    $oldest = ActionRequest::factory()->create(['created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(25)->create();
+    $member = User::factory()->member()->create();
+    $version = $this->actingAs($member)->get(route('actions.requests.index'))->viewData('page')['version'];
+
+    DB::enableQueryLog();
+    $this->actingAs($member)
+        ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => (string) $version, 'X-Inertia-Partial-Component' => 'Actions/Index', 'X-Inertia-Partial-Data' => 'statusCounts'])
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertJsonMissingPath('props.preselectedRequest');
+
+    expect(collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => preg_match('/where [`"]action_requests[`"]\.[`"]id[`"] = \?/', $sql) === 1)->all())->toBe([]);
+    DB::disableQueryLog();
+
+    $this->actingAs($member)
+        ->withHeaders(['X-Inertia' => 'true', 'X-Inertia-Version' => (string) $version, 'X-Inertia-Partial-Component' => 'Actions/Index', 'X-Inertia-Partial-Data' => 'preselectedRequest'])
+        ->get(route('actions.requests.index', ['request' => $oldest->id]))
+        ->assertOk()
+        ->assertJsonPath('props.preselectedRequest.id', $oldest->id);
+});
+
+test('viewers cannot reach a deep-linked request', function (): void {
+    $actionRequest = ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('actions.requests.index', ['request' => $actionRequest->id]))
+        ->assertForbidden();
 });
 
 // ---------- APPROVE ----------

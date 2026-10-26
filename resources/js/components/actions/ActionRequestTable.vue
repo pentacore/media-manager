@@ -39,7 +39,9 @@ const { isAdmin } = useCan();
 </script>
 
 <template>
-    <div class="overflow-hidden rounded-xl border border-border bg-card">
+    <div
+        class="overflow-hidden rounded-xl border border-border bg-card max-sm:hidden"
+    >
         <div class="overflow-x-auto">
             <table class="w-full border-collapse text-[13px]">
                 <thead>
