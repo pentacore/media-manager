@@ -35,6 +35,7 @@ test('the second opinion panel shows agreement with reviewers', function (): voi
         'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.'],
     ]);
     ActionRequest::factory()->secondOpinion(false)->create();
+    ActionRequest::factory()->secondOpinion(true)->autoExecute()->completed()->create();
     ActionRequest::factory()->secondOpinionSkipped('sonarr:Download')->create();
     $this->actingAs(User::factory()->admin()->create());
 
@@ -46,9 +47,11 @@ test('the second opinion panel shows agreement with reviewers', function (): voi
         ->assertSeeIn('[data-agreement-stat="holds_right"]', '50%')
         ->assertSeeIn('[data-agreement-stat="holds_right"]', 'of 2 reviewed holds')
         ->assertSeeIn('[data-agreement-stat="false_alarms"]', '1')
+        ->assertAttributeContains('[data-agreement-stat="false_alarms"]', 'class', 'text-warning')
         ->assertSeeIn('[data-agreement-stat="misses"]', '1')
-        ->assertSeeIn('[data-agreement-stat="coverage"]', 'of 9 verdicts')
-        ->assertSeeIn('[data-agreement-counts]', '9 verdicts · 1 failed · 1 rejected by the verifier · 1 awaiting review · 1 skipped by a per-event rule')
+        ->assertAttributeContains('[data-agreement-stat="misses"]', 'class', 'text-destructive')
+        ->assertSeeIn('[data-agreement-stat="coverage"]', 'of 10 verdicts')
+        ->assertSeeIn('[data-agreement-counts]', '10 verdicts · 1 failed · 1 rejected by the verifier · 1 awaiting review · 1 ran automatically · 1 skipped by a per-event rule')
         ->assertSeeIn('[data-agreement-cell="agreed_approved"]', '3')
         ->assertSeeIn('[data-agreement-cell="agreed_rejected"]', '1')
         ->assertSeeIn('[data-agreement-cell="disagreed_approved"]', '1')
@@ -99,6 +102,19 @@ test('recent disagreements link to the request and to benchmark capture', functi
         ->assertAttribute("[data-disagreement=\"{$actionRequest->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'completed', 'request' => $actionRequest->id], absolute: false))
         ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-request]", 'href', route('actions.requests.index', ['status' => 'rejected', 'request' => $miss->id], absolute: false))
         ->assertAttribute("[data-disagreement=\"{$miss->id}\"] [data-disagreement-benchmark]", 'href', route('admin.benchmarks.cases.create', ['action_request' => $miss->id], absolute: false));
+});
+
+test('opening an older disagreement shows its request in the Action Queue', function (): void {
+    $actionRequest = agreementBrowserReviewed(false, true, ['title' => 'Delete Example Old Show from Sonarr', 'created_at' => now()->subDay()]);
+    ActionRequest::factory()->count(30)->completed()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click("[data-disagreement=\"{$actionRequest->id}\"] [data-disagreement-request]")
+        ->assertSeeIn('[data-action-title]', 'Delete Example Old Show from Sonarr')
+        ->assertQueryStringHas('request', (string) $actionRequest->id)
+        ->assertNoSmoke();
 });
 
 test('agreement per day shows a placeholder bar for days nothing was reviewed', function (): void {

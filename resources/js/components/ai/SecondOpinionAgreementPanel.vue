@@ -24,6 +24,7 @@ const countsLine = computed(() => {
         `${formatCount(totals.value.failed)} failed`,
         `${formatCount(totals.value.rejected_by_verifier)} rejected by the verifier`,
         `${formatCount(totals.value.awaiting_review)} awaiting review`,
+        `${formatCount(totals.value.auto_run)} ran automatically`,
         `${formatCount(totals.value.skipped)} skipped by a per-event rule`,
     ];
 
@@ -97,9 +98,7 @@ const headerClass =
                     label="False alarms"
                     :value="formatCount(totals.disagreed_approved)"
                     hint="disagreed, person approved"
-                    :class="
-                        totals.disagreed_approved > 0 ? 'text-destructive' : ''
-                    "
+                    :class="totals.disagreed_approved > 0 ? 'text-warning' : ''"
                     data-agreement-stat="false_alarms"
                 />
                 <StatCard
