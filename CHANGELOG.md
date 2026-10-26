@@ -1,3 +1,43 @@
+# [1.57.0](https://github.com/pentacore/media-manager/compare/v1.56.0...v1.57.0) (2026-10-26)
+
+
+### Bug Fixes
+
+* **actions:** end the phone page clear of the bulk bar and keep off-page deep links live ([8da9949](https://github.com/pentacore/media-manager/commit/8da9949c30765459a972c331de8d6edf332ece47))
+* **actions:** keep the closing phone sheet on its own action, return focus to the card in view, and drop a used deep link ([3c9e04a](https://github.com/pentacore/media-manager/commit/3c9e04a71216e3248e42330a5fc9876b38bdf67b))
+* **actions:** safe sheet focus, off-page deep links and menu dialog focus on phones ([5e257b1](https://github.com/pentacore/media-manager/commit/5e257b1b064c4e58000168ac0c2e2b08655c4712))
+* **ai:** give the per-turn tools toggle a 40 px touch target ([198db85](https://github.com/pentacore/media-manager/commit/198db85453795bc415fc05a117b4f448f7617abd))
+* **ai:** keep the phone chat sheet's close X, focus and entries in step with the sheet ([57a389f](https://github.com/pentacore/media-manager/commit/57a389f39a788c7d770ab9265caf46b518f0bc17))
+* **calendar:** keep the phone day popover within the screen height and wrap agenda titles ([fe2aacb](https://github.com/pentacore/media-manager/commit/fe2aacb7bad27adf78421b98d060a24dac44bc40))
+* **chat:** show true batch statuses after a partial review ([7e4448e](https://github.com/pentacore/media-manager/commit/7e4448ee87007d63c3312320049a49dfadccf3ca))
+* **downloads:** wrap grab queue card titles between words and pin the phone card gates ([d03cf27](https://github.com/pentacore/media-manager/commit/d03cf2769b29e8fbdcdfe9319775549a200e0898))
+* **library:** return focus to the header menu after a phone delete dialog closes and pin the toolbar review gaps ([0ff5611](https://github.com/pentacore/media-manager/commit/0ff5611250b5f907284ecfa54ab13c15b16d99bb))
+* **subtitles:** drop deep-link params on close and quiet the batch view banner ([ae8753a](https://github.com/pentacore/media-manager/commit/ae8753ab8a1df1d3caf1ed90d6bf330ad5127b0d))
+* **subtitles:** guard a search's outcome write against the expiry sweep ([75f2aab](https://github.com/pentacore/media-manager/commit/75f2aab224a9d1c122da9f765c43ad82d9cc69ac))
+* **subtitles:** notify an expired batch nobody adopted ([e9a0e33](https://github.com/pentacore/media-manager/commit/e9a0e33d90a9b2589a1c6da4fe8f96d84f50bcf1))
+* **subtitles:** sweep expired audit batches and tighten follow-ups ([e4a4802](https://github.com/pentacore/media-manager/commit/e4a4802f06595e8c7bf93eeaef761422cd027179))
+* **ui:** give the phone-job pages 40 px touch targets ([b2a6dd8](https://github.com/pentacore/media-manager/commit/b2a6dd8934b57d330c757b176d02830820245ec3))
+* **ui:** inherit the dialog body gap, shrink the palette results in landscape, and gutter the phone scroller ([c45e31c](https://github.com/pentacore/media-manager/commit/c45e31c29463de96a05d473604699b538c335a20))
+* **ui:** keep the dialog and sheet close button on a phone screen and the palette in landscape ([e4c8c2a](https://github.com/pentacore/media-manager/commit/e4c8c2a4584cb8d9d4dc4bb8d26b30ab3a4a7930))
+* **ui:** pin the compact bulk bar to the phone screen bottom and stop the statistics overflow ([fecd7ca](https://github.com/pentacore/media-manager/commit/fecd7caacea954433d57a769259899e189dd356e))
+* **ui:** touch gaps, chat sheet consistency and monitoring cards on phones ([3bc2501](https://github.com/pentacore/media-manager/commit/3bc25011cbf8d5112ea4bcfd9f9ed1b396a8ccf2))
+* **ui:** wrap long action titles in the phone action sheet and dashboard review queue ([76ac6c0](https://github.com/pentacore/media-manager/commit/76ac6c0cf4688db032a1bd61f3c721fe32a48e0f))
+
+
+### Features
+
+* **actions:** list the action queue as cards on a phone ([410df01](https://github.com/pentacore/media-manager/commit/410df01f1848e4596b335f8031893767b33d38cd))
+* **actions:** open an action in a full-screen sheet on a phone ([bbd5054](https://github.com/pentacore/media-manager/commit/bbd5054ec79515fca4af9fc6094dbc8d1b9331fd))
+* **ai:** open the chat as a full-screen sheet on a phone ([ba29764](https://github.com/pentacore/media-manager/commit/ba297648e23178c49854e11a25cc93bd5e6cb9a7))
+* **bulk:** give phone bulk selections a compact bottom bar ([ae7ba34](https://github.com/pentacore/media-manager/commit/ae7ba344f44bea4b6e6b51fadc7df0c87ee8bec9))
+* **calendar:** show day dots and a full-width day popover on a phone ([15cf2ca](https://github.com/pentacore/media-manager/commit/15cf2cac2a2b2f8ffed3a25d759797ad09ad005c))
+* **downloads:** show the SABnzbd and grab queues as cards on a phone ([b158d73](https://github.com/pentacore/media-manager/commit/b158d7387652ae585326ffdb61b4a784f03653ec))
+* **library:** move the series and movie toolbars onto PageHeader for phones ([a499c1d](https://github.com/pentacore/media-manager/commit/a499c1dce0ee53334a5ed455d980af7bd28c449f))
+* **library:** show interactive search releases as cards on a phone ([8e445b5](https://github.com/pentacore/media-manager/commit/8e445b5b2b38eb8c3dcd4d128c0c6ee09e6035f6))
+* **monitoring:** fit health, now playing and watch history to a phone ([82f7a4a](https://github.com/pentacore/media-manager/commit/82f7a4a710780142b9f654b8043cd44a7f1ec8cc))
+* **notifications:** deep-link a single action request notification to its request ([8c75f69](https://github.com/pentacore/media-manager/commit/8c75f69ca9f4eebcaefef121d5981fcb14e9fa48))
+* **requests:** keep request actions and title cards within reach on a phone ([d2acf8b](https://github.com/pentacore/media-manager/commit/d2acf8b570038c3b9e73d4f9df5f5b5ea641cd5a))
+
 # [1.56.0](https://github.com/pentacore/media-manager/compare/v1.55.0...v1.56.0) (2026-10-26)
 
 
