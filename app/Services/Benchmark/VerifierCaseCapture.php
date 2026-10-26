@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Benchmark;
 
 use App\Ai\Decision\DecisionPrompt;
-use App\Enums\ActionRequestStatus;
+use App\Ai\Decision\SecondOpinionGroundTruth;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkScoringType;
 use App\Models\ActionRequest;
@@ -145,7 +145,7 @@ final readonly class VerifierCaseCapture
             $warnings[] = self::PROMPT_DIFFERS_WARNING;
         }
 
-        $expectedAgrees = $this->expectedAgrees($actionRequest);
+        $expectedAgrees = SecondOpinionGroundTruth::expectedAgrees($actionRequest->status, $actionRequest->approved_by, $actionRequest->second_opinion);
 
         if ($expectedAgrees === null) {
             $warnings[] = self::NO_REVIEW_WARNING;
@@ -157,23 +157,5 @@ final readonly class VerifierCaseCapture
             $warnings,
             sprintf('%s: %s', AiTask::DecisionVerifier->label(), Str::limit((string) $actionRequest->title, self::NAME_TITLE_CHARS)),
         );
-    }
-
-    /**
-     * A person's review is the only ground truth: approved_by is set by
-     * ActionRequestReviewer for both approve and reject; the verifier's own
-     * rejection and an auto-run leave it null.
-     */
-    private function expectedAgrees(ActionRequest $actionRequest): ?bool
-    {
-        if ($actionRequest->approved_by === null || ($actionRequest->second_opinion['failed'] ?? false) === true) {
-            return null;
-        }
-
-        return match ($actionRequest->status) {
-            ActionRequestStatus::Approved, ActionRequestStatus::Executing, ActionRequestStatus::Completed, ActionRequestStatus::Failed => true,
-            ActionRequestStatus::Rejected => false,
-            ActionRequestStatus::Pending => null,
-        };
     }
 }
