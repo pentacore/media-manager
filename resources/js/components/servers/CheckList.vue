@@ -154,7 +154,7 @@ function observedText(observed: Record<string, unknown> | null): string {
                             Paused
                         </Pill>
                     </div>
-                    <div class="flex shrink-0 items-center gap-1 touch:gap-2">
+                    <div class="flex shrink-0 items-center gap-1 touch:gap-3">
                         <Button
                             type="button"
                             size="icon"

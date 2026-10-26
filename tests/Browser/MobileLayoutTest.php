@@ -13,9 +13,14 @@ use App\Models\BenchmarkSchedule;
 use App\Models\ChatTemplate;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
+use App\Models\MediaReplacementAttempt;
 use App\Models\NotificationDestination;
+use App\Models\Server;
+use App\Models\ServerCheck;
+use App\Models\ServerIncident;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Models\WebhookEvent;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,8 +107,13 @@ function mobileLayoutFakeServices(): void
         'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/calendar*' => Http::response([]),
         'radarr.local:7878/*' => Http::response([]),
+        'whisparr.local:6969/api/v3/movie/11*' => Http::response(['id' => 11, 'title' => 'Example Scene Title That Runs Long Enough To Wrap On A Phone', 'year' => 2024, 'monitored' => true, 'hasFile' => false, 'sizeOnDisk' => 0, 'qualityProfileId' => 1, 'images' => []]),
+        'whisparr.local:6969/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'Any']]),
         'whisparr.local:6969/api/v3/movie*' => Http::response([['id' => 11, 'title' => 'Example Scene Title', 'year' => 2024, 'monitored' => true, 'hasFile' => false, 'sizeOnDisk' => 0, 'qualityProfileId' => 1, 'images' => []]]),
         'whisparr.local:6969/*' => Http::response([]),
+        // The Prowlarr connection's edit page lists its indexers (mobileLayoutSeedDetailModels()).
+        'prowlarr.local:9696/api/v1/indexer*' => Http::response([['id' => 3, 'name' => 'Example Usenet Indexer', 'enable' => true, 'protocol' => 'usenet', 'priority' => 25]]),
+        'prowlarr.local:9696/*' => Http::response([]),
         'sabnzbd.local:8080/api*' => function (Request $request) use ($slots) {
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
 
@@ -160,7 +170,10 @@ function mobileLayoutFakeServices(): void
 /**
  * The models the admin detail rows name by id (901 and up, clear of the ids
  * the factories hand out): a benchmark case, two finished runs on it, a
- * schedule, a chat template and an AI conversation, all owned by $admin.
+ * schedule, a chat template and an AI conversation, all owned by $admin; a
+ * Prowlarr connection, a processed webhook event on it, a replacement
+ * attempt that needs attention and a server with one open incident and
+ * one check.
  * Two prices and three usage records fill the AI prices table and the AI
  * usage invocations table, so those rows measure their row controls.
  */
@@ -175,6 +188,19 @@ function mobileLayoutSeedDetailModels(User $admin): void
     BenchmarkSchedule::factory()->create(['id' => 901, 'name' => 'Example nightly schedule', 'created_by' => $admin->id]);
     ChatTemplate::factory()->create(['id' => 901, 'name' => 'Example stuck downloads check', 'user_id' => $admin->id]);
     DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $admin->getMorphClass(), 'participant_id' => $admin->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
+    $prowlarr = ServiceConnection::factory()->prowlarr()->create(['id' => 901, 'url' => 'http://prowlarr.local:9696', 'api_key' => 'k']);
+    WebhookEvent::factory()->processed()->create(['id' => 901, 'service_connection_id' => $prowlarr->id]);
+    // The factory's own action request would bring a webhook event on a
+    // random connection; the attempt hangs off the fakes' Sonarr instead.
+    MediaReplacementAttempt::factory()->needsAttention()->create([
+        'id' => 901,
+        'action_request_id' => ActionRequest::factory()->create(['type' => 'replace_media_file', 'webhook_event_id' => null])->id,
+        'service_connection_id' => ServiceConnection::query()->where('name', 'Sonarr')->value('id'),
+    ]);
+    $server = Server::factory()->create(['id' => 901, 'name' => 'example-host-01']);
+    ServerIncident::factory()->open()->create(['server_id' => $server->id]);
+    // A check fills the server's check list, so the row measures its row actions.
+    ServerCheck::factory()->mountPresent()->create(['server_id' => $server->id]);
 }
 
 /**
@@ -359,6 +385,16 @@ function mobileLayoutAdminPages(): array
         'ai chat' => ['ai.chat', '[data-chat-options]'],
         'requests (admin)' => ['media.requests.index', '[data-page-header-more]', '[data-request-card="1"]'],
         'action queue (admin)' => ['actions.requests.index', '[data-action-refresh]', '[data-action-cards]'],
+        'new connection' => ['admin.connections.create', null],
+        // The deferred indexer row: the Prowlarr indexers card measures its row actions.
+        'connection' => ['admin.connections.edit', null, '[data-prowlarr-indexer-test="3"]', ['serviceConnection' => 901]],
+        'webhook event' => ['admin.webhook-log.show', null, null, ['webhookEvent' => 901]],
+        'replacement attempts' => ['admin.media-replacement.attempts.index', null],
+        'replacement attempt' => ['admin.media-replacement.attempts.show', '[data-attempt-header]', null, ['mediaReplacementAttempt' => 901]],
+        // Its header has only secondary actions: the phone keeps the ⋯ menu.
+        'server' => ['admin.servers.show', '[data-page-header-more]', null, ['server' => 901]],
+        // The toolbar stays hand-rolled (R4); the title waits for the scene.
+        'whisparr scene' => ['media.whisparr.show', '[data-search-now]', '[data-whisparr-show-title]', ['id' => 11]],
     ];
 }
 
@@ -415,6 +451,18 @@ function mobileLayoutTouchPages(): array
         'chat templates' => ['ai.templates.index', [], null],
         'new chat template' => ['ai.templates.create', [], null],
         'chat template' => ['ai.templates.edit', ['chatTemplate' => 901], null],
+        'new connection' => ['admin.connections.create', [], null],
+        'connection' => ['admin.connections.edit', ['serviceConnection' => 901], '[data-prowlarr-indexer-test="3"]'],
+        'webhook log' => ['admin.webhook-log.index', [], null],
+        'webhook event' => ['admin.webhook-log.show', ['webhookEvent' => 901], null],
+        'jobs' => ['admin.jobs.index', [], null],
+        'media replacement' => ['admin.media-replacement.index', [], null],
+        'replacement attempts' => ['admin.media-replacement.attempts.index', [], null],
+        'replacement attempt' => ['admin.media-replacement.attempts.show', ['mediaReplacementAttempt' => 901], null],
+        'operational statistics' => ['admin.statistics.index', [], null],
+        'server' => ['admin.servers.show', ['server' => 901], null],
+        'whisparr' => ['media.whisparr.index', [], null],
+        'whisparr scene' => ['media.whisparr.show', ['id' => 11], '[data-whisparr-show-title]'],
     ];
 }
 
@@ -473,17 +521,10 @@ function mobileLayoutPendingRouteNames(): array
         'password.confirm',
         'activity-log',
         'appearance.edit',
-        'admin.connections.create',
-        'admin.connections.edit',
-        'admin.media-replacement.attempts.index',
-        'admin.media-replacement.attempts.show',
-        'admin.webhook-log.show',
-        'admin.servers.show',
         'media.series.create',
         'media.movies.create',
         'media.wanted.index',
         'media.anime.index',
-        'media.whisparr.show',
         'prowlarr.search',
         'bazarr.overview',
         'bazarr.missing',
