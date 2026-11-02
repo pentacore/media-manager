@@ -29,7 +29,7 @@ class GetDownloadHistoryTool extends BaseTool
     public function description(): Stringable|string
     {
         return 'Fetch Sonarr or Radarr history events (grabbed, downloadFolderImported, downloadFailed, '
-            .'episodeFileDeleted, ...). Pass download_id to trace a single download\'s lifecycle — do this '
+            ."episodeFileDeleted, ...). Pass download_id to trace a single download's lifecycle — do this "
             .'when deciding whether a stuck download is a retry, a duplicate, or a failed import.';
     }
 
