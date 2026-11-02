@@ -1533,16 +1533,16 @@
         },
         {
             "name": "inertiajs/inertia-laravel",
-            "version": "v3.5.2",
+            "version": "v3.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/inertiajs/inertia-laravel.git",
-                "reference": "4e91cf45cad5ef97862d1ede40fe41616d4e4f91"
+                "reference": "cb1a80fde6cfbd59be14e9cc6c086f5ef08c3ec8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/inertiajs/inertia-laravel/zipball/4e91cf45cad5ef97862d1ede40fe41616d4e4f91",
-                "reference": "4e91cf45cad5ef97862d1ede40fe41616d4e4f91",
+                "url": "https://api.github.com/repos/inertiajs/inertia-laravel/zipball/cb1a80fde6cfbd59be14e9cc6c086f5ef08c3ec8",
+                "reference": "cb1a80fde6cfbd59be14e9cc6c086f5ef08c3ec8",
                 "shasum": ""
             },
             "require": {
@@ -1599,9 +1599,9 @@
             ],
             "support": {
                 "issues": "https://github.com/inertiajs/inertia-laravel/issues",
-                "source": "https://github.com/inertiajs/inertia-laravel/tree/v3.5.2"
+                "source": "https://github.com/inertiajs/inertia-laravel/tree/v3.6.0"
             },
-            "time": "2026-10-21T19:41:00+00:00"
+            "time": "2026-10-30T12:58:39+00:00"
         },
         {
             "name": "laminas/laminas-diactoros",
@@ -2715,16 +2715,16 @@
         },
         {
             "name": "league/commonmark",
-            "version": "2.10.4",
+            "version": "2.10.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/thephpleague/commonmark.git",
-                "reference": "40821b7606d8d946bac57dbd2290076c722e3a65"
+                "reference": "8eb53e906fd60c67038d22f1f1cab420ed58b8be"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/thephpleague/commonmark/zipball/40821b7606d8d946bac57dbd2290076c722e3a65",
-                "reference": "40821b7606d8d946bac57dbd2290076c722e3a65",
+                "url": "https://api.github.com/repos/thephpleague/commonmark/zipball/8eb53e906fd60c67038d22f1f1cab420ed58b8be",
+                "reference": "8eb53e906fd60c67038d22f1f1cab420ed58b8be",
                 "shasum": ""
             },
             "require": {
@@ -2818,7 +2818,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-17T19:59:50+00:00"
+            "time": "2026-10-31T13:35:37+00:00"
         },
         {
             "name": "league/config",
