@@ -34,11 +34,12 @@ updates:
         dependency-type: development
         update-types: [minor, patch]
     ignore:
-      # 3.3.12/3.3.13 rewrite `//` inside static prop strings into block
-      # comments and break types:check (vuejs/language-tools#6240, fixed by
-      # #6297). Drop this once a fixed release is out.
+      # 3.3.12-3.3.14 rewrite `//` inside static prop strings into block
+      # comments and break types:check (vuejs/language-tools#6240). The fix
+      # (#6297) landed on feat/vue-content-mapper, not in 3.3.14. Drop this
+      # once a release with it is out.
       - dependency-name: vue-tsc
-        versions: ['3.3.12', '3.3.13']
+        versions: ['3.3.12', '3.3.13', '3.3.14']
 
   - package-ecosystem: github-actions
     directory: /
