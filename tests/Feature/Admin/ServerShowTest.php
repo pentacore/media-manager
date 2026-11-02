@@ -176,6 +176,7 @@ test('the server page reads the server row once', function (): void {
 });
 
 test('the server page carries the last rejected report', function (): void {
+    $this->freezeSecond();
     $server = Server::factory()->enrolled()->create([
         'last_report_error' => 'The metrics.cpu percent field must be a number.',
         'last_report_error_at' => now()->subMinutes(2),
@@ -186,5 +187,5 @@ test('the server page carries the last rejected report', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('server.last_report_error', 'The metrics.cpu percent field must be a number.')
-            ->where('server.last_report_error_at', now()->subMinutes(2)->startOfSecond()->toIso8601String()));
+            ->where('server.last_report_error_at', now()->subMinutes(2)->toIso8601String()));
 });
