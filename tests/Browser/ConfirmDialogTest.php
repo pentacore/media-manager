@@ -279,9 +279,9 @@ function confirmDialogFakeSeerr(): void
 
     Http::fake([
         'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1, 'approved' => 0, 'declined' => 0, 'movie' => 1, 'tv' => 0]),
-        // posterPath keeps the card an <img> instead of Poster's text-hint
-        // fallback, which would otherwise duplicate the title in the same
-        // card and break strict-mode assertSeeIn (see DiscoverTest.php).
+        // The fake poster fails to load at an unpredictable moment, and Poster
+        // then shows its text hint ("the matrix"), so title assertions are
+        // scoped to [data-request-title] rather than the whole card.
         'seerr.local:5055/api/v1/movie/603' => Http::response(['id' => 603, 'title' => 'The Matrix', 'posterPath' => '/matrix.jpg']),
         'seerr.local:5055/api/v1/request*' => Http::response([
             'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1],
@@ -353,7 +353,7 @@ test('a Seerr request delete asks first; Cancel sends nothing and Delete removes
 
     $webpage = visit(route('media.requests.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-request-card="1"]', 'The Matrix')
+        ->assertSeeIn('[data-request-card="1"] [data-request-title]', 'The Matrix')
         ->click('[data-request-card="1"] [data-request-delete]')
         ->assertSeeIn('[data-confirm-dialog]', 'Delete request for "The Matrix"?')
         ->click('[data-confirm-cancel]');
