@@ -1,3 +1,10 @@
+## [1.58.2](https://github.com/pentacore/media-manager/compare/v1.58.1...v1.58.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **deps:** bump symfony/mime for CVE-2026-45070 and steady two flaky tests ([e65a8a3](https://github.com/pentacore/media-manager/commit/e65a8a328ac052ed74ec1d906d18b1ed68db7abd))
+
 ## [1.58.1](https://github.com/pentacore/media-manager/compare/v1.58.0...v1.58.1) (2026-10-26)
 
 
