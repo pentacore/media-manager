@@ -743,6 +743,7 @@ const rangeText = computed(() => {
                     </div>
                     <div
                         class="text-[15px] leading-tight font-semibold text-pretty"
+                        data-request-title
                     >
                         {{ req.media_title ?? 'Unknown' }}
                     </div>
