@@ -72,12 +72,17 @@ const showLocalForm = ref(false);
                 variant="outline"
                 class="w-full"
                 size="lg"
+                data-login-emby
                 @click="showEmbyForm = true"
             >
                 Sign in with Emby
             </Button>
 
-            <div v-if="showEmbyForm" class="space-y-4 rounded-lg border p-4">
+            <div
+                v-if="showEmbyForm"
+                class="space-y-4 rounded-lg border p-4"
+                data-login-emby-form
+            >
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium">Sign in with Emby</h3>
                     <Button
@@ -157,6 +162,7 @@ const showLocalForm = ref(false);
                         variant="ghost"
                         class="w-full text-muted-foreground"
                         size="sm"
+                        data-login-local-toggle
                     >
                         {{
                             showLocalForm

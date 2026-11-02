@@ -42,7 +42,8 @@ use Pest\Browser\Api\Webpage;
  * its primary action on screen, name every control, hide nothing behind
  * hover, overlap no two controls and leave no scroller scrolling by a sliver.
  * The gate covers every page route: `the phone gate classifies every page
- * route` fails while a GET route behind `auth` is in no dataset and not in
+ * route` fails while a named GET route in the `web` group (behind `auth`,
+ * behind `guest` or public) is in no dataset and not in
  * mobileLayoutExcludedRouteNames(). mobileLayoutPendingRouteNames() is the
  * 3h-3 backlog of pages not gated yet; Task 13 empties and deletes it. The
  * touch dataset sweeps every page PhoneJobsTouchTargetTest does not for
@@ -62,7 +63,10 @@ function mobileLayoutSeries(int $id, string $title): array
     ];
 }
 
-function mobileLayoutFakeServices(): void
+/**
+ * @param  array<string, mixed>  $overrides  fakes matched before the defaults (a row's own worst case)
+ */
+function mobileLayoutFakeServices(array $overrides = []): void
 {
     $poster = [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
     $sonarr = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
@@ -103,6 +107,7 @@ function mobileLayoutFakeServices(): void
     }
 
     Http::fake([
+        ...$overrides,
         'sonarr.local:8989/api/v3/series' => Http::response([
             mobileLayoutSeries(1, 'Severance'),
             mobileLayoutSeries(2, 'The Extraordinarily Long Example Series Title Of Doom'),
@@ -503,6 +508,8 @@ function mobileLayoutGuestPages(): array
         'login' => ['login', null],
         'register' => ['register', '[data-test="register-user-button"]'],
         'forgot password' => ['password.request', '[data-test="email-password-reset-link-button"]'],
+        // Fortify renders the form for any token.
+        'reset password' => ['password.reset', '[data-test="reset-password-button"]', null, ['token' => 'example-token']],
     ];
 }
 
@@ -517,6 +524,21 @@ function mobileLayoutSignedInAuthPages(): array
     return [
         'confirm password' => ['password.confirm', '[data-test="confirm-password-button"]'],
         'verify email' => ['verification.notice', null],
+    ];
+}
+
+/**
+ * Auth pages only their flow reaches, as [routeName, primary]: set-password
+ * needs an invited user without a password, the two-factor challenge a login
+ * by a user with two-factor confirmed.
+ *
+ * @return array<string, array{0: string, 1: ?string}>
+ */
+function mobileLayoutFlowAuthPages(): array
+{
+    return [
+        'set password' => ['auth.set-password', null],
+        'two-factor challenge' => ['two-factor.login', null],
     ];
 }
 
@@ -587,7 +609,7 @@ function mobileLayoutTouchPages(): array
 }
 
 /**
- * GET routes behind `auth` that render no page of their own, each with the
+ * Named `web` GET routes that render no page of their own, each with the
  * reason the gate leaves it out.
  *
  * @return array<string, string>
@@ -624,6 +646,9 @@ function mobileLayoutExcludedRouteNames(): array
         'two-factor.qr-code' => 'JSON for the two-factor QR code',
         'two-factor.secret-key' => 'JSON for the two-factor secret key',
         'two-factor.recovery-codes' => 'JSON for the two-factor recovery codes',
+        'auth.authentik' => 'a redirect to the Authentik sign-in',
+        'auth.authentik.callback' => 'the Authentik OAuth callback, which redirects',
+        'auth.invite.accept' => 'a signed invite link that redirects to set-password',
     ];
 }
 
@@ -647,9 +672,10 @@ function mobileLayoutPendingRouteNames(): array
 }
 
 /**
- * Named GET routes behind `auth` or `auth:<guard>` (Fortify registers its
- * routes with `auth:web`): every one needs a dataset row, an exclusion or a
- * pending entry.
+ * Named GET routes in the `web` group: behind `auth` or `auth:<guard>`
+ * (Fortify registers its routes with `auth:web`), behind `guest` or
+ * `guest:<guard>`, or public (home, set-password). Every one needs a dataset
+ * row, an exclusion or a pending entry.
  *
  * @return list<string>
  */
@@ -657,7 +683,7 @@ function mobileLayoutPageRouteNames(): array
 {
     return collect(Route::getRoutes()->getRoutes())
         ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('GET', $route->methods(), true))
-        ->filter(fn (Illuminate\Routing\Route $route): bool => collect($route->gatherMiddleware())->contains(fn (mixed $middleware): bool => $middleware === 'auth' || (is_string($middleware) && str_starts_with($middleware, 'auth:'))))
+        ->filter(fn (Illuminate\Routing\Route $route): bool => in_array('web', $route->gatherMiddleware(), true))
         ->map(fn (Illuminate\Routing\Route $route): ?string => $route->getName())
         ->filter()
         ->unique()
@@ -672,7 +698,7 @@ function mobileLayoutPageRouteNames(): array
  */
 function mobileLayoutUnclassifiedRouteNames(): array
 {
-    $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages()])
+    $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])
         ->map(fn (array $row): string => $row[0])
         ->merge(array_keys(mobileLayoutExcludedRouteNames()))
         ->merge(mobileLayoutPendingRouteNames());
@@ -684,6 +710,7 @@ dataset('mobile layout member pages', mobileLayoutMemberPages());
 dataset('mobile layout admin pages', mobileLayoutAdminPages());
 dataset('mobile layout guest pages', mobileLayoutGuestPages());
 dataset('mobile layout signed-in auth pages', mobileLayoutSignedInAuthPages());
+dataset('mobile layout flow auth pages', mobileLayoutFlowAuthPages());
 dataset('mobile layout touch pages', mobileLayoutTouchPages());
 
 /**
@@ -742,13 +769,65 @@ test('every control on a page is a 40 px target on a phone', function (string $r
     $webpage->assertScript(phoneSmallTargetsScript(), '');
 })->with('mobile layout touch pages');
 
-test('every control on a guest page is a 40 px target on a phone', function (string $routeName): void {
-    $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+/**
+ * @param  array<string, int|string>  $parameters
+ */
+test('every control on a guest page is a 40 px target on a phone', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
+    $webpage = visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->script(appHydratedScript());
     mobileLayoutSettle($webpage);
 
     $webpage->assertScript(phoneSmallTargetsScript('body'), '');
 })->with('mobile layout guest pages');
+
+test('an auth page reached through its flow fits a phone screen with 40 px targets', function (string $routeName, ?string $primary): void {
+    if ($routeName === 'auth.set-password') {
+        // An invited user signed in before setting a password.
+        $this->actingAs(User::factory()->member()->create(['password' => null, 'invite_accepted_at' => null]));
+        $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+    } else {
+        // Without Authentik or Emby the login page shows its email form directly.
+        config()->set('services.authentik.client_id');
+        $user = User::factory()->member()->create();
+        $user->forceFill([
+            'two_factor_secret' => encrypt('EXAMPLESECRETKEY'),
+            'two_factor_recovery_codes' => encrypt(json_encode(['example-recovery-code'])),
+            'two_factor_confirmed_at' => now(),
+        ])->save();
+
+        $webpage = visit(route('login', absolute: false))->on()->mobile()->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        $webpage->fill('email', $user->email)
+            ->fill('password', 'password')
+            ->click('[data-test="login-button"]');
+    }
+
+    $webpage->assertPathIs(route($routeName, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    mobileLayoutAssertPage($webpage, $primary, null, 'body');
+    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+})->with('mobile layout flow auth pages');
+
+/**
+ * The sign-in a real install shows: Authentik and Emby buttons, the open Emby
+ * form and the opened email-login collapsible.
+ */
+test('the login page with single sign-on fits a phone screen with 40 px targets', function (): void {
+    config()->set('services.authentik.client_id', 'example-client-id');
+    ServiceConnection::factory()->emby()->create(['name' => 'Emby', 'url' => 'http://emby.local:8096', 'api_key' => 'k']);
+
+    $webpage = visit(route('login', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutAssertPage($webpage, '[data-login-authentik]', '[data-login-emby]', 'body');
+    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+
+    $webpage->click('[data-login-emby]')
+        ->click('[data-login-local-toggle]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-login-emby-form]") && document.getAnimations().length === 0'));
+    mobileLayoutAssertPage($webpage, '[data-test="login-button"]', '[data-login-emby-form]', 'body');
+    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+});
 
 test('every control on a signed-in auth page is a 40 px target on a phone', function (string $routeName): void {
     $this->actingAs(User::factory()->member()->unverified()->create());
@@ -759,6 +838,35 @@ test('every control on a signed-in auth page is a 40 px target on a phone', func
 
     $webpage->assertScript(phoneSmallTargetsScript('body'), '');
 })->with('mobile layout signed-in auth pages');
+
+/**
+ * The add form a result card opens (quality profile, root folder, Add and
+ * Cancel), with a long first root folder: its select shows that path.
+ */
+test('the add form of an add page fits a phone screen', function (string $routeName, string $query, int $resultId): void {
+    // The `*` keys differ from the defaults' keys, so these match first.
+    $rootFolders = [
+        ['id' => 1, 'path' => '/mnt/user/data/media/example-library-with-a-long-folder-name/tv', 'freeSpace' => 1_200_000_000_000],
+        ['id' => 2, 'path' => '/data/tv', 'freeSpace' => 100_000_000_000],
+    ];
+    mobileLayoutFakeServices([
+        'sonarr.local:8989/api/v3/rootfolder*' => Http::response($rootFolders),
+        'radarr.local:7878/api/v3/rootfolder*' => Http::response($rootFolders),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route($routeName, ['q' => $query], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage, sprintf('[data-add-result="%d"]', $resultId));
+    $webpage->click(sprintf('[data-add-result="%d"]', $resultId));
+
+    mobileLayoutAssertPage($webpage, '[data-add-root-folder]', '[data-add-root-folder]');
+    $webpage->assertSeeIn('[data-add-root-folder]', '/mnt/user/data/media')
+        ->assertScript(phoneSmallTargetsScript(), '');
+})->with([
+    'add series' => ['media.series.create', 'severance', 371980],
+    'add movie' => ['media.movies.create', 'dune', 438631],
+]);
 
 test('an open dialog fits a phone screen', function (): void {
     $this->actingAs(User::factory()->admin()->create());
@@ -861,7 +969,7 @@ test('the sliver check names a scroller that scrolls by a few pixels', function 
 });
 
 test('the phone gate classifies every page route', function (): void {
-    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages()])->map(fn (array $row): string => $row[0])->unique();
+    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])->map(fn (array $row): string => $row[0])->unique();
     $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
     $pending = collect(mobileLayoutPendingRouteNames());
 
@@ -877,4 +985,12 @@ test('the route guard catches an unlisted page behind auth or an auth guard', fu
     Route::middleware(['web', 'auth:web'])->get('example-guarded-page', fn (): Response => Inertia::render('Welcome'))->name('example.guarded-page');
 
     expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.auth-page', 'example.guarded-page']);
+});
+
+test('the route guard catches an unlisted guest or public page', function (): void {
+    Route::middleware(['web', 'guest'])->get('example-guest-page', fn (): Response => Inertia::render('Welcome'))->name('example.guest-page');
+    Route::middleware(['web', 'guest:web'])->get('example-guarded-guest-page', fn (): Response => Inertia::render('Welcome'))->name('example.guarded-guest-page');
+    Route::middleware('web')->get('example-public-page', fn (): Response => Inertia::render('Welcome'))->name('example.public-page');
+
+    expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.guest-page', 'example.guarded-guest-page', 'example.public-page']);
 });
