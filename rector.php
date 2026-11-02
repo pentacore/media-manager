@@ -2,14 +2,12 @@
 
 declare(strict_types=1);
 
-use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
 use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
 use Rector\DeadCode\Rector\Property\RemoveDefaultValueFromAssignedPropertyRector;
-use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
-use Rector\Naming\Rector\ClassMethod\RenameParamToMatchTypeRector;
 use Rector\Php80\Rector\Class_\ClassPropertyAssignToConstructorPromotionRector;
+use RectorLaravel\Rector\Class_\RemoveDefaultAuthorizeTrueFromFormRequestRector;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
 
@@ -28,7 +26,6 @@ return RectorConfig::configure()
         typeDeclarations: true,
         typeDeclarationDocblocks: true,
         privatization: true,
-        naming: true,
         instanceOf: true,
         earlyReturn: true,
         carbon: true,
@@ -77,11 +74,11 @@ return RectorConfig::configure()
     )
     ->withSkipPath(__DIR__.'/bootstrap/cache')
     ->withSkip([
-        PostIncDecToPreIncDecRector::class,
-        // Parameter/promoted-property renames silently break named-argument
-        // call sites (parameter names are part of the public signature in PHP 8).
-        RenameParamToMatchTypeRector::class,
-        RenamePropertyToMatchTypeRector::class,
+        // It strips any authorize() that ends in `return true`, including
+        // ones that abort(404) first so a foreign record answers 404 before
+        // validation (chat templates, server checks), silently dropping the
+        // ownership check.
+        RemoveDefaultAuthorizeTrueFromFormRequestRector::class,
         // Laravel's event auto-discovery binds a Listener::handle() to an
         // event solely from that parameter's type hint (these classes are
         // never registered in a provider). Stripping an apparently-unused
