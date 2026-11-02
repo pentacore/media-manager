@@ -327,7 +327,7 @@ test('closing a deep-linked replace dialog drops the link params and a second cl
     $webpage = visit($linkUrl)
         ->assertPresent('[data-replacement-dialog]');
     $webpage->script(appHydratedScript());
-    $webpage->script("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-replacement-dialog]') === null && !location.search.includes('replace_')"));
 
     expect($webpage->script('location.search'))->not->toContain('replace_');
