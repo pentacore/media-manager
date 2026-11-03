@@ -10,8 +10,8 @@
         "Tests\\Browser\\Admin\\ConnectionSubtitleCheckTagsTest": 6.7491,
         "Tests\\Browser\\Admin\\MediaReplacementAttemptsTest": 4.2577,
         "Tests\\Browser\\Admin\\WebhookLogDecisionStatusTest": 3.1811,
-        "Tests\\Browser\\AiChatTest": 30.3099,
-        "Tests\\Browser\\AiConversationTranscriptTest": 1.177,
+        "Tests\\Browser\\AiChatTest": 31.9052,
+        "Tests\\Browser\\AiConversationTranscriptTest": 1.7655,
         "Tests\\Browser\\AiEmbeddingsSettingsTest": 1.5669,
         "Tests\\Browser\\AiFreeUsagePoolTest": 4.9109,
         "Tests\\Browser\\AiModelTiersTest": 18.143,
@@ -28,7 +28,7 @@
         "Tests\\Browser\\AiUsageDetailAbortTest": 74.0094,
         "Tests\\Browser\\AiUsageSecondOpinionTest": 7.9397,
         "Tests\\Browser\\AiUsageSectionsTest": 9.2572,
-        "Tests\\Browser\\AiUsageTelemetryTest": 12.2304,
+        "Tests\\Browser\\AiUsageTelemetryTest": 13.2496,
         "Tests\\Browser\\AnimeSeasonTest": 11.3002,
         "Tests\\Browser\\ArrLibraryOutageTest": 5.1914,
         "Tests\\Browser\\AuditLogTest": 1.8204,
@@ -111,5 +111,5 @@
         "Tests\\Browser\\WhisparrPreferencesTest": 1.7408
     },
     "checksum": "6d0fe2a286dee6a87f0135b9fdc74b43",
-    "updated_at": "2026-10-26T08:19:09+00:00"
+    "updated_at": "2026-11-03T08:46:23+00:00"
 }

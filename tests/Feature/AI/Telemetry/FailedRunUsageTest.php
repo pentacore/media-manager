@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Listeners\Ai\RecordFailedAgentRun;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
@@ -116,4 +117,31 @@ test('a failed run with an empty error message blames the agent, not an upstream
 
     expect(AiUsageRecord::where('invocation_id', 'inv-empty')->sole()->error_message)
         ->toBe('The agent failed without a usable description.');
+});
+
+test('a run ended by a client disconnect bills its completed steps as stopped without an error', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'input_per_mtok' => 1, 'output_per_mtok' => 2]);
+
+    $runUsageAccumulator = resolve(RunUsageAccumulator::class);
+    $runUsageAccumulator->add('inv-stopped', 'openai', 'gpt-5-mini', new TextUsage(1000, 200));
+
+    (new RecordFailedAgentRun)->handle(new AgentFailed('inv-stopped', makeFailedRunPrompt(new DecisionAgent), new ClientDisconnectedException));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-stopped')->sole())
+        ->prompt_tokens->toBe(1000)
+        ->completion_tokens->toBe(200)
+        ->status->toBe('stopped')
+        ->error_message->toBeNull();
+});
+
+test('a run ended by a wrapped client disconnect is stopped too', function (): void {
+    (new RecordFailedAgentRun)->handle(new AgentFailed(
+        'inv-wrapped',
+        makeFailedRunPrompt(new DecisionAgent),
+        new RuntimeException('tool failed', 0, new ClientDisconnectedException),
+    ));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-wrapped')->sole())
+        ->status->toBe('stopped')
+        ->error_message->toBeNull();
 });

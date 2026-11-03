@@ -43,6 +43,8 @@ export interface ConversationMessage {
     toolCalls?: ChatToolCall[];
     attachments?: ChatAttachmentRef[];
     failed?: boolean;
+    /** True when the user stopped the reply before it finished. */
+    stopped?: boolean;
     /** The model behind an assistant reply; null when it is not known. */
     answered_by?: AnsweredBy | null;
     /** Choice and approval cards under an assistant reply. */

@@ -165,8 +165,6 @@ export type SubtitleAuditBatchCard = Extract<
 export interface ChatMessage extends ConversationMessage {
     workflow?: WorkflowProposal | null;
     workflowResolved?: 'approved' | 'declined' | null;
-    /** True when the user stopped the reply before it finished. */
-    stopped?: boolean;
     /**
      * The option labels picked on this reply's choices card: set on a click,
      * or inferred from the next user message when the conversation loads.

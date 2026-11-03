@@ -46,6 +46,20 @@ test('the classifier fails open when classification throws', function (): void {
     expect(resolve(Classifier::class)->probability('x', 'payload', 'Needs action?'))->toBeNull();
 });
 
+test('a failed classification call bills a failed row with its error and caller, and still fails open', function (): void {
+    Classification::fake(fn () => throw new RuntimeException('provider down'));
+
+    expect(resolve(Classifier::class)->probability(RunDecisionAgent::class, 'payload', 'Needs action?'))->toBeNull();
+
+    $record = AiUsageRecord::where('kind', AiUsageKind::Classification)->sole();
+
+    expect($record->status)->toBe('failed')
+        ->and($record->error_message)->toBe('provider down')
+        ->and($record->agent_class)->toBe(RunDecisionAgent::class)
+        ->and($record->prompt_tokens)->toBe(0)
+        ->and($record->completion_tokens)->toBe(0);
+});
+
 test('an OpenRouter classification call carries the routing preferences', function (): void {
     resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
     Classification::fake([['decision' => new BooleanAnswer(0.5)]]);

@@ -8,6 +8,7 @@ use App\Ai\AnsweredBy;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\ToolGroup;
+use App\Ai\StoppedByUser;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
@@ -35,6 +36,7 @@ use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Responses\StreamedAgentResponse;
 use Laravel\Ai\Responses\TextResponse;
 use Throwable;
 
@@ -157,8 +159,9 @@ class ChatController extends Controller
             return $chatFailureResponder->respond($throwable, $user);
         }
 
-        $stream->then(function (TextResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $conversationToolPins, $pins, $chatToolRouter, $turnKey): void {
-            if ($turnKey !== null) {
+        $stream->then(function (StreamedAgentResponse $response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore, $conversationModelOverride, $conversationToolPins, $pins, $chatToolRouter, $turnKey): void {
+            // A stopped turn says nothing about which routed groups were useful.
+            if ($turnKey !== null && ! StoppedByUser::response($response)) {
                 $chatToolRouter->recordToolUse($turnKey, $this->calledToolNames($response));
             }
 
