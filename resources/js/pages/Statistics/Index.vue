@@ -197,7 +197,7 @@ function formatHours(seconds: number): string {
                                 :key="row.user"
                                 class="border-t border-border"
                             >
-                                <td class="py-2 max-lg:wrap-anywhere">
+                                <td class="py-2 wrap-anywhere">
                                     {{ row.user }}
                                 </td>
                                 <td class="py-2 text-right tabular-nums">

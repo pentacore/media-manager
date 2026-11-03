@@ -161,3 +161,37 @@ test('an activity-log row keeps every cell inside the feed at tablet widths with
     $webpage->assertScript('(() => { const feed = document.querySelector("[data-activity-feed]").getBoundingClientRect(); return [...document.querySelectorAll("[data-activity-row]")].flatMap((row) => [...row.firstElementChild.children].filter((cell) => { const rect = cell.getBoundingClientRect(); return rect.width < 1 || rect.left < feed.left - 1 || rect.right > feed.right + 1; }).map((cell) => `${row.dataset.activityRow}: ${(cell.textContent || cell.tagName).trim().slice(0, 24)} ${Math.round(cell.getBoundingClientRect().left)}..${Math.round(cell.getBoundingClientRect().right)} (feed ..${Math.round(feed.right)})`)).join(" | "); })()', '')
         ->assertScript('[...document.querySelectorAll("[data-audit-expand]")].length', 1);
 })->with([768, 769, 820]);
+
+/**
+ * Lists every statistics table that ends past its card, so a long unbroken
+ * viewer or connection name cannot widen the table out of it.
+ */
+function activityStatisticsTablesInsideCardsScript(): string
+{
+    return '(() => [...document.querySelectorAll("main table")].filter((table) => table.getBoundingClientRect().right > table.parentElement.getBoundingClientRect().right + 1).map((table) => `${table.querySelector("th")?.textContent.trim()} ${Math.round(table.getBoundingClientRect().right)} > ${Math.round(table.parentElement.getBoundingClientRect().right)}`).join(" | "))()';
+}
+
+test('a long unbroken viewer or connection name wraps inside its statistics card on desktop', function (int $width): void {
+    $name = 'ExampleUnbrokenNameThatRunsPastTheCardEvenOnAWideDesktopScreen'.str_repeat('0123456789', 8);
+    $viewer = User::factory()->create(['name' => $name]);
+    $link = EmbyUserLink::factory()->create(['user_id' => $viewer->id]);
+    StatRollup::factory()->create(['metric' => 'watch.user_plays', 'dimensions' => ['emby_user_link_id' => $link->id], 'count' => 120]);
+    StatRollup::factory()->create(['metric' => 'watch.seconds', 'dimensions' => ['emby_user_link_id' => $link->id], 'count' => 120, 'sum' => 4_000_000]);
+    $connection = ServiceConnection::factory()->sonarr()->create(['name' => $name]);
+    StatRollup::factory()->create(['metric' => 'service.uptime_pct', 'dimensions' => ['service_connection_id' => $connection->id], 'count' => 120, 'sum' => 118]);
+    StatRollup::factory()->create(['metric' => 'service.latency_ms', 'dimensions' => ['service_connection_id' => $connection->id], 'count' => 120, 'sum' => 120_000]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('statistics.index', absolute: false))->assertNoSmoke();
+    $webpage->resize($width, 1117);
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-statistics-heatmap]") && !document.querySelector("main .animate-pulse:not(header *)")'));
+
+    $webpage->assertSeeIn('[data-statistics-watch-grid]', 'ExampleUnbrokenName')
+        ->assertScript(activityStatisticsTablesInsideCardsScript(), '');
+
+    $webpage->navigate(route('admin.statistics.index', absolute: false));
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertSee('ExampleUnbrokenName')
+        ->assertScript(activityStatisticsTablesInsideCardsScript(), '');
+})->with([1024, 1280, 1728]);

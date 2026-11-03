@@ -7,8 +7,14 @@ import { cn } from '@/lib/utils';
 
 defineOptions({ inheritAttrs: false });
 
+/**
+ * `class` sizes and places the wrapper, so the toggle stays on the input
+ * whatever width or margin the call site gives it; `inputClass` styles the
+ * input itself (height, text size).
+ */
 const props = defineProps<{
     class?: HTMLAttributes['class'];
+    inputClass?: HTMLAttributes['class'];
 }>();
 
 const showPassword = ref(false);
@@ -21,11 +27,11 @@ defineExpose({
 </script>
 
 <template>
-    <div class="relative">
+    <div :class="cn('relative', props.class)">
         <Input
             ref="inputRef"
             :type="showPassword ? 'text' : 'password'"
-            :class="cn('pr-10', props.class)"
+            :class="cn('pr-10', props.inputClass)"
             v-bind="$attrs"
         />
         <button

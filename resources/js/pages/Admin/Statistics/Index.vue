@@ -184,7 +184,7 @@ const aiCostTotal = computed(() =>
                         :key="row.connection"
                         class="border-t border-border"
                     >
-                        <td class="py-2 max-lg:wrap-anywhere">
+                        <td class="py-2 wrap-anywhere">
                             {{ row.connection }}
                         </td>
                         <td class="py-2">

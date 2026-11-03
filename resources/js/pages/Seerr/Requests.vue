@@ -761,7 +761,7 @@ const rangeText = computed(() => {
                     </div>
 
                     <div
-                        class="mt-auto flex items-center gap-2 pt-1.5 max-sm:flex-wrap touch:gap-3"
+                        class="mt-auto flex flex-wrap items-center gap-2 pt-1.5 touch:gap-3"
                     >
                         <template v-if="req.status === 1">
                             <Button
