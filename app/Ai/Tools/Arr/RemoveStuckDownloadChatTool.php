@@ -88,7 +88,7 @@ class RemoveStuckDownloadChatTool extends BaseTool
                 ->description('Short plain-English reason for removing rather than importing.')
                 ->required(),
             'blocklist' => $schema->boolean()
-                ->description('Also blocklist the release so the arr never grabs it again. Use when the release itself is bad (corrupt, fake, wrong content) — not when it merely isn\'t an upgrade. Default false.')
+                ->description("Also blocklist the release so the arr never grabs it again. Use when the release itself is bad (corrupt, fake, wrong content) — not when it merely isn't an upgrade. Default false.")
                 ->required()
                 ->nullable(),
             'search_replacement' => $schema->boolean()

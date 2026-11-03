@@ -246,6 +246,15 @@ test('a check of another server answers 404', function (): void {
         ->and($serverCheck->fresh()?->is_enabled)->toBeTrue();
 });
 
+test('a check of another server answers 404 before its body is validated', function (): void {
+    $server = Server::factory()->create();
+    $serverCheck = ServerCheck::factory()->for(Server::factory())->mountpointProtected()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->putJson(route('admin.servers.checks.update', [$server, $serverCheck]), ['params' => []])->assertNotFound();
+    $this->patchJson(route('admin.servers.checks.toggle', [$server, $serverCheck]), [])->assertNotFound();
+});
+
 test('members and viewers cannot manage checks', function (string $role): void {
     $server = Server::factory()->create();
     $serverCheck = ServerCheck::factory()->for($server)->create();
