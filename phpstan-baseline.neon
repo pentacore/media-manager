@@ -562,7 +562,19 @@ parameters:
 			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
+			path: app/Listeners/Ai/RecordClassificationFailure.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
 			path: app/Listeners/Ai/RecordEmbeddingsUsage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordEmbeddingsFailure.php
 
 		-
 			message: '#^Property Laravel\\Ai\\Prompts\\Prompt\:\:\$model \(string\) on left side of \?\? is not nullable\.$#'
@@ -593,6 +605,12 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Listeners/Ai/RecordRerankingUsage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordRerankingFailure.php
 
 		-
 			message: '#^Instanceof between App\\Enums\\ServiceType and App\\Enums\\ServiceType will always evaluate to true\.$#'
