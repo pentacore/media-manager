@@ -54,7 +54,7 @@ const missesLine = computed(() => {
                 }}
                 — pick one by hand:
             </p>
-            <ul class="mb-2 flex flex-wrap gap-x-4 gap-y-2">
+            <ul class="mb-2 flex flex-wrap gap-x-4 gap-y-2 touch:gap-y-6">
                 <li
                     v-for="episode in followUps.manualPicks"
                     :key="episode.label"

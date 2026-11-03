@@ -6,6 +6,8 @@ use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\SubtitleAuditBatch;
+use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
@@ -397,4 +399,103 @@ test('the sheet shows the second opinion and a rejection reason', function (): v
     $webpage->script(actionQueuePhoneSheetOpenScript());
     $webpage->assertSeeIn('[data-action-sheet] [data-action-rejection-reason]', 'Not wanted on this server.')
         ->assertNoSmoke();
+});
+
+/**
+ * A handed-off subtitle audit batch for a long-titled series: one queued
+ * pending action, six episodes left to pick by hand, one with no usable
+ * release and one failed.
+ */
+function actionQueuePhoneAuditBatch(): SubtitleAuditBatch
+{
+    $batch = SubtitleAuditBatch::factory()->handedOff()->create(['series_id' => 42, 'series_title' => 'The Extraordinarily Long Example Series Title Of Doom']);
+    $queued = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->queued()->create(['season_number' => 1, 'episode_number' => 7, 'action_request_id' => $queued->id]);
+
+    foreach (range(1, 6) as $episodeNumber) {
+        SubtitleAuditEpisode::factory()->for($batch, 'batch')->manualPick()->create(['season_number' => 1, 'episode_number' => $episodeNumber, 'missing_languages' => ['eng', 'swe']]);
+    }
+
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->nothingFound()->create(['season_number' => 1, 'episode_number' => 8]);
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->create(['season_number' => 1, 'episode_number' => 9]);
+
+    return $batch;
+}
+
+/**
+ * The widest audit batch state: a five-digit batch id, an even longer series
+ * title, two-digit season and episode labels missing three languages, twelve
+ * manual picks, two episodes a pending replacement blocked, two- and
+ * three-digit miss counts, and over a hundred pending actions in the batch.
+ */
+function actionQueuePhoneWidestAuditBatch(): SubtitleAuditBatch
+{
+    $batch = SubtitleAuditBatch::factory()->handedOff()->create(['id' => 90001, 'series_id' => 42, 'series_title' => 'The Extraordinarily Long Example Series Title Of Doom And Its Even Longer Subtitle']);
+    ActionRequest::factory()->count(105)->create(['status' => ActionRequestStatus::Pending, 'title' => 'Replace S10E12 of "The Extraordinarily Long Example Series Title Of Doom"', 'payload' => ['subtitle_audit_batch_id' => $batch->id]]);
+
+    foreach (range(1, 12) as $episodeNumber) {
+        SubtitleAuditEpisode::factory()->for($batch, 'batch')->manualPick()->create(['season_number' => 10, 'episode_number' => $episodeNumber, 'missing_languages' => ['eng', 'swe', 'nor']]);
+    }
+
+    foreach (range(13, 14) as $episodeNumber) {
+        SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->create(['season_number' => 10, 'episode_number' => $episodeNumber, 'failure_reason' => 'replacement_in_flight', 'missing_languages' => ['eng', 'swe', 'nor']]);
+    }
+
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->nothingFound()->count(12)->create();
+    SubtitleAuditEpisode::factory()->for($batch, 'batch')->failed()->count(104)->create();
+
+    return $batch;
+}
+
+test('the subtitle audit batch chip and manual picks fit a phone screen', function (): void {
+    $subtitleAuditBatch = actionQueuePhoneAuditBatch();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertVisible('[data-action-batch-filter]')
+        ->assertCount('[data-subtitle-audit-manual-picks] [data-subtitle-audit-pick]', 6)
+        ->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript(phoneOverlapScript('main'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-action-batch-filter]'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-subtitle-audit-manual-picks]'), '');
+
+    $webpage->click('[data-action-batch-filter-clear]');
+    $webpage->assertQueryStringMissing('subtitle_audit_batch')
+        ->assertMissing('[data-action-batch-filter]');
+});
+
+test('the widest subtitle audit batch still fits a phone screen', function (): void {
+    // Fake every job: under the file's partial fake each new action runs its
+    // delayed BroadcastDashboardStats on the sync queue, two seconds apiece.
+    Queue::fake();
+    $subtitleAuditBatch = actionQueuePhoneWidestAuditBatch();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertSeeIn('[data-action-batch-filter]', '#90001')
+        ->assertCount('[data-subtitle-audit-manual-picks] [data-subtitle-audit-pick]', 12)
+        ->assertCount('[data-subtitle-audit-manual-picks] [data-subtitle-audit-in-flight]', 2)
+        ->assertSeeIn('[data-subtitle-audit-misses]', '12 had no usable release, 104 failed.')
+        ->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript(phoneOverlapScript('main'), '')
+        ->assertScript(phoneScrollSliverScript('main'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-action-batch-filter]'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-subtitle-audit-manual-picks]'), '');
+});
+
+test('a deep link outside the active batch filter still opens its action in the sheet on a phone', function (): void {
+    $subtitleAuditBatch = actionQueuePhoneAuditBatch();
+    $outside = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Andor"', 'payload' => []]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('actions.requests.index', ['subtitle_audit_batch' => $subtitleAuditBatch->id, 'request' => $outside->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(actionQueuePhoneSheetOpenScript());
+
+    $webpage->assertSeeIn('[data-action-sheet] [data-action-title]', 'Andor')
+        ->assertVisible('[data-action-batch-filter]');
 });
