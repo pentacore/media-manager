@@ -2,6 +2,7 @@
 import { Pill } from '@/components/mm';
 import { formatCount } from '@/lib/format';
 import { shortClass } from './format';
+import { usageStatusVariant } from './statusVariant';
 import type { ChildRun } from './types';
 
 defineProps<{
@@ -38,10 +39,7 @@ defineProps<{
                         {{ formatCount(child.total_tokens) }}
                         tok
                     </span>
-                    <Pill
-                        :variant="child.status === 'success' ? 'ok' : 'danger'"
-                        dot
-                    >
+                    <Pill :variant="usageStatusVariant(child.status)" dot>
                         {{ child.status }}
                     </Pill>
                 </span>

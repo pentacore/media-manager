@@ -25,3 +25,4 @@ export type {
     WindowKey,
     WindowOption,
 } from './types';
+export { usageStatusVariant } from './statusVariant';

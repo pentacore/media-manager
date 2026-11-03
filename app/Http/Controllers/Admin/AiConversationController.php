@@ -122,7 +122,7 @@ class AiConversationController extends Controller
         return [
             'role' => $storedMessage->role,
             'text' => $storedMessage->content,
-            'status' => $storedMessage->status->value,
+            'status' => ($storedMessage->meta['stopped'] ?? false) === true ? 'stopped' : $storedMessage->status->value,
             'error' => is_string($error) ? $error : null,
             'tool_groups' => RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null),
             'steps' => array_values(array_map(static fn (array $step): array => [

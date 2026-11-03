@@ -56,6 +56,24 @@ test('admin transcript shows steps, reasoning, tool results and failed status', 
         ->assertSeeIn('[data-transcript-tool-call]', '{"hits":1}');
 });
 
+test('a stopped turn shows a stopped status pill', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = transcriptConversation($admin, 'Stopped one');
+
+    DB::table('agent_conversation_messages')->insert(transcriptMessageRow($conversationId, $admin, 1, [
+        'content' => 'Partial answer',
+        'meta' => json_encode(['stopped' => true]),
+        'status' => 'completed',
+    ]));
+
+    $this->actingAs($admin);
+
+    visit(route('admin.ai-conversations.show', $conversationId, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-transcript-status]', 'stopped')
+        ->assertMissing('[data-transcript-error]');
+});
+
 test('admin transcript loads older messages on demand', function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = transcriptConversation($admin, 'Long transcript');
