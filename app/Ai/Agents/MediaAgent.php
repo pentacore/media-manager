@@ -209,16 +209,18 @@ PROMPT;
     }
 
     /**
-     * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, force a plain answer on the final allowed step, stop
-     * at the next step once the chat client disconnected, and answer tools
-     * from fixtures inside a benchmark run.
+     * Wrap every generation step: force a plain answer on the final allowed
+     * step, stop the run once the chat client disconnected (checked before
+     * every step, the first included; ends the run gracefully, ahead of the
+     * budget check so a gone client is stopped rather than failed), refuse a
+     * step once the hard budget is crossed mid-run, and answer tools from
+     * fixtures inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, Stop::when(static fn (): bool => resolve(ClientConnection::class)->disconnected()), new ReplayBenchmarkTools];
+        return [new AnswerOnFinalStep, Stop::when(static fn (): bool => resolve(ClientConnection::class)->disconnected()), new EnforceBudgetEachStep, new ReplayBenchmarkTools];
     }
 
     /**

@@ -83,7 +83,7 @@ test('every agent runs the step middleware its runs need', function (string $age
         ->and(array_map(static fn (object $middleware): string => $middleware::class, $agent->middleware()))
         ->toBe($expected);
 })->with([
-    'media' => [MediaAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, Stop::class, ReplayBenchmarkTools::class]],
+    'media' => [MediaAgent::class, [AnswerOnFinalStep::class, Stop::class, EnforceBudgetEachStep::class, ReplayBenchmarkTools::class]],
     'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
     'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
     'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, ReplayBenchmarkTools::class]],

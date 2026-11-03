@@ -29,3 +29,11 @@ test('a client disconnect counts as a user stop, also when wrapped', function ()
         ->and(StoppedByUser::exception(new RuntimeException('x', 0, new ClientDisconnectedException)))->toBeTrue()
         ->and(StoppedByUser::exception(new RuntimeException('x')))->toBeFalse();
 });
+
+test('only the result AgentTool degrades a client disconnect to counts as a stopped tool call', function (): void {
+    expect(StoppedByUser::toolResult('Agent failed: '.ClientDisconnectedException::MESSAGE))->toBeTrue()
+        ->and(StoppedByUser::toolResult('Agent failed: boom'))->toBeFalse()
+        ->and(StoppedByUser::toolResult(ClientDisconnectedException::MESSAGE))->toBeFalse()
+        ->and(StoppedByUser::toolResult(['error' => 'Agent failed: '.ClientDisconnectedException::MESSAGE]))->toBeFalse()
+        ->and(StoppedByUser::toolResult(null))->toBeFalse();
+});

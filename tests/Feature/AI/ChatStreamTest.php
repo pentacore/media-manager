@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
+use App\Enums\ClassificationGate;
 use App\Enums\FreePoolOverflowBehavior;
 use App\Http\Streaming\ChatStreamProtocol;
 use App\Http\Streaming\ClientConnection;
@@ -15,7 +18,9 @@ use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiTaskModel;
+use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Models\ClassificationOutcome;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\AiSettings;
@@ -40,6 +45,7 @@ use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Responses\TextResponse;
 use Laravel\Ai\Streaming\Events\Error;
 use Laravel\Ai\Streaming\Events\StreamStart;
+use Laravel\Ai\Tools\AgentTool;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -644,6 +650,64 @@ test('a disconnected client stops the turn at the next step and still bills what
         ->and($meta)->not->toHaveKey('error');
 });
 
+test('a client gone at a step that would cross the hard cap is stopped, not failed', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'input_per_mtok' => 1.0, 'output_per_mtok' => 0.0]);
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
+    resolve(AiSettings::class)->setHardBudgetUsd(1.0);
+    chatStreamClientLeavingAfter(1);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        'Second step reply that must never be generated.',
+    ]);
+    // The completed first step costs $2, past the $1 cap the next step checks.
+    Event::listen(StepCompleted::class, function (StepCompleted $stepCompleted): void {
+        $stepCompleted->response->usage = new TextUsage(2_000_000, 0);
+    });
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Check my services'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect($body)->not->toContain('RUN_ERROR')
+        ->and(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole()->status)->toBe('stopped');
+});
+
+test('a sub-agent the client left during is recorded as stopped, and the parent stops at its next step', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    chatStreamClientLeavingAfter(1);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Investigate the stuck download of Example Show']),
+        'Second step reply that must never be generated.',
+    ]);
+    StuckDownloadInvestigatorAgent::fake(function (): never {
+        throw new ClientDisconnectedException;
+    });
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Why is my download stuck?'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $aiToolInvocation = AiToolInvocation::query()->where('tool_name', 'InvestigateStuckDownload')->sole();
+    $subAgentUsage = AiUsageRecord::query()->where('agent_class', StuckDownloadInvestigatorAgent::class)->sole();
+    $parentUsage = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+
+    expect($body)->not->toContain('Second step reply')
+        ->and($body)->not->toContain('RUN_ERROR')
+        ->and($aiToolInvocation->tool_class)->toBe(AgentTool::class)
+        ->and($aiToolInvocation->status)->toBe('stopped')
+        ->and($aiToolInvocation->error_code)->toBeNull()
+        ->and($subAgentUsage->status)->toBe('stopped')
+        ->and($subAgentUsage->error_message)->toBeNull()
+        ->and($parentUsage->status)->toBe('stopped')
+        ->and($assistant->status)->toBe('completed')
+        ->and(json_decode((string) $assistant->meta, true))->toHaveKey('stopped', true);
+});
+
 test('a client gone before the first step stores the turn as an empty stopped reply without calling the model', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
     chatStreamGoneClient();
@@ -664,6 +728,30 @@ test('a client gone before the first step stores the turn as an empty stopped re
         ->and(DB::table('agent_conversation_messages')->where('role', 'user')->count())->toBe(1)
         ->and($assistant->content)->toBe('')
         ->and(json_decode((string) $assistant->meta, true))->toHaveKey('stopped', true);
+});
+
+test('a stopped routed turn leaves its chat-routing outcomes open', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([collect(ToolGroup::cases())
+        ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($toolGroup === ToolGroup::Playback ? 0.9 : 0.05)])
+        ->all()]);
+    chatStreamClientLeavingAfter(1);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        'Second step reply that must never be generated.',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'What is playing?'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $outcomes = ClassificationOutcome::query()->where('gate', ClassificationGate::ChatRouting)->get();
+
+    expect(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole()->status)->toBe('stopped')
+        ->and($outcomes)->not->toBeEmpty()
+        ->and($outcomes->whereNotNull('outcome_at'))->toBeEmpty()
+        ->and($outcomes->whereNotNull('outcome_positive'))->toBeEmpty();
 });
 
 test('a client that leaves after the final step still gets a successful run', function (): void {

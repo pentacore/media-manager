@@ -10,7 +10,8 @@ namespace App\Http\Streaming;
  * ChatStreamProtocol keeps the request alive after a disconnect
  * (ignore_user_abort) so usage is still recorded, and calls watch() to mark
  * the request as a stream whose agent should stop at its next step once PHP
- * has noticed the client left. PHP notices on a flush that observes the
+ * has noticed the client left: MediaAgent through laravel/ai's `Stop::when()`,
+ * structured sub-agents through StopWhenClientDisconnected. PHP notices on a flush that observes the
  * client gone — under FrankenPHP, any flush after the request context was
  * cancelled, even one that writes nothing — so disconnected() polls with a
  * flush of its own first, catching a disconnect that happened after the last
