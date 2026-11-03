@@ -174,7 +174,7 @@ defineOptions({
                     class="grid grid-cols-1 gap-1 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center"
                 >
                     <div>
-                        <p class="font-medium max-sm:break-all">
+                        <p class="font-medium max-sm:wrap-anywhere">
                             {{ item.title }}
                         </p>
                         <p class="text-xs text-muted-foreground">

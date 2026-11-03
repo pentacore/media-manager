@@ -187,7 +187,9 @@ defineOptions({
                     :key="`${item.media_type}-${item.media_id}`"
                     class="rounded-xl border border-border bg-card p-4"
                 >
-                    <p class="font-medium max-sm:break-all">{{ item.title }}</p>
+                    <p class="font-medium max-sm:wrap-anywhere">
+                        {{ item.title }}
+                    </p>
                     <p class="text-xs text-muted-foreground capitalize">
                         {{ item.media_type }} · {{ item.scope ?? 'movie' }}
                     </p>

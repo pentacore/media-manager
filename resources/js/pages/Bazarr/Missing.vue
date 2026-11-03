@@ -155,7 +155,9 @@ defineOptions({
                 class="flex flex-col gap-2 border-b border-border p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
                 <div>
-                    <p class="font-medium max-sm:break-all">{{ item.title }}</p>
+                    <p class="font-medium max-sm:wrap-anywhere">
+                        {{ item.title }}
+                    </p>
                     <p class="text-xs text-muted-foreground capitalize">
                         {{ item.media_type }} · {{ item.scope ?? 'movie' }}
                     </p>

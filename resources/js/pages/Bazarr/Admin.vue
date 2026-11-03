@@ -229,7 +229,7 @@ function saveAutomation(): void {
 
             <form
                 data-test="bazarr-admin-form"
-                class="grid gap-4 lg:grid-cols-2"
+                class="grid grid-cols-1 gap-4 lg:grid-cols-2"
                 @submit.prevent="save"
             >
                 <section
@@ -257,7 +257,7 @@ function saveAutomation(): void {
                             min="1"
                             max="168"
                             :disabled="!settings_writable"
-                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3"
+                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 touch:h-10"
                         />
                     </label>
                     <Toggle
@@ -296,15 +296,17 @@ function saveAutomation(): void {
                     <div
                         v-for="mapping in mappings"
                         :key="mapping.role"
-                        class="flex justify-between rounded-md border border-border p-3 text-sm"
+                        class="flex justify-between rounded-md border border-border p-3 text-sm max-sm:gap-3"
                     >
                         <span class="capitalize">{{ mapping.role }}</span>
-                        <span>{{ mapping.connection_name }}</span>
+                        <span class="max-sm:min-w-0 max-sm:wrap-anywhere">{{
+                            mapping.connection_name
+                        }}</span>
                     </div>
                 </section>
             </form>
 
-            <div class="grid gap-4 lg:grid-cols-2">
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <section class="rounded-xl border border-border bg-card p-5">
                     <h2 class="font-semibold">Language profiles</h2>
                     <p class="mb-3 text-sm text-muted-foreground">
@@ -386,9 +388,11 @@ function saveAutomation(): void {
                     <div
                         v-for="notification in settings.notifications"
                         :key="notification.id"
-                        class="flex justify-between border-t border-border py-3 text-sm first:border-0"
+                        class="flex justify-between border-t border-border py-3 text-sm first:border-0 max-sm:gap-3"
                     >
-                        <span>{{ notification.name }}</span>
+                        <span class="max-sm:min-w-0 max-sm:wrap-anywhere">{{
+                            notification.name
+                        }}</span>
                         <span class="text-muted-foreground">{{
                             notification.enabled ? 'Enabled' : 'Disabled'
                         }}</span>
@@ -415,7 +419,7 @@ function saveAutomation(): void {
                             {{ notification_setup.instructions }}
                         </p>
                         <input
-                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs touch:h-10"
                             data-test="bazarr-apprise-config-uri"
                             readonly
                             :value="notification_setup.apprise_config_uri"
@@ -424,7 +428,7 @@ function saveAutomation(): void {
                             Authenticated notification URL
                         </p>
                         <input
-                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs touch:h-10"
                             data-test="bazarr-notification-url"
                             readonly
                             :value="notification_setup.authenticated_url"
@@ -463,7 +467,7 @@ function saveAutomation(): void {
                             type="number"
                             :min="field.min"
                             :max="field.max"
-                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3"
+                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 touch:h-10"
                         />
                     </label>
                 </div>
@@ -481,7 +485,7 @@ function saveAutomation(): void {
                             type="number"
                             min="1"
                             max="8760"
-                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3"
+                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 touch:h-10"
                         />
                     </label>
                 </div>

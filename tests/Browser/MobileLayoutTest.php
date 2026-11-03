@@ -78,10 +78,12 @@ function mobileLayoutSeries(int $id, string $title): array
 function mobileLayoutFakeServices(array $overrides = []): void
 {
     // The id sequence outlives RefreshDatabase's rollback, and a whole run hands
-    // out ~10 connection ids per test: skip it past the fixed ids 901 and 902
-    // before it reaches them, or a factory row takes one first.
+    // out ~10 connection ids per test: keep it past the fixed ids 901 and 902
+    // from the first test on, so no factory row takes one and every connection
+    // made here has a higher id than the admin rows' Sonarr 902, whatever the
+    // test order.
     if (DB::getDriverName() === 'pgsql') {
-        DB::statement("SELECT setval('service_connections_id_seq', 902) WHERE (SELECT last_value FROM service_connections_id_seq) BETWEEN 850 AND 901");
+        DB::statement("SELECT setval('service_connections_id_seq', GREATEST((SELECT last_value FROM service_connections_id_seq), 902))");
     }
 
     $poster = [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
@@ -337,8 +339,9 @@ function mobileLayoutSubtitlesAndAnimeResponses(): array
         'bazarr.local:6767/api/movies*' => Http::response(['data' => array_slice($movies, 0, 2), 'total' => 2]),
         // Subtitles > Admin's task, provider and notification panels.
         'bazarr.local:6767/api/system/tasks' => Http::response(['data' => [['taskid' => 'search_missing', 'name' => 'Search for missing subtitles', 'status' => 'idle'], ['taskid' => 'sync_episodes', 'name' => 'Sync episodes with Sonarr', 'status' => 'running']]]),
-        'bazarr.local:6767/api/providers' => Http::response(['data' => [['name' => 'OpenSubtitles', 'status' => 'healthy'], ['name' => 'Podnapisi', 'status' => 'throttled']]]),
-        'bazarr.local:6767/api/system/notifications' => Http::response(['data' => []]),
+        // A throttled provider shows its "Throttled until" time; a notification has a long unbroken name.
+        'bazarr.local:6767/api/providers' => Http::response(['data' => [['name' => 'OpenSubtitles', 'status' => 'healthy'], ['name' => 'Podnapisi', 'status' => 'throttled', 'throttled_until' => '2026-01-05T12:00:00+00:00']]]),
+        'bazarr.local:6767/api/system/notifications' => Http::response(['data' => [['id' => 1, 'name' => 'example_apprise_notification_target_with_a_long_unbroken_name', 'enabled' => true], ['id' => 2, 'name' => 'Example Discord', 'enabled' => false]]]),
         'bazarr.local:6767/*' => Http::response([]),
         'graphql.anilist.co' => Http::response(['data' => ['Page' => ['pageInfo' => ['hasNextPage' => false], 'media' => mobileLayoutAnimeEntries()]]]),
     ];
@@ -377,11 +380,19 @@ function mobileLayoutFakeSubtitlesAndAnime(): void
         AnimeIdMap::factory()->tv()->create(['anilist_id' => $entry['id'], 'mal_id' => $entry['idMal'], 'tmdb_tv_id' => 7001 + $index, 'tvdb_id' => 81001 + $index, 'tmdb_season' => 1, 'tvdb_season' => 1]);
     }
 
-    // Sonarr serves series 7; series 8 has no live answer, so its stored
-    // unmonitored flag stands.
+    mobileLayoutSeedAnimeLibrary($serviceConnection);
+}
+
+/**
+ * The first two anime entries in $sonarr's library: series 7, which the fakes
+ * serve (Open), and series 8, which has no live answer, so its stored
+ * unmonitored flag stands (Monitor). The card reads the active Sonarr's row.
+ */
+function mobileLayoutSeedAnimeLibrary(ServiceConnection $sonarr): void
+{
     foreach ([[7, 81001, true], [8, 81002, false]] as [$sonarrId, $tvdbId, $monitored]) {
         IndexedSeries::factory()->create([
-            'service_connection_id' => $serviceConnection->id, 'sonarr_id' => $sonarrId, 'tvdb_id' => $tvdbId, 'title' => 'Example Indexed Series '.$sonarrId, 'sort_title' => 'example indexed series '.$sonarrId, 'title_slug' => 'example-indexed-series-'.$sonarrId,
+            'service_connection_id' => $sonarr->id, 'sonarr_id' => $sonarrId, 'tvdb_id' => $tvdbId, 'title' => 'Example Indexed Series '.$sonarrId, 'sort_title' => 'example indexed series '.$sonarrId, 'title_slug' => 'example-indexed-series-'.$sonarrId,
             'year' => 2022, 'status' => 'continuing', 'monitored' => $monitored, 'network' => 'Example Network', 'arr_added_at' => '2026-01-01 00:00:00',
         ]);
     }
@@ -410,10 +421,12 @@ function mobileLayoutSeedDetailModels(User $admin): void
     ChatTemplate::factory()->create(['id' => 901, 'name' => 'Example stuck downloads check', 'user_id' => $admin->id]);
     DB::table('agent_conversations')->insert(['id' => '01900000-0000-7000-8000-000000000901', 'participant_type' => $admin->getMorphClass(), 'participant_id' => $admin->id, 'title' => 'Example conversation about a long series title', 'created_at' => now(), 'updated_at' => now()]);
     // A second Sonarr connection on the same fake host, for the edit row: it
-    // shows selected disk paths with their metric toggles. The fakes' own
-    // Sonarr keeps the lower id, so pages that read the first Sonarr still
-    // read that one.
+    // shows selected disk paths with their metric toggles. Its id is lower
+    // than the fakes' own Sonarr (the sequence is kept past 902), so in admin
+    // tests it is the active Sonarr; it gets the same anime library, so the
+    // Seasonal anime cards show Open and Monitor here too.
     $sonarr = ServiceConnection::factory()->sonarr()->create(['id' => 902, 'name' => 'Sonarr Anime', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k', 'settings' => ['disk' => ['mode' => 'selected', 'paths' => ['/data/tv'], 'display' => ['/data/tv' => 'both']]]]);
+    mobileLayoutSeedAnimeLibrary($sonarr);
     WebhookEvent::factory()->processed()->create(['id' => 901, 'service_connection_id' => 901]);
     // The event's decision can become a benchmark case (a text usage row on
     // its invocation) and it dispatched one action, so the page shows both.
@@ -534,6 +547,49 @@ function mobileLayoutClippedTextScript(string $root = 'main'): string
             .map((element) => `\${element.tagName.toLowerCase()} "\${(element.textContent || '').trim().slice(0, 40)}" \${element.scrollWidth} > \${element.clientWidth}`)
             .slice(0, 10)
             .join(' | '))()
+    JS;
+}
+
+/**
+ * Where a wrapped text in $root that contains $needle breaks inside a word, as
+ * a ' , ' list of `before|after` snippets; 'missing' when no such text is
+ * there and 'not wrapped' when it fits on one line. A break after a space or
+ * a dash is a word break.
+ */
+function mobileLayoutMidWordBreaksScript(string $root, string $needle): string
+{
+    $selector = json_encode($root, JSON_THROW_ON_ERROR);
+    $encodedNeedle = json_encode($needle, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const root = document.querySelector({$selector});
+            if (!root) { return 'missing'; }
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) { if (walker.currentNode.textContent.includes({$encodedNeedle})) { nodes.push(walker.currentNode); } }
+            if (nodes.length === 0) { return 'missing'; }
+            const breaks = [];
+            let wraps = 0;
+            for (const node of nodes) {
+                const text = node.textContent;
+                const range = document.createRange();
+                let previousTop = null;
+                for (let index = 0; index < text.length; index++) {
+                    if (/\s/.test(text[index])) { continue; }
+                    range.setStart(node, index);
+                    range.setEnd(node, index + 1);
+                    const rect = range.getClientRects()[0];
+                    if (!rect) { continue; }
+                    if (previousTop !== null && rect.top > previousTop + 2) {
+                        wraps++;
+                        if (!/[\s\-—]/.test(text[index - 1])) { breaks.push(`\${text.slice(Math.max(0, index - 12), index)}|\${text.slice(index, index + 12)}`); }
+                    }
+                    previousTop = rect.top;
+                }
+            }
+            return wraps === 0 ? 'not wrapped' : breaks.join(' , ');
+        })()
     JS;
 }
 
@@ -799,10 +855,7 @@ function mobileLayoutTouchPages(): array
         'subtitle library' => ['bazarr.library', [], '[data-test^="subtitle-item-"]'],
         'subtitle history' => ['bazarr.history', [], null],
         'subtitle escalations' => ['bazarr.escalations', [], '[data-test^="subtitle-escalation-"]'],
-        // Open and Monitor need the fakes' Sonarr to be the active one, which the
-        // admin's Sonarr 902 outranks once the id sequence passes it: the anime
-        // match dialog test sweeps every card action as a member.
-        'seasonal anime' => ['media.anime.index', [], '[data-anime-status]'],
+        'seasonal anime' => ['media.anime.index', [], 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request])'],
         'subtitles admin' => ['bazarr.admin.index', [], '[data-test="bazarr-admin-form"]'],
     ];
 }
@@ -1149,6 +1202,58 @@ test('a Subtitles page with two Bazarr connections and a failed read fits a phon
  * The admin's escalations: the filters, an investigate button on every case
  * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
  */
+/**
+ * The titles are prose ("series — episode"): on a phone they wrap at a space,
+ * and only an unbroken run (a file name) may split mid-word.
+ */
+test('a long spaced Subtitles title wraps at a space on a phone', function (): void {
+    mobileLayoutFakeServices();
+    $this->actingAs(User::factory()->member()->create());
+    $title = 'Example Episode With A Fairly Long Name 2';
+
+    $webpage = visit(route('bazarr.missing', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage, '[data-test="subtitle-item-episode-82"]');
+    $webpage->assertScript(mobileLayoutMidWordBreaksScript('main', $title), '');
+
+    $webpage->click('[data-test="subtitle-item-episode-82"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
+    $webpage->assertScript(mobileLayoutMidWordBreaksScript('[data-slot="sheet-content"] [data-slot="sheet-header"]', $title), '');
+
+    foreach (['bazarr.library' => '[data-test="subtitle-item-episode-82"]', 'bazarr.history' => '[data-test="history-filters"]'] as $routeName => $deferred) {
+        $webpage->navigate(route($routeName, absolute: false))->assertNoSmoke();
+        mobileLayoutSettle($webpage, $deferred);
+        $webpage->assertScript(mobileLayoutMidWordBreaksScript('main', $title), '');
+    }
+});
+
+/**
+ * Subtitles admin with every panel filled: a long unbroken mapped connection
+ * name, a throttled provider, a notification with a long unbroken name (the
+ * fakes), then the open notification setup with its two readonly URIs. Every
+ * native input is 40 px on touch.
+ */
+test('the Subtitles admin page with every panel filled fits a phone screen', function (): void {
+    mobileLayoutFakeServices();
+    ServiceConnection::query()->where('name', 'Radarr')->sole()->update(['name' => 'Example_Radarr_Connection_With_A_Very_Long_Unbroken_Name_0123456789']);
+    $this->actingAs(User::factory()->admin()->create());
+    $inputs = '[...document.querySelectorAll("main input:not([type=\"checkbox\"]):not([type=\"radio\"])")].filter((input) => input.getBoundingClientRect().height > 0 && input.getBoundingClientRect().height < 39.5).map((input) => `${input.getAttribute("data-test") ?? input.type} ${Math.round(input.getBoundingClientRect().height)}px`).join(" | ")';
+
+    $webpage = visit(route('bazarr.admin.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutAssertPage($webpage, '[data-test="save-bazarr-settings"]', 'main:has([data-test="bazarr-admin-form"]):has([data-test="show-bazarr-notification-hint"])');
+    $webpage->assertScript('["Throttled until", "example_apprise_notification_target", "Example_Radarr_Connection"].every((text) => document.querySelector("main").textContent.includes(text))', true)
+        ->assertScript(mobileLayoutClippedTextScript(), '')
+        ->assertScript(phoneSmallTargetsScript(), '')
+        ->assertScript($inputs, '');
+
+    $webpage->click('[data-test="show-bazarr-notification-hint"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"bazarr-apprise-config-uri\"]")'));
+    mobileLayoutAssertPage($webpage, '[data-test="bazarr-apprise-config-uri"]');
+    $webpage->assertScript(mobileLayoutClippedTextScript(), '')
+        ->assertScript($inputs, '');
+});
+
 test('the subtitle escalations page with every action and a pager fits a phone screen', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);

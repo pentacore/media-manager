@@ -461,7 +461,7 @@ const dialogDescription = computed(
     <Sheet :open="open" @update:open="emit('update:open', $event)">
         <SheetContent class="w-full overflow-y-auto sm:max-w-2xl">
             <SheetHeader>
-                <SheetTitle class="max-sm:break-all">{{
+                <SheetTitle class="max-sm:wrap-anywhere">{{
                     currentItem?.title ?? 'Subtitle item'
                 }}</SheetTitle>
                 <SheetDescription>
