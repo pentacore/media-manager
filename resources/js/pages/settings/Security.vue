@@ -216,6 +216,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                                 size="sm"
                                 class="h-8 text-xs"
                                 :disabled="processing"
+                                data-two-factor-enable
                             >
                                 Enable 2FA
                             </Button>

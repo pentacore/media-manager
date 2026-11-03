@@ -145,6 +145,17 @@ test('a control scrolled into view in an admin table lands beside the sticky col
     $webpage->assertScript('(() => { const control = document.querySelector("[data-admin-table=\"emby-unlinked\"] [data-emby-link-trigger=\"emby-2\"]"); control.scrollIntoView({ block: "center", inline: "center" }); const rect = control.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2); return !!hit && control.contains(hit); })()', true);
 });
 
+test('a clamped AI conversation title shows one line in a 40 px link on a phone', function (): void {
+    $this->actingAs(adminTablePhoneSeed());
+
+    $webpage = visit(route('admin.ai-conversations.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // The title wraps in the sticky column; the clamp must hide line 2 whole,
+    // so the link's own box may not show the top of a second line.
+    $webpage->assertScript('(() => { const link = document.querySelector("[data-admin-table=\\"conversations\\"] tbody a"); const box = link.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(link); const tops = [...new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)))]; const shown = tops.filter((top) => top < box.bottom - 1); return [tops.length < 2 ? "the title fits on one line" : "", shown.length !== 1 ? `${shown.length} lines show in the ${Math.round(box.height)} px link` : "", box.height < 39.5 ? `the link is ${Math.round(box.height)} px tall` : ""].filter(Boolean).join(" | "); })()', '');
+});
+
 test('an empty-state cell spanning the table is not sticky on a phone', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 

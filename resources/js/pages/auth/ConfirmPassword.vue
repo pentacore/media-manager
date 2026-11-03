@@ -34,6 +34,7 @@ defineOptions({
                     required
                     autocomplete="current-password"
                     autofocus
+                    data-confirm-password-input
                 />
 
                 <InputError :message="errors.password" />

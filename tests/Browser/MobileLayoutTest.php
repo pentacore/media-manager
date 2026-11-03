@@ -408,11 +408,15 @@ function mobileLayoutSeedAnimeLibrary(ServiceConnection $sonarr): void
  * dispatched action), a replacement attempt that needs attention, one
  * subtitle rule and a server with one open incident and one check.
  * Two prices and three usage records fill the AI prices table and the AI
- * usage invocations table, so those rows measure their row controls, and
- * second-opinion verdicts fill AI usage's agreement panel at its widest:
- * two-digit counts, an unattributed verdict (the counts line's last part), a
- * long unbroken event key under a per-event rule in the breakdown, and a
- * false alarm and a miss with long titles and reasons.
+ * usage invocations table, so those rows measure their row controls.
+ * Second-opinion verdicts (one bulk insert) fill AI usage's agreement panel
+ * at its widest: three-digit counts, an unattributed verdict (the counts
+ * line's last part), a long unbroken event key under a per-event rule in the
+ * breakdown, and a false alarm and a miss with long titles and reasons. The
+ * seed runs for every admin and touch row, and two other rows rely on it:
+ * the Decision agent rows measure the per-event override it adds (the long
+ * key and the model link, both fixed in Task 13), and the admin Action Queue
+ * rows measure its requests as cards. Keep it shared.
  */
 function mobileLayoutSeedDetailModels(User $admin): void
 {
@@ -421,13 +425,16 @@ function mobileLayoutSeedDetailModels(User $admin): void
     AiUsageRecord::factory()->count(3)->create(['prompt_text' => 'Find the example series and tell me about it.']);
     $eventKey = 'sonarr:ExampleUnbrokenEventKeyThatRunsPastAPhoneScreen0123456789';
     resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides([$eventKey => ['mode' => SecondOpinionMode::Reject, 'engine' => null, 'jev_threshold' => null]]);
-    $verdict = ['type' => 'delete_series', 'webhook_event_id' => null, 'approved_by' => $admin->id];
-    ActionRequest::factory()->count(10)->secondOpinion(true, eventKey: $eventKey)->create([...$verdict, 'status' => ActionRequestStatus::Completed]);
-    ActionRequest::factory()->secondOpinion(false, reason: 'The example series is still airing, so deleting it would lose the episodes that are left this season.', eventKey: $eventKey)
-        ->create([...$verdict, 'status' => ActionRequestStatus::Completed, 'title' => 'Delete Example Series With A Fairly Long Title From Sonarr']);
-    ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)
-        ->create([...$verdict, 'status' => ActionRequestStatus::Rejected, 'title' => 'Delete Another_Example_Series_With_An_Unbroken_Title_0123456789']);
-    ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)->create([...$verdict, 'status' => ActionRequestStatus::Completed, 'approved_by' => null]);
+    $verdict = ['type' => 'delete_series', 'webhook_event_id' => null, 'approved_by' => $admin->id, 'title' => null, 'status' => ActionRequestStatus::Completed];
+    $verdicts = [
+        ...ActionRequest::factory()->count(100)->secondOpinion(true, eventKey: $eventKey)->make($verdict)->all(),
+        ActionRequest::factory()->secondOpinion(false, reason: 'The example series is still airing, so deleting it would lose the episodes that are left this season.', eventKey: $eventKey)
+            ->make([...$verdict, 'title' => 'Delete Example Series With A Fairly Long Title From Sonarr']),
+        ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)
+            ->make([...$verdict, 'status' => ActionRequestStatus::Rejected, 'title' => 'Delete Another_Example_Series_With_An_Unbroken_Title_0123456789']),
+        ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)->make([...$verdict, 'approved_by' => null]),
+    ];
+    ActionRequest::query()->insert(array_map(fn (ActionRequest $actionRequest): array => [...$actionRequest->getAttributes(), 'created_at' => now(), 'updated_at' => now()], $verdicts));
     BenchmarkCase::factory()->create(['id' => 901, 'name' => 'Example stuck download case']);
     BenchmarkRun::factory()->completed()->create(['id' => 901, 'name' => 'Example baseline run', 'case_ids' => [901]]);
     BenchmarkRun::factory()->completed()->create(['id' => 902, 'name' => 'Example candidate run', 'case_ids' => [901]]);
@@ -812,17 +819,19 @@ function mobileLayoutSignedInAuthPages(): array
 }
 
 /**
- * Auth pages only their flow reaches, as [routeName]: set-password needs an
+ * Pages only their flow reaches, as [routeName, root]: set-password needs an
  * invited user without a password, the two-factor challenge a login by a
- * user with two-factor confirmed.
+ * user with two-factor confirmed (both auth layout, measured on `body`), and
+ * Security a confirmed password first (measured on `main`).
  *
- * @return array<string, array{0: string}>
+ * @return array<string, array{0: string, 1: string}>
  */
 function mobileLayoutFlowAuthPages(): array
 {
     return [
-        'set password' => ['auth.set-password'],
-        'two-factor challenge' => ['two-factor.login'],
+        'set password' => ['auth.set-password', 'body'],
+        'two-factor challenge' => ['two-factor.login', 'body'],
+        'security' => ['security.edit', 'main'],
     ];
 }
 
@@ -919,7 +928,6 @@ function mobileLayoutExcludedRouteNames(): array
         'ai.templates.options' => 'JSON for the chat template picker',
         'ai.templates.library' => 'JSON for the chat template library search',
         'activity-log.export' => 'a CSV export download',
-        'security.edit' => 'password confirmation first (R6)',
         'admin.ai-usage.export' => 'a CSV export download',
         'admin.ai-usage.show' => 'JSON for the AI usage record drawer',
         'admin.ai-prices.catalog.index' => 'JSON for the AI price catalog picker',
@@ -1052,11 +1060,18 @@ test('every control on a guest page is a 40 px target on a phone', function (str
     $webpage->assertScript(phoneSmallTargetsScript('body'), '');
 })->with('mobile layout guest pages');
 
-test('an auth page reached through its flow fits a phone screen with 40 px targets', function (string $routeName): void {
+test('a page reached through its flow fits a phone screen with 40 px targets', function (string $routeName, string $root): void {
     if ($routeName === 'auth.set-password') {
         // An invited user signed in before setting a password.
         $this->actingAs(User::factory()->member()->create(['password' => null, 'invite_accepted_at' => null]));
         $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+    } elseif ($routeName === 'security.edit') {
+        // Security redirects to password confirmation first.
+        $this->actingAs(User::factory()->member()->create());
+        $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        $webpage->fill('[data-confirm-password-input]', 'password')
+            ->click('[data-test="confirm-password-button"]');
     } else {
         // Without Authentik or Emby the login page shows its email form directly.
         config()->set('services.authentik.client_id');
@@ -1077,8 +1092,8 @@ test('an auth page reached through its flow fits a phone screen with 40 px targe
     $webpage->assertPathIs(route($routeName, absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
 
-    mobileLayoutAssertPage($webpage, null, null, 'body');
-    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+    mobileLayoutAssertPage($webpage, null, null, $root);
+    $webpage->assertScript(phoneSmallTargetsScript($root), '');
 })->with('mobile layout flow auth pages');
 
 /**

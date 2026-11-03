@@ -423,16 +423,16 @@ test('the two-factor setup dialog fits or scrolls on a phone, portrait and lands
     $webpage = visit(route('security.edit', absolute: false))->on()->mobile()->assertNoSmoke();
     $webpage->resize($width, $height);
     $webpage->script(appHydratedScript());
-    $webpage->fill('password', 'password')
+    $webpage->fill('[data-confirm-password-input]', 'password')
         ->click('[data-test="confirm-password-button"]');
     $webpage->assertPathIs(route('security.edit', absolute: false));
     $webpage->script(appHydratedScript());
-    $webpage->click('Enable 2FA');
+    $webpage->click('[data-two-factor-enable]');
 
     // The QR code and the setup key have loaded.
     landscapeDialogAssertOpen($webpage, '!document.querySelector("[data-slot=\\"dialog-content\\"] .animate-pulse") && !!document.querySelector("[data-slot=\\"dialog-content\\"] input")');
 
-    $webpage->click('Continue');
+    $webpage->click('[data-two-factor-continue]');
     landscapeDialogAssertOpen($webpage, '!!document.querySelector("[data-slot=\\"dialog-content\\"] [data-input-otp]")');
 })->with([
     'portrait' => [375, 812],

@@ -212,7 +212,7 @@ function formatDate(iso: string | null): string {
                                 :href="
                                     AiConversationController.show.url(row.id)
                                 "
-                                class="line-clamp-1 max-w-[420px] font-medium text-foreground hover:underline touch:py-2.5"
+                                class="line-clamp-1 max-w-[420px] font-medium text-foreground hover:underline touch:leading-10"
                             >
                                 {{ row.title }}
                             </a>
