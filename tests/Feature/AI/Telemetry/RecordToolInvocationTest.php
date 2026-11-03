@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Benchmark\FixtureBook;
 use App\Ai\Benchmark\ReplayTool;
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
@@ -148,4 +149,20 @@ test('a benchmark replay records the tool it stands in for', function (): void {
 
     expect(AiToolInvocation::where('invocation_id', 'inv-replay')->orderBy('id')->pluck('tool_class')->all())
         ->toBe([SearchMediaTool::class, SearchMediaTool::class]);
+});
+
+test('a tool call ended by a client disconnect is recorded as stopped without an error code', function (): void {
+    (new RecordToolFailure)->handle(new ToolFailed(
+        invocationId: 'inv-s',
+        toolInvocationId: 't-stopped',
+        agent: new MediaAgent,
+        tool: resolve(SearchMediaTool::class),
+        arguments: [],
+        exception: new ClientDisconnectedException,
+        time: 3.0,
+    ));
+
+    expect(AiToolInvocation::where('tool_invocation_id', 't-stopped')->sole())
+        ->status->toBe('stopped')
+        ->error_code->toBeNull();
 });
