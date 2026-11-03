@@ -55,8 +55,7 @@ use Pest\Browser\Api\Webpage;
  * The gate covers every page route: `the phone gate classifies every page
  * route` fails while a named GET route in the `web` group (behind `auth`,
  * behind `guest` or public) is in no dataset and not in
- * mobileLayoutExcludedRouteNames(). mobileLayoutPendingRouteNames() is the
- * 3h-3 backlog of pages not gated yet; Task 13 empties and deletes it. The
+ * mobileLayoutExcludedRouteNames(), so a new page route needs a row. The
  * touch dataset sweeps every page PhoneJobsTouchTargetTest does not for
  * controls under 40 px.
  */
@@ -913,6 +912,7 @@ function mobileLayoutExcludedRouteNames(): array
         'ai.chat.attachments.show' => 'a chat attachment file download',
         'ai.chat.model-options' => 'JSON for the chat model picker',
         'ai.chat.tool-groups' => 'JSON for the chat tool-group picker',
+        'ai.chat.subtitle-audit-batches.show' => 'JSON for a chat subtitle-audit batch card',
         'ai.conversations.index' => 'JSON for the chat conversation list',
         'ai.conversations.show' => 'JSON for one chat conversation',
         'ai.conversations.tool-groups.show' => "JSON for a conversation's pinned tool groups",
@@ -945,21 +945,10 @@ function mobileLayoutExcludedRouteNames(): array
 }
 
 /**
- * The 3h-3 backlog: page routes not gated yet, in route-file order. Each
- * later task moves its pages into a dataset; Task 13 empties and deletes it.
- *
- * @return list<string>
- */
-function mobileLayoutPendingRouteNames(): array
-{
-    return [];
-}
-
-/**
  * Named GET routes in the `web` group: behind `auth` or `auth:<guard>`
  * (Fortify registers its routes with `auth:web`), behind `guest` or
  * `guest:<guard>`, or public (home, set-password). Every one needs a dataset
- * row, an exclusion or a pending entry.
+ * row or an exclusion.
  *
  * @return list<string>
  */
@@ -976,7 +965,7 @@ function mobileLayoutPageRouteNames(): array
 }
 
 /**
- * Page routes that are in no dataset, not excluded and not pending.
+ * Page routes that are in no dataset and not excluded.
  *
  * @return list<string>
  */
@@ -984,8 +973,7 @@ function mobileLayoutUnclassifiedRouteNames(): array
 {
     $classified = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])
         ->map(fn (array $row): string => $row[0])
-        ->merge(array_keys(mobileLayoutExcludedRouteNames()))
-        ->merge(mobileLayoutPendingRouteNames());
+        ->merge(array_keys(mobileLayoutExcludedRouteNames()));
 
     return collect(mobileLayoutPageRouteNames())->diff($classified)->values()->all();
 }
@@ -1434,13 +1422,12 @@ test('the clipped-text check names text past its box and passes a touch target',
 test('the phone gate classifies every page route', function (): void {
     $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])->map(fn (array $row): string => $row[0])->unique();
     $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
-    $pending = collect(mobileLayoutPendingRouteNames());
 
     $pageRoutes = collect(mobileLayoutPageRouteNames());
 
     expect(mobileLayoutUnclassifiedRouteNames())->toBe([])
-        ->and($listed->merge($excluded)->merge($pending)->diff($pageRoutes)->values()->all())->toBe([])
-        ->and($pending->intersect($listed->merge($excluded))->values()->all())->toBe([]);
+        ->and($listed->merge($excluded)->diff($pageRoutes)->values()->all())->toBe([])
+        ->and($listed->intersect($excluded)->values()->all())->toBe([]);
 });
 
 test('the route guard catches an unlisted page behind auth or an auth guard', function (): void {
