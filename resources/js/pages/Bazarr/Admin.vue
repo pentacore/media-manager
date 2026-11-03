@@ -206,14 +206,14 @@ function saveAutomation(): void {
                     :href="bazarr_external_url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                    class="touch-target inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
                 >
                     Open Bazarr to edit credentials
                     <ExternalLink class="size-4" />
                 </a>
                 <a
                     :href="action_rules_url"
-                    class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                    class="touch-target inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
                 >
                     Configure Action Rules
                     <ShieldCheck class="size-4" />
@@ -277,7 +277,7 @@ function saveAutomation(): void {
                         data-test="save-bazarr-settings"
                         type="submit"
                         :disabled="form.processing"
-                        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        class="touch-target rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                     >
                         Save settings
                     </button>
@@ -396,7 +396,7 @@ function saveAutomation(): void {
                     <button
                         v-if="notification_setup"
                         type="button"
-                        class="mt-3 text-sm font-medium text-primary hover:underline"
+                        class="touch-target mt-3 text-sm font-medium text-primary hover:underline"
                         data-test="show-bazarr-notification-hint"
                         @click="showNotificationSetup = !showNotificationSetup"
                     >
@@ -489,7 +489,7 @@ function saveAutomation(): void {
                     data-test="save-bazarr-automation"
                     type="submit"
                     :disabled="automationForm.processing"
-                    class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    class="touch-target rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 >
                     Save automation
                 </button>

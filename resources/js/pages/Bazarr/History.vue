@@ -103,10 +103,10 @@ defineOptions({
             class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
             data-test="history-filters"
         >
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Media type
                 <select
-                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="history-media-type-filter"
                     :value="filters.media_type ?? ''"
                     @change="updateMediaType"
@@ -116,11 +116,11 @@ defineOptions({
                     <option value="movie">Movie</option>
                 </select>
             </label>
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Provider
                 <input
                     type="search"
-                    class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3"
+                    class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3 max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="history-provider-filter"
                     placeholder="Any provider"
                     :value="filters.provider ?? ''"
@@ -171,10 +171,12 @@ defineOptions({
                 <div
                     v-for="item in history?.data ?? []"
                     :key="`${item.media_type}-${item.media_id}-${item.occurred_at}`"
-                    class="grid gap-1 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center"
+                    class="grid grid-cols-1 gap-1 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center"
                 >
                     <div>
-                        <p class="font-medium">{{ item.title }}</p>
+                        <p class="font-medium max-sm:break-all">
+                            {{ item.title }}
+                        </p>
                         <p class="text-xs text-muted-foreground">
                             {{ item.provider ?? 'Unknown provider' }} ·
                             {{ item.language ?? 'Unknown language' }}

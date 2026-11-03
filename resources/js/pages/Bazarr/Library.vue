@@ -105,10 +105,10 @@ defineOptions({
             class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
             data-test="library-filters"
         >
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Media type
                 <select
-                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="library-media-type-filter"
                     :value="filters.media_type ?? ''"
                     @change="updateFilter('media_type', $event)"
@@ -118,10 +118,10 @@ defineOptions({
                     <option value="movie">Movie</option>
                 </select>
             </label>
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Scope
                 <select
-                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="library-scope-filter"
                     :value="filters.scope ?? ''"
                     @change="updateFilter('scope', $event)"
@@ -132,7 +132,9 @@ defineOptions({
                     <option value="movie">Movie</option>
                 </select>
             </label>
-            <label class="flex items-center gap-2 text-sm font-medium">
+            <label
+                class="flex items-center gap-2 text-sm font-medium touch:min-h-10"
+            >
                 <input
                     type="checkbox"
                     class="size-4 rounded border-input"
@@ -179,13 +181,13 @@ defineOptions({
                     Check the mapped Sonarr and Radarr connections.
                 </p>
             </div>
-            <div v-else class="grid gap-4 md:grid-cols-2">
+            <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <article
                     v-for="item in library?.data ?? []"
                     :key="`${item.media_type}-${item.media_id}`"
                     class="rounded-xl border border-border bg-card p-4"
                 >
-                    <p class="font-medium">{{ item.title }}</p>
+                    <p class="font-medium max-sm:break-all">{{ item.title }}</p>
                     <p class="text-xs text-muted-foreground capitalize">
                         {{ item.media_type }} · {{ item.scope ?? 'movie' }}
                     </p>

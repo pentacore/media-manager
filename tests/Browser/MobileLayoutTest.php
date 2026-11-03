@@ -4,32 +4,41 @@ declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiUsageKind;
+use App\Enums\BazarrServiceRole;
+use App\Enums\SubtitleCaseStatus;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\AgentDecision;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
+use App\Models\AnimeIdMap;
+use App\Models\BazarrServiceLink;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
 use App\Models\ChatTemplate;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
+use App\Models\IndexedSeries;
 use App\Models\MediaReplacementAttempt;
 use App\Models\NotificationDestination;
 use App\Models\Server;
 use App\Models\ServerCheck;
 use App\Models\ServerIncident;
 use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Pest\Browser\Api\AwaitableWebpage;
@@ -68,6 +77,13 @@ function mobileLayoutSeries(int $id, string $title): array
  */
 function mobileLayoutFakeServices(array $overrides = []): void
 {
+    // The id sequence outlives RefreshDatabase's rollback, and a whole run hands
+    // out ~10 connection ids per test: skip it past the fixed ids 901 and 902
+    // before it reaches them, or a factory row takes one first.
+    if (DB::getDriverName() === 'pgsql') {
+        DB::statement("SELECT setval('service_connections_id_seq', 902) WHERE (SELECT last_value FROM service_connections_id_seq) BETWEEN 850 AND 901");
+    }
+
     $poster = [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
     $sonarr = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     ServiceConnection::factory()->radarr()->create(['name' => 'Radarr', 'url' => 'http://radarr.local:7878', 'api_key' => 'k']);
@@ -108,6 +124,7 @@ function mobileLayoutFakeServices(array $overrides = []): void
 
     Http::fake([
         ...$overrides,
+        ...mobileLayoutSubtitlesAndAnimeResponses(),
         'sonarr.local:8989/api/v3/series' => Http::response([
             mobileLayoutSeries(1, 'Severance'),
             mobileLayoutSeries(2, 'The Extraordinarily Long Example Series Title Of Doom'),
@@ -225,6 +242,149 @@ function mobileLayoutFakeServices(array $overrides = []): void
     // phone row must wrap and break.
     ActivityLog::factory()->create(['action' => 'sabnzbd.queue.paused', 'description' => 'Paused the SABnzbd queue.']);
     ActivityLog::factory()->create(['action' => 'media.library.episode.imported', 'description' => 'Imported /data/media/tv/'.str_repeat('Example-Unbroken-Path-Segment-', 4).'S01E01.mkv']);
+    mobileLayoutFakeSubtitlesAndAnime();
+}
+
+/**
+ * The long unbroken file name the Subtitles pages must break on a phone.
+ */
+function mobileLayoutSubtitleFileName(): string
+{
+    return 'Severance.S01E01.Good.News.About.Hell.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP.mkv';
+}
+
+/**
+ * The AniList season page: four entries, the first with a long title.
+ *
+ * @return list<array<string, mixed>>
+ */
+function mobileLayoutAnimeEntries(): array
+{
+    $anime = [];
+    foreach (['The Extraordinarily Long Example Anime Title That Wraps Badly', 'Example Anime Two', 'Example Anime Three', 'Short Example'] as $index => $title) {
+        $anime[] = [
+            'id' => 9101 + $index, 'idMal' => 9201 + $index, 'format' => 'TV', 'status' => 'RELEASING', 'episodes' => 12, 'popularity' => 5000 - $index * 100,
+            'averageScore' => 80 + $index, 'title' => ['romaji' => 'Example Romaji '.($index + 1), 'english' => $title],
+            'startDate' => ['year' => 2026, 'month' => 1, 'day' => 4 + $index], 'coverImage' => ['large' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'],
+        ];
+    }
+
+    return $anime;
+}
+
+/**
+ * The Bazarr and AniList fakes, spread into mobileLayoutFakeServices()'s one
+ * Http::fake() array (Task 1's capture payloads). The episodes name the
+ * gate's Sonarr series 1 and 2, which Bazarr's readers look up. Every Bazarr
+ * capability is advertised, so every drawer and admin action renders.
+ *
+ * @return array<string, mixed>
+ */
+function mobileLayoutSubtitlesAndAnimeResponses(): array
+{
+    $longFile = mobileLayoutSubtitleFileName();
+    $english = ['name' => 'English', 'code2' => 'en', 'code3' => 'eng', 'forced' => false, 'hi' => false];
+    $swedish = ['name' => 'Swedish', 'code2' => 'sv', 'code3' => 'swe', 'forced' => false, 'hi' => false];
+    $episodes = [
+        ['sonarrSeriesId' => 1, 'sonarrEpisodeId' => 81, 'seriesTitle' => 'Severance', 'episode_number' => '1x01', 'title' => $longFile, 'episodeTitle' => $longFile, 'sceneName' => $longFile, 'monitored' => true, 'missing_subtitles' => [$swedish], 'subtitles' => [$english + ['path' => '/tv/severance/'.Str::beforeLast($longFile, '.mkv').'.en.srt']]],
+        ['sonarrSeriesId' => 1, 'sonarrEpisodeId' => 82, 'seriesTitle' => 'Severance', 'episode_number' => '1x02', 'title' => 'Example Episode With A Fairly Long Name 2', 'episodeTitle' => 'Example Episode With A Fairly Long Name 2', 'sceneName' => 'Severance.S01E02.1080p.WEB-DL', 'monitored' => true, 'missing_subtitles' => [$english, $swedish], 'subtitles' => []],
+        ['sonarrSeriesId' => 2, 'sonarrEpisodeId' => 91, 'seriesTitle' => 'The Extraordinarily Long Example Series Title Of Doom', 'episode_number' => '1x01', 'title' => 'Pilot', 'episodeTitle' => 'Pilot', 'sceneName' => 'Example.Series.S01E01.1080p', 'monitored' => true, 'missing_subtitles' => [$english], 'subtitles' => []],
+    ];
+    $movies = [
+        ['radarrId' => 10, 'title' => 'Dune', 'sceneName' => 'Dune.2021.2160p.UHD.BluRay', 'monitored' => true, 'missing_subtitles' => [$swedish], 'subtitles' => [$english + ['path' => '/movies/dune/Dune.2021.en.srt']]],
+        ['radarrId' => 11, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'sceneName' => 'Example.Movie.2022.1080p', 'monitored' => true, 'missing_subtitles' => [$english, $swedish], 'subtitles' => []],
+        ['radarrId' => 12, 'title' => 'Example Movie', 'sceneName' => 'Example.Movie.2023.1080p', 'monitored' => false, 'missing_subtitles' => [$english], 'subtitles' => []],
+    ];
+    $episodeHistory = [
+        ['sonarrSeriesId' => 1, 'sonarrEpisodeId' => 81, 'seriesTitle' => 'Severance', 'episodeTitle' => $longFile, 'episode_number' => '1x01', 'language' => $english, 'provider' => 'opensubtitlescom', 'action' => 1, 'score' => '95.5%', 'timestamp' => '2026-01-04 09:00:00', 'parsed_timestamp' => '2026-01-04T09:00:00Z'],
+        ['sonarrSeriesId' => 1, 'sonarrEpisodeId' => 82, 'seriesTitle' => 'Severance', 'episodeTitle' => 'Example Episode With A Fairly Long Name 2', 'episode_number' => '1x02', 'language' => $swedish, 'provider' => 'podnapisi', 'action' => 3, 'score' => '88.1%', 'timestamp' => '2026-01-04 08:00:00', 'parsed_timestamp' => '2026-01-04T08:00:00Z'],
+        ['sonarrSeriesId' => 2, 'sonarrEpisodeId' => 91, 'seriesTitle' => 'The Extraordinarily Long Example Series Title Of Doom', 'episodeTitle' => 'Pilot', 'episode_number' => '1x01', 'language' => $english, 'provider' => 'embeddedsubtitles', 'action' => 2, 'score' => '', 'timestamp' => '2026-01-03 22:00:00', 'parsed_timestamp' => '2026-01-03T22:00:00Z'],
+    ];
+    $movieHistory = [
+        ['radarrId' => 10, 'title' => 'Dune', 'language' => $english, 'provider' => 'opensubtitlescom', 'action' => 1, 'score' => '91.0%', 'timestamp' => '2026-01-04 07:00:00', 'parsed_timestamp' => '2026-01-04T07:00:00Z'],
+        ['radarrId' => 11, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'language' => $swedish, 'provider' => 'podnapisi', 'action' => 1, 'score' => '84.0%', 'timestamp' => '2026-01-04 06:00:00', 'parsed_timestamp' => '2026-01-04T06:00:00Z'],
+        ['radarrId' => 12, 'title' => 'Example Movie', 'language' => $english, 'provider' => 'subdl', 'action' => 3, 'score' => '79.0%', 'timestamp' => '2026-01-03 21:00:00', 'parsed_timestamp' => '2026-01-03T21:00:00Z'],
+    ];
+    // The drawer's provider search: one candidate with a long release name.
+    $candidate = ['provider' => 'opensubtitlescom', 'subtitle' => 'example-provider-id', 'language' => 'swe', 'forced' => false, 'hearing_impaired' => true, 'score' => 98, 'release_info' => [Str::beforeLast($longFile, '.mkv')], 'uploader' => 'example-uploader-with-a-long-name'];
+    $available = ['responses' => ['200' => ['description' => 'OK']]];
+    $swaggerPaths = [];
+    foreach ([
+        '/episodes' => ['get'], '/movies' => ['get', 'patch'], '/series' => ['patch'],
+        '/episodes/wanted' => ['get'], '/movies/wanted' => ['get'], '/episodes/history' => ['get'], '/movies/history' => ['get'],
+        '/providers/episodes' => ['get', 'post'], '/providers/movies' => ['get', 'post'], '/providers' => ['get'],
+        '/episodes/subtitles' => ['patch', 'post', 'delete'], '/movies/subtitles' => ['patch', 'post', 'delete'], '/subtitles' => ['patch'],
+        '/system/tasks' => ['get', 'post'], '/system/languages/profiles' => ['get'], '/system/settings' => ['get', 'post'], '/system/notifications' => ['get', 'post', 'patch'],
+    ] as $path => $methods) {
+        $swaggerPaths[$path] = array_fill_keys($methods, $available);
+    }
+
+    return [
+        'bazarr.local:6767/api/swagger.json' => Http::response(['swagger' => '2.0', 'basePath' => '/api', 'info' => ['title' => 'Bazarr', 'version' => '1.6.0'], 'paths' => $swaggerPaths]),
+        'bazarr.local:6767/api/system/health' => Http::response(['data' => []]),
+        'bazarr.local:6767/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.5.1']]),
+        'bazarr.local:6767/api/system/settings' => Http::response(['data' => ['scheduler' => ['enabled' => true, 'interval_hours' => 6], 'subtitle_tools' => ['automatic_subtitle_synchronization' => true, 'use_postprocessing' => false]]]),
+        'bazarr.local:6767/api/system/languages/profiles' => Http::response([['profileId' => 1, 'name' => 'English and Swedish', 'items' => [['language' => 'eng'], ['language' => 'swe']]]]),
+        'bazarr.local:6767/api/episodes/wanted*' => Http::response(['data' => $episodes, 'total' => 3]),
+        'bazarr.local:6767/api/movies/wanted*' => Http::response(['data' => $movies, 'total' => 3]),
+        'bazarr.local:6767/api/episodes/history*' => Http::response(['data' => $episodeHistory, 'total' => 3]),
+        'bazarr.local:6767/api/movies/history*' => Http::response(['data' => $movieHistory, 'total' => 3]),
+        'bazarr.local:6767/api/providers/episodes*' => Http::response(['data' => [$candidate]]),
+        'bazarr.local:6767/api/providers/movies*' => Http::response(['data' => [$candidate]]),
+        // The library reads episodes per series id (GET /api/episodes?seriesid=…).
+        'bazarr.local:6767/api/episodes*' => Http::response(['data' => array_slice($episodes, 0, 2)]),
+        'bazarr.local:6767/api/series*' => Http::response(['data' => [['sonarrSeriesId' => 1, 'title' => 'Severance', 'episodeFileCount' => 6], ['sonarrSeriesId' => 2, 'title' => 'The Extraordinarily Long Example Series Title Of Doom', 'episodeFileCount' => 1]], 'total' => 2]),
+        'bazarr.local:6767/api/movies*' => Http::response(['data' => array_slice($movies, 0, 2), 'total' => 2]),
+        // Subtitles > Admin's task, provider and notification panels.
+        'bazarr.local:6767/api/system/tasks' => Http::response(['data' => [['taskid' => 'search_missing', 'name' => 'Search for missing subtitles', 'status' => 'idle'], ['taskid' => 'sync_episodes', 'name' => 'Sync episodes with Sonarr', 'status' => 'running']]]),
+        'bazarr.local:6767/api/providers' => Http::response(['data' => [['name' => 'OpenSubtitles', 'status' => 'healthy'], ['name' => 'Podnapisi', 'status' => 'throttled']]]),
+        'bazarr.local:6767/api/system/notifications' => Http::response(['data' => []]),
+        'bazarr.local:6767/*' => Http::response([]),
+        'graphql.anilist.co' => Http::response(['data' => ['Page' => ['pageInfo' => ['hasNextPage' => false], 'media' => mobileLayoutAnimeEntries()]]]),
+    ];
+}
+
+/**
+ * The Subtitles and Seasonal anime models (Task 1's capture fixtures): a
+ * Bazarr connection mapped to the fakes' Sonarr and Radarr, two subtitle
+ * cases, the AniList source with id maps, and two library series. The worst
+ * case per card: the first anime entry is in the library (Open), the second
+ * is unmonitored (Monitor and Open), the third is requestable and the fourth
+ * has no id map (Find match).
+ */
+function mobileLayoutFakeSubtitlesAndAnime(): void
+{
+    $serviceConnection = ServiceConnection::query()->where('name', 'Sonarr')->sole();
+    $radarr = ServiceConnection::query()->where('name', 'Radarr')->sole();
+    $bazarr = ServiceConnection::factory()->bazarr()->create(['name' => 'Bazarr', 'url' => 'http://bazarr.local:6767', 'api_key' => 'k']);
+    BazarrServiceLink::factory()->create(['bazarr_connection_id' => $bazarr->id, 'related_connection_id' => $serviceConnection->id, 'role' => BazarrServiceRole::Sonarr]);
+    BazarrServiceLink::factory()->create(['bazarr_connection_id' => $bazarr->id, 'related_connection_id' => $radarr->id, 'role' => BazarrServiceRole::Radarr]);
+
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id, 'service_connection_id' => $serviceConnection->id, 'scope' => 'tv', 'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'The Extraordinarily Long Example Series Title Of Doom S01E01', 'missing_languages' => ['eng', 'swe']],
+        'failure_reason' => 'No release with matching subtitles was found after three searches.',
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id, 'service_connection_id' => $serviceConnection->id, 'scope' => 'tv', 'status' => SubtitleCaseStatus::Resolved,
+        'evidence' => ['display_name' => 'Severance S01E02', 'missing_languages' => ['swe']], 'resolved_at' => now(),
+    ]);
+
+    config()->set('mediamanager.anime.source', 'anilist');
+    // The page queues the id-map sync on a fresh install.
+    Queue::fake();
+    foreach (array_slice(mobileLayoutAnimeEntries(), 0, 3) as $index => $entry) {
+        AnimeIdMap::factory()->tv()->create(['anilist_id' => $entry['id'], 'mal_id' => $entry['idMal'], 'tmdb_tv_id' => 7001 + $index, 'tvdb_id' => 81001 + $index, 'tmdb_season' => 1, 'tvdb_season' => 1]);
+    }
+
+    // Sonarr serves series 7; series 8 has no live answer, so its stored
+    // unmonitored flag stands.
+    foreach ([[7, 81001, true], [8, 81002, false]] as [$sonarrId, $tvdbId, $monitored]) {
+        IndexedSeries::factory()->create([
+            'service_connection_id' => $serviceConnection->id, 'sonarr_id' => $sonarrId, 'tvdb_id' => $tvdbId, 'title' => 'Example Indexed Series '.$sonarrId, 'sort_title' => 'example indexed series '.$sonarrId, 'title_slug' => 'example-indexed-series-'.$sonarrId,
+            'year' => 2022, 'status' => 'continuing', 'monitored' => $monitored, 'network' => 'Example Network', 'arr_added_at' => '2026-01-01 00:00:00',
+        ]);
+    }
 }
 
 /**
@@ -359,6 +519,25 @@ function mobileLayoutHoverOnlyScript(string $root = 'main'): string
 }
 
 /**
+ * Elements in $root (every match, default `main`) whose own text runs past
+ * their box: a long unbroken file name that a frame's overflow clips, which
+ * the box-based overflow check cannot see.
+ */
+function mobileLayoutClippedTextScript(string $root = 'main'): string
+{
+    $selector = json_encode($root, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => [...document.querySelectorAll({$selector})].flatMap((root) => [...root.querySelectorAll('*')])
+            .filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''))
+            .filter((element) => { const style = getComputedStyle(element); return style.display !== 'inline' && style.overflowX === 'visible' && style.textOverflow !== 'ellipsis' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1; })
+            .map((element) => `\${element.tagName.toLowerCase()} "\${(element.textContent || '').trim().slice(0, 40)}" \${element.scrollWidth} > \${element.clientWidth}`)
+            .slice(0, 10)
+            .join(' | '))()
+    JS;
+}
+
+/**
  * Runs every phone-gate check on $root (default `main`; the guest pages have
  * no `<main>` and pass `body`): nothing past the screen, no sideways scroll,
  * no unnamed or hover-only control, no two overlapping controls and no scroll
@@ -432,6 +611,15 @@ function mobileLayoutMemberPages(): array
         // The failed upstream reads: both Wanted sections and the indexer search show their errors.
         'wanted (failed reads)' => ['media.wanted.index', '[data-wanted-monitored]', 'main:has([data-wanted-section="sonarr"] [data-slot="alert"]):has([data-wanted-section="radarr"] [data-slot="alert"])', ['tab' => 'cutoff']],
         'prowlarr search (failed)' => ['prowlarr.search', null, '[data-prowlarr-error]', ['q' => 'failing']],
+        // The Subtitles pages (Bazarr faked, long unbroken file names) and Seasonal anime (AniList faked).
+        'subtitles' => ['bazarr.overview', null],
+        'missing subtitles' => ['bazarr.missing', '[data-test="missing-filters"]', '[data-test^="subtitle-item-"]'],
+        'subtitle library' => ['bazarr.library', '[data-test="library-filters"]', '[data-test^="subtitle-item-"]'],
+        'subtitle history' => ['bazarr.history', '[data-test="history-filters"]'],
+        // The filters are admin-only: 'the subtitle escalations page with every action and a pager' measures them.
+        'subtitle escalations' => ['bazarr.escalations', null, '[data-test^="subtitle-escalation-"]'],
+        // Every card action: Open, Monitor (an unmonitored series), Request and Find match.
+        'seasonal anime' => ['media.anime.index', null, 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request])'],
     ];
 }
 
@@ -492,6 +680,7 @@ function mobileLayoutAdminPages(): array
         'server' => ['admin.servers.show', '[data-page-header-more]', null, ['server' => 901]],
         // The toolbar stays hand-rolled (R4); the title waits for the scene.
         'whisparr scene' => ['media.whisparr.show', '[data-search-now]', '[data-whisparr-show-title]', ['id' => 11]],
+        'subtitles admin' => ['bazarr.admin.index', '[data-test="save-bazarr-settings"]', '[data-test="bazarr-admin-form"]'],
     ];
 }
 
@@ -605,6 +794,16 @@ function mobileLayoutTouchPages(): array
         'server' => ['admin.servers.show', ['server' => 901], null],
         'whisparr' => ['media.whisparr.index', [], null],
         'whisparr scene' => ['media.whisparr.show', ['id' => 11], '[data-whisparr-show-title]'],
+        'subtitles' => ['bazarr.overview', [], null],
+        'missing subtitles' => ['bazarr.missing', [], '[data-test^="subtitle-item-"]'],
+        'subtitle library' => ['bazarr.library', [], '[data-test^="subtitle-item-"]'],
+        'subtitle history' => ['bazarr.history', [], null],
+        'subtitle escalations' => ['bazarr.escalations', [], '[data-test^="subtitle-escalation-"]'],
+        // Open and Monitor need the fakes' Sonarr to be the active one, which the
+        // admin's Sonarr 902 outranks once the id sequence passes it: the anime
+        // match dialog test sweeps every card action as a member.
+        'seasonal anime' => ['media.anime.index', [], '[data-anime-status]'],
+        'subtitles admin' => ['bazarr.admin.index', [], '[data-test="bazarr-admin-form"]'],
     ];
 }
 
@@ -660,15 +859,7 @@ function mobileLayoutExcludedRouteNames(): array
  */
 function mobileLayoutPendingRouteNames(): array
 {
-    return [
-        'media.anime.index',
-        'bazarr.overview',
-        'bazarr.missing',
-        'bazarr.library',
-        'bazarr.history',
-        'bazarr.escalations',
-        'bazarr.admin.index',
-    ];
+    return [];
 }
 
 /**
@@ -898,6 +1089,115 @@ test('an open action sheet fits a phone screen', function (): void {
         ->assertScript(phoneOverlapScript('[data-action-sheet]'), '')
         ->assertScript(phoneScrollSliverScript('[data-action-sheet]'), '')
         ->assertScript('(() => { const rect = document.querySelector("[data-action-sheet]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
+});
+
+test('the open subtitle item drawer fits a phone screen', function (): void {
+    mobileLayoutFakeServices();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('bazarr.missing', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage, '[data-test^="subtitle-item-"]');
+    // The episode with the long unbroken file name and an external track.
+    $webpage->click('[data-test="subtitle-item-episode-81"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
+    mobileLayoutSettle($webpage);
+
+    $webpage->assertScript(phoneOverflowScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneOverlapScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(mobileLayoutClippedTextScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
+
+    // The widest state: the provider search lists a candidate with a long release name.
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"subtitle-search\"]:not([disabled])")'));
+    $webpage->click('[data-test="subtitle-search"]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"candidate-request-0\"]")'));
+
+    $webpage->assertScript(phoneOverflowScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneOverlapScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneScrollSliverScript('[data-slot="sheet-content"]'), '')
+        ->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
+});
+
+/**
+ * Two Bazarr connections (the connection select shows) and Bazarr's movie
+ * reads failing (each inventory page shows its partial-read warning), seen
+ * by an admin, whose tab strip also has Admin.
+ */
+test('a Subtitles page with two Bazarr connections and a failed read fits a phone screen', function (string $routeName, ?string $deferred, bool $failedRead): void {
+    // A key unlike the defaults' keys, so it matches first.
+    mobileLayoutFakeServices(['*bazarr.local:6767/api/movies*' => Http::response(['message' => 'Example upstream failure'], 500)]);
+    $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
+    ServiceConnection::factory()->bazarr()->create(['name' => 'Example Second Bazarr With A Long Connection Name', 'url' => 'http://bazarr.local:6767', 'api_key' => 'k']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route($routeName, ['connection' => $serviceConnection->id], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutAssertPage($webpage, '[data-test="bazarr-connection"]', $deferred);
+    $webpage->assertScript('document.querySelector("main").textContent.includes("temporarily unavailable")', $failedRead)
+        ->assertScript(mobileLayoutClippedTextScript(), '')
+        ->assertScript(phoneSmallTargetsScript(), '');
+})->with([
+    'subtitles' => ['bazarr.overview', null, true],
+    'missing subtitles' => ['bazarr.missing', '[data-test^="subtitle-item-"]', true],
+    'subtitle library' => ['bazarr.library', '[data-test^="subtitle-item-"]', true],
+    'subtitle history' => ['bazarr.history', '[data-test="history-filters"]', true],
+    'subtitles admin' => ['bazarr.admin.index', '[data-test="bazarr-admin-form"]', false],
+]);
+
+/**
+ * The admin's escalations: the filters, an investigate button on every case
+ * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
+ */
+test('the subtitle escalations page with every action and a pager fits a phone screen', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
+    mobileLayoutFakeServices();
+    $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
+    SubtitleCase::factory()->count(60)->create([
+        'bazarr_connection_id' => $serviceConnection->id, 'service_connection_id' => ServiceConnection::query()->where('name', 'Sonarr')->sole()->id, 'scope' => 'tv', 'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'Severance S01E03', 'missing_languages' => ['swe']],
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('bazarr.escalations', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutAssertPage($webpage, '[data-test="escalation-filters"]', 'main:has([data-test^="investigate-subtitle-case-"]):has(nav[aria-label="Escalation pages"])');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
+});
+
+test('the seasonal anime page with Seerr unreachable fits a phone screen', function (): void {
+    mobileLayoutFakeServices(['*seerr.local:5055/api/v1/user*' => Http::response(['message' => 'Example upstream failure'], 500)]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.anime.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutAssertPage($webpage, null, 'main:has([data-anime-open]):has([data-seerr-picker-unreachable])');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
+});
+
+/**
+ * Every card action as a member (Open, Monitor, an enabled Request and Find
+ * match, the fourth entry having no id map), then the match dialog listing
+ * the Seerr search's candidates.
+ */
+test('the seasonal anime page and its open match dialog fit a phone screen', function (): void {
+    mobileLayoutFakeServices();
+    $this->actingAs(User::factory()->member()->create(['email' => 'requester@example.com']));
+
+    $webpage = visit(route('media.anime.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    mobileLayoutSettle($webpage, 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request]:not([disabled]))');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
+
+    $webpage->click('Find match');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-anime-match-candidate]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+    mobileLayoutSettle($webpage);
+
+    $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
+        ->assertScript(phoneOverlapScript('[role="dialog"]'), '')
+        ->assertScript(phoneSmallTargetsScript('[role="dialog"]'), '')
+        ->assertScript('(() => { const rect = document.querySelector("[role=\"dialog\"]").getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()', true);
 });
 
 test('the open chat sheet fits a phone screen', function (): void {

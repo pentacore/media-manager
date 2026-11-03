@@ -93,10 +93,10 @@ defineOptions({
             class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
             data-test="missing-filters"
         >
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Media type
                 <select
-                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="missing-media-type-filter"
                     :value="filters.media_type ?? ''"
                     @change="updateFilter('media_type', $event)"
@@ -106,10 +106,10 @@ defineOptions({
                     <option value="movie">Movie</option>
                 </select>
             </label>
-            <label class="text-sm font-medium">
+            <label class="text-sm font-medium max-sm:w-full">
                 Scope
                 <select
-                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                     data-test="missing-scope-filter"
                     :value="filters.scope ?? ''"
                     @change="updateFilter('scope', $event)"
@@ -155,7 +155,7 @@ defineOptions({
                 class="flex flex-col gap-2 border-b border-border p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
                 <div>
-                    <p class="font-medium">{{ item.title }}</p>
+                    <p class="font-medium max-sm:break-all">{{ item.title }}</p>
                     <p class="text-xs text-muted-foreground capitalize">
                         {{ item.media_type }} · {{ item.scope ?? 'movie' }}
                     </p>
