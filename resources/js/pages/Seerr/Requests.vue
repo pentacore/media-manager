@@ -742,7 +742,7 @@ const rangeText = computed(() => {
                         <StatusPill :status="statusKey(req)" />
                     </div>
                     <div
-                        class="text-[15px] leading-tight font-semibold text-pretty"
+                        class="text-[15px] leading-tight font-semibold text-pretty wrap-anywhere"
                         data-request-title
                     >
                         {{ req.media_title ?? 'Unknown' }}
@@ -752,7 +752,9 @@ const rangeText = computed(() => {
                     </div>
                     <div v-if="req.requester" class="flex items-center gap-2">
                         <InitialsAvatar :name="req.requester" :size="20" />
-                        <span class="text-[12px]">{{ req.requester }}</span>
+                        <span class="min-w-0 text-[12px] wrap-anywhere">{{
+                            req.requester
+                        }}</span>
                         <span class="text-[12px] text-fg-subtle">·</span>
                         <TimeStamp
                             :iso="req.created_at"

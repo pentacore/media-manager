@@ -2,12 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiTask;
 use App\Enums\WhisparrVersion;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
+use App\Models\BenchmarkResult;
+use App\Models\BenchmarkRun;
 use App\Models\NotificationDestination;
+use App\Models\Server;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Pest\Browser\Api\AwaitableWebpage;
@@ -40,7 +46,11 @@ function landscapeDialogSeries(int $id, string $title): array
  * the library, series 7's detail), Radarr (movie 10 with three releases),
  * Whisparr (scene 11), Seerr (request 1, a TV request the edit dialog loads),
  * SABnzbd, the OpenRouter pricing feed (preflight P3), two AI usage records
- * (ids 901 and 902), an AI price and a Discord destination.
+ * (ids 901 and 902), an AI price and a Discord destination. For the dialogs
+ * added in Task 13: a stuck Sonarr queue item (id 41) with three manual-import
+ * candidates (one a sample, one unmapped), movie 10's file and history for the
+ * replace-file dialog, a server (id 901) and two benchmark runs (901 and 902)
+ * over one case whose results (901 and 902) differ, with long outputs.
  */
 function landscapeDialogFakes(): void
 {
@@ -62,7 +72,7 @@ function landscapeDialogFakes(): void
     $releases = [];
     foreach (range(1, 3) as $index) {
         $releases[] = [
-            'guid' => 'release-'.$index, 'indexerId' => 1, 'indexer' => 'ExampleIndexer', 'title' => 'Severance.S01E0'.$index.'.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP',
+            'guid' => 'release-'.$index, 'indexerId' => 1, 'indexer' => 'ExampleIndexer', 'movieId' => 10, 'title' => 'Severance.S01E0'.$index.'.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-EXAMPLEGROUP',
             'size' => 4_500_000_000, 'age' => $index, 'ageHours' => 30, 'protocol' => $index % 2 ? 'usenet' : 'torrent', 'seeders' => 12, 'leechers' => 3,
             'quality' => ['quality' => ['name' => 'WEBDL-2160p']], 'qualityWeight' => 100, 'rejected' => $index % 3 === 0, 'rejections' => $index % 3 === 0 ? ['Example rejection reason that is fairly long'] : [],
             'customFormatScore' => 10, 'languages' => [['name' => 'English']], 'downloadAllowed' => true,
@@ -92,11 +102,40 @@ function landscapeDialogFakes(): void
         'sonarr.local:8989/api/v3/episode*' => Http::response([
             ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long', 'airDate' => '2022-02-18', 'hasFile' => true, 'monitored' => true],
         ]),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [[
+            'id' => 41, 'title' => 'The.Extraordinarily.Long.Example.Series.Title.Of.Doom.S01E01.1080p.WEB-DL-EXAMPLEGROUP', 'series' => ['title' => 'The Extraordinarily Long Example Series Title Of Doom'],
+            'episode' => ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'], 'status' => 'completed', 'trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'importPending',
+            'protocol' => 'usenet', 'downloadClient' => 'SABnzbd', 'size' => 1_000_000_000, 'sizeleft' => 0, 'timeleft' => '00:00:00',
+            'statusMessages' => [['title' => 'Example status', 'messages' => ['No files found are eligible for import']]], 'added' => '2026-09-29T10:00:00Z',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'downloadId' => 'SABnzbd_nzo_41',
+        ]]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            [
+                'path' => '/downloads/The.Extraordinarily.Long.Example.Series.Title.Of.Doom.S01E01.1080p.WEB-DL-EXAMPLEGROUP/episode.mkv', 'name' => 'The.Extraordinarily.Long.Example.Series.Title.Of.Doom.S01E01', 'size' => 1_000_000_000,
+                'series' => ['id' => 2, 'title' => 'The Extraordinarily Long Example Series Title Of Doom'], 'seasonNumber' => 1,
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long']],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']], 'releaseType' => 'singleEpisode', 'rejections' => [],
+            ],
+            [
+                'path' => '/downloads/Sample/the-extraordinarily-long-example-series-sample.mkv', 'name' => 'sample', 'size' => 20_000_000,
+                'series' => ['id' => 2, 'title' => 'The Extraordinarily Long Example Series Title Of Doom'], 'seasonNumber' => 1,
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'An Example Episode Title That Runs Long']],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']], 'releaseType' => 'singleEpisode', 'rejections' => [['reason' => 'Sample', 'type' => 'permanent']],
+            ],
+            [
+                'path' => '/downloads/Extras/an-example-featurette-with-a-long-file-name.mkv', 'name' => 'featurette', 'size' => 300_000_000,
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']], 'rejections' => [['reason' => 'Unknown Series', 'type' => 'permanent']],
+            ],
+        ]),
         'sonarr.local:8989/*' => Http::response([]),
         'radarr.local:7878/api/v3/movie' => Http::response([
             ['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => $poster],
         ]),
-        'radarr.local:7878/api/v3/movie/10*' => Http::response(['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 12_000_000_000, 'images' => $poster, 'status' => 'released']),
+        'radarr.local:7878/api/v3/movie/10*' => Http::response(['id' => 10, 'title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'titleSlug' => 'example-10', 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 12_000_000_000, 'images' => $poster, 'status' => 'released',
+            'movieFileId' => 5, 'movieFile' => ['quality' => ['quality' => ['name' => 'Bluray-1080p']], 'size' => 12_000_000_000, 'relativePath' => 'An Extremely Long Example Movie Title That Wraps Badly (2021)/An.Extremely.Long.Example.Movie.Title.That.Wraps.Badly.2021.1080p.BluRay.mkv']]),
+        'radarr.local:7878/api/v3/moviefile/5' => Http::response(['id' => 5, 'movieId' => 10, 'sceneName' => 'An.Extremely.Long.Example.Movie.Title.That.Wraps.Badly.2021.1080p.BluRay', 'releaseGroup' => 'EXAMPLEGROUP', 'quality' => ['quality' => ['name' => 'Bluray-1080p']], 'mediaInfo' => ['subtitles' => 'English / Swedish']]),
+        'radarr.local:7878/api/v3/history*' => Http::response(['records' => [['id' => 777, 'eventType' => 'grabbed', 'movieId' => 10, 'downloadId' => 'XYZ']]]),
         'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/release*' => Http::response($releases),
         'radarr.local:7878/*' => Http::response([]),
@@ -133,6 +172,45 @@ function landscapeDialogFakes(): void
         'prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000, 'cache_read_input_tokens' => 400_000, 'cache_write_input_tokens' => 250_000, 'reasoning_tokens' => 120_000]);
     AiUsageRecord::factory()->create(['id' => 902, 'prompt_text' => 'Decide.', 'is_benchmark' => false]);
     NotificationDestination::factory()->discord()->create();
+    Server::factory()->create(['id' => 901, 'name' => 'example-host-with-a-long-name-01']);
+    // The replace-file search ranks only releases with subtitle evidence for a
+    // required language: a guarantee rule matches the fake releases' group.
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'automatic_selection_enabled' => false, 'automatic_selection_threshold' => 90, 'global_languages' => ['English'],
+        'scoped_languages' => ['anime' => null, 'tv' => null, 'movie' => null], 'season_pack_policy' => 'approval_required',
+        'guidance' => ['anime' => ['notes' => '', 'rules' => []], 'tv' => ['notes' => '', 'rules' => []], 'movie' => ['notes' => '', 'rules' => [[
+            'name' => 'Example group carries English', 'enabled' => true, 'strength' => 'guarantee', 'languages' => ['English'], 'conditions' => [['field' => 'title', 'value' => 'EXAMPLEGROUP']],
+        ]]]],
+    ]);
+
+    $candidates = [['provider' => 'openai', 'model' => 'gpt-5-mini', 'reasoning' => null]];
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['id' => 901, 'name' => 'Example case about a director', 'input' => ['prompt' => 'Which films did the example director make?']]);
+    foreach ([901 => ['Example baseline run', 0.9, true], 902 => ['Example rerun', 0.3, false]] as $id => [$name, $score, $passed]) {
+        $benchmarkRun = BenchmarkRun::factory()->completed()->withCandidates($candidates)->create(['id' => $id, 'name' => $name, 'judge' => ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => null]]);
+        BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->scored($score, $passed)->create([
+            'id' => $id, 'latency_ms' => 500, 'completion_tokens' => 50,
+            'output' => str_repeat('The example director made several films that run long in this example answer. ', 6).'/data/media/movies/An.Extremely.Long.Example.Movie.Title.That.Wraps.Badly.2021.1080p.BluRay.mkv',
+            'score_detail' => ['score_10' => (int) round($score * 10), 'rationale' => str_repeat('An example verdict that explains the score at some length. ', 4), 'tool_log' => []],
+        ]);
+    }
+}
+
+/**
+ * Asserts the open dialog (once $ready holds too, when given) stays on the
+ * screen and inside it: nothing overflows, scrolls by a sliver or overlaps,
+ * and its last control and close X can be reached.
+ */
+function landscapeDialogAssertOpen(AwaitableWebpage|PendingAwaitablePage|Webpage $webpage, ?string $ready): void
+{
+    $open = '!!document.querySelector("[data-slot=\"dialog-content\"]") && document.querySelector("[data-slot=\"dialog-content\"]").getAnimations().length === 0 && !document.querySelector("[data-slot=\"dialog-content\"] [data-slot=\"skeleton\"]")';
+    $condition = $ready === null ? $open : "{$open} && {$ready}";
+    $webpage->script(confirmDialogWaitUntilScript($condition));
+    $webpage->assertScript($condition, true);
+
+    $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
+        ->assertScript(phoneScrollSliverScript('[role="dialog"]'), '')
+        ->assertScript(phoneOverlapScript('[role="dialog"]'), '')
+        ->assertScript(landscapeDialogReachScript(), 'ok');
 }
 
 /**
@@ -157,7 +235,8 @@ function landscapeDialogOpen(AwaitableWebpage|PendingAwaitablePage|Webpage $webp
  * screen; scrolled to its end, its last control (the footer, not a row of an
  * inner list) is not inside the dialog; or its close X leaves the screen or
  * the dialog. A dialog without a footer (every control in an inner list) has
- * its inner lists scrolled to their end too, and their last control checked.
+ * its inner lists scrolled to their end too, and their last control checked;
+ * a dialog with no control at all has its last content block checked.
  * A control inside a sideways-scrolling frame is checked vertically only.
  */
 function landscapeDialogReachScript(): string
@@ -229,15 +308,22 @@ function landscapeDialogReachScript(): string
                 }
                 controls = all;
             }
-            const last = controls[controls.length - 1];
+            // A read-only dialog (two outputs side by side) has no control
+            // but its close X: its last block must then show instead.
+            const blocks = [...(scroller === dialog ? dialog.children : scroller.children)].filter((el) => !el.closest('[data-slot="dialog-close"]') && visible(el));
+            const lastIsBlock = controls.length === 0;
+            const last = controls[controls.length - 1] ?? blocks[blocks.length - 1];
             if (!last) {
-                return 'the dialog has no visible control';
+                return 'the dialog has no visible control or content';
             }
             // A control in a sideways-scrolling frame is reached by scrolling
             // that frame, so only its vertical place is checked.
             const lastRect = last.getBoundingClientRect();
             const dialogRect = dialog.getBoundingClientRect();
-            const reachable = insideSidewaysFrame(last)
+            // A content block can be taller than the dialog: its end must show.
+            const reachable = lastIsBlock
+                ? lastRect.bottom <= dialogRect.bottom + 1
+                : insideSidewaysFrame(last)
                 ? lastRect.top >= dialogRect.top - 1 && lastRect.bottom <= dialogRect.bottom + 1
                 : inside(lastRect, dialogRect);
             if (!reachable) {
@@ -269,22 +355,15 @@ test('every listed dialog fits or scrolls on a phone, portrait and landscape', f
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("main [data-slot=\"skeleton\"]")'));
     landscapeDialogOpen($webpage, $clicks, $width);
 
-    $open = '!!document.querySelector("[data-slot=\"dialog-content\"]") && document.querySelector("[data-slot=\"dialog-content\"]").getAnimations().length === 0 && !document.querySelector("[data-slot=\"dialog-content\"] [data-slot=\"skeleton\"]")';
-    $condition = $ready === null ? $open : "{$open} && {$ready}";
-    $webpage->script(confirmDialogWaitUntilScript($condition));
-    $webpage->assertScript($condition, true);
-
-    $webpage->assertScript(phoneOverflowScript('[role="dialog"]'), '')
-        ->assertScript(phoneScrollSliverScript('[role="dialog"]'), '')
-        ->assertScript(phoneOverlapScript('[role="dialog"]'), '')
-        ->assertScript(landscapeDialogReachScript(), 'ok');
+    landscapeDialogAssertOpen($webpage, $ready);
 })->with([
     'users invite' => ['admin.users.index', [], ['[data-users-invite]'], null],
     'new ai price' => ['admin.ai-prices.index', [], ['[data-create-price]'], null],
     'ai price from catalog' => ['admin.ai-prices.index', [], ['[data-add-from-catalog]'], '!document.querySelector("[data-catalog-loading]") && !!document.querySelector("[data-catalog-row]")'],
     'new server' => ['admin.servers.index', [], ['[data-server-add]'], null],
     'new notification destination' => ['admin.notification-destinations.index', [], ['[data-destination-add]'], null],
-    'ai usage detail' => ['admin.ai-usage.index', [], ['[data-usage-row="901"]'], '!!document.querySelector("[data-usage-detail]") && !document.querySelector("[data-usage-detail]").textContent.includes("Loading…")'],
+    // A what-if price scenario adds the breakdown's Scenario column, its widest state.
+    'ai usage detail' => ['admin.ai-usage.index', ['scenario' => landscapeDialogScenario()], ['[data-usage-row="901"]'], '!!document.querySelector("[data-usage-detail]") && !document.querySelector("[data-usage-detail]").textContent.includes("Loading…") && document.querySelector("[data-usage-breakdown]").textContent.includes("Scenario")'],
     'request edit' => ['media.requests.index', [], ['[data-request-edit]'], '!!document.querySelector("[data-request-edit-options]")'],
     'series delete' => ['media.series.show', ['id' => 7], ['phone' => ['[data-page-header-more]', '[data-page-header-item="delete"]'], 'wide' => ['[data-delete-trigger]']], '!!document.querySelector("[data-delete-description]")'],
     'interactive search' => ['media.movies.show', ['id' => 10], ['phone' => ['[data-page-header-more]', '[data-page-header-item="interactive-search"]'], 'wide' => ['[data-interactive-search]']], 'document.querySelectorAll("[data-interactive-search-dialog] [data-release-row], [data-interactive-search-dialog] [data-release-card]").length > 0'],
@@ -293,10 +372,29 @@ test('every listed dialog fits or scrolls on a phone, portrait and landscape', f
     'library bulk delete' => ['media.series.index', [], ['[data-bulk-select="1"]', '[data-bulk-action="delete"]'], null],
     // Preflight P14: the trigger opens a menu; the dialog sits behind "Custom…".
     'sabnzbd speed limit' => ['sabnzbd.queue.index', [], ['[data-speed-limit-trigger]', '[data-speed-limit-custom]'], null],
+    'server enrollment' => ['admin.servers.show', ['server' => 901], ['phone' => ['[data-page-header-more]', '[data-page-header-item="regenerate"]'], 'wide' => ['[data-server-regenerate]']], '!!document.querySelector("[data-enrollment-dialog]")'],
+    // The app-wide useConfirm() dialog, asked before a server is removed.
+    'confirm' => ['admin.servers.show', ['server' => 901], ['phone' => ['[data-page-header-more]', '[data-page-header-item="delete"]'], 'wide' => ['[data-server-delete]']], '!!document.querySelector("[data-confirm-accept]")'],
+    // The widest state: the release search ran and lists its candidates.
+    'replace file' => ['media.movies.show', ['id' => 10], ['phone' => ['[data-page-header-more]', '[data-page-header-item="replace"]', '[data-replacement-search]'], 'wide' => ['[data-replacement-trigger]', '[data-replacement-search]']], '!!document.querySelector("[data-replacement-candidate-row]")'],
+    'compare outputs' => ['admin.benchmarks.compare.show', ['runs' => '901,902'], ['[data-compare-vs-baseline="901:902"]'], '!!document.querySelector("[data-compare-outputs] [data-compare-output-text]")'],
+    // Three candidates: one to import, a sample and an unmapped file.
+    'activity import' => ['media.library.activity.queue', [], ['phone' => ['[data-queue-card-menu="sonarr-41"]', '[data-queue-manual-import]'], 'wide' => ['[data-queue-row="sonarr-41"] [data-queue-row-menu]', '[data-queue-manual-import]']], 'document.querySelectorAll("[data-manual-import-candidate]").length === 3'],
 ])->with([
     'portrait' => [375, 812],
     'landscape' => [812, 375],
 ]);
+
+/**
+ * A what-if price for every tier, high enough to give the Scenario column
+ * its longest costs.
+ *
+ * @return array{input: float, output: float, cache_read: float, cache_write: float, reasoning: float}
+ */
+function landscapeDialogScenario(): array
+{
+    return ['input' => 999.99, 'output' => 9999.99, 'cache_read' => 999.99, 'cache_write' => 999.99, 'reasoning' => 9999.99];
+}
 
 test('the AI usage cost breakdown fits a phone-width dialog without scrolling sideways', function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -308,7 +406,35 @@ test('the AI usage cost breakdown fits a phone-width dialog without scrolling si
     landscapeDialogOpen($webpage, ['[data-usage-row="901"]'], 375);
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-usage-breakdown]")'));
 
-    // Record 901's widest state (every tier in the millions, priced): the
-    // breakdown's phone cell padding keeps its columns inside the frame.
+    // Record 901's widest four-column state (every tier in the millions,
+    // priced): the breakdown's phone cell padding keeps its columns inside
+    // the frame. A what-if scenario's fifth Scenario column scrolls inside
+    // the frame by design; the 'ai usage detail' rows above measure that.
     $webpage->assertScript('(() => { const frame = document.querySelector("[data-usage-breakdown] > div"); return frame.scrollWidth <= frame.clientWidth; })()', true);
 });
+
+/**
+ * The two-factor setup dialog, reached through password confirmation: its
+ * QR code step, then its code step.
+ */
+test('the two-factor setup dialog fits or scrolls on a phone, portrait and landscape', function (int $width, int $height): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('security.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->resize($width, $height);
+    $webpage->script(appHydratedScript());
+    $webpage->fill('password', 'password')
+        ->click('[data-test="confirm-password-button"]');
+    $webpage->assertPathIs(route('security.edit', absolute: false));
+    $webpage->script(appHydratedScript());
+    $webpage->click('Enable 2FA');
+
+    // The QR code and the setup key have loaded.
+    landscapeDialogAssertOpen($webpage, '!document.querySelector("[data-slot=\\"dialog-content\\"] .animate-pulse") && !!document.querySelector("[data-slot=\\"dialog-content\\"] input")');
+
+    $webpage->click('Continue');
+    landscapeDialogAssertOpen($webpage, '!!document.querySelector("[data-slot=\\"dialog-content\\"] [data-input-otp]")');
+})->with([
+    'portrait' => [375, 812],
+    'landscape' => [812, 375],
+]);

@@ -20,7 +20,8 @@
 
 /*
  * Short viewports: a phone turned sideways (wider than `sm`, under 500 px
- * tall). Dialogs take their phone body-scroller layout here too.
+ * tall), and also any desktop window under 500 px tall. Dialogs take their
+ * phone body-scroller layout here too.
  */
 @custom-variant short {
     @media (max-height: 500px) {

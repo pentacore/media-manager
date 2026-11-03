@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiUsageKind;
 use App\Enums\BazarrServiceRole;
+use App\Enums\SecondOpinionMode;
 use App\Enums\SubtitleCaseStatus;
 use App\Enums\WhisparrVersion;
 use App\Models\ActionRequest;
@@ -31,6 +32,7 @@ use App\Models\SubtitleCase;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Settings\BazarrAutomationSettings;
+use App\Settings\DecisionAgentSettings;
 use App\Settings\MediaReplacementSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
@@ -407,13 +409,26 @@ function mobileLayoutSeedAnimeLibrary(ServiceConnection $sonarr): void
  * dispatched action), a replacement attempt that needs attention, one
  * subtitle rule and a server with one open incident and one check.
  * Two prices and three usage records fill the AI prices table and the AI
- * usage invocations table, so those rows measure their row controls.
+ * usage invocations table, so those rows measure their row controls, and
+ * second-opinion verdicts fill AI usage's agreement panel at its widest:
+ * two-digit counts, an unattributed verdict (the counts line's last part), a
+ * long unbroken event key under a per-event rule in the breakdown, and a
+ * false alarm and a miss with long titles and reasons.
  */
 function mobileLayoutSeedDetailModels(User $admin): void
 {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
     AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'example-model-with-a-very-long-unbroken-name-0123456789']);
     AiUsageRecord::factory()->count(3)->create(['prompt_text' => 'Find the example series and tell me about it.']);
+    $eventKey = 'sonarr:ExampleUnbrokenEventKeyThatRunsPastAPhoneScreen0123456789';
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides([$eventKey => ['mode' => SecondOpinionMode::Reject, 'engine' => null, 'jev_threshold' => null]]);
+    $verdict = ['type' => 'delete_series', 'webhook_event_id' => null, 'approved_by' => $admin->id];
+    ActionRequest::factory()->count(10)->secondOpinion(true, eventKey: $eventKey)->create([...$verdict, 'status' => ActionRequestStatus::Completed]);
+    ActionRequest::factory()->secondOpinion(false, reason: 'The example series is still airing, so deleting it would lose the episodes that are left this season.', eventKey: $eventKey)
+        ->create([...$verdict, 'status' => ActionRequestStatus::Completed, 'title' => 'Delete Example Series With A Fairly Long Title From Sonarr']);
+    ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)
+        ->create([...$verdict, 'status' => ActionRequestStatus::Rejected, 'title' => 'Delete Another_Example_Series_With_An_Unbroken_Title_0123456789']);
+    ActionRequest::factory()->secondOpinion(true, eventKey: $eventKey)->create([...$verdict, 'status' => ActionRequestStatus::Completed, 'approved_by' => null]);
     BenchmarkCase::factory()->create(['id' => 901, 'name' => 'Example stuck download case']);
     BenchmarkRun::factory()->completed()->create(['id' => 901, 'name' => 'Example baseline run', 'case_ids' => [901]]);
     BenchmarkRun::factory()->completed()->create(['id' => 902, 'name' => 'Example candidate run', 'case_ids' => [901]]);
@@ -532,21 +547,44 @@ function mobileLayoutHoverOnlyScript(string $root = 'main'): string
 }
 
 /**
- * Elements in $root (every match, default `main`) whose own text runs past
- * their box: a long unbroken file name that a frame's overflow clips, which
- * the box-based overflow check cannot see.
+ * Text that runs past its box in $root (every match, default `main`): a long
+ * unbroken file name that a frame's overflow clips, which the box-based
+ * overflow check cannot see. Each non-empty text node's line boxes are
+ * measured against the content box of its nearest ancestor that lays out a
+ * box of its own (not `inline`, not `contents`), so text inside a `span` or a
+ * link counts against its block, and a `touch-target` `::after` is never
+ * taken for text. A box that scrolls, clips on purpose or ends in an ellipsis
+ * is skipped.
  */
 function mobileLayoutClippedTextScript(string $root = 'main'): string
 {
     $selector = json_encode($root, JSON_THROW_ON_ERROR);
 
     return <<<JS
-        (() => [...document.querySelectorAll({$selector})].flatMap((root) => [...root.querySelectorAll('*')])
-            .filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''))
-            .filter((element) => { const style = getComputedStyle(element); return style.display !== 'inline' && style.overflowX === 'visible' && style.textOverflow !== 'ellipsis' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1; })
-            .map((element) => `\${element.tagName.toLowerCase()} "\${(element.textContent || '').trim().slice(0, 40)}" \${element.scrollWidth} > \${element.clientWidth}`)
-            .slice(0, 10)
-            .join(' | '))()
+        (() => {
+            const found = [];
+            const range = document.createRange();
+            for (const root of document.querySelectorAll({$selector})) {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode()) {
+                    const node = walker.currentNode;
+                    if (node.textContent.trim() === '') { continue; }
+                    let box = node.parentElement;
+                    while (box && box !== root && ['inline', 'contents'].includes(getComputedStyle(box).display)) { box = box.parentElement; }
+                    const style = box ? getComputedStyle(box) : null;
+                    if (!box || box.clientWidth === 0 || style.overflowX !== 'visible' || style.textOverflow === 'ellipsis') { continue; }
+                    const outer = box.getBoundingClientRect();
+                    const left = outer.left + box.clientLeft;
+                    const right = left + box.clientWidth;
+                    range.selectNodeContents(node);
+                    const past = [...range.getClientRects()].filter((rect) => rect.width > 0 && (rect.right > right + 1 || rect.left < left - 1));
+                    if (past.length > 0) {
+                        found.push(`\${box.tagName.toLowerCase()} "\${node.textContent.trim().slice(0, 40)}" \${Math.round(Math.min(...past.map((rect) => rect.left)))}..\${Math.round(Math.max(...past.map((rect) => rect.right)))} > \${Math.round(left)}..\${Math.round(right)}`);
+                    }
+                }
+            }
+            return found.slice(0, 10).join(' | ');
+        })()
     JS;
 }
 
@@ -614,7 +652,8 @@ function mobileLayoutAssertPage(AwaitableWebpage|PendingAwaitablePage|Webpage $w
         ->assertScript(mobileLayoutUnnamedScript($root), '')
         ->assertScript(mobileLayoutHoverOnlyScript($root), '')
         ->assertScript(phoneOverlapScript($root), '')
-        ->assertScript(phoneScrollSliverScript($root), '');
+        ->assertScript(phoneScrollSliverScript($root), '')
+        ->assertScript(mobileLayoutClippedTextScript($root), '');
 
     if ($primary !== null) {
         $encoded = json_encode($primary, JSON_THROW_ON_ERROR);
@@ -692,7 +731,8 @@ function mobileLayoutAdminPages(): array
         'ai settings' => ['admin.ai-settings.index', null],
         'decision agent' => ['admin.decision-agent.index', null],
         'media replacement' => ['admin.media-replacement.index', null],
-        'ai usage' => ['admin.ai-usage.index', null, '[data-classification-gates]'],
+        // Waits for the populated agreement panel's breakdown (a per-event rule row) too.
+        'ai usage' => ['admin.ai-usage.index', null, 'main:has([data-classification-gates]):has([data-agreement-breakdown="event"] [data-breakdown-override])'],
         'webhook log' => ['admin.webhook-log.index', null],
         'jobs' => ['admin.jobs.index', '[data-jobs-refresh]'],
         'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
@@ -773,17 +813,17 @@ function mobileLayoutSignedInAuthPages(): array
 }
 
 /**
- * Auth pages only their flow reaches, as [routeName, primary]: set-password
- * needs an invited user without a password, the two-factor challenge a login
- * by a user with two-factor confirmed.
+ * Auth pages only their flow reaches, as [routeName]: set-password needs an
+ * invited user without a password, the two-factor challenge a login by a
+ * user with two-factor confirmed.
  *
- * @return array<string, array{0: string, 1: ?string}>
+ * @return array<string, array{0: string}>
  */
 function mobileLayoutFlowAuthPages(): array
 {
     return [
-        'set password' => ['auth.set-password', null],
-        'two-factor challenge' => ['two-factor.login', null],
+        'set password' => ['auth.set-password'],
+        'two-factor challenge' => ['two-factor.login'],
     ];
 }
 
@@ -819,7 +859,7 @@ function mobileLayoutTouchPages(): array
         'emby links' => ['emby.links.index', [], null],
         'ai settings' => ['admin.ai-settings.index', [], null],
         'decision agent' => ['admin.decision-agent.index', [], null],
-        'ai usage' => ['admin.ai-usage.index', [], '[data-classification-gates]'],
+        'ai usage' => ['admin.ai-usage.index', [], 'main:has([data-classification-gates]):has([data-agreement-breakdown="event"] [data-breakdown-override])'],
         'ai models' => ['admin.ai-models.index', [], null],
         'ai prices' => ['admin.ai-prices.index', [], null],
         'ai conversation' => ['admin.ai-conversations.show', ['conversation' => '01900000-0000-7000-8000-000000000901'], null],
@@ -1024,7 +1064,7 @@ test('every control on a guest page is a 40 px target on a phone', function (str
     $webpage->assertScript(phoneSmallTargetsScript('body'), '');
 })->with('mobile layout guest pages');
 
-test('an auth page reached through its flow fits a phone screen with 40 px targets', function (string $routeName, ?string $primary): void {
+test('an auth page reached through its flow fits a phone screen with 40 px targets', function (string $routeName): void {
     if ($routeName === 'auth.set-password') {
         // An invited user signed in before setting a password.
         $this->actingAs(User::factory()->member()->create(['password' => null, 'invite_accepted_at' => null]));
@@ -1049,7 +1089,7 @@ test('an auth page reached through its flow fits a phone screen with 40 px targe
     $webpage->assertPathIs(route($routeName, absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
 
-    mobileLayoutAssertPage($webpage, $primary, null, 'body');
+    mobileLayoutAssertPage($webpage, null, null, 'body');
     $webpage->assertScript(phoneSmallTargetsScript('body'), '');
 })->with('mobile layout flow auth pages');
 
@@ -1188,7 +1228,6 @@ test('a Subtitles page with two Bazarr connections and a failed read fits a phon
     $webpage->script(appHydratedScript());
     mobileLayoutAssertPage($webpage, '[data-test="bazarr-connection"]', $deferred);
     $webpage->assertScript('document.querySelector("main").textContent.includes("temporarily unavailable")', $failedRead)
-        ->assertScript(mobileLayoutClippedTextScript(), '')
         ->assertScript(phoneSmallTargetsScript(), '');
 })->with([
     'subtitles' => ['bazarr.overview', null, true],
@@ -1198,10 +1237,6 @@ test('a Subtitles page with two Bazarr connections and a failed read fits a phon
     'subtitles admin' => ['bazarr.admin.index', '[data-test="bazarr-admin-form"]', false],
 ]);
 
-/**
- * The admin's escalations: the filters, an investigate button on every case
- * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
- */
 /**
  * The titles are prose ("series — episode"): on a phone they wrap at a space,
  * and only an unbroken run (a file name) may split mid-word.
@@ -1243,17 +1278,19 @@ test('the Subtitles admin page with every panel filled fits a phone screen', fun
     $webpage->script(appHydratedScript());
     mobileLayoutAssertPage($webpage, '[data-test="save-bazarr-settings"]', 'main:has([data-test="bazarr-admin-form"]):has([data-test="show-bazarr-notification-hint"])');
     $webpage->assertScript('["Throttled until", "example_apprise_notification_target", "Example_Radarr_Connection"].every((text) => document.querySelector("main").textContent.includes(text))', true)
-        ->assertScript(mobileLayoutClippedTextScript(), '')
         ->assertScript(phoneSmallTargetsScript(), '')
         ->assertScript($inputs, '');
 
     $webpage->click('[data-test="show-bazarr-notification-hint"]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"bazarr-apprise-config-uri\"]")'));
     mobileLayoutAssertPage($webpage, '[data-test="bazarr-apprise-config-uri"]');
-    $webpage->assertScript(mobileLayoutClippedTextScript(), '')
-        ->assertScript($inputs, '');
+    $webpage->assertScript($inputs, '');
 });
 
+/**
+ * The admin's escalations: the filters, an investigate button on every case
+ * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
+ */
 test('the subtitle escalations page with every action and a pager fits a phone screen', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
@@ -1374,6 +1411,26 @@ test('the sliver check names a scroller that scrolls by a few pixels', function 
     $webpage->assertScript(phoneScrollSliverScript(), '');
 });
 
+test('the clipped-text check names text past its box and passes a touch target', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // Unbroken text inside a span is measured against its block, which a frame clips.
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden"><div><span>ExampleUnbrokenTextThatRunsPastItsBox</span></div></div>`)');
+
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div "ExampleUnbrokenTextThatRunsPastItsBox"');
+
+    // A touch-target's 40 px ::after is wider than its 24 px button, but its text fits.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture><button class="touch-target" style="width:24px;height:24px;padding:0;font-size:10px">OK</button></div>`');
+    $webpage->assertScript('(() => { const button = document.querySelector("[data-clipped-fixture] button"); return parseFloat(getComputedStyle(button, "::after").width) > button.clientWidth; })()', true)
+        ->assertScript(mobileLayoutClippedTextScript(), '');
+
+    // Text that ends in an ellipsis is clipped on purpose.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px"><div class="truncate">ExampleUnbrokenTextThatRunsPastItsBox</div></div>`');
+    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
+});
+
 test('the phone gate classifies every page route', function (): void {
     $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])->map(fn (array $row): string => $row[0])->unique();
     $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
@@ -1382,7 +1439,7 @@ test('the phone gate classifies every page route', function (): void {
     $pageRoutes = collect(mobileLayoutPageRouteNames());
 
     expect(mobileLayoutUnclassifiedRouteNames())->toBe([])
-        ->and($listed->merge($excluded)->merge($pending)->diff($pageRoutes)->diff(collect(mobileLayoutGuestPages())->map(fn (array $row): string => $row[0]))->values()->all())->toBe([])
+        ->and($listed->merge($excluded)->merge($pending)->diff($pageRoutes)->values()->all())->toBe([])
         ->and($pending->intersect($listed->merge($excluded))->values()->all())->toBe([]);
 });
 

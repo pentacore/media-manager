@@ -25,6 +25,26 @@ function activityStatisticsWatchGridHoldsScript(): string
     return '(() => { const grid = document.querySelector("[data-statistics-watch-grid]").getBoundingClientRect(); return [...document.querySelectorAll("[data-statistics-watch-grid] > *, [data-statistics-watch-grid] table")].every((box) => box.getBoundingClientRect().right <= grid.right + 1); })()';
 }
 
+/**
+ * What breaks the page header: main scrolling sideways, or an `h1` squeezed
+ * below its own one-line width (one letter per line); '' when it holds.
+ */
+function activityStatisticsPageHeaderHoldsScript(): string
+{
+    return '(() => { const main = document.querySelector("main"); const heading = document.querySelector("[data-page-header] h1"); const range = document.createRange(); range.selectNodeContents(heading); const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size; return [main.scrollWidth > main.clientWidth ? `main scrolls by ${main.scrollWidth - main.clientWidth}px` : "", lines > 1 ? `the title takes ${lines} lines at ${Math.round(heading.getBoundingClientRect().width)}px` : ""].filter(Boolean).join(" | "); })()';
+}
+
+test('the page header keeps its title on one line in a 769 px desktop window', function (string $routeName): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route($routeName, absolute: false))->assertNoSmoke();
+    $webpage->resize(769, 1000);
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertScript('document.querySelector("[data-slot=\\"sidebar\\"][data-state]")?.dataset.state', 'expanded')
+        ->assertScript(activityStatisticsPageHeaderHoldsScript(), '');
+})->with(['statistics.index', 'admin.statistics.index', 'activity-log', 'monitoring.watch-history']);
+
 test('an activity-log row wraps on a phone and breaks a long description', function (): void {
     $member = User::factory()->member()->create();
     ActivityLog::factory()->for($member)->create(['description' => 'Imported /data/media/tv/'.str_repeat('Example-Unbroken-Path-Segment-', 4).'S01E01.mkv']);
@@ -116,6 +136,15 @@ test('the busiest statistics page fits a phone and holds a long viewer name up t
         $webpage->assertScript(activityStatisticsWatchGridHoldsScript(), true)
             ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
     }
+
+    // The mobile() entries above keep a coarse pointer, so they pass via the
+    // touch: classes; a 769 px desktop window (fine pointer, sidebar
+    // expanded beside it) is measured on its own.
+    $desktop = visit(route('statistics.index', absolute: false))->assertNoSmoke();
+    $desktop->resize(769, 1000);
+    $desktop->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-statistics-heatmap]") && !document.querySelector("main .animate-pulse:not(header *)")'));
+    $desktop->assertScript(activityStatisticsWatchGridHoldsScript(), true)
+        ->assertScript(activityStatisticsPageHeaderHoldsScript(), '');
 });
 
 test('the busiest operational statistics page fits a phone and holds a long connection name up to 1023 px', function (): void {
@@ -137,6 +166,14 @@ test('the busiest operational statistics page fits a phone and holds a long conn
         $webpage->assertScript(phoneOverflowScript('main'), '')
             ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0);
     }
+
+    // The mobile() entries above pass via the touch: classes (coarse pointer);
+    // a 769 px desktop window with a fine pointer is measured on its own.
+    $desktop = visit(route('admin.statistics.index', absolute: false))->assertNoSmoke();
+    $desktop->resize(769, 1000);
+    $desktop->script(appHydratedScript());
+    $desktop->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript(activityStatisticsPageHeaderHoldsScript(), '');
 });
 
 test('an activity-log row keeps every cell inside the feed at tablet widths with the sidebar expanded', function (int $width): void {
