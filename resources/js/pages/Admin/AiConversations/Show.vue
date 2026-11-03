@@ -43,7 +43,7 @@ interface TranscriptStep {
 interface MessageRow {
     role: string;
     text: string;
-    status: 'completed' | 'paused' | 'failed';
+    status: 'completed' | 'paused' | 'failed' | 'stopped';
     error: string | null;
     steps: TranscriptStep[];
     tool_groups?: TurnToolGroupsValue;

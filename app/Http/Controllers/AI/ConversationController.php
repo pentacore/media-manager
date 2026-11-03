@@ -94,7 +94,7 @@ class ConversationController extends Controller
                     : [],
             ])
             ->filter(fn (array $entry): bool => in_array($entry['stored']->role, ['user', 'assistant'], true)
-                && (trim($entry['stored']->content) !== '' || $entry['stored']->status === MessageStatus::Failed || $entry['stored']->attachments !== [] || $entry['cards'] !== []))
+                && (trim($entry['stored']->content) !== '' || $entry['stored']->status === MessageStatus::Failed || ($entry['stored']->meta['stopped'] ?? false) === true || $entry['stored']->attachments !== [] || $entry['cards'] !== []))
             ->map(function (array $entry) use ($chatAttachmentStore): array {
                 $storedMessage = $entry['stored'];
 
@@ -107,6 +107,7 @@ class ConversationController extends Controller
                     'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
                     'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                     'failed' => $storedMessage->status === MessageStatus::Failed,
+                    'stopped' => ($storedMessage->meta['stopped'] ?? false) === true,
                     'cards' => $entry['cards'],
                     'tool_groups' => $storedMessage->role === 'assistant' ? RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null) : null,
                     'answered_by' => $storedMessage->role === 'assistant' ? [

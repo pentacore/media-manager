@@ -5,6 +5,7 @@ import BenchmarkRunController from '@/actions/App/Http/Controllers/Admin/Benchma
 import { InitialsAvatar, Pill } from '@/components/mm';
 import { formatCount } from '@/lib/format';
 import { formatCost, formatTimestamp } from './format';
+import { usageStatusVariant } from './statusVariant';
 import type {
     BenchmarkFilter,
     KindOption,
@@ -176,10 +177,9 @@ function kindLabel(value: string): string {
                             </span>
                             <Pill
                                 v-else
-                                :variant="
-                                    row.status === 'success' ? 'ok' : 'danger'
-                                "
+                                :variant="usageStatusVariant(row.status)"
                                 dot
+                                data-usage-status
                             >
                                 {{ row.status }}
                             </Pill>

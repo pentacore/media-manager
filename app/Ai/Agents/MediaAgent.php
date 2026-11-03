@@ -11,7 +11,6 @@ use App\Ai\Conversations\HistoryForProvider;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
-use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Tools\Arr\AddMediaTool;
@@ -61,6 +60,7 @@ use App\Ai\Tools\Trakt\TraktGetTrendingTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
 use App\Enums\AiTask;
 use App\Enums\ServiceType;
+use App\Http\Streaming\ClientConnection;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\CacheInstructions;
@@ -74,6 +74,7 @@ use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Middleware\Stop;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -208,16 +209,18 @@ PROMPT;
     }
 
     /**
-     * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, force a plain answer on the final allowed step, stop
-     * at the next step once the chat client disconnected, and answer tools
-     * from fixtures inside a benchmark run.
+     * Wrap every generation step: force a plain answer on the final allowed
+     * step, stop the run once the chat client disconnected (checked before
+     * every step, the first included; ends the run gracefully, ahead of the
+     * budget check so a gone client is stopped rather than failed), refuse a
+     * step once the hard budget is crossed mid-run, and answer tools from
+     * fixtures inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenClientDisconnected, new ReplayBenchmarkTools];
+        return [new AnswerOnFinalStep, Stop::when(static fn (): bool => resolve(ClientConnection::class)->disconnected()), new EnforceBudgetEachStep, new ReplayBenchmarkTools];
     }
 
     /**

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\Benchmark\ReplayTool;
+use App\Ai\StoppedByUser;
 use App\Models\AiToolInvocation;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Tools\AgentTool;
 use Laravel\Ai\Tools\ToolNameResolver;
 use Throwable;
 
@@ -19,18 +21,25 @@ class RecordToolInvocation
      * I/O can't be written, the row is written without it, and a failure of
      * that is only reported. Each insert runs in its own transaction so a
      * rejected statement rolls back to a savepoint inside a caller's
-     * transaction instead of aborting it.
+     * transaction instead of aborting it. A sub-agent call a client disconnect
+     * ended is recorded as stopped (StoppedByUser::toolResult()).
      */
     public function handle(ToolInvoked $toolInvoked): void
     {
-        $errorCode = $this->errorCodeFrom($toolInvoked->result);
+        $tool = ReplayTool::unwrap($toolInvoked->tool);
+        $stopped = $tool instanceof AgentTool && StoppedByUser::toolResult($toolInvoked->result);
+        $errorCode = $stopped ? null : $this->errorCodeFrom($toolInvoked->result);
 
         $attributes = [
             'invocation_id' => $toolInvoked->invocationId,
             'tool_invocation_id' => $toolInvoked->toolInvocationId,
-            'tool_class' => ReplayTool::unwrap($toolInvoked->tool)::class,
+            'tool_class' => $tool::class,
             'agent_class' => $toolInvoked->agent::class,
-            'status' => $errorCode === null ? 'success' : 'failed',
+            'status' => match (true) {
+                $stopped => 'stopped',
+                $errorCode === null => 'success',
+                default => 'failed',
+            },
             'error_code' => $errorCode,
             'duration_ms' => (int) round($toolInvoked->time),
             'tool_name' => ToolNameResolver::resolve($toolInvoked->tool),

@@ -21,8 +21,9 @@ use Throwable;
 
 /**
  * AG-UI for the chat panel, with five app behaviours on top: keep the
- * request alive after a browser disconnect so usage is recorded, while the
- * agent stops at its next step (ClientConnection + StopWhenClientDisconnected),
+ * request alive after a browser disconnect so usage is recorded, while
+ * MediaAgent's `Stop::when()` on ClientConnection::disconnected() ends the run
+ * gracefully before its next step (a cancelled StreamEnd, saved as stopped),
  * write the frames under Octane, keep them inside a capturing output buffer,
  * and explain failures instead of the SDK's masked "An error occurred."
  * (naming the stored conversation of a failed turn), and name the exact
@@ -38,7 +39,7 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
         ignore_user_abort(true);
 
         // Keep draining after a disconnect so usage is recorded, but let
-        // StopWhenClientDisconnected end the run at its next step.
+        // MediaAgent's Stop::when() end the run before its next step.
         resolve(ClientConnection::class)->watch();
 
         $streamedResponse = parent::response($response);

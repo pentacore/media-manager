@@ -15,6 +15,7 @@ import { formatTimestamp } from './format';
 import InvocationChildRuns from './InvocationChildRuns.vue';
 import InvocationCostBreakdown from './InvocationCostBreakdown.vue';
 import InvocationToolList from './InvocationToolList.vue';
+import { usageStatusVariant } from './statusVariant';
 import type { InvocationDetail, PricedModel } from './types';
 
 /**
@@ -115,11 +116,7 @@ function rateSourceVariant(
                             Status
                         </div>
                         <Pill
-                            :variant="
-                                detail.record.status === 'success'
-                                    ? 'ok'
-                                    : 'danger'
-                            "
+                            :variant="usageStatusVariant(detail.record.status)"
                             dot
                         >
                             {{ detail.record.status }}

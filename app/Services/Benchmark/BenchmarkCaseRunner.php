@@ -292,36 +292,34 @@ final readonly class BenchmarkCaseRunner
     /**
      * @return array{0: AgentResponse, 1: string}
      */
-    private function asTitle(AgentResponse $agentResponse): array
+    private function asTitle(StructuredAgentResponse $structuredAgentResponse): array
     {
-        $title = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['title'] ?? '') : $agentResponse->text;
+        $title = $structuredAgentResponse['title'] ?? '';
 
-        return [$agentResponse, is_string($title) ? $title : ''];
+        return [$structuredAgentResponse, is_string($title) ? $title : ''];
     }
 
     /**
      * @return array{0: AgentResponse, 1: string}
      */
-    private function asVerdict(AgentResponse $agentResponse): array
+    private function asVerdict(StructuredAgentResponse $structuredAgentResponse): array
     {
-        $agrees = $agentResponse instanceof StructuredAgentResponse ? ($agentResponse['agrees'] ?? null) : null;
+        $agrees = $structuredAgentResponse['agrees'] ?? null;
 
         throw_unless(is_bool($agrees), RuntimeException::class, 'The verifier returned no verdict.');
 
-        $reason = $agentResponse['reason'] ?? '';
+        $reason = $structuredAgentResponse['reason'] ?? '';
 
-        return [$agentResponse, (string) json_encode(['agrees' => $agrees, 'reason' => is_string($reason) ? $reason : ''], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
+        return [$structuredAgentResponse, (string) json_encode(['agrees' => $agrees, 'reason' => is_string($reason) ? $reason : ''], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)];
     }
 
     /**
      * @return array{0: AgentResponse, 1: string}
      */
-    private function asJson(AgentResponse $agentResponse): array
+    private function asJson(StructuredAgentResponse $structuredAgentResponse): array
     {
-        $output = $agentResponse instanceof StructuredAgentResponse
-            ? (string) json_encode($agentResponse->toArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-            : $agentResponse->text;
+        $output = (string) json_encode($structuredAgentResponse->toArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        return [$agentResponse, $output];
+        return [$structuredAgentResponse, $output];
     }
 }

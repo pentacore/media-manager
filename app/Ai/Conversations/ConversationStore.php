@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Conversations;
 
 use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\StoppedByUser;
 use App\Ai\TaskModelResolver;
 use App\Ai\TierOutcome;
 use App\Enums\AiTask;
@@ -19,6 +20,9 @@ use Throwable;
  * model came from a tier list, which tier, plus the chat mode, in each assistant message's meta
  * (for the chat's "answered by" line). The reasoning key is
  * `reasoning_level`: `meta.reasoning` used to hold reasoning text.
+ * A turn the user stopped ends with a cancelled stream (MediaAgent's
+ * `Stop::when()`), which the SDK stores as a completed reply; it is flagged
+ * `stopped` here (StoppedByUser::response()).
  * Stateless, so the SDK's singleton binding stays Octane-safe.
  */
 class ConversationStore extends DatabaseConversationStore
@@ -34,6 +38,7 @@ class ConversationStore extends DatabaseConversationStore
 
         return [
             ...parent::metaFor($response, $exception),
+            ...(StoppedByUser::response($response) ? ['stopped' => true] : []),
             'invocation_id' => $response->invocationId,
             'mode' => resolve(AiSettings::class)->mode()->value,
             'reasoning_level' => $resolvedSelection->reasoning->value,
