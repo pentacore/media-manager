@@ -36,9 +36,11 @@ const emit = defineEmits<{
 
 /**
  * `default`: every action, inline (and the only layout when `primary` is
- * absent). `primary` + `menu`: below `sm` the bar is one 56 px row, made of
- * the count, the `primary` action and a ⋯ menu of `menu` items plus "Clear
- * selection". Pass each phone action its own hook, never the inline button's.
+ * absent; below `sm` the count and Clear then share the first row and the
+ * actions wrap below them). `primary` + `menu`: below `sm` the bar is one
+ * 56 px row, made of the count, the `primary` action and a ⋯ menu of `menu`
+ * items plus "Clear selection". Pass each phone action its own hook, never
+ * the inline button's.
  */
 const slots = defineSlots<{
     default(props: { disabled: boolean }): unknown;
@@ -166,7 +168,9 @@ onUnmounted(() => setPagePadding(false));
             :class="
                 cn(
                     'flex flex-wrap items-center gap-2',
-                    isCompact() && 'max-sm:hidden',
+                    isCompact()
+                        ? 'max-sm:hidden'
+                        : 'max-sm:order-last max-sm:basis-full',
                 )
             "
             role="group"

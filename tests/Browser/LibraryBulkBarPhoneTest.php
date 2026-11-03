@@ -40,7 +40,7 @@ function libraryBulkBarSeries(int $id): array
  */
 function libraryBulkBarFakes(): void
 {
-    $profiles = [['id' => 1, 'name' => 'HD-1080p'], ['id' => 2, 'name' => 'Ultra-HD']];
+    $profiles = [['id' => 1, 'name' => 'HD-1080p'], ['id' => 2, 'name' => 'Example Ultra-HD Remux 2160p With A Long Profile Name']];
     $series = array_map(libraryBulkBarSeries(...), range(1, 24));
     $movies = array_map(static fn (int $id): array => [
         'id' => $id, 'title' => sprintf('Example Movie %02d', $id), 'titleSlug' => sprintf('example-movie-%d', $id), 'year' => 2021,
@@ -69,6 +69,34 @@ function libraryBulkBarFakes(): void
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
     ServiceConnection::factory()->whisparr()->whisparrVersion(WhisparrVersion::V3)->create(['url' => 'http://whisparr.local:6969', 'api_key' => 'k']);
+}
+
+/**
+ * Counts the rows the bar's visible controls sit on: a control starts a new
+ * row when its top is below the bottom of everything placed so far.
+ */
+function libraryBulkBarRowsScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const rects = [...document.querySelectorAll('[data-bulk-bar] [data-bulk-count], [data-bulk-bar] button')]
+                .filter((control) => control.getClientRects().length > 0)
+                .map((control) => control.getBoundingClientRect())
+                .sort((first, second) => first.top - second.top);
+            let rows = 0;
+            let bottom = -Infinity;
+            for (const rect of rects) {
+                if (rect.top >= bottom - 1) {
+                    rows++;
+                    bottom = rect.bottom;
+                } else {
+                    bottom = Math.max(bottom, rect.bottom);
+                }
+            }
+
+            return rows;
+        })()
+    JS;
 }
 
 /**
@@ -117,8 +145,43 @@ test('the page ends with room for the whole library bar', function (): void {
     $webpage->script(appHydratedScript());
     libraryBulkBarPick($webpage, 1);
 
-    $webpage->assertScript('Math.round(parseFloat(document.body.style.getPropertyValue("--bulk-bar-height"))) === Math.round(document.querySelector("[data-bulk-bar]").getBoundingClientRect().height)', true)
+    $heightMatches = 'Math.round(parseFloat(document.body.style.getPropertyValue("--bulk-bar-height"))) === Math.round(document.querySelector("[data-bulk-bar]").getBoundingClientRect().height)';
+    $webpage->script(confirmDialogWaitUntilScript($heightMatches));
+
+    $webpage->assertScript($heightMatches, true)
         ->assertScript('(() => { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }); const cards = [...document.querySelectorAll("[data-series-card]")]; return cards.at(-1).getBoundingClientRect().bottom <= document.querySelector("[data-bulk-bar]").getBoundingClientRect().top; })()', true);
+});
+
+test('the library bar takes at most three rows of a phone screen with every action shown', function (string $routeName, int $id, string $role): void {
+    libraryBulkBarFakes();
+    $this->actingAs(User::factory()->{$role}()->create());
+
+    $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    libraryBulkBarPick($webpage, $id);
+
+    $webpage->assertCount('[data-bulk-bar] [data-bulk-action]', 4)
+        ->assertPresent('[data-bulk-bar] [data-bulk-quality-profile-trigger]')
+        ->assertScript('[...document.querySelectorAll("[data-bulk-bar] [data-bulk-action], [data-bulk-bar] [data-bulk-quality-profile-trigger], [data-bulk-bar] [data-bulk-clear]")].every((control) => { const rect = control.getBoundingClientRect(); return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight; })', true)
+        ->assertScript(libraryBulkBarRowsScript().' <= 3', true);
+})->with([
+    'series' => ['media.series.index', 1, 'member'],
+    'movies' => ['media.movies.index', 10, 'member'],
+    'whisparr' => ['media.whisparr.index', 101, 'admin'],
+]);
+
+test('clearing the library selection drops the measured spacer', function (): void {
+    libraryBulkBarFakes();
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    libraryBulkBarPick($webpage, 1);
+    $webpage->click('[data-bulk-clear]');
+
+    $webpage->assertCount('[data-bulk-bar]', 0)
+        ->assertScript('document.body.dataset.bulkBarOpen === undefined && document.body.style.getPropertyValue("--bulk-bar-height") === ""', true)
+        ->assertScript('getComputedStyle(document.querySelector("main[data-slot=\"sidebar-inset\"]"), "::after").content', 'none');
 });
 
 test('the quality profile list opens fully on screen from the fixed bar', function (): void {
