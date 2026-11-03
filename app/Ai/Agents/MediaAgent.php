@@ -11,7 +11,6 @@ use App\Ai\Conversations\HistoryForProvider;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
-use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\RoutedToolGroups;
 use App\Ai\Tools\Arr\AddMediaTool;
@@ -61,6 +60,7 @@ use App\Ai\Tools\Trakt\TraktGetTrendingTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
 use App\Enums\AiTask;
 use App\Enums\ServiceType;
+use App\Http\Streaming\ClientConnection;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\CacheInstructions;
@@ -74,6 +74,7 @@ use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Middleware\Stop;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -217,7 +218,7 @@ PROMPT;
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenClientDisconnected, new ReplayBenchmarkTools];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, Stop::when(static fn (): bool => resolve(ClientConnection::class)->disconnected()), new ReplayBenchmarkTools];
     }
 
     /**

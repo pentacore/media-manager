@@ -6,6 +6,7 @@ namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\StoppedByUser;
 use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
@@ -31,6 +32,7 @@ class RecordAgentUsage
 
         resolve(UsageRecordWriter::class)->record([
             'invocation_id' => $agentPrompted->invocationId,
+            'status' => StoppedByUser::response($response) ? 'stopped' : 'success',
             'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompted->prompt->agent::class,
             'tier_position' => TierOutcome::positionFor($agentPrompted->prompt->agent),

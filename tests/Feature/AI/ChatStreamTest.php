@@ -18,7 +18,6 @@ use App\Models\AiTaskModel;
 use App\Models\AiUsageRecord;
 use App\Models\ServiceConnection;
 use App\Models\User;
-use App\Services\AiUsage\RunUsageAccumulator;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
@@ -584,30 +583,43 @@ function chatStreamFrame(string $body, string $type): string
  */
 function chatStreamGoneClient(): void
 {
-    app()->instance(ClientConnection::class, new class extends ClientConnection
+    chatStreamClientLeavingAfter(0);
+}
+
+/**
+ * Bind a client connection that stays for the given number of polls, then leaves.
+ */
+function chatStreamClientLeavingAfter(int $connectedPolls): void
+{
+    app()->instance(ClientConnection::class, new class($connectedPolls) extends ClientConnection
     {
+        private int $polls = 0;
+
+        public function __construct(private readonly int $connectedPolls) {}
+
         #[Override]
         protected function pollConnection(): void {}
 
         #[Override]
         protected function connectionAborted(): bool
         {
-            return true;
+            return ++$this->polls > $this->connectedPolls;
         }
     });
 }
 
 test('a disconnected client stops the turn at the next step and still bills what ran', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
-    chatStreamGoneClient();
+    chatStreamClientLeavingAfter(1);
     MediaAgent::fake([
         new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
         'Second step reply that must never be generated.',
     ]);
     // The fake gateway reports no usage for a tool-call step; stand in for
-    // the provider billing the completed first step.
+    // the provider billing the completed first step. The loop adds the step
+    // response's usage to the stream's total after StepCompleted fires.
     Event::listen(StepCompleted::class, function (StepCompleted $stepCompleted): void {
-        resolve(RunUsageAccumulator::class)->add($stepCompleted->invocationId, $stepCompleted->provider->name(), $stepCompleted->model, new TextUsage(1200, 300));
+        $stepCompleted->response->usage = new TextUsage(1200, 300);
     });
     $admin = User::factory()->admin()->create();
 
@@ -618,11 +630,56 @@ test('a disconnected client stops the turn at the next step and still bills what
     $aiUsageRecord = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
 
     expect($body)->not->toContain('Second step reply')
-        ->and(chatStreamFrame($body, 'RUN_ERROR'))->toContain('"code":"stopped"')
-        ->and($aiUsageRecord->status)->toBe('failed')
-        ->and($aiUsageRecord->error_message)->toContain('client disconnected')
+        ->and($body)->not->toContain('RUN_ERROR')
+        ->and($aiUsageRecord->status)->toBe('stopped')
+        ->and($aiUsageRecord->error_message)->toBeNull()
         ->and($aiUsageRecord->prompt_tokens)->toBe(1200)
         ->and($aiUsageRecord->completion_tokens)->toBe(300);
+
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+    $meta = json_decode((string) $assistant->meta, true);
+
+    expect($assistant->status)->toBe('completed')
+        ->and($meta)->toHaveKey('stopped', true)
+        ->and($meta)->not->toHaveKey('error');
+});
+
+test('a client gone before the first step stores the turn as an empty stopped reply without calling the model', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    chatStreamGoneClient();
+    MediaAgent::fake(['Reply that must never be generated.']);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Check my services'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $aiUsageRecord = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+
+    expect($body)->not->toContain('Reply that must never be generated.')
+        ->and($aiUsageRecord->status)->toBe('stopped')
+        ->and($aiUsageRecord->prompt_tokens)->toBe(0)
+        ->and(DB::table('agent_conversations')->count())->toBe(1)
+        ->and(DB::table('agent_conversation_messages')->where('role', 'user')->count())->toBe(1)
+        ->and($assistant->content)->toBe('')
+        ->and(json_decode((string) $assistant->meta, true))->toHaveKey('stopped', true);
+});
+
+test('a client that leaves after the final step still gets a successful run', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    chatStreamClientLeavingAfter(1);
+    MediaAgent::fake(['Done in one step.']);
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hi'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+
+    expect($assistant->content)->toBe('Done in one step.')
+        ->and(AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole()->status)->toBe('success')
+        ->and(json_decode((string) $assistant->meta, true))->not->toHaveKey('stopped');
 });
 
 test('a non-streamed turn is never stopped by the disconnect check', function (): void {
