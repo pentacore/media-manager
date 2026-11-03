@@ -525,16 +525,21 @@
 }
 
 /*
- * While a compact bulk bar is mounted (BulkActionBar sets
- * `data-bulk-bar-open` on <body>), a phone's bar is fixed to the bottom of
- * the screen. The page then ends with room for it, so whatever comes last
- * (pagination, a history list) scrolls clear of the bar.
+ * Every bulk bar is fixed to the bottom of a phone's screen. While one is
+ * mounted (BulkActionBar sets `data-bulk-bar-open` on <body>, and its measured
+ * border-box height as `--bulk-bar-height`), the page ends with a spacer of
+ * that height plus 1rem, so whatever comes last (pagination, a history list,
+ * the last library row) scrolls clear of the bar, however many rows it wraps
+ * to. A compact bar measures 3.5rem plus the safe-area inset, the fallback.
  */
 @media (width < 40rem) {
     body[data-bulk-bar-open] main[data-slot='sidebar-inset']::after {
         content: '';
         display: block;
         flex-shrink: 0;
-        height: calc(4.5rem + env(safe-area-inset-bottom));
+        height: calc(
+            var(--bulk-bar-height, calc(3.5rem + env(safe-area-inset-bottom))) +
+                1rem
+        );
     }
 }

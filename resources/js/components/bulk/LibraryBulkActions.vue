@@ -117,7 +117,7 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2 touch:gap-3">
         <Button
             variant="outline"
             size="sm"
