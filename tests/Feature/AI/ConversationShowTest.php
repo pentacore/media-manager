@@ -159,6 +159,42 @@ test('history exposes reasoning and failed turns', function (): void {
         ->and($messages[1]['failed'])->toBeTrue();
 });
 
+test('a stopped reply is returned with its text and the stopped flag', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 1);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Partial answer',
+        'steps' => json_encode([conversationStep('Partial answer', '')]),
+        'meta' => json_encode(['stopped' => true]),
+    ]);
+    insertAssistantRow($conversationId, $admin, 'Whole answer', '', 'completed');
+
+    $messages = $this->actingAs($admin)->getJson(route('ai.conversations.show', $conversationId))->json('messages');
+
+    expect($messages)->toHaveCount(3)
+        ->and($messages[1]['text'])->toBe('Partial answer')
+        ->and($messages[1]['stopped'])->toBeTrue()
+        ->and($messages[2]['stopped'])->toBeFalse();
+});
+
+test('an empty stopped reply is still returned', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 1);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => '',
+        'steps' => '[]',
+        'meta' => json_encode(['stopped' => true]),
+    ]);
+
+    $messages = $this->actingAs($admin)->getJson(route('ai.conversations.show', $conversationId))->json('messages');
+
+    expect($messages)->toHaveCount(2)
+        ->and($messages[1]['stopped'])->toBeTrue()
+        ->and($messages[1]['failed'])->toBeFalse();
+});
+
 test('history links a user turn to its stored attachments', function (): void {
     $admin = User::factory()->admin()->create();
     $conversationId = seedConversationWithMessages($admin, 0);

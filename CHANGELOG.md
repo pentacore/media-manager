@@ -1,3 +1,18 @@
+# [1.59.0](https://github.com/pentacore/media-manager/compare/v1.58.3...v1.59.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **ai:** record a stopped sub-agent call as stopped and keep stopped turns out of routing outcomes ([006032f](https://github.com/pentacore/media-manager/commit/006032fce0cea5de6d375a4112697743e18167e4))
+
+
+### Features
+
+* **ai-usage:** record failed classification, embedding and rerank calls ([4f1d5a6](https://github.com/pentacore/media-manager/commit/4f1d5a64f0f228076ab46f4dbbcd3bc724796caf))
+* **ai-usage:** record sub-agent runs and tool calls a user stop ended as stopped ([05ee1d6](https://github.com/pentacore/media-manager/commit/05ee1d6b3c84886842f77aeaf7ab08700b869f30))
+* **ai:** end a stopped chat reply gracefully and record it as stopped ([d212594](https://github.com/pentacore/media-manager/commit/d212594fb4238ca92817f5fd687c9bbb4fa4fa1e))
+* **ai:** show stopped replies and runs as stopped in the chat, transcript and AI Usage ([a9b1968](https://github.com/pentacore/media-manager/commit/a9b1968c66d4ada1006279f0ebbfd3430af38e9f))
+
 ## [1.58.3](https://github.com/pentacore/media-manager/compare/v1.58.2...v1.58.3) (2026-11-03)
 
 ## [1.58.2](https://github.com/pentacore/media-manager/compare/v1.58.1...v1.58.2) (2026-11-02)

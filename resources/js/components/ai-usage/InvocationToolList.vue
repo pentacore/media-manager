@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Pill } from '@/components/mm';
 import { formatMs } from './format';
+import { usageStatusVariant } from './statusVariant';
 import type { InvocationDetail } from './types';
 
 defineProps<{
@@ -41,10 +42,7 @@ defineProps<{
                     >
                         {{ tool.error_code }}
                     </Pill>
-                    <Pill
-                        :variant="tool.status === 'success' ? 'ok' : 'danger'"
-                        dot
-                    >
+                    <Pill :variant="usageStatusVariant(tool.status)" dot>
                         {{ tool.status }}
                     </Pill>
                 </span>

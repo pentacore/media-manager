@@ -6,6 +6,7 @@ namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\StoppedByUser;
 use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
@@ -20,11 +21,14 @@ use Laravel\Ai\Responses\Data\TextUsage;
 /**
  * AgentFailed fires once, after failover is exhausted. Bill the steps that
  * completed before the failure so the budget guard sees money already spent.
+ * A run a user stop ended is billed the same way but recorded as stopped,
+ * without an error message.
  */
 class RecordFailedAgentRun
 {
     public function handle(AgentFailed $agentFailed): void
     {
+        $stopped = StoppedByUser::exception($agentFailed->exception);
         $runUsageAccumulator = resolve(RunUsageAccumulator::class);
         $invocationId = $agentFailed->invocationId;
         $agentPrompt = $agentFailed->prompt;
@@ -45,8 +49,8 @@ class RecordFailedAgentRun
             'benchmark_run_id' => $benchmarkRunId,
             'is_benchmark' => $benchmarkRunContext->active(),
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
-            'status' => 'failed',
-            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
+            'status' => $stopped ? 'stopped' : 'failed',
+            'error_message' => $stopped ? null : UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
         ]);
 
         $runUsageAccumulator->forget($invocationId);

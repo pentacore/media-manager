@@ -359,6 +359,43 @@ test('a stored failed turn renders as a failed reply when reopened', function ()
         ->assertSeeIn('[data-chat-thread] [data-failed-turn]', 'This reply failed.');
 });
 
+test('a stored stopped reply shows its text and the stopped marker when reopened', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Stopped chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Tell me a story');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Here is the start of', meta: ['stopped' => true]);
+
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Here is the start of')
+        ->assertSeeIn('[data-chat-thread] [data-stopped-turn]', 'Stopped.')
+        ->assertMissing('[data-failed-turn]');
+});
+
+test('an empty stored stopped reply shows only the stopped marker', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Stopped early');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Tell me a story');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', meta: ['stopped' => true]);
+
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread] [data-stopped-turn]', 'Stopped.')
+        ->assertMissing('[data-failed-turn]');
+});
+
 test('a picked attachment shows as a removable chip in the composer', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 

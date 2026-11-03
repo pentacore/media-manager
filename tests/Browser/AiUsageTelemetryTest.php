@@ -54,6 +54,19 @@ test('the invocation drill-down lists sub-agent runs and tool errors', function 
         ->assertSeeIn('[data-usage-tool-error]', 'tool_failed');
 });
 
+test('a stopped run shows a stopped pill without an error', function (): void {
+    $record = AiUsageRecord::factory()->create(['status' => 'stopped']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-usage-status]', 'stopped')
+        ->assertMissing('[data-usage-error]')
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[role="dialog"]', 'stopped');
+});
+
 test('the invocation drill-down shows the input and output text', function (): void {
     $record = AiUsageRecord::factory()->create([
         'prompt_text' => 'Find severance in Sonarr.',
