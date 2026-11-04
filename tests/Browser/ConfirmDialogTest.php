@@ -93,6 +93,32 @@ test("a confirmed connection delete hands focus to the next row's menu, and the 
     expect(ServiceConnection::query()->count())->toBe(0);
 });
 
+test('a confirmed connection delete far down a long list keeps the focused menu on screen', function (): void {
+    $connections = ServiceConnection::factory()->sonarr()->count(30)->sequence(fn ($sequence): array => [
+        'name' => sprintf('Sonarr %02d', $sequence->index + 1),
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'k',
+    ])->create();
+    $deleted = $connections->get(28);
+    $next = $connections->get(29);
+    $this->actingAs(User::factory()->admin()->create());
+    $menu = sprintf('[data-connection-row="%d"] [data-connection-menu]', $deleted->id);
+
+    $webpage = visit(route('admin.connections.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(sprintf('document.querySelector(%s).scrollIntoView({ block: "center" })', json_encode($menu, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)));
+    $webpage->assertScript('window.scrollY > 0', true)
+        ->click($menu)
+        ->click('[data-connection-delete]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Connection deleted.');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('!document.querySelector("[data-connection-row=\"%d\"]")', $deleted->id)));
+
+    $webpage->assertScript(focusLandsOnScript(sprintf('[data-connection-row="%d"] [data-connection-menu]', $next->id)), true);
+
+    expect($webpage->script('(() => { const box = document.activeElement.getBoundingClientRect(); return box.top >= 0 && box.bottom <= window.innerHeight; })()'))->toBeTrue();
+});
+
 test('Escape closes the confirm as a cancel', function (): void {
     $serviceConnection = confirmDialogConnection();
     $this->actingAs(User::factory()->admin()->create());

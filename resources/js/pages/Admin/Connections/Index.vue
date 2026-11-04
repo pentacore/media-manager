@@ -162,6 +162,7 @@ async function deleteConnection(connection: Connection): Promise<void> {
 
     router.visit(ServiceConnectionController.destroy.url(connection.id), {
         method: 'delete',
+        preserveScroll: true,
         onFinish: rowMenuFocusKeeper(trigger, '[data-connection-menu]'),
     });
 }
