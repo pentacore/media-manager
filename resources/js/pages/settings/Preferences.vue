@@ -144,6 +144,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="preferences-time-format"
                             label="Time format"
                             hint="Hour clock used for every time shown in the UI."
                         >
@@ -155,7 +156,11 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             name="time_format"
                             :default-value="props.preferences.time_format"
                         >
-                            <SelectTrigger class="h-8 text-sm">
+                            <SelectTrigger
+                                id="preferences-time-format"
+                                aria-labelledby="preferences-time-format-label preferences-time-format"
+                                class="h-8 text-sm"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -181,6 +186,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="preferences-date-format"
                             label="Date format"
                             hint="Layout for full dates."
                         >
@@ -192,7 +198,11 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             name="date_format"
                             :default-value="props.preferences.date_format"
                         >
-                            <SelectTrigger class="h-8 text-sm">
+                            <SelectTrigger
+                                id="preferences-date-format"
+                                aria-labelledby="preferences-date-format-label preferences-date-format"
+                                class="h-8 text-sm"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -218,13 +228,19 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="preferences-timezone"
                             label="Timezone"
                             hint="All times are converted to this zone before display."
                         >
                             <span />
                         </Field>
                     </template>
-                    <div class="flex max-w-[360px] flex-col gap-2">
+                    <div
+                        id="preferences-timezone"
+                        role="group"
+                        aria-labelledby="preferences-timezone-label"
+                        class="flex max-w-[360px] flex-col gap-2"
+                    >
                         <Input
                             v-model="timezoneQuery"
                             class="h-8 text-sm"
@@ -235,7 +251,11 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             name="timezone"
                             :default-value="initialTimezone"
                         >
-                            <SelectTrigger class="h-8 text-sm">
+                            <SelectTrigger
+                                id="preferences-timezone-select"
+                                aria-labelledby="preferences-timezone-label preferences-timezone-select"
+                                class="h-8 text-sm"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -278,6 +298,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="preferences-first-day-of-week"
                             label="First day of week"
                             hint="Used by week pickers and grouped charts."
                         >
@@ -291,7 +312,11 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                                 String(props.preferences.first_day_of_week)
                             "
                         >
-                            <SelectTrigger class="h-8 text-sm">
+                            <SelectTrigger
+                                id="preferences-first-day-of-week"
+                                aria-labelledby="preferences-first-day-of-week-label preferences-first-day-of-week"
+                                class="h-8 text-sm"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -317,6 +342,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="preferences-relative-time"
                             label="Relative time"
                             hint="Show '8h ago' for recent entries instead of full timestamps."
                         >
@@ -328,6 +354,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             class="inline-flex items-center gap-2 text-[13px] touch:min-h-10"
                         >
                             <input
+                                id="preferences-relative-time"
                                 type="checkbox"
                                 name="show_relative_time"
                                 :checked="props.preferences.show_relative_time"
@@ -349,6 +376,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="preferences-whisparr-posters"
                                 label="Whisparr posters"
                                 hint="Blur Whisparr posters until you hover, focus or tap them."
                             >
@@ -360,6 +388,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                                 class="inline-flex items-center gap-2 text-[13px] touch:min-h-10"
                             >
                                 <input
+                                    id="preferences-whisparr-posters"
                                     type="checkbox"
                                     name="whisparr_blur_posters"
                                     :checked="

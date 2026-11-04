@@ -79,6 +79,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="current_password"
                             label="Current password"
                             hint="Confirms it's really you."
                         >
@@ -106,6 +107,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="password"
                             label="New password"
                             hint="At least 8 characters."
                         >
@@ -130,6 +132,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="password_confirmation"
                             label="Confirm password"
                             hint="Type the new password again."
                         >

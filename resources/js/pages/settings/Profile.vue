@@ -89,6 +89,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="name"
                             label="Name"
                             hint="Shown across the app and in audit logs."
                         >
@@ -114,6 +115,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="email"
                             label="Email"
                             hint="Used for sign-in and account notifications."
                         >
@@ -231,6 +233,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="emby-username"
                             label="Emby username"
                             hint="The display name you use to sign in to Emby."
                         >
@@ -255,6 +258,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="emby-password"
                             label="Emby password"
                             hint="Verifies it's actually you. Stored only as a session check, not retained."
                         >

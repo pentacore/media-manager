@@ -156,9 +156,10 @@ function submit(): void {
         >
             <div class="flex flex-col gap-5">
                 <!-- Enabled -->
-                <SettingsRow>
+                <SettingsRow data-decision-agent-enabled-row>
                     <template #label>
                         <Field
+                            for="decision-agent-enabled"
                             label="Enabled"
                             hint="Master switch. When off, no inbound event is ever handed to the agent."
                         >
@@ -167,6 +168,9 @@ function submit(): void {
                     </template>
                     <div>
                         <Toggle
+                            id="decision-agent-enabled"
+                            aria-labelledby="decision-agent-enabled-label"
+                            data-decision-agent-enabled
                             :model-value="form.enabled"
                             :label="form.enabled ? 'on' : 'off'"
                             @update:model-value="(v) => (form.enabled = v)"
