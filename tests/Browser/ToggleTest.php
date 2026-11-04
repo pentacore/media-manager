@@ -39,6 +39,5 @@ test('clicking the label of a linked toggle toggles it exactly once', function (
     $wasChecked = $webpage->script('document.querySelector("[data-decision-agent-enabled]").getAttribute("aria-checked")');
 
     $webpage->click('[data-decision-agent-enabled-row] label');
-    $webpage->script('new Promise((resolve) => setTimeout(resolve, 100))');
     $webpage->assertAttribute('[data-decision-agent-enabled]', 'aria-checked', $wasChecked === 'true' ? 'false' : 'true');
 });

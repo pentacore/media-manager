@@ -37,6 +37,15 @@ function settingsLabelUnlabelledRowsScript(): string
 }
 
 /**
+ * Returns the text of every `label[for]` whose target is missing or is not a
+ * labelable element (a `<label for>` that points at a group `div` is invalid).
+ */
+function settingsLabelForNonLabelableScript(): string
+{
+    return 'JSON.stringify([...document.querySelectorAll("label[for]")].filter((label) => label.control === null).map((label) => label.textContent.trim()))';
+}
+
+/**
  * Returns the labels whose box differs by more than 0.5 px from a `<div>` with
  * the same classes and text placed beside it, i.e. the old Field label.
  */
@@ -69,7 +78,8 @@ test('every editable settings row on the member settings pages is named by its l
     $webpage->script(appHydratedScript());
 
     $webpage->assertPresent('[data-settings-row]')
-        ->assertScript(settingsLabelUnlabelledRowsScript(), '[]');
+        ->assertScript(settingsLabelUnlabelledRowsScript(), '[]')
+        ->assertScript(settingsLabelForNonLabelableScript(), '[]');
 })->with([
     'profile' => ['profile.edit'],
     'security' => ['security.edit'],

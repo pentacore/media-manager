@@ -228,7 +228,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 <SettingsRow>
                     <template #label>
                         <Field
-                            for="preferences-timezone"
+                            label-id="preferences-timezone-label"
                             label="Timezone"
                             hint="All times are converted to this zone before display."
                         >
