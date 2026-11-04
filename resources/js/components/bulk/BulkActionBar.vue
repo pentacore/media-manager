@@ -156,13 +156,22 @@ onUnmounted(() => setPagePadding(false));
             :class="
                 cn(
                     'text-[12px] text-destructive',
-                    isCompact() && 'max-sm:hidden',
+                    isCompact()
+                        ? 'max-sm:hidden'
+                        : 'max-sm:min-w-0 max-sm:truncate',
                 )
             "
             data-bulk-over-limit
         >
-            Bulk actions take at most {{ max }} at a time — narrow the
-            selection.
+            <span class="max-sm:sr-only"
+                >Bulk actions take at most {{ max }} at a time — narrow the
+                selection.</span
+            ><span
+                class="sm:hidden"
+                aria-hidden="true"
+                data-bulk-over-limit-phone
+                >At most {{ max }} at a time</span
+            >
         </span>
         <div
             :class="

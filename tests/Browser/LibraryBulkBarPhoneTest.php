@@ -34,14 +34,15 @@ function libraryBulkBarSeries(int $id): array
 }
 
 /**
- * Sonarr (24 series), Radarr (12 movies) and Whisparr V3 (12 scenes), each
- * with two quality profiles, so the series page is long enough to scroll
- * past the bar and every library bar renders its quality-profile Select.
+ * Sonarr (24 series unless told otherwise), Radarr (12 movies) and Whisparr
+ * V3 (12 scenes), each with two quality profiles, so the series page is long
+ * enough to scroll past the bar and every library bar renders its
+ * quality-profile Select.
  */
-function libraryBulkBarFakes(): void
+function libraryBulkBarFakes(int $seriesCount = 24): void
 {
     $profiles = [['id' => 1, 'name' => 'HD-1080p'], ['id' => 2, 'name' => 'Example Ultra-HD Remux 2160p With A Long Profile Name']];
-    $series = array_map(libraryBulkBarSeries(...), range(1, 24));
+    $series = array_map(libraryBulkBarSeries(...), range(1, $seriesCount));
     $movies = array_map(static fn (int $id): array => [
         'id' => $id, 'title' => sprintf('Example Movie %02d', $id), 'titleSlug' => sprintf('example-movie-%d', $id), 'year' => 2021,
         'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => libraryBulkBarPoster(),
@@ -72,14 +73,15 @@ function libraryBulkBarFakes(): void
 }
 
 /**
- * Counts the rows the bar's visible controls sit on: a control starts a new
- * row when its top is below the bottom of everything placed so far.
+ * Counts the rows the bar's visible controls (and its over-limit note) sit
+ * on: a control starts a new row when its top is below the bottom of
+ * everything placed so far.
  */
 function libraryBulkBarRowsScript(): string
 {
     return <<<'JS'
         (() => {
-            const rects = [...document.querySelectorAll('[data-bulk-bar] [data-bulk-count], [data-bulk-bar] button')]
+            const rects = [...document.querySelectorAll('[data-bulk-bar] [data-bulk-count], [data-bulk-bar] [data-bulk-over-limit], [data-bulk-bar] button')]
                 .filter((control) => control.getClientRects().length > 0)
                 .map((control) => control.getBoundingClientRect())
                 .sort((first, second) => first.top - second.top);
@@ -169,6 +171,22 @@ test('the library bar takes at most three rows of a phone screen with every acti
     'movies' => ['media.movies.index', 10, 'member'],
     'whisparr' => ['media.whisparr.index', 101, 'admin'],
 ]);
+
+test('the over-limit note keeps the library bar to three rows on a phone', function (): void {
+    libraryBulkBarFakes(101);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-bulk-select-all]');
+    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-bulk-bar] [data-bulk-over-limit]") && !!document.querySelector("[data-bulk-bar] [data-bulk-quality-profile-trigger]") && document.body.style.getPropertyValue("--bulk-bar-height") !== ""'));
+
+    $webpage->assertSeeIn('[data-bulk-count]', '101 selected')
+        ->assertScript('document.querySelector("[data-bulk-over-limit-phone]").innerText', 'At most 100 at a time')
+        ->assertScript('(() => { const note = document.querySelector("[data-bulk-over-limit]"); const rect = note.getBoundingClientRect(); return rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth && rect.height < 2 * parseFloat(getComputedStyle(note).lineHeight) && note.scrollWidth <= note.clientWidth; })()', true)
+        ->assertScript(libraryBulkBarRowsScript().' <= 3', true)
+        ->assertScript(phoneOverflowScript('[data-bulk-bar]'), '');
+});
 
 test('clearing the library selection drops the measured spacer', function (): void {
     libraryBulkBarFakes();
