@@ -387,6 +387,7 @@ function save(): void {
             >
                 <ModelSelect
                     :models="modelOptions.models"
+                    id="template-preset-model"
                     inherit-label="Conversation default"
                     aria-label="Model"
                     :provider="form.preset.provider ?? ''"
@@ -397,6 +398,7 @@ function save(): void {
                 <ReasoningSelect
                     v-model="form.preset.reasoning"
                     :levels="modelOptions.reasoningLevels"
+                    id="template-preset-reasoning"
                     inherit-label="Conversation default"
                     aria-label="Reasoning"
                 />

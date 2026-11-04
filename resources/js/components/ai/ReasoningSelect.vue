@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import {
     Select,
     SelectContent,
@@ -31,6 +31,14 @@ const props = withDefaults(
 
 const level = defineModel<AiReasoningLevel | null>({ default: null });
 
+/**
+ * `ariaLabel` names the trigger through an sr-only span plus the trigger
+ * itself, so the selected level stays in the accessible name.
+ */
+const generatedId = useId();
+const triggerId = computed(() => props.id ?? `${generatedId}-trigger`);
+const nameId = `${generatedId}-name`;
+
 /** Select items cannot carry null, so "inherit" uses a sentinel. */
 const INHERIT = '__inherit__';
 
@@ -57,13 +65,22 @@ function clamped(value: AiReasoningLevel): boolean {
 
 <template>
     <div data-reasoning-select>
+        <span
+            v-if="ariaLabel"
+            :id="nameId"
+            class="sr-only"
+            :data-select-name="ariaLabel"
+            >{{ ariaLabel }}</span
+        >
         <Select
             v-model="selected"
             :disabled="disabled || disabledHint !== null"
         >
             <SelectTrigger
-                :id="id"
-                :aria-label="ariaLabel"
+                :id="triggerId"
+                :aria-labelledby="
+                    ariaLabel ? `${nameId} ${triggerId}` : undefined
+                "
                 class="h-8 max-w-[220px] text-sm"
             >
                 <SelectValue placeholder="Reasoning" />

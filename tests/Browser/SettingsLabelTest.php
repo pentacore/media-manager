@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SecondOpinionEngine;
+use App\Enums\SecondOpinionMode;
 use App\Models\ChatTemplate;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -87,7 +88,9 @@ function settingsLabelUnnamedGroupControlsScript(): string
 
 /**
  * Seeds the admin settings pages so every row renders: Jev as the second
- * opinion engine with a configured classifier (the threshold input shows).
+ * opinion engine with a configured classifier (the threshold input shows), and
+ * two allowlisted events, one with a second-opinion override, so the override
+ * controls and the add-override select render inside the labelled groups.
  */
 function settingsLabelSeedAdminPages(): void
 {
@@ -97,7 +100,30 @@ function settingsLabelSeedAdminPages(): void
         'ai.providers.openrouter.key' => 'sk-test',
         'mediamanager.monitoring.uptime_kuma_push_url' => null,
     ]);
-    resolve(DecisionAgentSettings::class)->setSecondOpinionEngine(SecondOpinionEngine::Jev);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setSecondOpinionEngine(SecondOpinionEngine::Jev);
+    $decisionAgentSettings->setEventAllowlist(['sonarr:Download', 'radarr:Grab']);
+    $decisionAgentSettings->setSecondOpinionEventOverrides(['sonarr:Download' => ['mode' => SecondOpinionMode::Hold, 'engine' => null, 'jev_threshold' => null]]);
+}
+
+/**
+ * Returns whether the trigger at `$selector` is named, through its
+ * `aria-labelledby`, by text holding both `$name` and its own value text.
+ */
+function settingsLabelNameKeepsValueScript(string $selector, string $name): string
+{
+    $selectorJson = json_encode($selector, JSON_THROW_ON_ERROR);
+    $nameJson = json_encode($name, JSON_THROW_ON_ERROR);
+
+    return <<<JS_WRAP
+        (() => {
+            const trigger = document.querySelector({$selectorJson});
+            const value = trigger.textContent.trim();
+            const name = (trigger.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
+                .map((id) => document.getElementById(id)?.textContent.trim() ?? '').join(' ');
+            return value !== '' && name.includes({$nameJson}) && name.includes(value);
+        })()
+    JS_WRAP;
 }
 
 /**
@@ -213,6 +239,8 @@ test('the admin settings groups and selects point at their row label', function 
         ->assertNoSmoke()
         ->assertScript('document.querySelector("#decision-agent-second-opinion-engine").getAttribute("aria-labelledby")', 'decision-agent-second-opinion-label decision-agent-second-opinion-engine')
         ->assertScript('document.querySelector("[data-second-opinion-threshold]").labels.length', 1)
+        ->assertPresent('[data-second-opinion-override="sonarr:Download"]')
+        ->assertPresent('[data-add-second-opinion-override] button')
         ->assertScript('document.querySelector("#decision-agent-event-allowlist").getAttribute("role")', 'group');
 });
 
@@ -230,6 +258,8 @@ test('the chat template editor names its toggles and its preset and tool group c
 
     $webpage->assertScript('document.querySelector("#template-auto-send").getAttribute("aria-labelledby")', 'template-auto-send-label')
         ->assertScript('document.querySelector("#template-pinned").labels[0].textContent.trim()', 'Show on new chats')
+        ->assertScript(settingsLabelNameKeepsValueScript('#template-preset-reasoning', 'Reasoning'), true)
+        ->assertScript(settingsLabelNameKeepsValueScript('#template-preset-model', 'Model'), true)
         ->assertScript('document.querySelectorAll("main [role=\"group\"][aria-labelledby]").length', 2)
         ->assertScript(settingsLabelForNonLabelableScript(), '[]')
         ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
@@ -241,10 +271,13 @@ test('the ai models rows and failover are named control groups', function (): vo
         'ai.default' => 'openai',
         'ai.providers.openai.key' => 'sk-test',
     ]);
+    resolve(DecisionAgentSettings::class)->setEventAllowlist(['sonarr:Download']);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-models.index', absolute: false))
         ->assertNoSmoke()
+        ->assertPresent('[data-add-event-override] button')
+        ->assertScript(settingsLabelNameKeepsValueScript('[data-task="chat"] [data-reasoning-select] button', 'Chat reasoning'), true)
         ->assertScript('document.querySelector("[data-task=\"failover\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-failover-label')
         ->assertScript('document.querySelector("[data-failover-provider]").getAttribute("aria-labelledby")', 'ai-models-failover-label ai-models-failover-provider')
         ->assertScript('document.querySelector("[data-task=\"chat\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-chat-label')

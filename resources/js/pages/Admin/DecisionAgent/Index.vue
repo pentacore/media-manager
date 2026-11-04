@@ -297,7 +297,7 @@ function submit(): void {
                     >
                         <Toggle
                             id="decision-agent-notify-on-suggest"
-                            aria-label="Notify on suggest"
+                            aria-label="Suggest"
                             :model-value="form.notify_on_suggest"
                             :label="
                                 form.notify_on_suggest
@@ -310,7 +310,7 @@ function submit(): void {
                         />
                         <Toggle
                             id="decision-agent-notify-on-act"
-                            aria-label="Notify on act"
+                            aria-label="Act"
                             :model-value="form.notify_on_act"
                             :label="form.notify_on_act ? 'on act' : 'act: off'"
                             @update:model-value="
