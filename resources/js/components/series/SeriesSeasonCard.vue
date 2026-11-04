@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Activity, ChevronRight, HardDrive } from '@lucide/vue';
-import { onMounted, ref } from 'vue';
 import { MonitorButton, SearchButton } from '@/components/library-actions';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -40,24 +39,6 @@ const emit = defineEmits<{
 }>();
 
 const { can } = useCan();
-
-/**
- * reka-ui's CollapsibleContent sets the id the trigger's aria-controls reads
- * in its own setup — after the trigger rendered — and not reactively. Inline
- * in the page, the trigger sat in the seasons v-for, so the next page render
- * refreshed it; here the trigger re-keys once on mount to pick the id up.
- * The remount runs in the mount flush, before the browser paints, so no
- * frame shows the old trigger and no click can reach it. The trigger is
- * built and torn down twice, so keep mount side effects (listeners, fetches,
- * focus) out of it. Remove the re-key once
- * `components/ui/collapsible/CollapsibleTrigger.vue` seeds `contentId`
- * itself (on the roadmap).
- */
-const mounted = ref(false);
-
-onMounted(() => {
-    mounted.value = true;
-});
 </script>
 
 <template>
@@ -66,10 +47,11 @@ onMounted(() => {
         :data-season-card="season.season_number"
     >
         <Collapsible :open="open">
-            <CollapsibleTrigger :key="mounted ? 'mounted' : 'initial'" as-child>
+            <CollapsibleTrigger as-child>
                 <button
                     type="button"
                     class="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-bg-hover"
+                    data-season-toggle
                     @click="emit('toggle')"
                 >
                     <div class="flex items-center gap-3">

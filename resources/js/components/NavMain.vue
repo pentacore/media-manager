@@ -173,6 +173,7 @@ function rollupBadge(item: NavItem): number {
                             <SidebarMenuButton
                                 :tooltip="item.title"
                                 class="text-[13px] font-medium"
+                                :data-nav-group="item.title"
                             >
                                 <component :is="item.icon" />
                                 <span>{{ item.title }}</span>
