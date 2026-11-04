@@ -523,3 +523,47 @@ test("a confirmed row removal hands focus to the next row's menu", function (): 
     $webpage->assertMissing('[data-queue-row="sonarr-41"]')
         ->assertScript(focusLandsOnScript('[data-queue-row="sonarr-42"] [data-queue-row-menu]'), true);
 });
+
+test("on a phone a queue card menu's Cancel returns focus to it and a confirmed removal hands focus to the next card's menu", function (): void {
+    $state = new class
+    {
+        public bool $removed = false;
+    };
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => function (Request $request) use ($state) {
+            if ($request->method() === 'DELETE') {
+                $state->removed = true;
+
+                return Http::response('', 200);
+            }
+
+            return Http::response(['records' => $state->removed
+                ? [grabQueueBrowserRecord(42, 'Andor')]
+                : [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]);
+        },
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+    $menu = '[data-queue-card-menu="sonarr-41"]';
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))->on()->mobile()
+        ->assertNoSmoke()
+        ->assertVisible($menu);
+    $webpage->script(appHydratedScript());
+
+    $webpage->click($menu)
+        ->click('[data-queue-remove="remove"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'from the queue?')
+        ->click('[data-confirm-cancel]');
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(focusLandsOnScript($menu), true);
+
+    $webpage->click($menu)
+        ->click('[data-queue-remove="remove"]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Removed from queue.');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-queue-card=\"sonarr-41\"]")'));
+
+    $webpage->assertMissing('[data-queue-card="sonarr-41"]')
+        ->assertScript(focusLandsOnScript('[data-queue-card-menu="sonarr-42"]'), true);
+});
