@@ -164,6 +164,28 @@ function seriesSectionsReloadRecorderScript(): string
     JS;
 }
 
+/**
+ * Presses Escape until the replace dialog is gone, and throws after ~5 s.
+ * reka mounts the dialog's teleported content, and with it the layer's
+ * Escape listener, a tick after the app mounts, so under a loaded suite a
+ * single early Escape can land before anything listens for it.
+ */
+function seriesSectionsEscapeReplaceDialogScript(): string
+{
+    return <<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 50; attempt++) {
+                if (document.querySelector('[data-replacement-dialog]') === null) {
+                    return;
+                }
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error('The replace dialog did not close on Escape.');
+        })()
+    JS;
+}
+
 beforeEach(function (): void {
     $this->sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
 });
@@ -306,8 +328,10 @@ test('a processed webhook reload does not reopen a closed replace dialog', funct
         ->assertPresent('[data-replacement-dialog]');
     $webpage->script(appHydratedScript());
     $webpage->script(seriesSectionsReloadRecorderScript());
-    $webpage->script("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
-    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-replacement-dialog]') === null"));
+    $webpage->script(seriesSectionsEscapeReplaceDialogScript());
+    $webpage->script(confirmDialogWaitUntilScript("!location.search.includes('replace_')"));
+
+    expect($webpage->script('location.search'))->not->toContain('replace_');
 
     $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
         'id' => 7002, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
@@ -327,8 +351,8 @@ test('closing a deep-linked replace dialog drops the link params and a second cl
     $webpage = visit($linkUrl)
         ->assertPresent('[data-replacement-dialog]');
     $webpage->script(appHydratedScript());
-    $webpage->keys('[data-replacement-dialog]', 'Escape');
-    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-replacement-dialog]') === null && !location.search.includes('replace_')"));
+    $webpage->script(seriesSectionsEscapeReplaceDialogScript());
+    $webpage->script(confirmDialogWaitUntilScript("!location.search.includes('replace_')"));
 
     expect($webpage->script('location.search'))->not->toContain('replace_');
     $webpage->assertMissing('[data-replacement-dialog]');
