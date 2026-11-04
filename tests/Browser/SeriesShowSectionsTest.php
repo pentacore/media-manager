@@ -165,25 +165,36 @@ function seriesSectionsReloadRecorderScript(): string
 }
 
 /**
- * Presses Escape until the replace dialog is gone, and throws after ~5 s.
- * reka mounts the dialog's teleported content, and with it the layer's
- * Escape listener, a tick after the app mounts, so under a loaded suite a
- * single early Escape can land before anything listens for it.
+ * Waits until the condition holds and throws with the message after ~5 s, so
+ * a wait that gives up fails at the wait instead of at a later assertion. The
+ * error names the replace dialog's state and the URL's query.
  */
-function seriesSectionsEscapeReplaceDialogScript(): string
+function seriesSectionsWaitUntilScript(string $condition, string $message): string
 {
-    return <<<'JS'
+    return sprintf(<<<'JS'
         (async () => {
-            for (let attempt = 0; attempt < 50; attempt++) {
-                if (document.querySelector('[data-replacement-dialog]') === null) {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (%s) {
                     return;
                 }
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-                await new Promise((resolve) => setTimeout(resolve, 100));
+                await new Promise((resolve) => setTimeout(resolve, 20));
             }
-            throw new Error('The replace dialog did not close on Escape.');
+            const dialog = document.querySelector('[data-replacement-dialog]');
+            throw new Error(%s + ` (dialog: ${dialog === null ? 'none' : dialog.dataset.state}, search: "${location.search}")`);
         })()
-    JS;
+        JS, $condition, json_encode($message, JSON_THROW_ON_ERROR));
+}
+
+/**
+ * Waits until the replace dialog has left the DOM and its link params have
+ * left the URL.
+ */
+function seriesSectionsWaitForClosedReplaceDialogScript(): string
+{
+    return seriesSectionsWaitUntilScript(
+        "document.querySelector('[data-replacement-dialog]') === null && !location.search.includes('replace_')",
+        'The replace dialog did not close with its link params dropped from the URL.',
+    );
 }
 
 beforeEach(function (): void {
@@ -328,8 +339,8 @@ test('a processed webhook reload does not reopen a closed replace dialog', funct
         ->assertPresent('[data-replacement-dialog]');
     $webpage->script(appHydratedScript());
     $webpage->script(seriesSectionsReloadRecorderScript());
-    $webpage->script(seriesSectionsEscapeReplaceDialogScript());
-    $webpage->script(confirmDialogWaitUntilScript("!location.search.includes('replace_')"));
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
+    $webpage->script(seriesSectionsWaitForClosedReplaceDialogScript());
 
     expect($webpage->script('location.search'))->not->toContain('replace_');
 
@@ -351,8 +362,8 @@ test('closing a deep-linked replace dialog drops the link params and a second cl
     $webpage = visit($linkUrl)
         ->assertPresent('[data-replacement-dialog]');
     $webpage->script(appHydratedScript());
-    $webpage->script(seriesSectionsEscapeReplaceDialogScript());
-    $webpage->script(confirmDialogWaitUntilScript("!location.search.includes('replace_')"));
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
+    $webpage->script(seriesSectionsWaitForClosedReplaceDialogScript());
 
     expect($webpage->script('location.search'))->not->toContain('replace_');
     $webpage->assertMissing('[data-replacement-dialog]');
@@ -360,5 +371,40 @@ test('closing a deep-linked replace dialog drops the link params and a second cl
     $webpage->script(seriesSectionsInertiaVisitScript($linkUrl));
 
     $webpage->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]')
+        ->assertNoSmoke();
+});
+
+test('a deferred response that lands after the replace dialog closed does not reopen it', function (): void {
+    seriesSectionsFakeSonarrWithFile($this->sonarr);
+    seriesSectionsFakeSonarrIndexList();
+    $this->actingAs(User::factory()->member()->create());
+    $linkUrl = route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false);
+
+    $webpage = visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="7"]', 'Example Series Title');
+    $webpage->script(appHydratedScript());
+    $webpage->script(seriesSectionsHoldEpisodesScript());
+
+    $webpage->script(seriesSectionsInertiaVisitScript($linkUrl));
+    $webpage->assertPresent('[data-replacement-dialog][data-replacement-season="1"][data-replacement-episode="3"]');
+    $webpage->script(seriesSectionsWaitForHeldEpisodesScript());
+
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
+    $webpage->script(seriesSectionsWaitForClosedReplaceDialogScript());
+
+    $webpage->script('window.__mmReleaseHeld()');
+    $webpage->script(seriesSectionsWaitUntilScript(
+        "document.querySelector('[data-season-card=\"1\"]') !== null",
+        'The held episodes never reached the page.',
+    ));
+    $webpage->script('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    $webpage->script(seriesSectionsWaitUntilScript(
+        "!location.search.includes('replace_')",
+        'The deferred response put the link params back in the URL.',
+    ));
+
+    expect($webpage->script('location.search'))->not->toContain('replace_');
+    $webpage->assertMissing('[data-replacement-dialog]')
         ->assertNoSmoke();
 });

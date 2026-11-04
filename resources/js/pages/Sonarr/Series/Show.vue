@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { InteractiveSearchDialog } from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
@@ -71,50 +71,43 @@ function openReplaceDialog(episode: Episode): void {
     replaceDialogOpen.value = true;
 }
 
-/**
- * Opens the replace dialog for the episode named by a `replace_season` /
- * `replace_episode` link (the chat's "Pick release"). Runs on mount and on
- * every URL change, so a link followed while already on this series works;
- * unrelated prop reloads keep the URL and so never reopen it.
- */
 const page = usePage();
 
-watch(
-    () => page.url,
-    (url) => {
-        const query = new URL(url, 'http://localhost').searchParams;
-        const season = query.get('replace_season');
-        const episode = query.get('replace_episode');
-
-        if (
-            season === null ||
-            episode === null ||
-            !/^\d+$/.test(season) ||
-            !/^\d+$/.test(episode) ||
-            Number(episode) < 1
-        ) {
-            return;
-        }
-
-        replaceTarget.value = {
-            seasonNumber: Number(season),
-            episodeNumber: Number(episode),
-        };
-        replaceDialogOpen.value = true;
-    },
-    { immediate: true },
-);
-
 /**
- * Closing the dialog drops the deep-link params from the URL, as a client-side
- * replace (no request, no remount), so a reload does not reopen it and
- * following the same link again changes `page.url` and reopens it.
+ * The `season:episode` of a deep link whose dialog the user closed. Async
+ * visits (the deferred props, a webhook reload, any `only:` reload) are sent
+ * to `window.location.href`, so one that left before the close answers with
+ * the link's URL and puts the params back; this keeps that from reopening
+ * the dialog. Only following a link again forgets it: a real (non-async)
+ * visit to a URL that carries one (the `before` listener below). The
+ * client-side cleanup replace is not a visit and fires no `before`.
  */
-watch(replaceDialogOpen, (open) => {
-    if (open) {
-        return;
+const dismissedDeepLink = ref<string | null>(null);
+
+function deepLinkKey(url: string): string | null {
+    const query = new URL(url, 'http://localhost').searchParams;
+    const season = query.get('replace_season');
+    const episode = query.get('replace_episode');
+
+    if (
+        season === null ||
+        episode === null ||
+        !/^\d+$/.test(season) ||
+        !/^\d+$/.test(episode) ||
+        Number(episode) < 1
+    ) {
+        return null;
     }
 
+    return `${Number(season)}:${Number(episode)}`;
+}
+
+/**
+ * Drops the deep-link params from the URL as a client-side replace (no
+ * request, no remount, no new history entry), so a reload does not reopen
+ * the dialog and following the same link again changes `page.url`.
+ */
+function dropDeepLinkParams(): void {
     const url = new URL(page.url, 'http://localhost');
 
     if (
@@ -132,6 +125,73 @@ watch(replaceDialogOpen, (open) => {
         preserveState: true,
         preserveScroll: true,
     });
+}
+
+/**
+ * Opens the replace dialog for the episode named by a `replace_season` /
+ * `replace_episode` link (the chat's "Pick release"). Runs on mount and on
+ * every URL change, so a link followed while already on this series works.
+ * A dismissed link that an async response brings back is dropped again
+ * instead of reopening. The watcher is `sync`: the cleanup replace and an
+ * async response can both set the page before a `pre` flush, and the URL
+ * would then go back to the link's without the watcher ever seeing it.
+ */
+watch(
+    () => page.url,
+    (url) => {
+        const key = deepLinkKey(url);
+
+        if (key === null) {
+            return;
+        }
+
+        if (key === dismissedDeepLink.value) {
+            dropDeepLinkParams();
+
+            return;
+        }
+
+        const [season, episode] = key.split(':').map(Number);
+
+        replaceTarget.value = { seasonNumber: season, episodeNumber: episode };
+        replaceDialogOpen.value = true;
+    },
+    { immediate: true, flush: 'sync' },
+);
+
+watch(replaceDialogOpen, (open) => {
+    if (open) {
+        return;
+    }
+
+    const key = deepLinkKey(page.url);
+
+    if (key !== null) {
+        dismissedDeepLink.value = key;
+    }
+
+    dropDeepLinkParams();
+});
+
+let stopForgettingDismissedLink: (() => void) | null = null;
+
+onMounted(() => {
+    stopForgettingDismissedLink = router.on('before', (event) => {
+        const visit = event.detail.visit;
+
+        if (
+            !visit.async &&
+            !visit.prefetch &&
+            deepLinkKey(visit.url.href) !== null
+        ) {
+            dismissedDeepLink.value = null;
+        }
+    });
+});
+
+onUnmounted(() => {
+    stopForgettingDismissedLink?.();
+    stopForgettingDismissedLink = null;
 });
 
 const interactiveOpen = ref(false);
