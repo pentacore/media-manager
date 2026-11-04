@@ -223,7 +223,7 @@ function removeOverride(eventKey: string): void {
                 @update:model-value="(value) => addOverride(String(value))"
             >
                 <SelectTrigger
-                    aria-label="Add an event override"
+                    :aria-label="`Add a ${taskLabel} event override`"
                     class="h-8 max-w-[320px] text-sm"
                 >
                     <Plus class="size-4" />

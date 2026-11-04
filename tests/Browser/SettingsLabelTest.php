@@ -127,6 +127,21 @@ function settingsLabelNameKeepsValueScript(string $selector, string $name): stri
 }
 
 /**
+ * Returns whether the AI Models page shows at least two add-event-override
+ * selects (one per task that accepts event scopes) and no two share a name.
+ */
+function settingsLabelUniqueAddOverrideNamesScript(): string
+{
+    return <<<'JS_WRAP'
+        (() => {
+            const names = [...document.querySelectorAll('main [role="combobox"][aria-label$=" event override"]')]
+                .map((trigger) => trigger.getAttribute('aria-label'));
+            return names.length >= 2 && new Set(names).size === names.length;
+        })()
+    JS_WRAP;
+}
+
+/**
  * Returns the labels whose box differs by more than 0.5 px from a `<div>` with
  * the same classes and text placed beside it, i.e. the old Field label.
  */
@@ -280,6 +295,7 @@ test('the ai models rows and failover are named control groups', function (): vo
         ->assertScript(settingsLabelNameKeepsValueScript('[data-task="chat"] [data-reasoning-select] button', 'Chat reasoning'), true)
         ->assertScript('document.querySelector("[data-task=\"chat\"] [data-reasoning-select] [data-select-name]").getAttribute("aria-hidden")', 'true')
         ->assertScript('[...document.querySelectorAll("main [data-select-name]")].filter((name) => name.getAttribute("aria-hidden") !== "true").length', 0)
+        ->assertScript(settingsLabelUniqueAddOverrideNamesScript(), true)
         ->assertScript('document.querySelector("[data-task=\"failover\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-failover-label')
         ->assertScript('document.querySelector("[data-failover-provider]").getAttribute("aria-labelledby")', 'ai-models-failover-label ai-models-failover-provider')
         ->assertScript('document.querySelector("[data-task=\"chat\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-chat-label')
