@@ -126,7 +126,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
         </PageHeader>
 
         <div class="overflow-x-auto rounded-xl border border-border bg-card">
-            <Table>
+            <Table class="sticky-first-column" data-admin-table="schedules">
                 <TableHeader>
                     <TableRow>
                         <TableHead>Name</TableHead>
@@ -145,14 +145,16 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                         :data-benchmark-schedule-row="schedule.id"
                     >
                         <TableCell class="font-medium">
-                            <Link
-                                :href="
-                                    BenchmarkScheduleController.edit.url(
-                                        schedule.id,
-                                    )
-                                "
-                                >{{ schedule.name }}</Link
-                            >
+                            <span class="block">
+                                <Link
+                                    :href="
+                                        BenchmarkScheduleController.edit.url(
+                                            schedule.id,
+                                        )
+                                    "
+                                    >{{ schedule.name }}</Link
+                                >
+                            </span>
                         </TableCell>
                         <TableCell>{{ schedule.task_label }}</TableCell>
                         <TableCell>{{ schedule.cadence }}</TableCell>

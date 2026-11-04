@@ -124,7 +124,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                     <span />
                 </Field>
             </template>
-            <label class="flex items-center gap-2 text-sm">
+            <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
                     v-model="state.automatic_selection_enabled"
                     type="checkbox"
@@ -160,7 +160,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                     <span />
                 </Field>
             </template>
-            <label class="flex items-center gap-2 text-sm">
+            <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input v-model="state.subtitle_check.enabled" type="checkbox" />
                 Check tagged imports for missing subtitles
             </label>
@@ -250,7 +250,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <div class="space-y-3">
                 <h3 class="text-sm font-semibold">{{ scope.label }}</h3>
 
-                <label class="flex items-center gap-2 text-xs">
+                <label class="flex items-center gap-2 text-xs touch:min-h-10">
                     <input
                         type="checkbox"
                         :checked="hasScopeOverride(scope.key)"

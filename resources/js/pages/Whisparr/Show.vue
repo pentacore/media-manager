@@ -180,7 +180,7 @@ const profileName = computed(() => {
                 </Link>
             </Button>
             <div
-                class="flex flex-wrap items-center gap-2"
+                class="flex flex-wrap items-center gap-2 touch:gap-3"
                 data-whisparr-actions
             >
                 <Button

@@ -191,6 +191,7 @@ function confirm(): void {
                     v-for="candidate in candidates"
                     :key="`${candidate.mediaType}-${candidate.tmdbId}`"
                     type="button"
+                    data-anime-match-candidate
                     :class="
                         cn(
                             'flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',

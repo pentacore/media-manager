@@ -394,3 +394,29 @@ test('the drawer shows a scripted result transcript with its attachment names', 
         ->assertSeeIn('[data-benchmark-drawer-turn="1"]', 'Candidate')
         ->assertSeeIn('[data-benchmark-drawer-turn="1"]', 'Yes, Dune is there.');
 });
+
+test('every action of a finished run with an unscored judge stays on a phone screen', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Nolan chat']);
+    $run = BenchmarkRun::factory()->completed()->create(['name' => 'Title bake-off', 'case_ids' => [$benchmarkCase->id]]);
+    BenchmarkResult::factory()->forCase($run, $benchmarkCase, 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Nolan Films',
+        'judge_status' => BenchmarkJudgeStatus::Failed,
+        'score_detail' => ['error' => 'judge timed out', 'tool_log' => []],
+    ]);
+    // A second finished run on the same task, so "Compare with…" shows too.
+    $earlierRun = BenchmarkRun::factory()->completed()->create(['name' => 'Earlier bake-off', 'case_ids' => [$benchmarkCase->id]]);
+    BenchmarkResult::factory()->forCase($earlierRun, $benchmarkCase, 0)->scored(0.8, true)->create(['output' => 'Nolan Films']);
+
+    $webpage = visit(route('admin.benchmarks.runs.show', $run, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertVisible('[data-benchmark-compare-with]')
+        ->assertVisible('[data-benchmark-rejudge]')
+        ->assertVisible('[data-benchmark-delete]')
+        ->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
+        ->assertScript(phoneOverlapScript('main'), '')
+        ->assertScript('(() => ["[data-benchmark-compare-with]", "[data-benchmark-rejudge]", "[data-benchmark-delete]"].filter((selector) => { const rect = document.querySelector(selector).getBoundingClientRect(); return !(rect.width > 0 && rect.left >= 0 && rect.right <= window.innerWidth); }).join(" | "))()', '');
+});

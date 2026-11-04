@@ -37,7 +37,7 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
                         :href="item.href"
                         :class="
                             cn(
-                                'inline-flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium transition-colors',
+                                'inline-flex h-8 items-center rounded-md px-2.5 text-[13px] font-medium transition-colors touch:h-10',
                                 isCurrentOrParentUrl(item.href)
                                     ? 'bg-accent/15 text-accent'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

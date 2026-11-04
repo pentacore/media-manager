@@ -104,7 +104,10 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
             class="overflow-hidden rounded-xl border border-border bg-card"
         >
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="sticky-first-column w-full border-collapse text-[13px]"
+                    data-admin-table="action-rules"
+                >
                     <thead>
                         <tr>
                             <th

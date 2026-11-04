@@ -117,7 +117,10 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2 touch:gap-3">
+        <!-- On a phone the profile Select and Delete… share the last row
+             (order-1), so the fixed bar stays at three rows: count and Clear,
+             Monitor/Unmonitor/Search, then Select and Delete…. -->
         <Button
             variant="outline"
             size="sm"
@@ -140,7 +143,7 @@ async function confirmDelete(): Promise<void> {
         </Button>
         <span
             v-if="qualityProfilesError"
-            class="text-[12px] text-destructive"
+            class="text-[12px] text-destructive max-sm:order-1"
             data-bulk-quality-profile-error
             >{{ qualityProfilesError }}</span
         >
@@ -151,12 +154,12 @@ async function confirmDelete(): Promise<void> {
             @update:model-value="changeProfile"
         >
             <SelectTrigger
-                class="h-7 w-44 text-xs"
+                class="h-7 w-44 text-xs max-sm:order-1"
                 data-bulk-quality-profile-trigger
             >
                 <SelectValue placeholder="Set quality profile…" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent class="max-sm:max-w-[calc(100vw-2rem)]">
                 <SelectItem
                     v-for="profile in qualityProfiles"
                     :key="profile.id"
@@ -180,7 +183,7 @@ async function confirmDelete(): Promise<void> {
         <Button
             variant="destructive"
             size="sm"
-            class="h-7 gap-1.5 text-xs"
+            class="h-7 gap-1.5 text-xs max-sm:order-1"
             :disabled="disabled || busy"
             data-bulk-action="delete"
             @click="deleteConfirmOpen = true"

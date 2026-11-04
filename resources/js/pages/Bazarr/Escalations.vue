@@ -230,7 +230,7 @@ function paginationLabel(label: string): string {
                     Connection
                     <select
                         data-test="escalation-connection-filter"
-                        class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3"
+                        class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3 max-sm:w-full max-sm:min-w-0 touch:h-10"
                         :value="filters.connection ?? ''"
                         @change="updateConnection"
                     >
@@ -247,7 +247,7 @@ function paginationLabel(label: string): string {
                     Status
                     <select
                         data-test="escalation-status-filter"
-                        class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3 capitalize"
+                        class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3 capitalize max-sm:w-full max-sm:min-w-0 touch:h-10"
                         :value="filters.status"
                         @change="updateStatus"
                     >
@@ -385,7 +385,7 @@ function paginationLabel(label: string): string {
                 :key="`${link.label}-${index}`"
                 :href="link.url ?? '#'"
                 preserve-scroll
-                class="rounded-md border border-border px-3 py-2 text-sm"
+                class="rounded-md border border-border px-3 py-2 text-sm touch:min-h-10 touch:min-w-10 touch:text-center"
                 :class="{
                     'bg-primary text-primary-foreground': link.active,
                     'pointer-events-none opacity-50': !link.url,

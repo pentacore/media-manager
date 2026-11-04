@@ -64,7 +64,7 @@ function setOpen(value: boolean): void {
         <CollapsibleTrigger as-child>
             <button
                 type="button"
-                class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-medium touch:min-h-10"
                 data-template-help-toggle
             >
                 <CircleHelp class="size-4 text-muted-foreground" />

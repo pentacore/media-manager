@@ -217,7 +217,10 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <Table>
+                <Table
+                    class="sticky-first-column"
+                    data-admin-table="emby-links"
+                >
                     <TableHeader>
                         <TableRow>
                             <TableHead>Emby Username</TableHead>
@@ -231,9 +234,11 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                             v-for="link in props.links ?? []"
                             :key="link.id"
                         >
-                            <TableCell class="font-medium">{{
-                                link.emby_username
-                            }}</TableCell>
+                            <TableCell class="font-medium"
+                                ><span class="block">{{
+                                    link.emby_username
+                                }}</span></TableCell
+                            >
                             <TableCell>
                                 <span v-if="link.user">
                                     {{ link.user.name }}
@@ -290,7 +295,11 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                 >
                     {{ props.embyUsers.error }}
                 </div>
-                <Table v-else>
+                <Table
+                    v-else
+                    class="sticky-first-column"
+                    data-admin-table="emby-unlinked"
+                >
                     <TableHeader>
                         <TableRow>
                             <TableHead>Emby user</TableHead>
@@ -305,13 +314,15 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                             :data-emby-user="embyUser.id"
                         >
                             <TableCell class="font-medium">
-                                {{ embyUser.name }}
-                                <Badge
-                                    v-if="embyUser.is_admin"
-                                    variant="outline"
-                                    class="ml-2"
-                                    >Emby admin</Badge
-                                >
+                                <span class="block">
+                                    {{ embyUser.name }}
+                                    <Badge
+                                        v-if="embyUser.is_admin"
+                                        variant="outline"
+                                        class="ml-2"
+                                        >Emby admin</Badge
+                                    >
+                                </span>
                             </TableCell>
                             <TableCell class="text-muted-foreground">{{
                                 formatDate(embyUser.last_activity_at)

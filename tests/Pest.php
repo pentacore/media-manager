@@ -344,3 +344,233 @@ function phoneOverflowScript(string $rootSelector = 'main, [role="dialog"]'): st
         })()
     JS;
 }
+
+/**
+ * Phone-width overlap check (Batch 3h-3). Returns '' when no two visible
+ * controls inside the roots matching $rootSelector cover each other on screen.
+ * A control is `a[href]`, `button`, a non-hidden `input`, `select`,
+ * `textarea` or an element with a button, checkbox, switch, tab, combobox or
+ * menuitem role. Skipped: zero-size controls, `visibility` other than
+ * `visible`, `pointer-events: none` on an enabled control (a disabled
+ * Button is `pointer-events: none` yet keeps its box, so it stays in),
+ * anything inside `.sr-only`, `[aria-hidden="true"]` or a reka-ui
+ * `VisuallyHidden` (the inline-style test of `phoneOverflowScript()`), and anything that is, or sits in, a
+ * `position: fixed` box below its root (a floating bar overlays content by
+ * design). A control is measured by its visible rect: its border box — or,
+ * when its computed `display` is `inline`, each of its line boxes — clipped by
+ * every ancestor up to the root whose `overflow-x`/`overflow-y` is not
+ * `visible`; a control its scroller clips away entirely is skipped. A pair is
+ * reported when neither contains the other in the DOM and a rect of each
+ * intersects the other's by more than 1 px in both axes, unless the smaller
+ * rect lies wholly inside the larger (a checkbox on a card link). Otherwise
+ * returns up to ten `<a> × <b>` pairs, each side `tag[data-…] "text"
+ * left..right`, in document order of the first control.
+ * Use with assertScript(phoneOverlapScript(), '').
+ */
+function phoneOverlapScript(string $rootSelector = 'main, [role="dialog"]'): string
+{
+    $selector = json_encode($rootSelector, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const controlSelector = 'a[href], button, input:not([type="hidden"]), select, textarea, [role="button"], [role="checkbox"], [role="switch"], [role="tab"], [role="combobox"], [role="menuitem"]';
+            const visuallyHidden = (el) => el.style.position === 'absolute' && el.style.width === '1px' && el.style.height === '1px' && el.style.overflow === 'hidden' && el.style.clipPath === 'inset(50%)';
+            const hidden = (el, root) => {
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                if (rect.width === 0 || rect.height === 0 || style.visibility !== 'visible' || (style.pointerEvents === 'none' && !el.matches(':disabled')) || el.closest('.sr-only, [aria-hidden="true"]')) {
+                    return true;
+                }
+                for (let node = el; node && node !== root; node = node.parentElement) {
+                    if (visuallyHidden(node)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const floating = (el, root) => {
+                for (let node = el; node && node !== root; node = node.parentElement) {
+                    if (getComputedStyle(node).position === 'fixed') {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const clip = (el, root, rect) => {
+                let { left, top, right, bottom } = rect;
+                for (let parent = el.parentElement; parent && el !== root; parent = parent.parentElement) {
+                    const style = getComputedStyle(parent);
+                    if (style.display !== 'contents') {
+                        const box = parent.getBoundingClientRect();
+                        if (style.overflowX !== 'visible') {
+                            left = Math.max(left, box.left);
+                            right = Math.min(right, box.right);
+                        }
+                        if (style.overflowY !== 'visible') {
+                            top = Math.max(top, box.top);
+                            bottom = Math.min(bottom, box.bottom);
+                        }
+                    }
+                    if (parent === root) {
+                        break;
+                    }
+                }
+                return right - left > 0 && bottom - top > 0 ? { left, top, right, bottom } : null;
+            };
+            const describe = (el) => {
+                const rect = el.getBoundingClientRect();
+                const hooks = [...el.attributes].filter((attribute) => attribute.name.startsWith('data-') && !attribute.name.startsWith('data-v-')).slice(0, 2).map((attribute) => `[\${attribute.name}\${attribute.value ? '=' + attribute.value : ''}]`).join('');
+                const text = (el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+                return `\${el.tagName.toLowerCase()}\${hooks} "\${text}" \${Math.round(rect.left)}..\${Math.round(rect.right)}`;
+            };
+            const controls = [];
+            const seen = new Set();
+            for (const root of document.querySelectorAll({$selector})) {
+                for (const el of root.querySelectorAll(controlSelector)) {
+                    if (seen.has(el)) {
+                        continue;
+                    }
+                    seen.add(el);
+                    if (hidden(el, root) || floating(el, root)) {
+                        continue;
+                    }
+                    const boxes = (getComputedStyle(el).display === 'inline' ? [...el.getClientRects()] : [el.getBoundingClientRect()]).map((rect) => clip(el, root, rect)).filter((rect) => rect !== null);
+                    if (boxes.length > 0) {
+                        controls.push({ el, boxes });
+                    }
+                }
+            }
+            controls.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+            const area = (rect) => (rect.right - rect.left) * (rect.bottom - rect.top);
+            const inside = (inner, outer) => inner.left >= outer.left - 1 && inner.right <= outer.right + 1 && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+            const clash = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1 && !(area(a) <= area(b) ? inside(a, b) : inside(b, a));
+            const pairs = [];
+            for (let i = 0; i < controls.length && pairs.length < 10; i++) {
+                for (let j = i + 1; j < controls.length && pairs.length < 10; j++) {
+                    const [a, b] = [controls[i], controls[j]];
+                    if (a.el.contains(b.el) || b.el.contains(a.el)) {
+                        continue;
+                    }
+                    if (a.boxes.some((boxA) => b.boxes.some((boxB) => clash(boxA, boxB)))) {
+                        pairs.push(`\${describe(a.el)} × \${describe(b.el)}`);
+                    }
+                }
+            }
+            return pairs.join(' | ');
+        })()
+    JS;
+}
+
+/**
+ * Phone-width scroll-sliver check (Batch 3h-3). Returns '' when no visible
+ * scroller — a root matching $rootSelector or an element inside one whose
+ * computed `overflow-x`/`overflow-y` is `auto` or `scroll` — scrolls along such
+ * an axis by 1–12 px (`scrollWidth − clientWidth` sideways, `scrollHeight −
+ * clientHeight` down). A scroll that small is no content, only an overhang: a
+ * `touch-target` `::after` (40 px) sticking out of a smaller control in a
+ * scroller, 12 px being the overhang of the smallest one, a 16 px checkbox or
+ * close X ((40 − 16) / 2). Hidden scrollers are skipped like
+ * `phoneOverlapScript()` skips hidden controls. Otherwise returns up to ten
+ * `tag[data-…] "text" left..right scrolls sideways|down by Npx` entries.
+ * Use with assertScript(phoneScrollSliverScript(), '').
+ */
+function phoneScrollSliverScript(string $rootSelector = 'main, [role="dialog"]'): string
+{
+    $selector = json_encode($rootSelector, JSON_THROW_ON_ERROR);
+
+    return <<<JS
+        (() => {
+            const visuallyHidden = (el) => el.style.position === 'absolute' && el.style.width === '1px' && el.style.height === '1px' && el.style.overflow === 'hidden' && el.style.clipPath === 'inset(50%)';
+            const hidden = (el, root) => {
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                if (rect.width === 0 || rect.height === 0 || style.visibility !== 'visible' || style.pointerEvents === 'none' || el.closest('.sr-only, [aria-hidden="true"]')) {
+                    return true;
+                }
+                for (let node = el; node && node !== root; node = node.parentElement) {
+                    if (visuallyHidden(node)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const describe = (el) => {
+                const rect = el.getBoundingClientRect();
+                const hooks = [...el.attributes].filter((attribute) => attribute.name.startsWith('data-') && !attribute.name.startsWith('data-v-')).slice(0, 2).map((attribute) => `[\${attribute.name}\${attribute.value ? '=' + attribute.value : ''}]`).join('');
+                const text = (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+                return `\${el.tagName.toLowerCase()}\${hooks} "\${text}" \${Math.round(rect.left)}..\${Math.round(rect.right)}`;
+            };
+            const scrolls = (value) => value === 'auto' || value === 'scroll';
+            const slivers = [];
+            const seen = new Set();
+            for (const root of document.querySelectorAll({$selector})) {
+                for (const el of [root, ...root.querySelectorAll('*')]) {
+                    if (seen.has(el)) {
+                        continue;
+                    }
+                    seen.add(el);
+                    const style = getComputedStyle(el);
+                    if ((!scrolls(style.overflowX) && !scrolls(style.overflowY)) || hidden(el, root)) {
+                        continue;
+                    }
+                    const dx = el.scrollWidth - el.clientWidth;
+                    const dy = el.scrollHeight - el.clientHeight;
+                    if (scrolls(style.overflowX) && dx > 0 && dx <= 12) {
+                        slivers.push(`\${describe(el)} scrolls sideways by \${dx}px`);
+                    }
+                    if (scrolls(style.overflowY) && dy > 0 && dy <= 12) {
+                        slivers.push(`\${describe(el)} scrolls down by \${dy}px`);
+                    }
+                }
+            }
+            return slivers.slice(0, 10).join(' | ');
+        })()
+    JS;
+}
+
+/**
+ * Phone touch-target sweep (Batch 3h-2, shared from 3h-3). Every visible
+ * control in $root (default `main`) whose tappable area — its box or its
+ * touch-target ::after, measured with elementFromPoint from its centre — is
+ * under 40 px in either direction, as "tag[hook] "text" Npx". Inline text
+ * links are exempt. A native `input[type="checkbox"]` or
+ * `input[type="radio"]` is measured through `closest('label')` when it has
+ * one: a tap anywhere in the wrapping label toggles the input, so the label
+ * is its tap area (a hit counts when it lands inside that area). Empty when
+ * every control is a 40 px target.
+ */
+function phoneSmallTargetsScript(string $root = 'main'): string
+{
+    return str_replace('__ROOT__', $root, <<<'JS'
+        (() => {
+            const offenders = [];
+            const controls = document.querySelectorAll(['a[href]', 'button', '[role="button"]', '[role="checkbox"]', '[role="switch"]', '[role="tab"]', '[role="combobox"]', 'select', 'input[type="checkbox"]', 'input[type="radio"]'].map((control) => `__ROOT__ ${control}`).join(', '));
+            for (const element of controls) {
+                const style = getComputedStyle(element);
+                if (element.closest('[aria-hidden="true"], .sr-only') || style.visibility !== 'visible' || style.pointerEvents === 'none') {
+                    continue;
+                }
+                if (element.tagName === 'A' && style.display === 'inline') {
+                    continue;
+                }
+                if (element.getBoundingClientRect().width === 0 || element.getBoundingClientRect().height === 0) {
+                    continue;
+                }
+                const area = element.matches('input[type="checkbox"], input[type="radio"]') ? (element.closest('label') ?? element) : element;
+                area.scrollIntoView({ block: 'center', inline: 'center' });
+                const rect = area.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                const hits = (px, py) => { const hit = document.elementFromPoint(px, py); return !!hit && area.contains(hit); };
+                const reach = (dx, dy) => { let step = 0; while (step < 30 && hits(x + dx * (step + 1), y + dy * (step + 1))) { step++; } return step; };
+                const size = hits(x, y) ? Math.min(reach(0, -1) + reach(0, 1) + 1, reach(-1, 0) + reach(1, 0) + 1) : 0;
+                if (size < 39) {
+                    const hook = [...element.attributes].map((attribute) => attribute.name).find((name) => name.startsWith('data-')) ?? '';
+                    const text = (element.innerText || element.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+                    offenders.push(`${element.tagName.toLowerCase()}[${hook}] "${text}" ${size}px`);
+                }
+            }
+            return offenders.slice(0, 15).join(' | ');
+        })()
+    JS);
+}

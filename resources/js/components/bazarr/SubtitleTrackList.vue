@@ -44,8 +44,10 @@ const emit = defineEmits<{
             class="rounded-lg border border-border p-3"
         >
             <div class="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                    <p class="text-sm font-medium">{{ track.display_name }}</p>
+                <div class="max-sm:min-w-0">
+                    <p class="text-sm font-medium max-sm:break-all">
+                        {{ track.display_name }}
+                    </p>
                     <p class="text-xs text-muted-foreground">
                         {{ track.language.toUpperCase() }} · {{ track.kind }}
                         <template v-if="track.forced"> · forced</template>

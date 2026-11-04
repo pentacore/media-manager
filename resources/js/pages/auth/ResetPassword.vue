@@ -54,7 +54,7 @@ const inputEmail = ref(props.email);
                     id="password"
                     name="password"
                     autocomplete="new-password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full touch:mt-0"
                     autofocus
                     placeholder="Password"
                 />
@@ -67,7 +67,7 @@ const inputEmail = ref(props.email);
                     id="password_confirmation"
                     name="password_confirmation"
                     autocomplete="new-password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full touch:mt-0"
                     placeholder="Confirm password"
                 />
                 <InputError :message="errors.password_confirmation" />

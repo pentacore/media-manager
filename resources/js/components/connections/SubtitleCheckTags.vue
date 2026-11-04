@@ -63,7 +63,7 @@ defineProps<{
             <label
                 v-for="tag in arrTags"
                 :key="tag.id"
-                class="flex items-center gap-2 text-sm"
+                class="flex items-center gap-2 text-sm touch:min-h-10"
             >
                 <input
                     type="checkbox"

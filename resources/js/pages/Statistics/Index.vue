@@ -129,7 +129,7 @@ function formatHours(seconds: number): string {
             />
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div class="rounded-xl border border-border bg-card p-5">
                 <h2 class="mb-4 text-sm font-semibold">Plays over time</h2>
                 <BarChart :data="watchBars" :height="160" />
@@ -162,7 +162,10 @@ function formatHours(seconds: number): string {
             </div>
         </div>
 
-        <div class="grid gap-6 max-sm:grid-cols-1 lg:grid-cols-2">
+        <div
+            class="grid grid-cols-1 gap-6 lg:grid-cols-2"
+            data-statistics-watch-grid
+        >
             <Deferred data="leaderboard">
                 <template #fallback>
                     <div class="h-56 animate-pulse rounded-xl bg-muted" />
@@ -194,7 +197,9 @@ function formatHours(seconds: number): string {
                                 :key="row.user"
                                 class="border-t border-border"
                             >
-                                <td class="py-2">{{ row.user }}</td>
+                                <td class="py-2 wrap-anywhere">
+                                    {{ row.user }}
+                                </td>
                                 <td class="py-2 text-right tabular-nums">
                                     {{ row.plays }}
                                 </td>

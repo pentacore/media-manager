@@ -660,7 +660,7 @@ const matchEntryContext = computed(() =>
                         type="button"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded px-2.5 text-xs font-medium transition-colors',
+                                'inline-flex h-6 items-center rounded px-2.5 text-xs font-medium transition-colors touch:h-10 touch:min-w-10',
                                 filters.source === 'anilist'
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:text-foreground',
@@ -674,7 +674,7 @@ const matchEntryContext = computed(() =>
                         type="button"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded px-2.5 text-xs font-medium transition-colors',
+                                'inline-flex h-6 items-center rounded px-2.5 text-xs font-medium transition-colors touch:h-10 touch:min-w-10',
                                 filters.source === 'jikan'
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:text-foreground',
@@ -694,7 +694,7 @@ const matchEntryContext = computed(() =>
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 touch:gap-3">
                 <!-- Requesting as -->
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-muted-foreground"
@@ -749,14 +749,14 @@ const matchEntryContext = computed(() =>
         </div>
 
         <!-- Filter chips -->
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 touch:gap-3">
             <button
                 v-for="format in FORMATS"
                 :key="`fmt-${format.value}`"
                 type="button"
                 :class="
                     cn(
-                        'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'touch-target inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
                         activeFormats.has(format.value)
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -775,7 +775,7 @@ const matchEntryContext = computed(() =>
                 type="button"
                 :class="
                     cn(
-                        'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'touch-target inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
                         activeAirStatuses.has(air.value)
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -792,7 +792,7 @@ const matchEntryContext = computed(() =>
                 type="button"
                 :class="
                     cn(
-                        'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+                        'touch-target inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
                         hideInLibrary
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -876,7 +876,9 @@ const matchEntryContext = computed(() =>
                         {{ metaLine(entry) }}
                     </p>
 
-                    <div class="mt-auto flex items-center gap-1.5 pt-1">
+                    <div
+                        class="mt-auto flex items-center gap-1.5 pt-1 touch:gap-3"
+                    >
                         <template
                             v-if="effectiveStatus(entry) === 'requestable'"
                         >
@@ -953,7 +955,7 @@ const matchEntryContext = computed(() =>
                                 v-if="libraryHref(entry)"
                                 :href="libraryHref(entry)!"
                                 data-anime-open
-                                class="inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-foreground hover:bg-bg-hover"
+                                class="touch-target inline-flex h-7 flex-1 items-center justify-center rounded-md border border-border bg-bg-elev text-xs text-foreground hover:bg-bg-hover"
                             >
                                 {{
                                     entry.library!.service === 'sonarr'
@@ -975,6 +977,7 @@ const matchEntryContext = computed(() =>
                                 size="sm"
                                 variant="outline"
                                 class="h-7 flex-1 text-xs"
+                                data-anime-find-match
                                 @click="openMatch(entry)"
                             >
                                 Find match
@@ -986,7 +989,7 @@ const matchEntryContext = computed(() =>
                             :href="externalLink(entry)!.href"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            class="touch-target inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             data-anime-external
                             :title="externalLink(entry)!.title"
                             :aria-label="externalLink(entry)!.title"

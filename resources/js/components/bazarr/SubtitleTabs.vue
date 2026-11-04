@@ -109,7 +109,7 @@ function selectConnection(event: Event): void {
                 Bazarr connection
                 <select
                     data-test="bazarr-connection"
-                    class="h-9 min-w-48 rounded-md border border-input bg-background px-3 text-sm"
+                    class="h-9 min-w-48 rounded-md border border-input bg-background px-3 text-sm max-sm:w-full max-sm:min-w-0 touch:h-10"
                     :value="selectedConnectionId ?? ''"
                     @change="selectConnection"
                 >
@@ -133,7 +133,7 @@ function selectConnection(event: Event): void {
                 v-for="tab in tabs"
                 :key="tab.name"
                 :href="tabUrl(tab)"
-                class="flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors"
+                class="flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors touch:h-10"
                 :class="
                     active === tab.name
                         ? 'border-primary text-foreground'
