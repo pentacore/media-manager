@@ -111,6 +111,20 @@ function settingsLabelUndescribedHintsScript(): string
 }
 
 /**
+ * Returns the texts of the elements the control at `$selector` names in its
+ * `aria-describedby`, joined by " | ".
+ */
+function settingsLabelDescriptionScript(string $selector): string
+{
+    $selectorJson = json_encode($selector, JSON_THROW_ON_ERROR);
+
+    return <<<JS_WRAP
+        (document.querySelector({$selectorJson}).getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+            .map((id) => document.getElementById(id)?.textContent.trim() ?? '').join(' | ')
+    JS_WRAP;
+}
+
+/**
  * Seeds the admin settings pages so every row renders: Jev as the second
  * opinion engine with a configured classifier (the threshold input shows), and
  * two allowlisted events, one with a second-opinion override, so the override
@@ -332,3 +346,24 @@ test('the ai models rows and failover are named control groups', function (): vo
         ->assertScript(settingsLabelUndescribedHintsScript(), '[]');
 });
 
+test('a settings checkbox is named by its row label, its inline text describes it, and a click on that text toggles it once', function (string $routeName, string $id, string $label, string $text, string $hint): void {
+    settingsLabelSeedAdminPages();
+    $this->actingAs(User::factory()->admin()->create());
+    $checkbox = sprintf('#%s', $id);
+
+    $webpage = visit(route($routeName, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertCount(sprintf('internal:role=checkbox[name="%s"s]', $label), 1)
+        ->assertScript(sprintf('document.getElementById("%s").labels.length', $id), 2)
+        ->assertScript(settingsLabelDescriptionScript($checkbox), sprintf('%s | %s', $text, $hint));
+
+    $wasChecked = $webpage->script(sprintf('document.getElementById("%s").checked', $id));
+    $webpage->click(sprintf('#%s-description', $id))
+        ->assertScript(sprintf('document.getElementById("%s").checked', $id), ! $wasChecked);
+})->with([
+    'relative time' => ['settings.preferences.edit', 'preferences-relative-time', 'Relative time', 'Show relative time for recent entries', "Show '8h ago' for recent entries instead of full timestamps."],
+    'whisparr posters' => ['settings.preferences.edit', 'preferences-whisparr-posters', 'Whisparr posters', 'Blur posters on the Whisparr pages', 'Blur Whisparr posters until you hover, focus or tap them.'],
+    'automatic selection' => ['admin.media-replacement.index', 'media-replacement-automatic-selection', 'Automatic selection', 'Enable automatic candidate selection', 'When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution.'],
+    'subtitle check' => ['admin.media-replacement.index', 'media-replacement-subtitle-check', 'Automatic subtitle check', 'Check tagged imports for missing subtitles', "Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."],
+]);

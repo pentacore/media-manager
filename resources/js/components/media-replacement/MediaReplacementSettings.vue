@@ -129,11 +129,14 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
                     id="media-replacement-automatic-selection"
-                    aria-describedby="media-replacement-automatic-selection-hint"
+                    aria-labelledby="media-replacement-automatic-selection-label"
+                    aria-describedby="media-replacement-automatic-selection-description media-replacement-automatic-selection-hint"
                     v-model="state.automatic_selection_enabled"
                     type="checkbox"
                 />
-                Enable automatic candidate selection
+                <span id="media-replacement-automatic-selection-description"
+                    >Enable automatic candidate selection</span
+                >
             </label>
         </SettingsRow>
 
@@ -171,11 +174,14 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
                     id="media-replacement-subtitle-check"
-                    aria-describedby="media-replacement-subtitle-check-hint"
+                    aria-labelledby="media-replacement-subtitle-check-label"
+                    aria-describedby="media-replacement-subtitle-check-description media-replacement-subtitle-check-hint"
                     v-model="state.subtitle_check.enabled"
                     type="checkbox"
                 />
-                Check tagged imports for missing subtitles
+                <span id="media-replacement-subtitle-check-description"
+                    >Check tagged imports for missing subtitles</span
+                >
             </label>
         </SettingsRow>
 

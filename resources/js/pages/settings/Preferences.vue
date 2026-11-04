@@ -359,13 +359,16 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         >
                             <input
                                 id="preferences-relative-time"
-                                aria-describedby="preferences-relative-time-hint"
+                                aria-labelledby="preferences-relative-time-label"
+                                aria-describedby="preferences-relative-time-description preferences-relative-time-hint"
                                 type="checkbox"
                                 name="show_relative_time"
                                 :checked="props.preferences.show_relative_time"
                                 class="size-4 rounded border-border accent-accent"
                             />
-                            Show relative time for recent entries
+                            <span id="preferences-relative-time-description"
+                                >Show relative time for recent entries</span
+                            >
                         </label>
                         <InputError
                             :message="errors.show_relative_time"
@@ -394,7 +397,8 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             >
                                 <input
                                     id="preferences-whisparr-posters"
-                                    aria-describedby="preferences-whisparr-posters-hint"
+                                    aria-labelledby="preferences-whisparr-posters-label"
+                                    aria-describedby="preferences-whisparr-posters-description preferences-whisparr-posters-hint"
                                     type="checkbox"
                                     name="whisparr_blur_posters"
                                     :checked="
@@ -403,7 +407,10 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                                     class="size-4 rounded border-border accent-accent"
                                     data-whisparr-blur-toggle
                                 />
-                                Blur posters on the Whisparr pages
+                                <span
+                                    id="preferences-whisparr-posters-description"
+                                    >Blur posters on the Whisparr pages</span
+                                >
                             </label>
                             <InputError
                                 :message="errors.whisparr_blur_posters"
