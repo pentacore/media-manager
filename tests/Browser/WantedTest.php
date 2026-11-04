@@ -51,6 +51,24 @@ test("paging one section reloads only that section's list, and Prev/Next disable
     expect($radarrWantedCalls)->toBe(1);
 });
 
+test('only a title that links to the library takes a 40 px line on a phone', function (): void {
+    ServiceConnection::query()->where('type', 'sonarr')->update(['url' => 'http://sonarr-unmapped.local:8989']);
+    Http::fake([
+        'sonarr-unmapped.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 1, 'records' => [
+            ['id' => 71, 'seasonNumber' => 1, 'episodeNumber' => 3, 'title' => 'Example Unmapped Episode', 'airDateUtc' => '2026-09-11T02:00:00Z', 'series' => ['title' => 'Example Unmapped Series']],
+        ]]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.wanted.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->assertSeeIn('[data-wanted-row="sonarr-71"] [data-wanted-title]', 'Example Unmapped Series')
+        ->assertSeeIn('[data-wanted-row="radarr-10"] [data-wanted-title]', 'Dune')
+        ->assertScript('document.querySelector(\'[data-wanted-row="sonarr-71"] [data-wanted-title]\').tagName', 'SPAN')
+        ->assertScript('document.querySelector(\'[data-wanted-row="radarr-10"] [data-wanted-title]\').tagName', 'A')
+        ->assertScript('getComputedStyle(document.querySelector(\'[data-wanted-row="radarr-10"] [data-wanted-title]\')).lineHeight', '40px')
+        ->assertScript('getComputedStyle(document.querySelector(\'[data-wanted-row="sonarr-71"] [data-wanted-title]\')).lineHeight !== "40px"', true);
+});
+
 test('the Search-all button hides for a section that failed to load', function (): void {
     ServiceConnection::query()->where('type', 'radarr')->update(['url' => 'http://radarr-down.local:7878']);
     Http::fake(['radarr-down.local:7878/*' => Http::response([], 503)]);

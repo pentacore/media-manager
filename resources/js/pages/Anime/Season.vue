@@ -977,6 +977,7 @@ const matchEntryContext = computed(() =>
                                 size="sm"
                                 variant="outline"
                                 class="h-7 flex-1 text-xs"
+                                data-anime-find-match
                                 @click="openMatch(entry)"
                             >
                                 Find match

@@ -293,7 +293,7 @@ function decisionVariant(status: string): PillVariant {
             >
                 Dispatched actions
             </div>
-            <div class="overflow-x-auto">
+            <div class="max-sm:overflow-x-auto">
                 <table class="w-full border-collapse text-[13px]">
                     <tbody>
                         <tr

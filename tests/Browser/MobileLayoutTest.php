@@ -1084,8 +1084,8 @@ test('a page reached through its flow fits a phone screen with 40 px targets', f
 
         $webpage = visit(route('login', absolute: false))->on()->mobile()->assertNoSmoke();
         $webpage->script(appHydratedScript());
-        $webpage->fill('email', $user->email)
-            ->fill('password', 'password')
+        $webpage->fill('[data-login-email]', $user->email)
+            ->fill('[data-login-password]', 'password')
             ->click('[data-test="login-button"]');
     }
 
@@ -1335,7 +1335,7 @@ test('the seasonal anime page and its open match dialog fit a phone screen', fun
     mobileLayoutSettle($webpage, 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request]:not([disabled]))');
     $webpage->assertScript(phoneSmallTargetsScript(), '');
 
-    $webpage->click('Find match');
+    $webpage->click('[data-anime-find-match]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-anime-match-candidate]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
     mobileLayoutSettle($webpage);
 

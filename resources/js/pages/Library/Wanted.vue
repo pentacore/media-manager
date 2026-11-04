@@ -300,7 +300,11 @@ function tabClass(active: boolean): string {
                             <component
                                 :is="row.library_url ? Link : 'span'"
                                 :href="row.library_url ?? undefined"
-                                class="block truncate text-[13px] font-medium touch:leading-10"
+                                :class="[
+                                    'block truncate text-[13px] font-medium',
+                                    row.library_url && 'touch:leading-10',
+                                ]"
+                                data-wanted-title
                             >
                                 {{ row.title
                                 }}<template v-if="row.year">

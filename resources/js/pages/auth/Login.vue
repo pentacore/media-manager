@@ -189,6 +189,7 @@ const showLocalForm = ref(false);
                                     autofocus
                                     autocomplete="email"
                                     placeholder="email@example.com"
+                                    data-login-email
                                 />
                                 <InputError :message="errors.email" />
                             </div>
@@ -208,6 +209,7 @@ const showLocalForm = ref(false);
                                     required
                                     autocomplete="current-password"
                                     placeholder="Password"
+                                    data-login-password
                                 />
                                 <InputError :message="errors.password" />
                             </div>
@@ -254,6 +256,7 @@ const showLocalForm = ref(false);
                             autofocus
                             autocomplete="email"
                             placeholder="email@example.com"
+                            data-login-email
                         />
                         <InputError :message="errors.email" />
                     </div>
@@ -273,6 +276,7 @@ const showLocalForm = ref(false);
                             required
                             autocomplete="current-password"
                             placeholder="Password"
+                            data-login-password
                         />
                         <InputError :message="errors.password" />
                     </div>
