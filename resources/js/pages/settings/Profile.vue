@@ -99,6 +99,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="name"
+                            aria-describedby="name-hint"
                             class="h-8 max-w-[360px] text-sm"
                             name="name"
                             :default-value="user.name"
@@ -125,6 +126,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="email"
+                            aria-describedby="email-hint"
                             type="email"
                             class="h-8 max-w-[360px] text-sm"
                             name="email"
@@ -243,6 +245,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="emby-username"
+                            aria-describedby="emby-username-hint"
                             class="h-8 max-w-[360px] text-sm"
                             name="emby_username"
                             required
@@ -268,6 +271,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <PasswordInput
                             id="emby-password"
+                            aria-describedby="emby-password-hint"
                             name="password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"

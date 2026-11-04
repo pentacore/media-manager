@@ -80,6 +80,7 @@ async function clear(): Promise<void> {
                 <div class="min-w-0 space-y-2">
                     <Input
                         id="watcher-push-url"
+                        aria-describedby="watcher-push-url-hint"
                         name="push_url"
                         type="url"
                         autocomplete="off"

@@ -169,6 +169,7 @@ function submit(): void {
                     <div>
                         <Toggle
                             id="decision-agent-enabled"
+                            aria-describedby="decision-agent-enabled-hint"
                             aria-labelledby="decision-agent-enabled-label"
                             data-decision-agent-enabled
                             :model-value="form.enabled"
@@ -199,6 +200,7 @@ function submit(): void {
                         id="decision-agent-event-allowlist"
                         role="group"
                         aria-labelledby="decision-agent-event-allowlist-label"
+                        aria-describedby="decision-agent-event-allowlist-label-hint"
                         class="flex flex-col gap-4"
                     >
                         <div
@@ -260,6 +262,7 @@ function submit(): void {
                     <div>
                         <Toggle
                             id="decision-agent-manual-import"
+                            aria-describedby="decision-agent-manual-import-hint"
                             aria-labelledby="decision-agent-manual-import-label"
                             :model-value="form.allow_manual_import"
                             :label="
@@ -293,6 +296,7 @@ function submit(): void {
                         id="decision-agent-notify"
                         role="group"
                         aria-labelledby="decision-agent-notify-label"
+                        aria-describedby="decision-agent-notify-label-hint"
                         class="flex flex-col gap-2.5"
                     >
                         <Toggle
@@ -336,6 +340,7 @@ function submit(): void {
                     <div>
                         <Input
                             id="decision-agent-max-actions"
+                            aria-describedby="decision-agent-max-actions-hint"
                             v-model.number="form.max_actions_per_run"
                             type="number"
                             min="1"
@@ -366,6 +371,7 @@ function submit(): void {
                         id="decision-agent-second-opinion"
                         role="group"
                         aria-labelledby="decision-agent-second-opinion-label"
+                        aria-describedby="decision-agent-second-opinion-label-hint"
                         class="flex flex-col gap-2.5"
                     >
                         <Select v-model="form.second_opinion_engine">

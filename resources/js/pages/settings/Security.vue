@@ -89,6 +89,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="current_password"
+                            aria-describedby="current_password-hint"
                             name="current_password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"
@@ -117,6 +118,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="password"
+                            aria-describedby="password-hint"
                             name="password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"
@@ -142,6 +144,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="password_confirmation"
+                            aria-describedby="password_confirmation-hint"
                             name="password_confirmation"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"

@@ -327,6 +327,7 @@ function submit(): void {
                 <div
                     role="group"
                     aria-labelledby="ai-models-failover-label"
+                    aria-describedby="ai-models-failover-label-hint"
                     class="flex min-w-0 flex-col gap-2"
                 >
                     <Select

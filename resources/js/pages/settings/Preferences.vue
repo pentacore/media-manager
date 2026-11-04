@@ -158,6 +158,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         >
                             <SelectTrigger
                                 id="preferences-time-format"
+                                aria-describedby="preferences-time-format-hint"
                                 aria-labelledby="preferences-time-format-label preferences-time-format"
                                 class="h-8 text-sm"
                             >
@@ -200,6 +201,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         >
                             <SelectTrigger
                                 id="preferences-date-format"
+                                aria-describedby="preferences-date-format-hint"
                                 aria-labelledby="preferences-date-format-label preferences-date-format"
                                 class="h-8 text-sm"
                             >
@@ -239,6 +241,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         id="preferences-timezone"
                         role="group"
                         aria-labelledby="preferences-timezone-label"
+                        aria-describedby="preferences-timezone-label-hint"
                         class="flex max-w-[360px] flex-col gap-2"
                     >
                         <Input
@@ -314,6 +317,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         >
                             <SelectTrigger
                                 id="preferences-first-day-of-week"
+                                aria-describedby="preferences-first-day-of-week-hint"
                                 aria-labelledby="preferences-first-day-of-week-label preferences-first-day-of-week"
                                 class="h-8 text-sm"
                             >
@@ -355,6 +359,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         >
                             <input
                                 id="preferences-relative-time"
+                                aria-describedby="preferences-relative-time-hint"
                                 type="checkbox"
                                 name="show_relative_time"
                                 :checked="props.preferences.show_relative_time"
@@ -389,6 +394,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                             >
                                 <input
                                     id="preferences-whisparr-posters"
+                                    aria-describedby="preferences-whisparr-posters-hint"
                                     type="checkbox"
                                     name="whisparr_blur_posters"
                                     :checked="

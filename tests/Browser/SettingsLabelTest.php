@@ -87,6 +87,30 @@ function settingsLabelUnnamedGroupControlsScript(): string
 }
 
 /**
+ * Returns the text of every hint of a linked `Field` (one whose label has an
+ * id) that no control or control group describes with it: its id must appear
+ * in the `aria-describedby` of an input, select, textarea, button, switch,
+ * combobox or group. Read-only fields keep their hints undescribed.
+ */
+function settingsLabelUndescribedHintsScript(): string
+{
+    return <<<'JS_WRAP'
+        (() => {
+            const describable = 'input, select, textarea, button, [role="switch"], [role="combobox"], [role="group"]';
+            return JSON.stringify([...document.querySelectorAll('main [data-field-hint]')].flatMap((hint) => {
+                if (hint.parentElement.firstElementChild.id === '') {
+                    return [];
+                }
+                const isDescribed = hint.id !== '' && document.getElementById(hint.id) === hint
+                    && [...document.querySelectorAll('[aria-describedby]')].some((element) => element.matches(describable)
+                        && element.getAttribute('aria-describedby').split(/\s+/).includes(hint.id));
+                return isDescribed ? [] : [hint.textContent.trim()];
+            }));
+        })()
+    JS_WRAP;
+}
+
+/**
  * Seeds the admin settings pages so every row renders: Jev as the second
  * opinion engine with a configured classifier (the threshold input shows), and
  * two allowlisted events, one with a second-opinion override, so the override
@@ -174,8 +198,10 @@ test('every editable settings row on the member settings pages is named by its l
     $webpage->script(appHydratedScript());
 
     $webpage->assertPresent('[data-settings-row]')
+        ->assertPresent('main [data-field-hint]')
         ->assertScript(settingsLabelUnlabelledRowsScript(), '[]')
-        ->assertScript(settingsLabelForNonLabelableScript(), '[]');
+        ->assertScript(settingsLabelForNonLabelableScript(), '[]')
+        ->assertScript(settingsLabelUndescribedHintsScript(), '[]');
 })->with([
     'profile' => ['profile.edit'],
     'security' => ['security.edit'],
@@ -215,7 +241,8 @@ test('every editable settings row on the admin settings pages is named by its la
     $webpage->assertPresent('[data-settings-row]')
         ->assertScript(settingsLabelUnlabelledRowsScript(), '[]')
         ->assertScript(settingsLabelForNonLabelableScript(), '[]')
-        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]')
+        ->assertScript(settingsLabelUndescribedHintsScript(), '[]');
 })->with([
     'ai settings' => ['admin.ai-settings.index'],
     'decision agent' => ['admin.decision-agent.index'],
@@ -277,7 +304,8 @@ test('the chat template editor names its toggles and its preset and tool group c
         ->assertScript(settingsLabelNameKeepsValueScript('#template-preset-model', 'Model'), true)
         ->assertScript('document.querySelectorAll("main [role=\"group\"][aria-labelledby]").length', 2)
         ->assertScript(settingsLabelForNonLabelableScript(), '[]')
-        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]')
+        ->assertScript(settingsLabelUndescribedHintsScript(), '[]');
 });
 
 test('the ai models rows and failover are named control groups', function (): void {
@@ -300,5 +328,7 @@ test('the ai models rows and failover are named control groups', function (): vo
         ->assertScript('document.querySelector("[data-failover-provider]").getAttribute("aria-labelledby")', 'ai-models-failover-label ai-models-failover-provider')
         ->assertScript('document.querySelector("[data-task=\"chat\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-chat-label')
         ->assertScript(settingsLabelForNonLabelableScript(), '[]')
-        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]')
+        ->assertScript(settingsLabelUndescribedHintsScript(), '[]');
 });
+

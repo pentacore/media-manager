@@ -129,6 +129,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
                     id="media-replacement-automatic-selection"
+                    aria-describedby="media-replacement-automatic-selection-hint"
                     v-model="state.automatic_selection_enabled"
                     type="checkbox"
                 />
@@ -148,6 +149,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </template>
             <Input
                 id="media-replacement-confidence-threshold"
+                aria-describedby="media-replacement-confidence-threshold-hint"
                 v-model.number="state.automatic_selection_threshold"
                 type="number"
                 min="0"
@@ -169,6 +171,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
                     id="media-replacement-subtitle-check"
+                    aria-describedby="media-replacement-subtitle-check-hint"
                     v-model="state.subtitle_check.enabled"
                     type="checkbox"
                 />
@@ -188,6 +191,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </template>
             <Input
                 id="media-replacement-attempts-per-item"
+                aria-describedby="media-replacement-attempts-per-item-hint"
                 v-model.number="state.subtitle_check.max_attempts_per_target"
                 type="number"
                 min="1"
@@ -208,6 +212,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </template>
             <Input
                 id="media-replacement-cooldown-hours"
+                aria-describedby="media-replacement-cooldown-hours-hint"
                 v-model.number="state.subtitle_check.cooldown_hours"
                 type="number"
                 min="1"
@@ -228,6 +233,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </template>
             <Input
                 id="media-replacement-languages"
+                aria-describedby="media-replacement-languages-hint"
                 :model-value="languagesToText(state.global_languages)"
                 type="text"
                 placeholder="English, Swedish"
@@ -249,6 +255,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <Select v-model="state.season_pack_policy">
                 <SelectTrigger
                     id="media-replacement-season-pack-policy"
+                    aria-describedby="media-replacement-season-pack-policy-hint"
                     aria-labelledby="media-replacement-season-pack-policy-label media-replacement-season-pack-policy"
                     class="h-8 max-w-[320px] text-sm"
                 >

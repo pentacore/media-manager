@@ -241,6 +241,7 @@ const budgetState = computed<{
                         >
                             <SelectTrigger
                                 id="ai-settings-mode"
+                                aria-describedby="ai-settings-mode-hint"
                                 aria-labelledby="ai-settings-mode-label ai-settings-mode"
                                 class="h-8 w-48 text-sm"
                             >
@@ -277,6 +278,7 @@ const budgetState = computed<{
                         <div class="relative max-w-[200px]">
                             <Input
                                 id="chat_timeout"
+                                aria-describedby="chat_timeout-hint"
                                 name="chat_timeout"
                                 type="number"
                                 step="1"
@@ -349,6 +351,7 @@ const budgetState = computed<{
                             >
                                 <SelectTrigger
                                     id="ai-settings-openrouter-sort"
+                                    aria-describedby="ai-settings-openrouter-sort-hint"
                                     aria-labelledby="ai-settings-openrouter-sort-label ai-settings-openrouter-sort"
                                     class="h-8 w-56 text-sm"
                                 >
@@ -387,6 +390,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-openrouter-data-collection"
+                                aria-describedby="ai-settings-openrouter-data-collection-hint"
                                 aria-labelledby="ai-settings-openrouter-data-collection-label"
                                 v-model="openRouterDenyDataCollection"
                                 data-openrouter-deny-data-collection
@@ -419,6 +423,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-openrouter-allow-fallbacks"
+                                aria-describedby="ai-settings-openrouter-allow-fallbacks-hint"
                                 aria-labelledby="ai-settings-openrouter-allow-fallbacks-label"
                                 v-model="openRouterAllowFallbacks"
                                 data-openrouter-allow-fallbacks
@@ -449,6 +454,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="openrouter_order"
+                                aria-describedby="openrouter_order-hint"
                                 name="openrouter_order"
                                 type="text"
                                 class="h-8 max-w-[420px] text-sm"
@@ -475,6 +481,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="openrouter_ignore"
+                                aria-describedby="openrouter_ignore-hint"
                                 name="openrouter_ignore"
                                 type="text"
                                 class="h-8 max-w-[420px] text-sm"
@@ -529,6 +536,7 @@ const budgetState = computed<{
                                 >
                                     <SelectTrigger
                                         id="ai-settings-classification-provider"
+                                        aria-describedby="ai-settings-classification-provider-hint"
                                         aria-labelledby="ai-settings-classification-provider-label ai-settings-classification-provider"
                                         class="h-8 w-48 text-sm"
                                     >
@@ -578,6 +586,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="classification_model"
+                                aria-describedby="classification_model-hint"
                                 name="classification_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -605,6 +614,7 @@ const budgetState = computed<{
                             id="ai-settings-decision-gate"
                             role="group"
                             aria-labelledby="ai-settings-decision-gate-label"
+                            aria-describedby="ai-settings-decision-gate-label-hint"
                             class="flex flex-col gap-2"
                         >
                             <div>
@@ -666,6 +676,7 @@ const budgetState = computed<{
                             id="ai-settings-subtitle-triage"
                             role="group"
                             aria-labelledby="ai-settings-subtitle-triage-label"
+                            aria-describedby="ai-settings-subtitle-triage-label-hint"
                             class="flex flex-col gap-2"
                         >
                             <div>
@@ -726,6 +737,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-chat-routing"
+                                aria-describedby="ai-settings-chat-routing-hint"
                                 aria-labelledby="ai-settings-chat-routing-label"
                                 v-model="chatRoutingEnabled"
                                 data-chat-routing-toggle
@@ -758,6 +770,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-decision-tool-scoping"
+                                aria-describedby="ai-settings-decision-tool-scoping-hint"
                                 aria-labelledby="ai-settings-decision-tool-scoping-label"
                                 v-model="decisionToolScopingEnabled"
                                 data-decision-tool-scoping-toggle
@@ -793,6 +806,7 @@ const budgetState = computed<{
                             id="ai-settings-stuck-import"
                             role="group"
                             aria-labelledby="ai-settings-stuck-import-label"
+                            aria-describedby="ai-settings-stuck-import-label-hint"
                             class="flex flex-col gap-2"
                         >
                             <div>
@@ -855,6 +869,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="classification_audit_sample_rate"
+                                aria-describedby="classification_audit_sample_rate-hint"
                                 name="classification_audit_sample_rate"
                                 type="number"
                                 step="0.01"
@@ -912,6 +927,7 @@ const budgetState = computed<{
                                 >
                                     <SelectTrigger
                                         id="reranking_provider"
+                                        aria-describedby="reranking_provider-hint"
                                         aria-labelledby="reranking_provider-label reranking_provider"
                                         class="h-8 w-48 text-sm"
                                     >
@@ -960,6 +976,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="reranking_model"
+                                aria-describedby="reranking_model-hint"
                                 name="reranking_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -1052,6 +1069,7 @@ const budgetState = computed<{
                             >
                                 <SelectTrigger
                                     id="ai-settings-embeddings-provider"
+                                    aria-describedby="ai-settings-embeddings-provider-hint"
                                     aria-labelledby="ai-settings-embeddings-provider-label ai-settings-embeddings-provider"
                                     class="h-8 w-48 text-sm"
                                 >
@@ -1089,6 +1107,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="embeddings_model"
+                                aria-describedby="embeddings_model-hint"
                                 name="embeddings_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -1176,6 +1195,7 @@ const budgetState = computed<{
                             </span>
                             <Input
                                 id="soft_budget_usd"
+                                aria-describedby="soft_budget_usd-hint"
                                 name="soft_budget_usd"
                                 type="number"
                                 step="0.01"
@@ -1211,6 +1231,7 @@ const budgetState = computed<{
                             </span>
                             <Input
                                 id="hard_budget_usd"
+                                aria-describedby="hard_budget_usd-hint"
                                 name="hard_budget_usd"
                                 type="number"
                                 step="0.01"
@@ -1240,6 +1261,7 @@ const budgetState = computed<{
                     <div>
                         <Toggle
                             id="ai-settings-rate-limits"
+                            aria-describedby="ai-settings-rate-limits-hint"
                             aria-labelledby="ai-settings-rate-limits-label"
                             v-model="rateLimitsEnforced"
                             data-rate-limits-toggle
@@ -1333,6 +1355,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-models-dev-pricing"
+                                aria-describedby="ai-settings-models-dev-pricing-hint"
                                 aria-labelledby="ai-settings-models-dev-pricing-label"
                                 v-model="modelsDevPricingEnabled"
                                 data-models-dev-toggle
@@ -1367,6 +1390,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-litellm-pricing"
+                                aria-describedby="ai-settings-litellm-pricing-hint"
                                 aria-labelledby="ai-settings-litellm-pricing-label"
                                 v-model="liteLlmPricingEnabled"
                                 data-litellm-pricing-toggle
@@ -1401,6 +1425,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-openrouter-pricing"
+                                aria-describedby="ai-settings-openrouter-pricing-hint"
                                 aria-labelledby="ai-settings-openrouter-pricing-label"
                                 v-model="openRouterPricingEnabled"
                                 data-openrouter-pricing-toggle
@@ -1435,6 +1460,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 id="ai-settings-xai-pricing"
+                                aria-describedby="ai-settings-xai-pricing-hint"
                                 aria-labelledby="ai-settings-xai-pricing-label"
                                 v-model="xaiPricingEnabled"
                                 data-xai-pricing-toggle
@@ -1477,6 +1503,7 @@ const budgetState = computed<{
                                 id="ai-settings-ignored-providers"
                                 role="group"
                                 aria-labelledby="ai-settings-ignored-providers-label"
+                                aria-describedby="ai-settings-ignored-providers-label-hint"
                                 class="flex flex-col gap-2"
                             >
                                 <label
@@ -1524,6 +1551,7 @@ const budgetState = computed<{
                                 id="ai-settings-auto-create-providers"
                                 role="group"
                                 aria-labelledby="ai-settings-auto-create-providers-label"
+                                aria-describedby="ai-settings-auto-create-providers-label-hint"
                                 class="flex flex-col gap-2"
                             >
                                 <label

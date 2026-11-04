@@ -355,6 +355,7 @@ function save(): void {
             >
                 <Toggle
                     id="template-auto-send"
+                    aria-describedby="template-auto-send-hint"
                     v-model="form.auto_send"
                     aria-labelledby="template-auto-send-label"
                 />
@@ -367,6 +368,7 @@ function save(): void {
             >
                 <Toggle
                     id="template-pinned"
+                    aria-describedby="template-pinned-hint"
                     v-model="form.pinned"
                     aria-labelledby="template-pinned-label"
                 />
@@ -383,6 +385,7 @@ function save(): void {
             <div
                 role="group"
                 aria-labelledby="template-preset-label"
+                aria-describedby="template-preset-label-hint"
                 class="grid gap-2 sm:max-w-md"
             >
                 <ModelSelect
@@ -417,6 +420,7 @@ function save(): void {
             <div
                 role="group"
                 aria-labelledby="template-tool-groups-label"
+                aria-describedby="template-tool-groups-label-hint"
                 class="grid gap-2 sm:max-w-md"
             >
                 <label

@@ -6,6 +6,9 @@
  * passes `labelId` instead: the label stays a `<div>` with that id (a
  * `<label for>` may only point at a labelable element), the hint gets
  * `<labelId>-hint`, and the control group points `aria-labelledby` at it.
+ * The control sits outside this component (in `SettingsRow`'s default slot),
+ * so each call site points the control's (or group's) `aria-describedby` at
+ * the hint id.
  */
 defineProps<{
     label: string;
@@ -45,6 +48,7 @@ defineProps<{
                       : undefined
             "
             class="text-[12px] leading-snug text-muted-foreground"
+            data-field-hint
         >
             {{ hint }}
         </div>
