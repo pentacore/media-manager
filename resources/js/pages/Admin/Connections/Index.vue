@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/composables/useConfirm';
 import { useServiceHealth } from '@/composables/useServiceHealth';
+import { rowMenuFocusKeeper } from '@/lib/bulk';
+import { focusedMenuTrigger, returnFocusTo } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder';
 
@@ -145,11 +147,13 @@ function toggleConnection(connection: Connection) {
 const { confirm } = useConfirm();
 
 async function deleteConnection(connection: Connection): Promise<void> {
+    const trigger = focusedMenuTrigger();
     const confirmed = await confirm({
         title: `Delete ${connection.name}?`,
         description: 'This cannot be undone.',
         confirmLabel: 'Delete',
         destructive: true,
+        onCloseAutoFocus: (event) => returnFocusTo(event, trigger),
     });
 
     if (!confirmed) {
@@ -158,6 +162,7 @@ async function deleteConnection(connection: Connection): Promise<void> {
 
     router.visit(ServiceConnectionController.destroy.url(connection.id), {
         method: 'delete',
+        onFinish: rowMenuFocusKeeper(trigger, '[data-connection-menu]'),
     });
 }
 

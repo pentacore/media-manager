@@ -50,6 +50,61 @@ test('a connection delete asks in the app dialog; Cancel keeps it and Delete rem
     expect(ServiceConnection::query()->whereKey($serviceConnection->id)->exists())->toBeFalse();
 });
 
+/**
+ * Waits until the element matching $selector has focus (a dialog's close
+ * focus runs as it unmounts, a visit's after it renders), then reports
+ * whether it does.
+ */
+function confirmDialogFocusScript(string $selector): string
+{
+    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
+test("Cancel on a connection row menu's delete returns focus to that row's menu", function (): void {
+    $serviceConnection = confirmDialogConnection();
+    $this->actingAs(User::factory()->admin()->create());
+    $menu = sprintf('[data-connection-row="%d"] [data-connection-menu]', $serviceConnection->id);
+
+    $webpage = visit(route('admin.connections.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click($menu)
+        ->click('[data-connection-delete]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Delete Primary Sonarr?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(confirmDialogFocusScript($menu), true);
+
+    expect(ServiceConnection::query()->whereKey($serviceConnection->id)->exists())->toBeTrue();
+});
+
+test("a confirmed connection delete hands focus to the next row's menu, and the last one's to the heading", function (): void {
+    $primary = confirmDialogConnection();
+    $second = ServiceConnection::factory()->radarr()->create(['name' => 'Second Radarr', 'url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.connections.index', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click(sprintf('[data-connection-row="%d"] [data-connection-menu]', $primary->id))
+        ->click('[data-connection-delete]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Connection deleted.');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('!document.querySelector("[data-connection-row=\"%d\"]")', $primary->id)));
+
+    $webpage->assertScript(confirmDialogFocusScript(sprintf('[data-connection-row="%d"] [data-connection-menu]', $second->id)), true);
+
+    $webpage->click(sprintf('[data-connection-row="%d"] [data-connection-menu]', $second->id))
+        ->click('[data-connection-delete]')
+        ->click('[data-confirm-accept]');
+    $webpage->script(confirmDialogWaitUntilScript(sprintf('!document.querySelector("[data-connection-row=\"%d\"]")', $second->id)));
+
+    $webpage->assertScript(confirmDialogFocusScript('h1'), true);
+
+    expect(ServiceConnection::query()->count())->toBe(0);
+});
+
 test('Escape closes the confirm as a cancel', function (): void {
     $serviceConnection = confirmDialogConnection();
     $this->actingAs(User::factory()->admin()->create());

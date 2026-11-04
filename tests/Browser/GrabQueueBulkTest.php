@@ -442,3 +442,96 @@ test('a confirmed bulk remove hands focus to select all, not the page body', fun
     $webpage->script('new Promise((resolve) => setTimeout(() => requestAnimationFrame(() => setTimeout(resolve, 0)), 0))');
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });
+
+/**
+ * Waits until the element matching $selector has focus (a dialog's close
+ * focus runs as it unmounts, a reload's after it renders), then reports
+ * whether it does.
+ */
+function grabQueueFocusScript(string $selector): string
+{
+    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
+test("Cancel on a row menu's question or manual import returns focus to that row's menu", function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+    $menu = '[data-queue-row="sonarr-41"] [data-queue-row-menu]';
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click($menu)
+        ->click('[data-queue-remove="remove"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'from the queue?')
+        ->click('[data-confirm-cancel]');
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(grabQueueFocusScript($menu), true);
+
+    $webpage->click($menu)
+        ->click('[data-queue-manual-import]')
+        ->assertSeeIn('[data-manual-import-candidate]', 'Severance · S01E01');
+    $webpage->keys('[data-manual-import-submit]', 'Escape');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[role=\"dialog\"]")'));
+    $webpage->assertScript(grabQueueFocusScript($menu), true);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test("a confirmed force grab keeps focus on that row's menu", function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+    $menu = '[data-queue-row="sonarr-41"] [data-queue-row-menu]';
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click($menu)
+        ->click('[data-queue-grab]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Grab triggered.');
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(grabQueueFocusScript($menu), true);
+});
+
+test("a confirmed row removal hands focus to the next row's menu", function (): void {
+    $state = new class
+    {
+        public bool $removed = false;
+    };
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => function (Request $request) use ($state) {
+            if ($request->method() === 'DELETE') {
+                $state->removed = true;
+
+                return Http::response('', 200);
+            }
+
+            return Http::response(['records' => $state->removed
+                ? [grabQueueBrowserRecord(42, 'Andor')]
+                : [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]);
+        },
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+    $webpage->script(appHydratedScript());
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="remove"]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Removed from queue.');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-queue-row=\"sonarr-41\"]")'));
+
+    $webpage->assertMissing('[data-queue-row="sonarr-41"]')
+        ->assertScript(grabQueueFocusScript('[data-queue-row="sonarr-42"] [data-queue-row-menu]'), true);
+});
