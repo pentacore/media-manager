@@ -443,18 +443,6 @@ test('a confirmed bulk remove hands focus to select all, not the page body', fun
     $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null");
 });
 
-/**
- * Waits until the element matching $selector has focus (a dialog's close
- * focus runs as it unmounts, a reload's after it renders), then reports
- * whether it does.
- */
-function grabQueueFocusScript(string $selector): string
-{
-    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
-
-    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
-}
-
 test("Cancel on a row menu's question or manual import returns focus to that row's menu", function (): void {
     fakeGrabQueueBrowser();
     $this->actingAs(User::factory()->admin()->create());
@@ -470,14 +458,14 @@ test("Cancel on a row menu's question or manual import returns focus to that row
         ->assertSeeIn('[data-confirm-dialog]', 'from the queue?')
         ->click('[data-confirm-cancel]');
     $webpage->script(confirmDialogGoneScript());
-    $webpage->assertScript(grabQueueFocusScript($menu), true);
+    $webpage->assertScript(focusLandsOnScript($menu), true);
 
     $webpage->click($menu)
         ->click('[data-queue-manual-import]')
         ->assertSeeIn('[data-manual-import-candidate]', 'Severance · S01E01');
     $webpage->keys('[data-manual-import-submit]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[role=\"dialog\"]")'));
-    $webpage->assertScript(grabQueueFocusScript($menu), true);
+    $webpage->assertScript(focusLandsOnScript($menu), true);
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
@@ -497,7 +485,7 @@ test("a confirmed force grab keeps focus on that row's menu", function (): void 
         ->click('[data-confirm-accept]')
         ->assertSee('Grab triggered.');
     $webpage->script(confirmDialogGoneScript());
-    $webpage->assertScript(grabQueueFocusScript($menu), true);
+    $webpage->assertScript(focusLandsOnScript($menu), true);
 });
 
 test("a confirmed row removal hands focus to the next row's menu", function (): void {
@@ -533,5 +521,5 @@ test("a confirmed row removal hands focus to the next row's menu", function (): 
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-queue-row=\"sonarr-41\"]")'));
 
     $webpage->assertMissing('[data-queue-row="sonarr-41"]')
-        ->assertScript(grabQueueFocusScript('[data-queue-row="sonarr-42"] [data-queue-row-menu]'), true);
+        ->assertScript(focusLandsOnScript('[data-queue-row="sonarr-42"] [data-queue-row-menu]'), true);
 });
