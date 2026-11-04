@@ -348,31 +348,47 @@ function save(): void {
 
         <div class="grid gap-6 sm:grid-cols-2">
             <Field
+                for="template-auto-send"
                 label="Send right away"
                 hint="When you pick this template, send it immediately instead of putting it in the message box."
                 data-template-auto-send
             >
-                <Toggle v-model="form.auto_send" aria-label="Send right away" />
+                <Toggle
+                    id="template-auto-send"
+                    v-model="form.auto_send"
+                    aria-labelledby="template-auto-send-label"
+                />
             </Field>
             <Field
+                for="template-pinned"
                 label="Show on new chats"
                 hint="Show as a shortcut on an empty chat."
                 data-template-pinned
             >
-                <Toggle v-model="form.pinned" aria-label="Show on new chats" />
+                <Toggle
+                    id="template-pinned"
+                    v-model="form.pinned"
+                    aria-labelledby="template-pinned-label"
+                />
             </Field>
         </div>
 
         <Field
             v-if="modelOptions"
+            label-id="template-preset-label"
             label="Model preset"
             hint="Applied when this template starts a new conversation. Leave both on Conversation default to use the chat defaults."
             data-template-preset
         >
-            <div class="grid gap-2 sm:max-w-md">
+            <div
+                role="group"
+                aria-labelledby="template-preset-label"
+                class="grid gap-2 sm:max-w-md"
+            >
                 <ModelSelect
                     :models="modelOptions.models"
                     inherit-label="Conversation default"
+                    aria-label="Model"
                     :provider="form.preset.provider ?? ''"
                     :model="form.preset.model ?? ''"
                     @update:provider="setPresetProvider"
@@ -382,6 +398,7 @@ function save(): void {
                     v-model="form.preset.reasoning"
                     :levels="modelOptions.reasoningLevels"
                     inherit-label="Conversation default"
+                    aria-label="Reasoning"
                 />
                 <InputError :message="form.errors['preset.model']" />
                 <InputError :message="form.errors['preset.provider']" />
@@ -390,11 +407,16 @@ function save(): void {
 
         <Field
             v-if="toolGroupOptions.length > 0"
+            label-id="template-tool-groups-label"
             label="Tool groups"
             hint="Pinned to the chat when you use this template, on a new or an existing chat. Groups that are not available are skipped."
             data-template-tool-groups
         >
-            <div class="grid gap-2 sm:max-w-md">
+            <div
+                role="group"
+                aria-labelledby="template-tool-groups-label"
+                class="grid gap-2 sm:max-w-md"
+            >
                 <label
                     v-for="group in toolGroupOptions"
                     :key="group.value"

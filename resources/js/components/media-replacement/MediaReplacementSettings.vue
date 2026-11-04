@@ -119,6 +119,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-automatic-selection"
                     label="Automatic selection"
                     hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
                 >
@@ -127,6 +128,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </template>
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
                 <input
+                    id="media-replacement-automatic-selection"
                     v-model="state.automatic_selection_enabled"
                     type="checkbox"
                 />
@@ -137,6 +139,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-confidence-threshold"
                     label="Confidence threshold"
                     hint="Minimum subtitle confidence (0–100) required before a candidate can be selected automatically."
                 >
@@ -144,6 +147,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <Input
+                id="media-replacement-confidence-threshold"
                 v-model.number="state.automatic_selection_threshold"
                 type="number"
                 min="0"
@@ -155,6 +159,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-subtitle-check"
                     label="Automatic subtitle check"
                     hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
                 >
@@ -162,7 +167,11 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <label class="flex items-center gap-2 text-sm touch:min-h-10">
-                <input v-model="state.subtitle_check.enabled" type="checkbox" />
+                <input
+                    id="media-replacement-subtitle-check"
+                    v-model="state.subtitle_check.enabled"
+                    type="checkbox"
+                />
                 Check tagged imports for missing subtitles
             </label>
         </SettingsRow>
@@ -170,6 +179,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-attempts-per-item"
                     label="Attempts per item"
                     hint="How many replacements the automatic check may request for the same item inside the cooldown window."
                 >
@@ -177,6 +187,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <Input
+                id="media-replacement-attempts-per-item"
                 v-model.number="state.subtitle_check.max_attempts_per_target"
                 type="number"
                 min="1"
@@ -188,6 +199,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-cooldown-hours"
                     label="Cooldown (hours)"
                     hint="Window over which the attempts-per-item limit is counted."
                 >
@@ -195,6 +207,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <Input
+                id="media-replacement-cooldown-hours"
                 v-model.number="state.subtitle_check.cooldown_hours"
                 type="number"
                 min="1"
@@ -206,6 +219,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-languages"
                     label="Preferred subtitle languages"
                     hint="Global comma-separated list of required subtitle languages. Scopes inherit this unless overridden."
                 >
@@ -213,6 +227,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <Input
+                id="media-replacement-languages"
                 :model-value="languagesToText(state.global_languages)"
                 type="text"
                 placeholder="English, Swedish"
@@ -224,6 +239,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <SettingsRow>
             <template #label>
                 <Field
+                    for="media-replacement-season-pack-policy"
                     label="Season-pack policy"
                     hint="Controls whether a season pack may replace an individual episode, and whether it forces approval."
                 >
@@ -231,7 +247,11 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </Field>
             </template>
             <Select v-model="state.season_pack_policy">
-                <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                <SelectTrigger
+                    id="media-replacement-season-pack-policy"
+                    aria-labelledby="media-replacement-season-pack-policy-label media-replacement-season-pack-policy"
+                    class="h-8 max-w-[320px] text-sm"
+                >
                     <SelectValue placeholder="Select a policy" />
                 </SelectTrigger>
                 <SelectContent>
@@ -267,6 +287,8 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 </label>
                 <Input
                     v-if="hasScopeOverride(scope.key)"
+                    :id="`media-replacement-${scope.key}-languages`"
+                    :aria-label="`${scope.label} subtitle languages`"
                     :model-value="scopeLanguagesText(scope.key)"
                     type="text"
                     placeholder="Leave empty for no languages"
@@ -277,10 +299,14 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 />
 
                 <div>
-                    <Label class="text-xs text-muted-foreground">
+                    <Label
+                        :for="`media-replacement-${scope.key}-notes`"
+                        class="text-xs text-muted-foreground"
+                    >
                         Free-text notes (max 4000 characters)
                     </Label>
                     <textarea
+                        :id="`media-replacement-${scope.key}-notes`"
                         v-model="state.guidance[scope.key].notes"
                         rows="3"
                         maxlength="4000"

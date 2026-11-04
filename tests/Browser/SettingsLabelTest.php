@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\SecondOpinionEngine;
+use App\Models\ChatTemplate;
+use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\DecisionAgentSettings;
 
 /**
  * Returns the label texts of every settings row whose first focusable control
- * is named by neither its row's label (`label.control`) nor an `aria-labelledby`
- * on the control or its group that points at that label.
+ * (the control column itself when it is one) is named by neither its row's
+ * label (`label.control`) nor an `aria-labelledby` on the control or its group
+ * that points at that label.
  */
 function settingsLabelUnlabelledRowsScript(): string
 {
@@ -21,7 +26,8 @@ function settingsLabelUnlabelledRowsScript(): string
             return JSON.stringify([...document.querySelectorAll('[data-settings-row]')].flatMap((row) => {
                 const [labelColumn, controlColumn] = row.children;
                 const label = labelColumn.firstElementChild;
-                const control = [...controlColumn.querySelectorAll(focusable)]
+                const control = [controlColumn, ...controlColumn.querySelectorAll(focusable)]
+                    .filter((element) => element.matches(focusable))
                     .find((element) => element.tabIndex >= 0 && !element.closest('[aria-hidden="true"]'));
                 if (!control) {
                     return [];
@@ -43,6 +49,55 @@ function settingsLabelUnlabelledRowsScript(): string
 function settingsLabelForNonLabelableScript(): string
 {
     return 'JSON.stringify([...document.querySelectorAll("label[for]")].filter((label) => label.control === null).map((label) => label.textContent.trim()))';
+}
+
+/**
+ * Returns "<group label>: <control>" for every focusable control inside a
+ * labelled control group that has no name of its own (no `aria-label`, no
+ * resolving `aria-labelledby`, no `<label>`, and for a plain button no text),
+ * and "<id>: missing label" for a group whose label id does not resolve.
+ */
+function settingsLabelUnnamedGroupControlsScript(): string
+{
+    return <<<'JS_WRAP'
+        (() => {
+            const focusable = 'input:not([type="hidden"]), select, textarea, button, [role="switch"], [role="combobox"]';
+            const resolves = (element) => {
+                const ids = (element.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean);
+                return ids.length > 0 && ids.every((id) => (document.getElementById(id)?.textContent.trim() ?? '') !== '');
+            };
+            const isNamed = (control) => (control.getAttribute('aria-label') ?? '').trim() !== ''
+                || resolves(control)
+                || (control.labels?.length ?? 0) > 0
+                || (control.tagName === 'BUTTON'
+                    && !['combobox', 'switch', 'checkbox'].includes(control.getAttribute('role') ?? '')
+                    && control.textContent.trim() !== '');
+            return JSON.stringify([...document.querySelectorAll('main [role="group"][aria-labelledby]')].flatMap((group) => {
+                if (!resolves(group)) {
+                    return [`${group.getAttribute('aria-labelledby')}: missing label`];
+                }
+                const groupLabel = document.getElementById(group.getAttribute('aria-labelledby').split(/\s+/)[0]).textContent.trim();
+                return [...group.querySelectorAll(focusable)]
+                    .filter((control) => control.tabIndex >= 0 && !control.closest('[aria-hidden="true"]') && !isNamed(control))
+                    .map((control) => `${groupLabel}: ${control.outerHTML.slice(0, 80)}`);
+            }));
+        })()
+    JS_WRAP;
+}
+
+/**
+ * Seeds the admin settings pages so every row renders: Jev as the second
+ * opinion engine with a configured classifier (the threshold input shows).
+ */
+function settingsLabelSeedAdminPages(): void
+{
+    config([
+        'mediamanager.ai.enabled' => true,
+        'mediamanager.ai.classification.provider' => 'openrouter',
+        'ai.providers.openrouter.key' => 'sk-test',
+        'mediamanager.monitoring.uptime_kuma_push_url' => null,
+    ]);
+    resolve(DecisionAgentSettings::class)->setSecondOpinionEngine(SecondOpinionEngine::Jev);
 }
 
 /**
@@ -107,4 +162,92 @@ test('the preferences selects keep their value in their accessible name and the 
         ->assertScript('document.querySelector("#preferences-time-format").getAttribute("aria-labelledby")', 'preferences-time-format-label preferences-time-format')
         ->assertScript('document.querySelector("#preferences-timezone").getAttribute("role")', 'group')
         ->assertScript('document.querySelector("#preferences-timezone-select").getAttribute("aria-labelledby")', 'preferences-timezone-label preferences-timezone-select');
+});
+
+test('every editable settings row on the admin settings pages is named by its label', function (string $routeName): void {
+    settingsLabelSeedAdminPages();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route($routeName, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertPresent('[data-settings-row]')
+        ->assertScript(settingsLabelUnlabelledRowsScript(), '[]')
+        ->assertScript(settingsLabelForNonLabelableScript(), '[]')
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
+})->with([
+    'ai settings' => ['admin.ai-settings.index'],
+    'decision agent' => ['admin.decision-agent.index'],
+    'media replacement' => ['admin.media-replacement.index'],
+    'servers' => ['admin.servers.index'],
+]);
+
+test('a linked admin settings label keeps the old label box at desktop width', function (string $routeName): void {
+    settingsLabelSeedAdminPages();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route($routeName, absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('document.querySelectorAll("[data-settings-row] label[id$=\"-label\"]").length > 0', true)
+        ->assertScript(settingsLabelBoxDriftScript(), '[]');
+})->with([
+    'ai settings' => ['admin.ai-settings.index'],
+    'decision agent' => ['admin.decision-agent.index'],
+    'media replacement' => ['admin.media-replacement.index'],
+    'servers' => ['admin.servers.index'],
+]);
+
+test('the admin settings groups and selects point at their row label', function (): void {
+    settingsLabelSeedAdminPages();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-settings.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('document.querySelector("#ai-settings-mode").getAttribute("aria-labelledby")', 'ai-settings-mode-label ai-settings-mode')
+        ->assertScript('document.querySelector("#ai-settings-decision-gate").getAttribute("role")', 'group')
+        ->assertScript('document.querySelector("#ai-settings-decision-gate-label").tagName', 'DIV')
+        ->assertScript('document.querySelector("#ai-settings-ignored-providers").getAttribute("aria-labelledby")', 'ai-settings-ignored-providers-label')
+        ->assertScript('document.querySelector("[data-rate-limits-toggle]").getAttribute("aria-labelledby")', 'ai-settings-rate-limits-label');
+
+    visit(route('admin.decision-agent.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('document.querySelector("#decision-agent-second-opinion-engine").getAttribute("aria-labelledby")', 'decision-agent-second-opinion-label decision-agent-second-opinion-engine')
+        ->assertScript('document.querySelector("[data-second-opinion-threshold]").labels.length', 1)
+        ->assertScript('document.querySelector("#decision-agent-event-allowlist").getAttribute("role")', 'group');
+});
+
+test('the chat template editor names its toggles and its preset and tool group controls', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    ServiceConnection::factory()->prowlarr()->create();
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create();
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-template-preset]')
+        ->assertVisible('[data-template-tool-group="indexers"]');
+
+    $webpage->assertScript('document.querySelector("#template-auto-send").getAttribute("aria-labelledby")', 'template-auto-send-label')
+        ->assertScript('document.querySelector("#template-pinned").labels[0].textContent.trim()', 'Show on new chats')
+        ->assertScript('document.querySelectorAll("main [role=\"group\"][aria-labelledby]").length', 2)
+        ->assertScript(settingsLabelForNonLabelableScript(), '[]')
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
+});
+
+test('the ai models rows and failover are named control groups', function (): void {
+    config([
+        'mediamanager.ai.enabled' => true,
+        'ai.default' => 'openai',
+        'ai.providers.openai.key' => 'sk-test',
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-models.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript('document.querySelector("[data-task=\"failover\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-failover-label')
+        ->assertScript('document.querySelector("[data-failover-provider]").getAttribute("aria-labelledby")', 'ai-models-failover-label ai-models-failover-provider')
+        ->assertScript('document.querySelector("[data-task=\"chat\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-chat-label')
+        ->assertScript(settingsLabelForNonLabelableScript(), '[]')
+        ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]');
 });

@@ -188,13 +188,19 @@ function submit(): void {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            label-id="decision-agent-event-allowlist-label"
                             label="Event allowlist"
                             hint="Only these inbound events wake the agent. Empty = the agent never runs. Opt in deliberately."
                         >
                             <span />
                         </Field>
                     </template>
-                    <div class="flex flex-col gap-4">
+                    <div
+                        id="decision-agent-event-allowlist"
+                        role="group"
+                        aria-labelledby="decision-agent-event-allowlist-label"
+                        class="flex flex-col gap-4"
+                    >
                         <div
                             v-for="(events, service) in eventCatalog"
                             :key="service"
@@ -244,6 +250,7 @@ function submit(): void {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="decision-agent-manual-import"
                             label="Manual-import resolution"
                             hint="Lets the agent resolve stuck Sonarr/Radarr imports. Ambiguous imports are always queued for approval regardless of the action rule."
                         >
@@ -252,6 +259,8 @@ function submit(): void {
                     </template>
                     <div>
                         <Toggle
+                            id="decision-agent-manual-import"
+                            aria-labelledby="decision-agent-manual-import-label"
                             :model-value="form.allow_manual_import"
                             :label="
                                 form.allow_manual_import ? 'allowed' : 'off'
@@ -273,14 +282,22 @@ function submit(): void {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            label-id="decision-agent-notify-label"
                             label="Notify admins"
                             hint="Send an admin notification when the agent suggests and/or auto-acts on something."
                         >
                             <span />
                         </Field>
                     </template>
-                    <div class="flex flex-col gap-2.5">
+                    <div
+                        id="decision-agent-notify"
+                        role="group"
+                        aria-labelledby="decision-agent-notify-label"
+                        class="flex flex-col gap-2.5"
+                    >
                         <Toggle
+                            id="decision-agent-notify-on-suggest"
+                            aria-label="Notify on suggest"
                             :model-value="form.notify_on_suggest"
                             :label="
                                 form.notify_on_suggest
@@ -292,6 +309,8 @@ function submit(): void {
                             "
                         />
                         <Toggle
+                            id="decision-agent-notify-on-act"
+                            aria-label="Notify on act"
                             :model-value="form.notify_on_act"
                             :label="form.notify_on_act ? 'on act' : 'act: off'"
                             @update:model-value="
@@ -307,6 +326,7 @@ function submit(): void {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="decision-agent-max-actions"
                             label="Max actions per run"
                             hint="Upper bound on how many actions one decision can spawn — bounds the blast radius of a single event."
                         >
@@ -315,6 +335,7 @@ function submit(): void {
                     </template>
                     <div>
                         <Input
+                            id="decision-agent-max-actions"
                             v-model.number="form.max_actions_per_run"
                             type="number"
                             min="1"
@@ -334,15 +355,23 @@ function submit(): void {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            label-id="decision-agent-second-opinion-label"
                             label="Second opinion"
                             hint="How automated proposals are double-checked on the action types you choose under Approval Rules. A failed check always holds the action for approval."
                         >
                             <span />
                         </Field>
                     </template>
-                    <div class="flex flex-col gap-2.5">
+                    <div
+                        id="decision-agent-second-opinion"
+                        role="group"
+                        aria-labelledby="decision-agent-second-opinion-label"
+                        class="flex flex-col gap-2.5"
+                    >
                         <Select v-model="form.second_opinion_engine">
                             <SelectTrigger
+                                id="decision-agent-second-opinion-engine"
+                                aria-labelledby="decision-agent-second-opinion-label decision-agent-second-opinion-engine"
                                 class="h-8 max-w-[260px] text-sm"
                                 data-second-opinion-engine
                             >
@@ -378,6 +407,7 @@ function submit(): void {
                             class="flex items-center gap-2"
                         >
                             <Input
+                                id="decision-agent-second-opinion-threshold"
                                 v-model.number="
                                     form.second_opinion_jev_threshold
                                 "
@@ -388,9 +418,12 @@ function submit(): void {
                                 class="h-8 max-w-[120px] text-sm"
                                 data-second-opinion-threshold
                             />
-                            <span class="text-[12px] text-muted-foreground">
+                            <label
+                                for="decision-agent-second-opinion-threshold"
+                                class="text-[12px] text-muted-foreground"
+                            >
                                 Jev agrees at or above this probability.
-                            </span>
+                            </label>
                         </div>
                         <InputError
                             :message="form.errors.second_opinion_engine"

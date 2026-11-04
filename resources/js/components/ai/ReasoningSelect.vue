@@ -16,6 +16,7 @@ const props = withDefaults(
         accepted?: AiReasoningLevel[] | null;
         disabledHint?: string | null;
         id?: string;
+        ariaLabel?: string;
         disabled?: boolean;
     }>(),
     {
@@ -23,6 +24,7 @@ const props = withDefaults(
         accepted: null,
         disabledHint: null,
         id: undefined,
+        ariaLabel: undefined,
         disabled: false,
     },
 );
@@ -59,7 +61,11 @@ function clamped(value: AiReasoningLevel): boolean {
             v-model="selected"
             :disabled="disabled || disabledHint !== null"
         >
-            <SelectTrigger :id="id" class="h-8 max-w-[220px] text-sm">
+            <SelectTrigger
+                :id="id"
+                :aria-label="ariaLabel"
+                class="h-8 max-w-[220px] text-sm"
+            >
                 <SelectValue placeholder="Reasoning" />
             </SelectTrigger>
             <SelectContent>
