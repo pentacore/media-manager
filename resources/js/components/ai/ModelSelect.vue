@@ -115,6 +115,7 @@ const groups = computed<Record<string, string[]>>(() => {
             v-if="ariaLabel"
             :id="nameId"
             class="sr-only"
+            aria-hidden="true"
             :data-select-name="ariaLabel"
             >{{ ariaLabel }}</span
         >

@@ -278,6 +278,8 @@ test('the ai models rows and failover are named control groups', function (): vo
         ->assertNoSmoke()
         ->assertPresent('[data-add-event-override] button')
         ->assertScript(settingsLabelNameKeepsValueScript('[data-task="chat"] [data-reasoning-select] button', 'Chat reasoning'), true)
+        ->assertScript('document.querySelector("[data-task=\"chat\"] [data-reasoning-select] [data-select-name]").getAttribute("aria-hidden")', 'true')
+        ->assertScript('[...document.querySelectorAll("main [data-select-name]")].filter((name) => name.getAttribute("aria-hidden") !== "true").length', 0)
         ->assertScript('document.querySelector("[data-task=\"failover\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-failover-label')
         ->assertScript('document.querySelector("[data-failover-provider]").getAttribute("aria-labelledby")', 'ai-models-failover-label ai-models-failover-provider')
         ->assertScript('document.querySelector("[data-task=\"chat\"] [role=\"group\"]").getAttribute("aria-labelledby")', 'ai-models-chat-label')

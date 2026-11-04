@@ -69,6 +69,7 @@ function clamped(value: AiReasoningLevel): boolean {
             v-if="ariaLabel"
             :id="nameId"
             class="sr-only"
+            aria-hidden="true"
             :data-select-name="ariaLabel"
             >{{ ariaLabel }}</span
         >
