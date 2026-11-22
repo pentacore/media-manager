@@ -11,6 +11,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import type { MediaReplacementScope } from '@/typefinder';
 import SubtitleRuleEditor from './SubtitleRuleEditor.vue';
 import type { SubtitleRule } from './SubtitleRuleEditor.vue';
 
@@ -19,7 +20,7 @@ interface ScopeGuidance {
     rules: SubtitleRule[];
 }
 
-type Scope = 'anime' | 'tv' | 'movie';
+type Scope = MediaReplacementScope;
 
 export interface SubtitleCheckConfiguration {
     enabled: boolean;

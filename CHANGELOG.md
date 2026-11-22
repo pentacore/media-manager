@@ -1,3 +1,15 @@
+# [1.61.0](https://github.com/pentacore/media-manager/compare/v1.60.0...v1.61.0) (2026-11-22)
+
+
+### Bug Fixes
+
+* **ai:** stop the SDK's duplicate conversation title request ([a41913e](https://github.com/pentacore/media-manager/commit/a41913ecb55f791ef29bdf176096c8efda304b64))
+
+
+### Features
+
+* **ai:** validate tool arguments against their schema ([43bc9b9](https://github.com/pentacore/media-manager/commit/43bc9b92103960e04be4ae2b74c516814c95e8c7))
+
 # [1.60.0](https://github.com/pentacore/media-manager/compare/v1.59.0...v1.60.0) (2026-11-22)
 
 

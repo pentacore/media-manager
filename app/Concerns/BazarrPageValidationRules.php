@@ -16,8 +16,11 @@ trait BazarrPageValidationRules
     protected function bazarrPageRules(): array
     {
         return [
+            /** @query */
             'connection' => ['nullable', 'integer', 'min:1'],
+            /** @query */
             'page' => ['nullable', 'integer', 'min:1'],
+            /** @query */
             'per_page' => ['nullable', 'integer', 'between:1,100'],
         ];
     }

@@ -10,6 +10,7 @@ use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\Decision\RemoveStuckDownloadTool;
 use App\Ai\Tools\Decision\ResolveManualImportTool;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
 
 afterEach(function (): void {
@@ -81,6 +82,41 @@ test('invalid arguments come back as an invalid_arguments rejection naming the f
         ->and($result['reason'])->toBe('invalid_arguments')
         ->and($result['errors'])->toHaveKey('service')
         ->and($result['message'])->toBe('Some arguments were invalid. Fix them and call the tool again.');
+});
+
+test('arguments are validated against the tool schema before execute runs', function (): void {
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr'));
+
+    $decisionTool = new class extends DecisionTool
+    {
+        public function description(): string
+        {
+            return 'Schema probe.';
+        }
+
+        /**
+         * @return array<string, Type>
+         */
+        public function schema(JsonSchema $schema): array
+        {
+            return ['download_ids' => $schema->array()->items($schema->string())->required()];
+        }
+
+        /**
+         * @return array<string, mixed>
+         */
+        protected function execute(Request $request): array
+        {
+            return ['queued' => true];
+        }
+    };
+
+    $result = decisionToolResult($decisionTool, ['download_ids' => 'dl-1']);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('download_ids')
+        ->and(decisionToolResult($decisionTool, ['download_ids' => ['dl-1']]))->toBe(['queued' => true]);
 });
 
 test('service names are accepted in any case', function (): void {

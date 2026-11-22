@@ -28,7 +28,7 @@ import { useDashboardStats } from '@/composables/useDashboardStats';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
+import type { ActivityLogResource } from '@/typefinder';
 
 type ActivityItem = ActivityLogResource;
 

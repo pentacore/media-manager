@@ -12,6 +12,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 
 class DeleteMediaTool extends BaseTool
@@ -33,10 +34,7 @@ class DeleteMediaTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $validated = $request->validate(
-            ['item_id' => ['required', 'integer', 'min:1']],
-            ['item_id' => 'item_id must be a positive service-native id — look it up with SearchMediaTool/GetMediaTool, never guess.'],
-        );
+        $validated = $request->validate(['item_id' => ['integer', 'min:1']], $this->argumentMessages());
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $itemId = (int) $validated['item_id'];
@@ -67,6 +65,15 @@ class DeleteMediaTool extends BaseTool
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
         }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return ['item_id' => 'item_id must be a positive service-native id — look it up with SearchMediaTool/GetMediaTool, never guess.'];
     }
 
     /**

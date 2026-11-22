@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Download } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
-import type { SubtitleCandidateResource } from '@/typefinder/resources/SubtitleCandidateResource';
+import type { SubtitleCandidateResource } from '@/typefinder';
 
 defineProps<{
     candidates: SubtitleCandidateResource[];

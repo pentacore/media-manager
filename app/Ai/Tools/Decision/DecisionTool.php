@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Tools\Decision;
 
 use App\Ai\Decision\DecisionRunContext;
+use App\Ai\ToolArgumentRules;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -20,9 +21,10 @@ use Laravel\Ai\Tools\Request;
  *
  * handle() resolves the run's DecisionRunContext, refuses without one (unless
  * the tool also serves chat), applies the tool's refusal hook and the per-run
- * action cap, then runs execute(). Argument-shape checks use
- * $request->validate(); a failure comes back as an `invalid_arguments`
- * rejection in the tool's own result shape.
+ * action cap, validates the arguments against the tool's own schema()
+ * (ToolArgumentRules), then runs execute(). Checks the schema can't express
+ * use $request->validate() inside execute(); either failure comes back as an
+ * `invalid_arguments` rejection in the tool's own result shape.
  */
 abstract class DecisionTool implements Tool
 {
@@ -50,6 +52,8 @@ abstract class DecisionTool implements Tool
         }
 
         try {
+            $request->validate(ToolArgumentRules::for($this), $this->argumentMessages());
+
             return $this->encode($this->execute($request));
         } catch (ValidationException $validationException) {
             return $this->encode([
@@ -69,6 +73,18 @@ abstract class DecisionTool implements Tool
      * @return array<string, mixed>
      */
     abstract protected function execute(Request $request): array;
+
+    /**
+     * Custom messages for the schema-derived argument check handle() runs
+     * before execute(). Reuse them in execute()'s own validate() so both
+     * stages word a field alike.
+     *
+     * @return array<string, string>
+     */
+    protected function argumentMessages(): array
+    {
+        return [];
+    }
 
     /**
      * Whether the tool refuses to run outside a decision run.

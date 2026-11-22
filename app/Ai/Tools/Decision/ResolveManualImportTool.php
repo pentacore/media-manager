@@ -9,6 +9,7 @@ use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 
 /**
@@ -58,18 +59,27 @@ class ResolveManualImportTool extends DecisionTool
             'download_id' => ['required', 'string'],
             'excluded_paths' => ['nullable', 'array', 'max:50'],
             'excluded_paths.*' => ['string', 'max:1024'],
-        ], [
-            'service.required' => 'service must be "sonarr" or "radarr".',
-            'service.string' => 'service must be "sonarr" or "radarr".',
-            'service.regex' => 'service must be "sonarr" or "radarr".',
-            'download_id.required' => 'download_id is required (take it from the event payload).',
-            'download_id.string' => 'download_id must be a string (take it from the event payload).',
-        ]);
+        ], $this->argumentMessages());
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];
         $excludedPaths = array_values(array_filter((array) ($validated['excluded_paths'] ?? []), is_string(...)));
 
         return resolve(StuckImportResolver::class)->import($decisionRunContext, $service, $downloadId, $excludedPaths);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return [
+            'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.string' => 'service must be "sonarr" or "radarr".',
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'download_id.required' => 'download_id is required (take it from the event payload).',
+            'download_id.string' => 'download_id must be a string (take it from the event payload).',
+        ];
     }
 
     /**

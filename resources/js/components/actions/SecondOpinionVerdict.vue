@@ -7,7 +7,7 @@ import {
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { Pill } from '@/components/mm';
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
+import type { ActionRequestResource } from '@/typefinder';
 
 const props = defineProps<{
     verdict: NonNullable<ActionRequestResource['second_opinion']>;

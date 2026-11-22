@@ -1,3 +1,4 @@
+import type { WhisparrVersion } from '@/typefinder';
 import type { QualityProfileOption } from './library';
 
 export type WhisparrKind = 'site' | 'movie';
@@ -37,7 +38,7 @@ export interface WhisparrSceneGroup {
 export interface WhisparrConnection {
     id: number;
     name: string;
-    version: 'v2' | 'v3';
+    version: WhisparrVersion;
     url: string;
 }
 

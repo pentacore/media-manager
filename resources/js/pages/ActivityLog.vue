@@ -16,7 +16,7 @@ import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
+import type { ActivityLogCategory, ActivityLogResource } from '@/typefinder';
 
 interface PaginatorLink {
     url: string | null;
@@ -47,14 +47,14 @@ const props = defineProps<{
         action: string;
         service_id: number | null;
         since: number | 'today';
-        category: 'activity' | 'audit' | null;
+        category: ActivityLogCategory | null;
     };
     filterOptions: {
         actions: string[];
         services: ServiceOption[];
         rangeHours: number[];
         todayValue: 'today';
-        categories: Array<'activity' | 'audit'>;
+        categories: ActivityLogCategory[];
     };
 }>();
 
@@ -161,7 +161,7 @@ function applyFilters(next: {
     action?: string;
     service_id?: number | null;
     since?: number | 'today';
-    category?: 'activity' | 'audit' | null;
+    category?: ActivityLogCategory | null;
 }) {
     // ?? would treat an explicit null (intent: clear the filter) as
     // "fall through to the current value", so distinguish "key present"

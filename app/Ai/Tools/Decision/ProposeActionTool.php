@@ -16,6 +16,7 @@ use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 use Throwable;
 
@@ -114,15 +115,8 @@ class ProposeActionTool extends DecisionTool
             ];
         }
 
-        $validated = $request->validate([
-            'rationale' => ['required', 'string'],
-        ], [
-            'rationale.required' => 'A plain-English rationale is required so a human can understand the proposal.',
-            'rationale.string' => 'rationale must be plain-English text so a human can understand the proposal.',
-        ]);
-
         $targetService = (string) ($args['target_service'] ?? '');
-        $rationale = (string) $validated['rationale'];
+        $rationale = (string) $args['rationale'];
         $payload = is_array($args['payload'] ?? null) ? $args['payload'] : [];
 
         $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $decisionRunContext)
@@ -224,6 +218,18 @@ class ProposeActionTool extends DecisionTool
             'queued' => false,
             'reason' => 'max_actions_reached',
             'message' => 'The per-run action cap has been reached. Do not propose further actions; summarize what you have queued.',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return [
+            'rationale.required' => 'A plain-English rationale is required so a human can understand the proposal.',
+            'rationale.string' => 'rationale must be plain-English text so a human can understand the proposal.',
         ];
     }
 

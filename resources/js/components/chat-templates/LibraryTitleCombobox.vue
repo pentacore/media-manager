@@ -5,10 +5,11 @@ import ChatTemplateLibraryController from '@/actions/App/Http/Controllers/AI/Cha
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/lib/http';
+import type { SearchChatTemplateLibraryRequestQuery } from '@/typefinder';
 import type { LibraryHit } from './types';
 
 const props = defineProps<{
-    type: 'series' | 'movie';
+    type: SearchChatTemplateLibraryRequestQuery['type'];
     modelValue: LibraryHit | null;
     fieldName: string;
 }>();
@@ -39,7 +40,10 @@ const search = useDebounceFn(async (term: string): Promise<void> => {
         const response = await jsonRequest<{ items: LibraryHit[] }>(
             'GET',
             ChatTemplateLibraryController.url({
-                query: { type: props.type, q: term.trim() },
+                query: {
+                    type: props.type,
+                    q: term.trim(),
+                } satisfies SearchChatTemplateLibraryRequestQuery,
             }),
         );
 

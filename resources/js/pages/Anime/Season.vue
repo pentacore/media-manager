@@ -27,9 +27,7 @@ import { useCan } from '@/composables/useCan';
 import { BLOCKLISTED_PILL, NOT_REQUESTED_PILL } from '@/lib/seerr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
-import type { AnimeFormat } from '@/typefinder/enums/AnimeFormat';
-import type { AnimeSeason } from '@/typefinder/enums/AnimeSeason';
+import type { AnimeAirStatus, AnimeFormat, AnimeSeason } from '@/typefinder';
 import type { FlashToast } from '@/types/ui';
 import MatchDialog from './MatchDialog.vue';
 

@@ -18,7 +18,9 @@ final class MissingPageRequest extends FormRequest
     {
         return [
             ...$this->bazarrPageRules(),
+            /** @query */
             'media_type' => ['nullable', 'in:episode,movie'],
+            /** @query */
             'scope' => ['nullable', 'in:anime,tv,movie'],
         ];
     }

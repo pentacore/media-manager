@@ -25,7 +25,7 @@ import {
 import { useConfirm } from '@/composables/useConfirm';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { dashboard } from '@/routes';
-import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
+import type { ServiceConnectionResource } from '@/typefinder';
 
 type Connection = ServiceConnectionResource;
 

@@ -1,6 +1,14 @@
-import type { AiReasoningLevel, BenchmarkJudgeStatus } from '@/typefinder';
+import type {
+    AiReasoningLevel,
+    BenchmarkConversationMode,
+    BenchmarkJudgeStatus,
+    BenchmarkNeutralRejudgeStatus,
+    BenchmarkRunStatus,
+    BenchmarkScheduleOutcome,
+    BenchmarkScoringType,
+} from '@/typefinder';
 
-export type BenchmarkScoringKind = 'actions' | 'prices' | 'judge' | 'verdict';
+export type BenchmarkScoringKind = BenchmarkScoringType;
 
 type JsonScalar = string | number | boolean | null;
 
@@ -41,7 +49,7 @@ export type BenchmarkHistoryTurn = {
     content: string;
 };
 
-export type BenchmarkConversationMode = 'context' | 'scripted';
+export type { BenchmarkConversationMode };
 
 export type BenchmarkCaseAttachment = {
     id: number;
@@ -166,13 +174,7 @@ export type BenchmarkCaseRow = {
     updated_at: string | null;
 };
 
-export type BenchmarkRunStatus =
-    | 'pending'
-    | 'running'
-    | 'completed'
-    | 'stopped_cost_cap'
-    | 'cancelled'
-    | 'failed';
+export type { BenchmarkRunStatus };
 
 /** A provider / model / reasoning selection (candidate or judge). */
 export type BenchmarkSelection = {
@@ -387,13 +389,7 @@ export type BenchmarkModelCapabilities = Record<
     }
 >;
 
-export type BenchmarkScheduleOutcomeValue =
-    | 'launched'
-    | 'skipped_no_cases'
-    | 'skipped_no_candidates'
-    | 'skipped_running'
-    | 'skipped_over_cap'
-    | 'failed';
+export type BenchmarkScheduleOutcomeValue = BenchmarkScheduleOutcome;
 
 export type BenchmarkScheduleRow = {
     id: number;
@@ -526,7 +522,7 @@ export type BenchmarkComparison = {
 
 export type BenchmarkNeutralRejudgeSummary = {
     id: number;
-    status: 'running' | 'completed' | 'stopped_cost_cap' | 'cancelled';
+    status: BenchmarkNeutralRejudgeStatus;
     status_label: string;
     judge_key: string;
     judge_label: string;

@@ -11,6 +11,7 @@ use App\Models\ActionTypeConfig;
 use App\Services\Actions\ActionDescription;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
 
 function makeFakeRequest(array $args = []): Request
@@ -130,6 +131,58 @@ class FakeValidatingTool extends BaseTool
         $validated = $request->validate(['limit' => ['required', 'integer', 'between:1,10']]);
 
         return ['limit' => (int) $validated['limit']];
+    }
+}
+
+/**
+ * Its schema is the only validation: handle() derives the rules from it.
+ */
+class FakeSchemaTool extends BaseTool
+{
+    public static int $executions = 0;
+
+    public function description(): Stringable|string
+    {
+        return 'fake';
+    }
+
+    /**
+     * @return array<string, Type>
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'service' => $schema->string()->enum(['sonarr', 'radarr'])->required(),
+            'item_id' => $schema->integer()->required(),
+            'monitored' => $schema->boolean()->required(),
+            'title' => $schema->string()->required()->nullable(),
+            'limit' => $schema->integer()->required()->nullable(),
+            'tags' => $schema->array()->items($schema->string())->required()->nullable(),
+        ];
+    }
+
+    public function risk(): Risk
+    {
+        return Risk::Read;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return ['item_id.required' => 'item_id is required; look it up first.'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function execute(Request $request): array
+    {
+        self::$executions++;
+
+        return ['reached' => true, 'arguments' => $request->toArray()];
     }
 }
 
@@ -344,4 +397,71 @@ test('arguments that pass validation reach the tool result unchanged', function 
     $result = json_decode((new FakeValidatingTool)->handle(makeFakeRequest(['limit' => 3])), true);
 
     expect($result)->toBe(['limit' => 3]);
+});
+
+/**
+ * @param  array<string, mixed>  $arguments
+ * @return array<string, mixed>
+ */
+function schemaToolResult(array $arguments): array
+{
+    return json_decode((new FakeSchemaTool)->handle(makeFakeRequest([
+        'service' => 'sonarr',
+        'item_id' => 7,
+        'monitored' => true,
+        'title' => null,
+        'limit' => null,
+        'tags' => null,
+        ...$arguments,
+    ])), true);
+}
+
+test('arguments are validated against the tool schema before execute runs', function (array $arguments, string $field): void {
+    FakeSchemaTool::$executions = 0;
+
+    $result = schemaToolResult($arguments);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey($field)
+        ->and($result['message'])->toBe('Some arguments were invalid. Fix them and call the tool again.')
+        ->and(FakeSchemaTool::$executions)->toBe(0);
+})->with([
+    'a value outside the enum' => [['service' => 'lidarr'], 'service'],
+    'a required field sent as null' => [['monitored' => null], 'monitored'],
+    'a string where an integer belongs' => [['item_id' => 'seven'], 'item_id'],
+    'a non-null value of the wrong type in a nullable field' => [['limit' => 'many'], 'limit'],
+    'a wrong item type inside a nullable array' => [['tags' => [1]], 'tags.0'],
+]);
+
+test('a missing required argument is rejected with the tool message', function (): void {
+    FakeSchemaTool::$executions = 0;
+
+    $result = json_decode((new FakeSchemaTool)->handle(makeFakeRequest(['service' => 'sonarr', 'monitored' => true])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors']['item_id'])->toBe(['item_id is required; look it up first.'])
+        ->and(FakeSchemaTool::$executions)->toBe(0);
+});
+
+test('a required nullable argument accepts null and may be omitted', function (): void {
+    expect(schemaToolResult(['title' => null, 'limit' => null])['reached'])->toBeTrue();
+
+    $result = json_decode((new FakeSchemaTool)->handle(makeFakeRequest([
+        'service' => 'radarr', 'item_id' => 1, 'monitored' => true,
+    ])), true);
+
+    expect($result['reached'])->toBeTrue();
+});
+
+test('false, zero and an empty optional string pass the schema check and reach execute unchanged', function (): void {
+    $result = schemaToolResult(['item_id' => 0, 'monitored' => false, 'title' => '', 'tags' => []]);
+
+    expect($result['reached'])->toBeTrue()
+        ->and($result['arguments'])->toMatchArray(['item_id' => 0, 'monitored' => false, 'title' => '', 'tags' => []]);
+});
+
+test('a tool with an empty schema skips the schema check', function (): void {
+    $result = json_decode((new FakeReadTool)->handle(makeFakeRequest(['anything' => ['goes' => true]])), true);
+
+    expect($result)->toBe(['ok' => true, 'data' => 'hello']);
 });

@@ -25,12 +25,18 @@ function upsertTool(?RefreshScope $scope = null): UpsertModelPriceTool
 }
 
 /**
+ * The schema requires source_url; calls that don't exercise provenance get a
+ * first-party page by default (only a bound run checks it against receipts).
+ *
  * @param  array<string, mixed>  $args
  * @return array<string, mixed>
  */
 function upsert(UpsertModelPriceTool $tool, array $args): array
 {
-    return json_decode($tool->handle(new Request($args)), true);
+    return json_decode($tool->handle(new Request([
+        'source_url' => 'https://developers.openai.com/api/docs/pricing',
+        ...$args,
+    ])), true);
 }
 
 test('creates a new price row when within scope', function (): void {
@@ -72,7 +78,7 @@ test('updates the existing row in place rather than creating a duplicate', funct
         ->and((float) $rows[0]->cache_write_per_mtok)->toBe(3.75);
 });
 
-test('rejects an empty provider or model with invalid_args', function (): void {
+test('rejects an empty provider or model as invalid arguments', function (): void {
     $result = upsert(upsertTool(RefreshScope::all()), [
         'provider' => '',
         'model' => 'gpt-x',
@@ -80,7 +86,8 @@ test('rejects an empty provider or model with invalid_args', function (): void {
         'output_per_mtok' => 1,
     ]);
 
-    expect($result['error'])->toBe('invalid_args')
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('provider')
         ->and(AiModelPrice::count())->toBe(0);
 });
 
