@@ -50,6 +50,17 @@ test('the picker shows the defaults and an override sticks to the new conversati
     expect(DB::table('agent_conversations')->latest('created_at')->value('reasoning'))->toBe('high');
 });
 
+test('the picker selects are named Model and Reasoning and keep their value in the name', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-chat-model-chip]')
+        ->assertVisible('[data-chat-model-picker] [data-chat-model-select] button')
+        ->assertScript(selectNameKeepsValueScript('[data-chat-model-picker] [data-chat-model-select] button', 'Model'), true)
+        ->assertScript(selectNameKeepsValueScript('[data-chat-model-picker] [data-reasoning-select] button', 'Reasoning'), true);
+});
+
 test('reset returns the conversation to the defaults', function (): void {
     MediaAgent::fake(['One', 'Two']);
     $this->actingAs(User::factory()->admin()->create());

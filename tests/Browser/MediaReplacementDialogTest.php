@@ -107,6 +107,7 @@ test('member replaces a movie file end to end from the show page', function (): 
         ->click('[data-replacement-trigger]')
         ->assertSeeIn('[data-replacement-current-file]', 'A Movie')
         ->assertSeeIn('[data-replacement-current-file]', 'Bluray-1080p')
+        ->assertScript(switchNameScript('[data-replacement-verify-toggle]'), 'Verify subtitles')
         ->click('[data-replacement-search]')
         ->assertSeeIn('[data-replacement-candidate-row]', 'A.Movie.2026.CR.1080p.BluRay')
         ->click('[data-replacement-candidate-row]')

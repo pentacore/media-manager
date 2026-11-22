@@ -58,10 +58,14 @@ function toggle() {
                 :class="modelValue ? 'left-[14px]' : 'left-0.5'"
             />
         </span>
-        <!-- A row label names the switch; its on/off text only repeats aria-checked. -->
+        <!-- Once a row label or aria-label names the switch, its on/off text only repeats aria-checked. -->
         <span
             class="text-[12px] text-muted-foreground"
-            :aria-hidden="$attrs['aria-labelledby'] ? 'true' : undefined"
+            :aria-hidden="
+                $attrs['aria-labelledby'] || $attrs['aria-label']
+                    ? 'true'
+                    : undefined
+            "
             >{{ labelText }}</span
         >
     </button>

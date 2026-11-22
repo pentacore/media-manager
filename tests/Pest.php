@@ -212,6 +212,50 @@ function focusLandsOnScript(string $selector): string
 }
 
 /**
+ * Returns whether the trigger at `$selector` is named, through its
+ * `aria-labelledby`, by text holding both `$name` and its own value text.
+ */
+function selectNameKeepsValueScript(string $selector, string $name): string
+{
+    $selectorJson = json_encode($selector, JSON_THROW_ON_ERROR);
+    $nameJson = json_encode($name, JSON_THROW_ON_ERROR);
+
+    return <<<JS_WRAP
+        (() => {
+            const trigger = document.querySelector({$selectorJson});
+            const value = trigger.textContent.trim();
+            const name = (trigger.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
+                .map((id) => document.getElementById(id)?.textContent.trim() ?? '').join(' ');
+            return value !== '' && name.includes({$nameJson}) && name.includes(value);
+        })()
+    JS_WRAP;
+}
+
+/**
+ * The accessible name of the mm/Toggle switch matching $selector, from its
+ * aria-labelledby targets or its aria-label (the two ways a page names one).
+ * A switch named by neither, or one whose on/off text is still exposed next
+ * to its name, gets a marker so the assertion shows what is wrong.
+ */
+function switchNameScript(string $selector): string
+{
+    $encoded = json_encode($selector, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
+    return <<<JS
+        (() => {
+            const toggle = document.querySelector({$encoded});
+            if (!toggle) return '[no switch]';
+            const ids = (toggle.getAttribute('aria-labelledby') ?? '').split(/\\s+/).filter(Boolean);
+            const name = ids.length
+                ? ids.map((id) => document.getElementById(id)?.textContent.trim() ?? '').join(' ').trim()
+                : (toggle.getAttribute('aria-label') ?? '').trim();
+            const stateHidden = [...toggle.children].at(-1)?.getAttribute('aria-hidden') === 'true';
+            return (name || '[unnamed]') + (stateHidden ? '' : ' [state text exposed]');
+        })()
+    JS;
+}
+
+/**
  * Waits until the Vue app has mounted onto #app (Vue sets `__vue_app__` after
  * hydrate() has flushed every onMounted hook), so Echo subscriptions, hover
  * prefetch and click handlers exist. Throws after ~5 s. SSR markup satisfies

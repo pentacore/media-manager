@@ -165,6 +165,8 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
                             <td class="px-3 py-3">
                                 <Toggle
                                     :model-value="rule.is_enabled"
+                                    :aria-label="`${rule.label}: enabled`"
+                                    :data-rule-enabled-toggle="rule.type"
                                     :label="rule.is_enabled ? 'on' : 'off'"
                                     @update:model-value="
                                         (v) => setEnabled(rule, v)
@@ -174,6 +176,8 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
                             <td class="px-3 py-3">
                                 <Toggle
                                     :model-value="rule.requires_approval"
+                                    :aria-label="`${rule.label}: requires approval`"
+                                    :data-rule-approval-toggle="rule.type"
                                     :label="
                                         rule.requires_approval
                                             ? 'required'

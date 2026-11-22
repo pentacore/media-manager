@@ -468,10 +468,16 @@ function setJudge(judge: BenchmarkSelectionForm): void {
         </section>
 
         <section class="grid gap-1.5" data-benchmark-schedule-enabled>
-            <h2 class="text-[13px] font-semibold">Enabled</h2>
+            <h2
+                id="benchmark-schedule-enabled-label"
+                class="text-[13px] font-semibold"
+            >
+                Enabled
+            </h2>
             <div>
                 <Toggle
                     v-model="form.enabled"
+                    aria-labelledby="benchmark-schedule-enabled-label"
                     :label="form.enabled ? 'Runs on schedule' : 'Paused'"
                 />
             </div>
