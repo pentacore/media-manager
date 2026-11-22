@@ -252,11 +252,14 @@ function decisionVariant(status: string): PillVariant {
                     class="flex flex-col items-end gap-1 rounded-xl border border-border bg-card px-3 py-2"
                 >
                     <span
+                        id="webhook-log-capture-label"
                         class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                         >Capture &amp; store</span
                     >
                     <Toggle
                         :model-value="captureEnabled"
+                        aria-labelledby="webhook-log-capture-label"
+                        data-webhook-capture-toggle
                         :disabled="updatingCapture"
                         :label="
                             captureEnabled ? 'Storing payloads' : 'Discarding'

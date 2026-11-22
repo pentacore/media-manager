@@ -1,3 +1,11 @@
+## [1.61.2](https://github.com/pentacore/media-manager/compare/v1.61.1...v1.61.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* **a11y:** name switches outside settings rows by their row, column or heading ([a0ac5d0](https://github.com/pentacore/media-manager/commit/a0ac5d0f0151516a7cb7bf8fe566e006d5d14056))
+* **a11y:** name the chat model picker's selects Model and Reasoning ([9e548e0](https://github.com/pentacore/media-manager/commit/9e548e0149cd44ab36263043e51a329299f4a6bd))
+
 ## [1.61.1](https://github.com/pentacore/media-manager/compare/v1.61.0...v1.61.1) (2026-11-22)
 
 

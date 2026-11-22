@@ -145,26 +145,6 @@ function settingsLabelSeedAdminPages(): void
 }
 
 /**
- * Returns whether the trigger at `$selector` is named, through its
- * `aria-labelledby`, by text holding both `$name` and its own value text.
- */
-function settingsLabelNameKeepsValueScript(string $selector, string $name): string
-{
-    $selectorJson = json_encode($selector, JSON_THROW_ON_ERROR);
-    $nameJson = json_encode($name, JSON_THROW_ON_ERROR);
-
-    return <<<JS_WRAP
-        (() => {
-            const trigger = document.querySelector({$selectorJson});
-            const value = trigger.textContent.trim();
-            const name = (trigger.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
-                .map((id) => document.getElementById(id)?.textContent.trim() ?? '').join(' ');
-            return value !== '' && name.includes({$nameJson}) && name.includes(value);
-        })()
-    JS_WRAP;
-}
-
-/**
  * Returns whether the AI Models page shows at least two add-event-override
  * selects (one per task that accepts event scopes) and no two share a name.
  */
@@ -314,8 +294,8 @@ test('the chat template editor names its toggles and its preset and tool group c
 
     $webpage->assertScript('document.querySelector("#template-auto-send").getAttribute("aria-labelledby")', 'template-auto-send-label')
         ->assertScript('document.querySelector("#template-pinned").labels[0].textContent.trim()', 'Show on new chats')
-        ->assertScript(settingsLabelNameKeepsValueScript('#template-preset-reasoning', 'Reasoning'), true)
-        ->assertScript(settingsLabelNameKeepsValueScript('#template-preset-model', 'Model'), true)
+        ->assertScript(selectNameKeepsValueScript('#template-preset-reasoning', 'Reasoning'), true)
+        ->assertScript(selectNameKeepsValueScript('#template-preset-model', 'Model'), true)
         ->assertScript('document.querySelectorAll("main [role=\"group\"][aria-labelledby]").length', 2)
         ->assertScript(settingsLabelForNonLabelableScript(), '[]')
         ->assertScript(settingsLabelUnnamedGroupControlsScript(), '[]')
@@ -334,7 +314,7 @@ test('the ai models rows and failover are named control groups', function (): vo
     visit(route('admin.ai-models.index', absolute: false))
         ->assertNoSmoke()
         ->assertPresent('[data-add-event-override] button')
-        ->assertScript(settingsLabelNameKeepsValueScript('[data-task="chat"] [data-reasoning-select] button', 'Chat reasoning'), true)
+        ->assertScript(selectNameKeepsValueScript('[data-task="chat"] [data-reasoning-select] button', 'Chat reasoning'), true)
         ->assertScript('document.querySelector("[data-task=\"chat\"] [data-reasoning-select] [data-select-name]").getAttribute("aria-hidden")', 'true')
         ->assertScript('[...document.querySelectorAll("main [data-select-name]")].filter((name) => name.getAttribute("aria-hidden") !== "true").length', 0)
         ->assertScript(settingsLabelUniqueAddOverrideNamesScript(), true)

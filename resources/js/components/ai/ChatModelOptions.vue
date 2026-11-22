@@ -110,10 +110,15 @@ function reset(): void {
     <div class="flex flex-col gap-3" data-chat-model-options>
         <template v-if="options">
             <div class="flex flex-col gap-1.5">
-                <span class="text-xs font-medium text-muted-foreground">
+                <!-- Visual only: aria-label names the select and keeps its value in the name. -->
+                <span
+                    class="text-xs font-medium text-muted-foreground"
+                    aria-hidden="true"
+                >
                     Model
                 </span>
                 <ModelSelect
+                    aria-label="Model"
                     :models="options.models"
                     :inherit-label="`Default (${options.defaults.provider} · ${options.defaults.model})`"
                     :provider="override.provider ?? ''"
@@ -125,10 +130,14 @@ function reset(): void {
                 />
             </div>
             <div class="flex flex-col gap-1.5">
-                <span class="text-xs font-medium text-muted-foreground">
+                <span
+                    class="text-xs font-medium text-muted-foreground"
+                    aria-hidden="true"
+                >
                     Reasoning
                 </span>
                 <ReasoningSelect
+                    aria-label="Reasoning"
                     :model-value="override.reasoning"
                     :levels="options.reasoningLevels"
                     :inherit-label="`Default (${options.defaults.reasoning_label})`"

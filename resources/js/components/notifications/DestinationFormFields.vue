@@ -187,10 +187,11 @@ const hint = computed(() => CHANNEL_HINTS[channel.value] ?? '');
                 <InputError :message="errors.min_severity" />
             </div>
             <div class="space-y-2">
-                <Label>Enabled</Label>
+                <Label :id="`${idPrefix}-enabled-label`">Enabled</Label>
                 <div>
                     <Toggle
                         v-model="enabled"
+                        :aria-labelledby="`${idPrefix}-enabled-label`"
                         :label="enabled ? 'Enabled' : 'Disabled'"
                         :data-destination-enabled="idPrefix"
                     />
