@@ -192,7 +192,7 @@ test('a new request elsewhere does not raise the stale banner in a batch view', 
 
     $unrelated = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example unrelated request']);
     $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($unrelated)->broadcastWith(), 4));
-    $webpage->script('new Promise((resolve) => setTimeout(resolve, 1000))');
+    $webpage->wait(1);
 
     $webpage->assertMissing('[data-action-stale]')
         ->assertMissing(sprintf('[data-action-row="%d"]', $unrelated->id))
