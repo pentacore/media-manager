@@ -43,6 +43,7 @@ import {
 import { useConfirm } from '@/composables/useConfirm';
 import { formatCount } from '@/lib/format';
 import { dashboard } from '@/routes';
+import type { ShowBenchmarkComparisonRequestQuery } from '@/typefinder';
 
 const props = defineProps<{
     run: BenchmarkRunDetail;
@@ -132,7 +133,9 @@ const statusVariant = computed<'ok' | 'warn' | 'danger' | 'info' | 'default'>(
 
 function compareWithUrl(option: BenchmarkCompareOption): string {
     return BenchmarkComparisonController.show.url({
-        query: { runs: `${option.id},${props.run.id}` },
+        query: {
+            runs: `${option.id},${props.run.id}`,
+        } satisfies ShowBenchmarkComparisonRequestQuery & { runs: string },
     });
 }
 

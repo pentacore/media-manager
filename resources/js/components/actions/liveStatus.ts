@@ -1,4 +1,4 @@
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
+import type { ActionRequestResource } from '@/typefinder';
 import { mergeLiveResult } from './failure';
 
 type ActionStatus = ActionRequestResource['status'];

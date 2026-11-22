@@ -26,7 +26,7 @@ import {
 import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { dashboard } from '@/routes';
-import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
+import type { EmbyActivityResource } from '@/typefinder';
 
 type Activity = EmbyActivityResource;
 

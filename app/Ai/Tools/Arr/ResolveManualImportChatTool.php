@@ -14,6 +14,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 
 /**
@@ -48,12 +49,7 @@ class ResolveManualImportChatTool extends BaseTool
             'reason' => ['required', 'string'],
             'excluded_paths' => ['nullable', 'array', 'max:50'],
             'excluded_paths.*' => ['string', 'max:1024'],
-        ], [
-            'download_id.required' => 'download_id is required.',
-            'download_id.string' => 'download_id must be a string.',
-            'reason.required' => 'reason is required so the approver understands the decision.',
-            'reason.string' => 'reason must be a short plain-text explanation for the approver.',
-        ]);
+        ], $this->argumentMessages());
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) $validated['download_id'];
@@ -89,6 +85,20 @@ class ResolveManualImportChatTool extends BaseTool
                 'agent_rationale' => mb_substr($reason, 0, 1000),
             ],
             'force_requires_approval' => $partial,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return [
+            'download_id.required' => 'download_id is required.',
+            'download_id.string' => 'download_id must be a string.',
+            'reason.required' => 'reason is required so the approver understands the decision.',
+            'reason.string' => 'reason must be a short plain-text explanation for the approver.',
         ];
     }
 

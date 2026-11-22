@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
-import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
+import type { ServiceConnectionResource } from '@/typefinder';
 
 interface DiskSpace {
     path: string | null;

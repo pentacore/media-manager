@@ -1,3 +1,10 @@
+import type {
+    FreeUsagePeriod,
+    RateLimitMetric,
+    RateLimitPeriod,
+    TimeWindow,
+} from '@/typefinder';
+
 export interface Totals {
     total_invocations: number;
     total_tool_calls: number;
@@ -130,8 +137,7 @@ export interface InvocationDetail {
     scenario_total_cost: number | null;
 }
 
-export type WindowKey =
-    'today' | '24h' | '7d' | '30d' | '90d' | 'week' | 'month' | 'year' | 'all';
+export type WindowKey = TimeWindow;
 
 /** The AI usage ledger's model-tier filter; null shows every run. */
 export type TierFilter = 'first' | 'fell_through';
@@ -147,7 +153,7 @@ export interface WindowOption {
 export interface FreePoolRow {
     id: number;
     name: string;
-    period: 'daily' | 'weekly' | 'monthly';
+    period: FreeUsagePeriod;
     unified: boolean;
     documentation_url: string | null;
     free_input: number | null;
@@ -168,8 +174,8 @@ export interface RateLimitStatusRow {
     provider: string;
     model: string;
     limits: Array<{
-        metric: 'requests' | 'tokens';
-        period: 'minute' | 'hour' | 'day';
+        metric: RateLimitMetric;
+        period: RateLimitPeriod;
         limit_value: number;
         used: number;
     }>;

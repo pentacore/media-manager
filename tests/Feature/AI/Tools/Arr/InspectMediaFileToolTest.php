@@ -84,5 +84,6 @@ test('the inspect tool rejects an unknown service', function (): void {
         'absolute_episode_number' => null,
     ])), true, flags: JSON_THROW_ON_ERROR);
 
-    expect($result['error'])->toBe('tool_failed');
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('service');
 });

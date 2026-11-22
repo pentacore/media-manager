@@ -12,6 +12,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 use Throwable;
 
@@ -55,18 +56,7 @@ class InspectStuckImportTool extends DecisionTool
             'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
             'download_ids' => ['required', 'array', 'min:1', 'max:20'],
             'download_ids.*' => ['required', 'string', 'distinct'],
-        ], [
-            'service.required' => 'service must be "sonarr" or "radarr".',
-            'service.string' => 'service must be "sonarr" or "radarr".',
-            'service.regex' => 'service must be "sonarr" or "radarr".',
-            'download_ids.required' => 'download_ids needs at least one downloadId (from the event payload).',
-            'download_ids.array' => 'download_ids must be a list of downloadIds (from the event payload).',
-            'download_ids.min' => 'download_ids needs at least one downloadId (from the event payload).',
-            'download_ids.max' => 'download_ids takes at most 20 downloadIds per call.',
-            'download_ids.*.required' => 'every download id must be a string (from the event payload).',
-            'download_ids.*.string' => 'every download id must be a string (from the event payload).',
-            'download_ids.*.distinct' => 'download_ids must not repeat an id.',
-        ]);
+        ], $this->argumentMessages());
         $service = mb_strtolower((string) $validated['service']);
         /** @var list<string> $downloadIds */
         $downloadIds = array_values(array_map(strval(...), $validated['download_ids']));
@@ -95,6 +85,27 @@ class InspectStuckImportTool extends DecisionTool
         }
 
         return ['ok' => true, 'service' => $service, 'downloads' => $inspections];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return [
+            'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.string' => 'service must be "sonarr" or "radarr".',
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'download_ids.required' => 'download_ids needs at least one downloadId (from the event payload).',
+            'download_ids.array' => 'download_ids must be a list of downloadIds (from the event payload).',
+            'download_ids.list' => 'download_ids must be a list of downloadIds (from the event payload).',
+            'download_ids.min' => 'download_ids needs at least one downloadId (from the event payload).',
+            'download_ids.max' => 'download_ids takes at most 20 downloadIds per call.',
+            'download_ids.*.required' => 'every download id must be a string (from the event payload).',
+            'download_ids.*.string' => 'every download id must be a string (from the event payload).',
+            'download_ids.*.distinct' => 'download_ids must not repeat an id.',
+        ];
     }
 
     /**

@@ -159,10 +159,11 @@ test('lists the whole Whisparr library when service is whisparr and no id is giv
     expect($result)->toHaveCount(1);
 });
 
-test('returns tool_failed for an unknown service', function (): void {
+test('rejects an unknown service against the schema enum', function (): void {
     $result = json_decode((new GetMediaTool)->handle(new Request(['service' => 'emby', 'item_id' => null])), true);
 
-    expect($result['error'])->toBe('tool_failed');
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('service');
 });
 
 test('risk is Read', function (): void {

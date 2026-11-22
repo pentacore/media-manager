@@ -1,5 +1,5 @@
 import type { ConfirmOptions } from '@/composables/useConfirm';
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
+import type { ActionRequestResource } from '@/typefinder';
 
 /** An action's `result`: the full result for admins, the member-safe subset otherwise. */
 export type ActionResult = ActionRequestResource['result'];

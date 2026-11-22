@@ -18,7 +18,9 @@ final class HistoryPageRequest extends FormRequest
     {
         return [
             ...$this->bazarrPageRules(),
+            /** @query */
             'media_type' => ['nullable', 'in:episode,movie'],
+            /** @query */
             'provider' => ['nullable', 'string', 'max:100'],
         ];
     }

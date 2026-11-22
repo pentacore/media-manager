@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/table';
 import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
-import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
+import type { EmbyUserLinkResource } from '@/typefinder';
 
 type UserLink = EmbyUserLinkResource;
 

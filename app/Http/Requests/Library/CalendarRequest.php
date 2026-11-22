@@ -13,6 +13,9 @@ class CalendarRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['month' => ['nullable', 'date_format:Y-m']];
+        return [
+            /** @query */
+            'month' => ['nullable', 'date_format:Y-m'],
+        ];
     }
 }

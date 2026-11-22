@@ -2,7 +2,7 @@
 import { AlertTriangle } from '@lucide/vue';
 import { computed } from 'vue';
 import { Field } from '@/components/mm';
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
+import type { ActionRequestResource } from '@/typefinder';
 import {
     failureMessage,
     failureReasonLabel,

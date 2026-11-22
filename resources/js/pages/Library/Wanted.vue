@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useDateTime } from '@/composables/useDateTime';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import type { WantedRequestQuery } from '@/typefinder';
 import type { MediaSearchCommand } from '@/types';
 
 type Service = 'sonarr' | 'radarr';
@@ -50,7 +51,7 @@ interface WantedSection {
 
 const props = defineProps<{
     filters: {
-        tab: 'missing' | 'cutoff';
+        tab: NonNullable<WantedRequestQuery['tab']>;
         monitored: boolean;
         sonarr_page: number;
         radarr_page: number;

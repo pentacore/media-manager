@@ -25,6 +25,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Conversations
+    |--------------------------------------------------------------------------
+    |
+    | The SDK's own title call is off: it runs on the provider's hardcoded
+    | cheapest model (ignoring the configured Title task), and its title is
+    | overwritten by ChatController's seed and GenerateConversationTitle.
+    |
+    */
+
+    'conversations' => [
+        'generate_title' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Caching
     |--------------------------------------------------------------------------
     |

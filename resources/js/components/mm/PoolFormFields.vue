@@ -10,15 +10,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import type { FreePoolOverflowBehavior, FreeUsagePeriod } from '@/typefinder';
 
 interface PoolInitial {
     name: string;
-    period: 'daily' | 'weekly' | 'monthly';
+    period: FreeUsagePeriod;
     unified: boolean;
     free_input_tokens: number | null;
     free_output_tokens: number | null;
     free_total_tokens: number | null;
-    overflow_behavior: 'fit_or_paid' | 'split';
+    overflow_behavior: FreePoolOverflowBehavior;
     documentation_url: string | null;
 }
 
