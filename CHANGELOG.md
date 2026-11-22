@@ -1,3 +1,21 @@
+## [1.61.1](https://github.com/pentacore/media-manager/compare/v1.61.0...v1.61.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **a11y:** describe each settings control with its row hint ([cf161aa](https://github.com/pentacore/media-manager/commit/cf161aa027d1a0dbb59e58a4da26e2eccfc101c1))
+* **a11y:** give collapsible triggers a real aria-controls id ([f157fb9](https://github.com/pentacore/media-manager/commit/f157fb908be6ae1eb3c1877a5b6abec0ec09cc52))
+* **a11y:** hide the select name spans from browse mode ([24e294f](https://github.com/pentacore/media-manager/commit/24e294fe167516b463626ff2575d8d79ed28cce1))
+* **a11y:** keep select values in their names and cover the add-override selects ([98087c3](https://github.com/pentacore/media-manager/commit/98087c394519c360271b300c6e007d949622f833))
+* **a11y:** keep the scroll position when a connection delete reloads the list ([2159352](https://github.com/pentacore/media-manager/commit/21593525db1d154929a40686cb70c9f0421233b6))
+* **a11y:** link admin settings labels to their controls ([1a89323](https://github.com/pentacore/media-manager/commit/1a89323d954ebe88086c92cffe7e076512cbb104))
+* **a11y:** link settings labels to their controls and announce toggles as switches ([5698632](https://github.com/pentacore/media-manager/commit/5698632c7680f475769f39fe3b78f7f7f7fb0990))
+* **a11y:** name each add-override select after its task ([4e57163](https://github.com/pentacore/media-manager/commit/4e57163b069b7e58d4808cfa5f160f09b40ae168))
+* **a11y:** name multi-control settings rows without a label for, and drop a sleep from the toggle test ([7ba62e6](https://github.com/pentacore/media-manager/commit/7ba62e6bc27bc35f71a6eea723e3d559270fc3d0))
+* **a11y:** name settings checkboxes by their row label and describe them by their own text ([5b31c76](https://github.com/pentacore/media-manager/commit/5b31c767678971d676616738cb4e5ca2361ecfd0))
+* **a11y:** return focus to a row's menu after its confirm closes ([2f43b2e](https://github.com/pentacore/media-manager/commit/2f43b2e9d191303ab818f6680a6d02371dafbda2))
+* **a11y:** return focus to the phone menu after its confirms close ([1c9dbd6](https://github.com/pentacore/media-manager/commit/1c9dbd63edc92c363e40c25d4cd55b3e2d85a6a3))
+
 # [1.61.0](https://github.com/pentacore/media-manager/compare/v1.60.0...v1.61.0) (2026-11-22)
 
 
