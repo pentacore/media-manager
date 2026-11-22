@@ -85,7 +85,7 @@ test('a streamed turn hands the investigator structured findings to the parent',
         ->and((string) $toolResult->toolResult->result)->toContain('"downloads":[{')
         ->toContain('"recommendation":"remove"')
         ->toContain('"excluded_paths":["\/dl\/sample.mkv"]')
-        ->not->toContain('Agent failed');
+        ->not->toContain('The tool call failed');
 
     StuckDownloadInvestigatorAgent::assertPromptedTimes(1);
     expect(AiUsageRecord::where('parent_invocation_id', $stream->invocationId)->sole()->agent_class)->toBe(StuckDownloadInvestigatorAgent::class);

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Http\Middleware\EnsureAIEnabled;
 use App\Http\Middleware\EnsurePasswordIsSet;
 use App\Http\Middleware\EnsureUserHasRole;
@@ -60,5 +61,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // The Uptime Kuma push URL carries its token in the path.
         $exceptions->dontFlash(['push_url']);
+        // laravel/ai reports every exception a tool throws; a user Stop that
+        // ended a structured sub-agent is not an error.
+        $exceptions->dontReport([ClientDisconnectedException::class]);
         $exceptions->shouldRenderJsonWhen(fn (Request $request, Throwable $e): bool => $request->is('api/agent/*') || $request->expectsJson());
     })->create();
