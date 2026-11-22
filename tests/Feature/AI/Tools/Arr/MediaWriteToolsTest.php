@@ -242,11 +242,12 @@ test('DeleteMediaTool reports a non-positive item_id as invalid arguments', func
         ->and(ActionRequest::count())->toBe(0);
 });
 
-test('unknown service returns tool_failed for every write tool', function (): void {
+test('unknown service is rejected as invalid_arguments for every write tool', function (): void {
     foreach ([new AddMediaTool, new DeleteMediaTool, new MonitorMediaTool, new SetMediaQualityProfileTool] as $tool) {
         $result = json_decode($tool->handle(new Request(['service' => 'emby', 'item_id' => 1])), true);
 
-        expect($result['error'])->toBe('tool_failed');
+        expect($result['error'])->toBe('invalid_arguments')
+            ->and($result['errors'])->toHaveKey('service');
     }
 
     expect(ActionRequest::count())->toBe(0);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Tools;
 
 use App\Ai\Risk;
+use App\Ai\ToolArgumentRules;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionDescriber;
@@ -33,10 +34,12 @@ abstract class BaseTool implements Tool
         }
 
         try {
+            $request->validate(ToolArgumentRules::for($this), $this->argumentMessages());
             $result = $this->execute($request);
         } catch (ValidationException $validationException) {
-            // $request->validate() inside execute(): tell the model exactly
-            // which argument to fix instead of a generic tool failure.
+            // The schema-derived check above, or a $request->validate() inside
+            // execute() for what the schema can't express: tell the model
+            // exactly which argument to fix instead of a generic tool failure.
             return $this->safeEncode([
                 'error' => 'invalid_arguments',
                 'errors' => $validationException->errors(),
@@ -80,6 +83,18 @@ abstract class BaseTool implements Tool
     abstract protected function execute(Request $request): array;
 
     abstract public function risk(): Risk;
+
+    /**
+     * Custom messages for the schema-derived argument check handle() runs
+     * before execute() (same keys as $request->validate()'s messages). Reuse
+     * them in execute()'s own validate() so both stages word a field alike.
+     *
+     * @return array<string, string>
+     */
+    protected function argumentMessages(): array
+    {
+        return [];
+    }
 
     /**
      * @param  array<string, mixed>  $candidate

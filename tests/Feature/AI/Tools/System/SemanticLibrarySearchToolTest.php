@@ -66,7 +66,7 @@ test('ignores an invalid kind by passing null', function (): void {
     $semanticLibrarySearchTool->handle(new Request(['query' => 'anything', 'kind' => 'documentary']));
 });
 
-test('returns an error envelope when the query is empty', function (): void {
+test('rejects a blank query as invalid arguments before searching', function (): void {
     $mock = Mockery::mock(SemanticLibrarySearch::class);
     $mock->shouldNotReceive('search');
 
@@ -75,7 +75,8 @@ test('returns an error envelope when the query is empty', function (): void {
     $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
     $decoded = json_decode($semanticLibrarySearchTool->handle(new Request(['query' => '   '])), true);
 
-    expect($decoded['error'])->toBe('empty_query');
+    expect($decoded['error'])->toBe('invalid_arguments')
+        ->and($decoded['errors'])->toHaveKey('query');
 });
 
 test('surfaces the unavailable envelope when the service is unavailable', function (): void {

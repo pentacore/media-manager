@@ -12,7 +12,6 @@ use App\Services\Arr\ArrConnections;
 use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Validation\Rule;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
@@ -35,11 +34,7 @@ class GetMediaAddOptionsTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $validated = $request->validate([
-            'service' => ['required', 'string', Rule::in(['sonarr', 'radarr', 'whisparr'])],
-        ]);
-
-        $serviceType = ServiceType::from((string) $validated['service']);
+        $serviceType = ServiceType::from($request->string('service')->toString());
         $serviceConnection = ServiceConnection::resolveActive($serviceType);
         $client = $serviceType === ServiceType::Whisparr
             ? new WhisparrClient($serviceConnection)
