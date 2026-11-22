@@ -34,6 +34,8 @@ function toggle() {
 <template>
     <button
         type="button"
+        role="switch"
+        :aria-checked="modelValue"
         :disabled="disabled"
         :class="
             cn(
@@ -56,6 +58,11 @@ function toggle() {
                 :class="modelValue ? 'left-[14px]' : 'left-0.5'"
             />
         </span>
-        <span class="text-[12px] text-muted-foreground">{{ labelText }}</span>
+        <!-- A row label names the switch; its on/off text only repeats aria-checked. -->
+        <span
+            class="text-[12px] text-muted-foreground"
+            :aria-hidden="$attrs['aria-labelledby'] ? 'true' : undefined"
+            >{{ labelText }}</span
+        >
     </button>
 </template>

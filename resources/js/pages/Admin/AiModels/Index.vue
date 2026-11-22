@@ -234,8 +234,15 @@ function submit(): void {
                     class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6"
                     :data-task="row.task"
                 >
-                    <Field :label="row.label" />
-                    <div class="flex min-w-0 flex-col gap-2">
+                    <Field
+                        :label="row.label"
+                        :label-id="`ai-models-${row.task}-label`"
+                    />
+                    <div
+                        role="group"
+                        :aria-labelledby="`ai-models-${row.task}-label`"
+                        class="flex min-w-0 flex-col gap-2"
+                    >
                         <TierListEditor
                             v-model="form.tasks[row.task].tiers"
                             :label="row.label"
@@ -313,15 +320,23 @@ function submit(): void {
                 data-task="failover"
             >
                 <Field
+                    label-id="ai-models-failover-label"
                     label="Failover"
                     hint="Where a task goes when its provider fails. Uses the failing task's reasoning."
                 />
-                <div class="flex min-w-0 flex-col gap-2">
+                <div
+                    role="group"
+                    aria-labelledby="ai-models-failover-label"
+                    aria-describedby="ai-models-failover-label-hint"
+                    class="flex min-w-0 flex-col gap-2"
+                >
                     <Select
                         :model-value="form.failover.provider ?? 'none'"
                         @update:model-value="setFailoverProvider"
                     >
                         <SelectTrigger
+                            id="ai-models-failover-provider"
+                            aria-labelledby="ai-models-failover-label ai-models-failover-provider"
                             class="h-8 max-w-[220px] text-sm"
                             data-failover-provider
                         >
@@ -345,6 +360,7 @@ function submit(): void {
                                     models[form.failover.provider] ?? [],
                             }"
                             inherit-label="Provider default"
+                            aria-label="Failover model"
                             :provider="
                                 form.failover.model
                                     ? form.failover.provider

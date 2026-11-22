@@ -91,16 +91,19 @@ function blankTier(): TierForm {
     };
 }
 
-/** Accessible name of a tier's model select, prefixed with the list's label. */
-function modelAriaLabel(index: number): string {
-    const multiple = tiers.value.length > 1;
-    const name = multiple ? `tier ${index + 1} model` : 'model';
+/** Accessible name of a tier's model or reasoning select, prefixed with the list's label. */
+function tierControlAriaLabel(
+    index: number,
+    control: 'model' | 'reasoning',
+): string {
+    const name =
+        tiers.value.length > 1 ? `tier ${index + 1} ${control}` : control;
 
     if (props.label) {
         return `${props.label} ${name}`;
     }
 
-    return multiple ? `Tier ${index + 1} model` : 'Model';
+    return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 function isLast(index: number): boolean {
@@ -296,7 +299,7 @@ function errorFor(index: number): string | undefined {
                     :inherit-label="isLast(index) ? inheritLabel : undefined"
                     :provider="tier.provider ?? ''"
                     :model="tier.model ?? ''"
-                    :aria-label="modelAriaLabel(index)"
+                    :aria-label="tierControlAriaLabel(index, 'model')"
                     @update:provider="
                         (value: string) => setPair(tier, 'provider', value)
                     "
@@ -312,6 +315,7 @@ function errorFor(index: number): string | undefined {
                 :inherit-label="tier.model ? 'Default' : reasoningInheritLabel"
                 :accepted="acceptedLevels(tier)"
                 :disabled-hint="reasoningHint(tier)"
+                :aria-label="tierControlAriaLabel(index, 'reasoning')"
             />
             <p
                 v-if="poolLine(tier)"

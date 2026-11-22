@@ -200,6 +200,18 @@ function confirmDialogWaitUntilScript(string $condition): string
 }
 
 /**
+ * Waits until the element matching $selector has focus (a dialog's close
+ * focus runs as it unmounts, a visit's or reload's after it renders), then
+ * reports whether it does.
+ */
+function focusLandsOnScript(string $selector): string
+{
+    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+
+    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
+}
+
+/**
  * Waits until the Vue app has mounted onto #app (Vue sets `__vue_app__` after
  * hydrate() has flushed every onMounted hook), so Echo subscriptions, hover
  * prefetch and click handlers exist. Throws after ~5 s. SSR markup satisfies

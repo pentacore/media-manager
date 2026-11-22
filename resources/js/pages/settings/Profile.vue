@@ -89,6 +89,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="name"
                             label="Name"
                             hint="Shown across the app and in audit logs."
                         >
@@ -98,6 +99,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="name"
+                            aria-describedby="name-hint"
                             class="h-8 max-w-[360px] text-sm"
                             name="name"
                             :default-value="user.name"
@@ -114,6 +116,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="email"
                             label="Email"
                             hint="Used for sign-in and account notifications."
                         >
@@ -123,6 +126,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="email"
+                            aria-describedby="email-hint"
                             type="email"
                             class="h-8 max-w-[360px] text-sm"
                             name="email"
@@ -231,6 +235,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="emby-username"
                             label="Emby username"
                             hint="The display name you use to sign in to Emby."
                         >
@@ -240,6 +245,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <Input
                             id="emby-username"
+                            aria-describedby="emby-username-hint"
                             class="h-8 max-w-[360px] text-sm"
                             name="emby_username"
                             required
@@ -255,6 +261,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="emby-password"
                             label="Emby password"
                             hint="Verifies it's actually you. Stored only as a session check, not retained."
                         >
@@ -264,6 +271,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     <div>
                         <PasswordInput
                             id="emby-password"
+                            aria-describedby="emby-password-hint"
                             name="password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"
