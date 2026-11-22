@@ -1,11 +1,12 @@
 import type { ConversationMessage } from '@/composables/useAiChat';
 import type {
+    AiMode,
     AiReasoningLevel,
     SubtitleAuditBatchStatus,
     SubtitleAuditEpisodeOutcome,
 } from '@/typefinder';
 
-export type ChatMode = 'advisory' | 'executive';
+export type ChatMode = AiMode;
 
 /** A conversation's model/reasoning override; null fields use the chat default. */
 export type ChatOverride = {

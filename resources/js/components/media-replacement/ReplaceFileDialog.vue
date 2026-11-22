@@ -19,7 +19,10 @@ import {
 import { formatBytes } from '@/lib/format';
 import { jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
-import type { QueryParams } from '@/wayfinder';
+import type {
+    ReplacementTargetRequest,
+    SubtitleRuleStrength,
+} from '@/typefinder';
 
 // State machine: idle -> inspecting -> inspected -> searching -> picked -> submitting
 type Phase =
@@ -38,7 +41,7 @@ interface ReplacementSnapshot {
 
 interface MatchedRule {
     name: string;
-    strength: 'guarantee' | 'strong_evidence' | 'preference';
+    strength: SubtitleRuleStrength;
     languages: string[];
     evidences_subtitles: boolean;
     explanation?: string;
@@ -80,7 +83,7 @@ interface ReplaceResponse {
 }
 
 const props = defineProps<{
-    service: 'sonarr' | 'radarr';
+    service: ReplacementTargetRequest['service'];
     connectionId: number;
     itemId: number;
     seasonNumber?: number;
@@ -122,7 +125,10 @@ const selectedCandidate = computed(
         ) ?? null,
 );
 
-function targetQuery(): QueryParams {
+// The whole request is the query string; its keys come from a rules helper shared
+// with POST requests, so they cannot be tagged @query yet:
+// https://github.com/pentacore/Laravel-Typefinder/issues/129
+function targetQuery(): ReplacementTargetRequest {
     return {
         service: props.service,
         service_connection_id: props.connectionId,

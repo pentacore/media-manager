@@ -1,4 +1,4 @@
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
+import type { ActionRequestResource } from '@/typefinder';
 
 /** One Action Queue row, as the page's `requests` prop lists it. */
 export type ActionRequestRow = ActionRequestResource;

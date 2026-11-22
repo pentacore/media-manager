@@ -16,7 +16,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { useConfirm } from '@/composables/useConfirm';
 import { jsonRequest } from '@/lib/http';
-import type { AiReasoningLevel } from '@/typefinder';
+import type {
+    AiReasoningLevel,
+    EstimateNeutralRejudgeRequest,
+    StartNeutralRejudgeRequest,
+} from '@/typefinder';
 import { ORIGINAL_SCORES } from './compare';
 import { formatUsd } from './format';
 import SelectionRow from './SelectionRow.vue';
@@ -98,8 +102,10 @@ const starting = ref(false);
 const errors = ref<string[]>([]);
 
 const runIds = computed(() => props.comparison.runs.map((run) => run.id));
-const judgePayload = computed(() => ({
-    provider: judge.value.provider,
+const judgePayload = computed<EstimateNeutralRejudgeRequest['judge']>(() => ({
+    // The picker only offers the configured text providers the rule allows.
+    provider: judge.value
+        .provider as EstimateNeutralRejudgeRequest['judge']['provider'],
     model: judge.value.model,
     reasoning: judge.value.reasoning,
 }));
@@ -122,7 +128,10 @@ async function runEstimate(): Promise<void> {
         const response = await jsonRequest<BenchmarkNeutralEstimate>(
             'POST',
             BenchmarkComparisonController.estimate.url(),
-            { run_ids: runIds.value, judge: judgePayload.value },
+            {
+                run_ids: runIds.value,
+                judge: judgePayload.value,
+            } satisfies EstimateNeutralRejudgeRequest,
         );
 
         if (version === judgeVersion) {
@@ -154,7 +163,7 @@ function start(): void {
             run_ids: runIds.value,
             judge: judgePayload.value,
             cost_cap_usd: Number(costCap.value),
-        },
+        } satisfies StartNeutralRejudgeRequest,
         {
             preserveScroll: true,
             onStart: () => {

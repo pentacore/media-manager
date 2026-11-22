@@ -31,8 +31,11 @@ class ShowBenchmarkComparisonRequest extends FormRequest
     {
         return [
             ...$this->comparisonRunRules(),
+            /** @query */
             'baseline' => ['nullable', 'integer', Rule::in((array) $this->input('run_ids', []))],
+            /** @query */
             'pairs' => ['nullable', 'string', 'max:500'],
+            /** @query */
             'scores' => ['nullable', 'string', 'max:300'],
         ];
     }

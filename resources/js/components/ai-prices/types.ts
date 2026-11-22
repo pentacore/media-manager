@@ -1,4 +1,10 @@
-import type { PricingSource } from '@/typefinder';
+import type {
+    FreePoolOverflowBehavior,
+    FreeUsagePeriod,
+    PricingSource,
+    RateLimitMetric,
+    RateLimitPeriod,
+} from '@/typefinder';
 
 export type PricingSourceKey = PricingSource;
 
@@ -25,8 +31,8 @@ export interface CatalogModelOption {
 }
 
 export interface RateLimitDraft {
-    metric: 'requests' | 'tokens';
-    period: 'minute' | 'hour' | 'day';
+    metric: RateLimitMetric;
+    period: RateLimitPeriod;
     limit_value: number | undefined;
 }
 
@@ -58,8 +64,8 @@ export interface PriceRow {
     automatic_updates_enabled: boolean;
     rate_limits: {
         id: number;
-        metric: 'requests' | 'tokens';
-        period: 'minute' | 'hour' | 'day';
+        metric: RateLimitMetric;
+        period: RateLimitPeriod;
         limit_value: number;
     }[];
 }
@@ -67,12 +73,12 @@ export interface PriceRow {
 export interface PoolRow {
     id: number;
     name: string;
-    period: 'daily' | 'weekly' | 'monthly';
+    period: FreeUsagePeriod;
     unified: boolean;
     free_input_tokens: number | null;
     free_output_tokens: number | null;
     free_total_tokens: number | null;
-    overflow_behavior: 'fit_or_paid' | 'split';
+    overflow_behavior: FreePoolOverflowBehavior;
     documentation_url: string | null;
     prices_count: number;
 }

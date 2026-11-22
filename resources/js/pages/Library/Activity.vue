@@ -24,6 +24,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { focusAfterBulk, returnFocusToBulkMenu, submitBulk } from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
+import type { ManualImportCandidatesRequest } from '@/typefinder';
 
 interface QueueRow {
     id: number;
@@ -379,7 +380,14 @@ function openManualImport(row: QueueRow): void {
                 service: row.service,
                 downloadId: row.download_id,
             },
-            { query: { service_connection_id: row.service_connection_id } },
+            // ManualImportCandidatesRequest's only key is the query string; it comes
+            // from a shared rules helper, so it cannot be tagged @query yet:
+            // https://github.com/pentacore/Laravel-Typefinder/issues/129
+            {
+                query: {
+                    service_connection_id: row.service_connection_id,
+                } satisfies ManualImportCandidatesRequest,
+            },
         ),
         { headers: { Accept: 'application/json' }, credentials: 'same-origin' },
     )

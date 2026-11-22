@@ -15,9 +15,13 @@ class WantedRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @query */
             'tab' => ['nullable', Rule::in(['missing', 'cutoff'])],
+            /** @query */
             'monitored' => ['nullable', 'boolean'],
+            /** @query */
             'sonarr_page' => ['nullable', 'integer', 'min:1'],
+            /** @query */
             'radarr_page' => ['nullable', 'integer', 'min:1'],
         ];
     }

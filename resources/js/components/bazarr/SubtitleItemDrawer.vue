@@ -22,8 +22,11 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { useCan } from '@/composables/useCan';
-import type { SubtitleCandidateResource } from '@/typefinder/resources/SubtitleCandidateResource';
-import type { SubtitleItemResource } from '@/typefinder/resources/SubtitleItemResource';
+import type {
+    SearchRequestQuery,
+    SubtitleCandidateResource,
+    SubtitleItemResource,
+} from '@/typefinder';
 
 type OperationName =
     | 'download_best'
@@ -114,15 +117,14 @@ const uploadOpen = ref(false);
 const selectedUpload = ref<File | null>(null);
 const uploadLanguage = ref('eng');
 
-const searchHttp = useHttp<
-    {
-        connection: number | null;
-        media_type: string;
-        media_id: number | null;
-        target_fingerprint: string;
-    },
-    SearchResponse
->({
+/** The search query, blank until search() fills it from the item. */
+type SubtitleSearchQuery = Pick<SearchRequestQuery, 'target_fingerprint'> & {
+    connection: SearchRequestQuery['connection'] | null;
+    media_type: SearchRequestQuery['media_type'] | '';
+    media_id: SearchRequestQuery['media_id'] | null;
+};
+
+const searchHttp = useHttp<SubtitleSearchQuery, SearchResponse>({
     connection: null,
     media_type: '',
     media_id: null,

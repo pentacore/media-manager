@@ -9,14 +9,7 @@ use App\Concerns\BenchmarkComparisonValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-/**
- * `judge` is overridden because typefinder cannot render its wildcard rules.
- */
-#[TypefinderOverrides([
-    'judge' => '{ provider: string; model: string; reasoning: string | null }',
-])]
 class StartNeutralRejudgeRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;

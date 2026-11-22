@@ -5,7 +5,7 @@ import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/A
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import { SegmentedControl, Toggle } from '@/components/mm';
 import { dashboard } from '@/routes';
-import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
+import type { ActionTypeConfigResource } from '@/typefinder';
 
 type RuleRow = ActionTypeConfigResource;
 
