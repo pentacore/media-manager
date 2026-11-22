@@ -113,6 +113,7 @@
         "Tests\\Browser\\SidebarNavigationTest": 6.5894,
         "Tests\\Browser\\SmokeTest": 81.7436,
         "Tests\\Browser\\SsrHydrationTest": 1.7626,
+        "Tests\\Browser\\ToggleNamesTest": 4.1074,
         "Tests\\Browser\\ToggleTest": 1.641,
         "Tests\\Browser\\TouchTargetTest": 10.9957,
         "Tests\\Browser\\TwoFactorChallengeTest": 1.9531,
@@ -121,6 +122,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 15.9843,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.6608
     },
-    "checksum": "c84ae8f64a3bddc782e5c46e387150ed",
-    "updated_at": "2026-11-22T08:18:31+00:00"
+    "checksum": "592fdd17a1424ccfdb078c3474092ce8",
+    "updated_at": "2026-11-22T10:57:19+00:00"
 }
