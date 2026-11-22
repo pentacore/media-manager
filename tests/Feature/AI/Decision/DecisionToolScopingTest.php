@@ -135,7 +135,7 @@ test('a confident other run that queues an action leaves the action-kind outcome
 
 test('a classifier failure keeps every tool', function (): void {
     $captured = captureDecisionAgentRun();
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     runScopedJob();
 

@@ -95,7 +95,7 @@ test('a case triaged above the threshold runs the Advisor', function (): void {
 });
 
 test('a classifier failure fails open and runs the Advisor', function (): void {
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
     $this->mock(SubtitleAdvisorDecider::class)
         ->shouldReceive('decide')
         ->once()
