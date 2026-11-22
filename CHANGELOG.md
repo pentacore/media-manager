@@ -1,3 +1,37 @@
+# [1.60.0](https://github.com/pentacore/media-manager/compare/v1.59.0...v1.60.0) (2026-11-22)
+
+
+### Bug Fixes
+
+* **ai:** record a sub-agent Stop from ToolFailed on laravel/ai 1.4 ([89d3398](https://github.com/pentacore/media-manager/commit/89d3398286c896f86b017e5f3fd3a3211f957255)), closes [laravel/ai#1191](https://github.com/laravel/ai/issues/1191)
+* **mobile:** 40 px notification matrix cells and the remaining member and guest pages ([a4d9a7f](https://github.com/pentacore/media-manager/commit/a4d9a7f0d95285f9fd0e9c8f77b573e8ce9e6ef3))
+* **mobile:** break long service names in activity-log rows and wrap the row below lg ([f8d5ea0](https://github.com/pentacore/media-manager/commit/f8d5ea05383cfe109d60c46c743f3cfe26c42948))
+* **mobile:** cover the Sonarr connection form, webhook decisions and Whisparr outage states on phones ([70401dc](https://github.com/pentacore/media-manager/commit/70401dc00419f838478300a59b8cbca3fc6869fa))
+* **mobile:** fit or scroll every dialog on a landscape phone ([b016ca4](https://github.com/pentacore/media-manager/commit/b016ca4335d08a5107c0f26cb39c25c864d4f704))
+* **mobile:** fit the add forms and gate the guest auth pages on phones ([afde24f](https://github.com/pentacore/media-manager/commit/afde24f415109296649ce1385fe3636007f30a84))
+* **mobile:** fold the routed gate and layout follow-ups into the phone gate ([5c68fa6](https://github.com/pentacore/media-manager/commit/5c68fa682eb345f7bb3eacecb0d4280223aa1fd7))
+* **mobile:** keep row dividers and hover tint under the sticky admin column ([b2710ae](https://github.com/pentacore/media-manager/commit/b2710ae30b124a69825955d9b96623c2e75726e2))
+* **mobile:** keep the library bar's over-limit note on its first phone row ([cf679c0](https://github.com/pentacore/media-manager/commit/cf679c00b5306291a40cacc36f43701ddcedcd79))
+* **mobile:** keep the library bulk bar to three rows on phones ([e71f9d7](https://github.com/pentacore/media-manager/commit/e71f9d754bc469f434d02a9e888360083b263244))
+* **mobile:** make the AI admin pages reachable with 40 px targets on phones ([26e0fa5](https://github.com/pentacore/media-manager/commit/26e0fa531094657e7c23d32352e40c9aa417a9a9))
+* **mobile:** make the operations admin pages reachable with 40 px targets on phones ([64a8858](https://github.com/pentacore/media-manager/commit/64a88584ac160bda3a432466a431185c2f8a8559))
+* **mobile:** pin the library bulk bars to the bottom of phone screens ([011af23](https://github.com/pentacore/media-manager/commit/011af23904e401e54fcfefd5b23c20b0e0ff06da))
+* **mobile:** re-check the Subtitles and Anime pages with data and fix what they clip ([d95615e](https://github.com/pentacore/media-manager/commit/d95615e9eaa2779047a779d657206a8d256f08ea))
+* **mobile:** scope the webhook actions scroller and Wanted title line to phones ([1c2fa1f](https://github.com/pentacore/media-manager/commit/1c2fa1f9d643ff31b77dbe16a8b44b91612b5c89))
+* **mobile:** show one clamped line in the AI conversation title and gate the Security page ([6df74df](https://github.com/pentacore/media-manager/commit/6df74dfe2b77e0e7d92b1bd461b05f4d7576a89b))
+* **mobile:** wrap activity-log rows on phones and hold statistics grids to their column ([288fdc4](https://github.com/pentacore/media-manager/commit/288fdc46921370b60e92a320dc63482d34a15da6))
+* **mobile:** wrap Subtitles titles at spaces and fit the Subtitles admin on touch ([1ad1198](https://github.com/pentacore/media-manager/commit/1ad11988fbe08b9ba7ff29f8f42e497256083d88))
+* **mobile:** wrap the benchmark run actions and size the decision event fields on phones ([28fd5d8](https://github.com/pentacore/media-manager/commit/28fd5d83944510cb510f517cc88fe718ff6280e9))
+* **requests:** wrap a pending card's actions so they stay inside the card on desktop ([5113561](https://github.com/pentacore/media-manager/commit/5113561688150da1cf5d1d7f65cd761880f31113))
+* **series:** drop a dismissed replace link's params again after a lost race ([88dec29](https://github.com/pentacore/media-manager/commit/88dec299ba7998f4b90cbec3886aea911e2721a4))
+* **series:** keep a dismissed replace link closed when an async response restores it ([44a747b](https://github.com/pentacore/media-manager/commit/44a747b994945f473f1b963e92ce5287d10f9d5e))
+* **types:** mark whenLoaded resource keys optional ([eab2b7c](https://github.com/pentacore/media-manager/commit/eab2b7cc85a342f69605f1e88b69fd6aa4c58a44))
+
+
+### Features
+
+* **mobile:** keep admin tables' name column on screen while they scroll ([8981152](https://github.com/pentacore/media-manager/commit/8981152bd0b6bffa5915045567bd13cb91a6a1f9))
+
 # [1.59.0](https://github.com/pentacore/media-manager/compare/v1.58.3...v1.59.0) (2026-11-03)
 
 
