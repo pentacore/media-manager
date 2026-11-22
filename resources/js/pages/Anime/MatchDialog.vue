@@ -165,8 +165,7 @@ function confirm(): void {
                     Pick the TMDB title that matches
                     <span class="font-medium text-foreground">{{
                         entry.title
-                    }}</span
-                    >. We'll remember the mapping and file the request.
+                    }}</span>. We'll remember the mapping and file the request.
                 </DialogDescription>
             </DialogHeader>
 
