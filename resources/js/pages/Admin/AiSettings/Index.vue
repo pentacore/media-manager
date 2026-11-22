@@ -950,12 +950,10 @@ const budgetState = computed<{
                             Library embeddings are stale — built with
                             <span class="font-mono-tabular">{{
                                 embeddings.indexed_with
-                            }}</span
-                            >, search now uses
+                            }}</span>, search now uses
                             <span class="font-mono-tabular">{{
                                 embeddings.signature
-                            }}</span
-                            >.
+                            }}</span>.
                         </span>
                         <Button
                             type="button"
@@ -1397,7 +1395,7 @@ const budgetState = computed<{
                                     v-for="provider in pricingProviders"
                                     :key="provider.value"
                                     :for="`ignore-provider-${provider.value}`"
-                                    class="flex cursor-pointer items-center gap-2 text-[13px]"
+                                    class="flex cursor-pointer items-center gap-2 text-[13px] touch:min-h-10"
                                 >
                                     <input
                                         :id="`ignore-provider-${provider.value}`"
@@ -1438,7 +1436,7 @@ const budgetState = computed<{
                                     v-for="provider in pricingProviders"
                                     :key="provider.value"
                                     :for="`auto-create-provider-${provider.value}`"
-                                    class="flex cursor-pointer items-center gap-2 text-[13px]"
+                                    class="flex cursor-pointer items-center gap-2 text-[13px] touch:min-h-10"
                                 >
                                     <input
                                         :id="`auto-create-provider-${provider.value}`"

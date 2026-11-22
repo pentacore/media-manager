@@ -40,7 +40,11 @@ defineProps<{
             Resend verification email
         </Button>
 
-        <TextLink :href="logout()" as="button" class="mx-auto block text-sm">
+        <TextLink
+            :href="logout()"
+            as="button"
+            class="touch-target mx-auto block text-sm"
+        >
             Log out
         </TextLink>
     </Form>

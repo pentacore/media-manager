@@ -76,7 +76,7 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                 ] as const"
                 :key="opt[0]"
                 :class="[
-                    'inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm transition-colors',
+                    'inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm transition-colors touch:min-h-10',
                     diskMode === opt[0]
                         ? 'border-accent/50 bg-accent/10 text-accent'
                         : 'hover:bg-bg-hover',
@@ -116,7 +116,9 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                     class="flex flex-wrap items-center gap-3 text-sm"
                     :data-disk-path="entry.path"
                 >
-                    <label class="flex cursor-pointer items-center gap-2">
+                    <label
+                        class="flex cursor-pointer items-center gap-2 touch:min-h-10"
+                    >
                         <input
                             type="checkbox"
                             :value="entry.path"
@@ -143,7 +145,7 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                             :key="metric"
                             type="button"
                             :class="[
-                                'inline-flex h-6 items-center rounded px-2 transition-colors',
+                                'inline-flex h-6 items-center rounded px-2 transition-colors touch:h-10 touch:min-w-10',
                                 diskDisplayFor(entry.path) === metric
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -170,7 +172,7 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
                         :key="metric"
                         type="button"
                         :class="[
-                            'inline-flex h-6 items-center rounded px-2 transition-colors',
+                            'inline-flex h-6 items-center rounded px-2 transition-colors touch:h-10 touch:min-w-10',
                             diskDisplayFor('sum') === metric
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

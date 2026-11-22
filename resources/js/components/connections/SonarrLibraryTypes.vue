@@ -61,7 +61,7 @@ defineProps<{
                         :id="`sonarr_root_scope_${rootFolder.root_folder_id}`"
                         :name="`sonarr_root_folders[${index}][scope]`"
                         :value="rootFolder.scope ?? ''"
-                        class="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        class="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 touch:h-10"
                     >
                         <option value="">Unassigned</option>
                         <option value="anime">Anime</option>

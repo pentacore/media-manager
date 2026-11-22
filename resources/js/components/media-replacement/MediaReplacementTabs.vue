@@ -21,7 +21,7 @@ const attemptsActive = computed(() => isCurrentOrParentUrl(attemptsUrl));
 
 const tabClass = (active: boolean): string =>
     cn(
-        'inline-flex items-center gap-2 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors',
+        'inline-flex items-center gap-2 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors touch:min-h-10',
         active
             ? 'border-accent text-foreground'
             : 'border-transparent text-muted-foreground hover:text-foreground',

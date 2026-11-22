@@ -193,7 +193,7 @@ test('an unconfident call falls back to the agent and records the prediction', f
 
 test('a classifier without an answer falls back to the agent with nothing resolved', function (): void {
     fakeStuckImportApis(stuckImportCandidates());
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     runStuckImportJob();
 

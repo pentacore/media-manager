@@ -399,17 +399,17 @@ onMounted(() => {
                             canManageLibrary ? 'Live activity' : 'Your activity'
                         }}
                     </span>
-                    <div class="flex items-center gap-1">
+                    <div class="flex items-center gap-1 touch:gap-3">
                         <button
                             type="button"
-                            class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
+                            class="touch-target inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
                         >
                             <Filter class="size-3.5" />All services
                         </button>
                         <Link
                             v-if="canManageLibrary"
                             :href="ActivityLogController.index.url()"
-                            class="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
+                            class="touch-target inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
                             data-dashboard-activity-log-link
                         >
                             View log →

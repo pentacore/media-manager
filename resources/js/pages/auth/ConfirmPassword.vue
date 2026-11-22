@@ -30,10 +30,11 @@ defineOptions({
                 <PasswordInput
                     id="password"
                     name="password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full touch:mt-0"
                     required
                     autocomplete="current-password"
                     autofocus
+                    data-confirm-password-input
                 />
 
                 <InputError :message="errors.password" />

@@ -151,7 +151,7 @@ function formatDate(iso: string | null): string {
                     type="button"
                     :class="
                         cn(
-                            'inline-flex h-7 items-center rounded px-2.5 text-xs font-medium capitalize transition-colors',
+                            'inline-flex h-7 items-center rounded px-2.5 text-xs font-medium capitalize transition-colors touch:h-10 touch:min-w-10',
                             filters.state === state
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
@@ -194,7 +194,7 @@ function formatDate(iso: string | null): string {
         </div>
 
         <div class="rounded-xl border border-border bg-card">
-            <Table>
+            <Table class="sticky-first-column" data-admin-table="conversations">
                 <TableHeader>
                     <TableRow>
                         <TableHead>Title</TableHead>
@@ -212,7 +212,7 @@ function formatDate(iso: string | null): string {
                                 :href="
                                     AiConversationController.show.url(row.id)
                                 "
-                                class="line-clamp-1 max-w-[420px] font-medium text-foreground hover:underline"
+                                class="line-clamp-1 max-w-[420px] font-medium text-foreground hover:underline touch:leading-10"
                             >
                                 {{ row.title }}
                             </a>

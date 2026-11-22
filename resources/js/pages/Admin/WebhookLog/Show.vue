@@ -278,7 +278,7 @@ function decisionVariant(status: string): PillVariant {
                         },
                     })
                 "
-                class="mt-2 inline-block text-[12px] text-muted-foreground hover:text-foreground"
+                class="touch-target mt-2 inline-block text-[12px] text-muted-foreground hover:text-foreground"
                 data-webhook-save-benchmark-case
                 >Save as benchmark case</Link
             >
@@ -293,38 +293,42 @@ function decisionVariant(status: string): PillVariant {
             >
                 Dispatched actions
             </div>
-            <table class="w-full border-collapse text-[13px]">
-                <tbody>
-                    <tr
-                        v-for="action in event.actions"
-                        :key="action.id"
-                        class="border-b border-border last:border-b-0"
-                    >
-                        <td class="font-mono-tabular px-4 py-2.5 text-[12px]">
-                            {{ action.type }}
-                        </td>
-                        <td class="px-4 py-2.5">
-                            <SvcChip :id="action.target_service" />
-                        </td>
-                        <td class="px-4 py-2.5">
-                            <Pill
-                                :variant="
-                                    action.status === 'completed'
-                                        ? 'ok'
-                                        : 'default'
-                                "
-                            >
-                                {{ action.status.replace('_', ' ') }}
-                            </Pill>
-                        </td>
-                        <td
-                            class="font-mono-tabular px-4 py-2.5 text-[11px] text-fg-subtle"
+            <div class="max-sm:overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <tbody>
+                        <tr
+                            v-for="action in event.actions"
+                            :key="action.id"
+                            class="border-b border-border last:border-b-0"
                         >
-                            {{ formatTime(action.created_at) }}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            <td
+                                class="font-mono-tabular px-4 py-2.5 text-[12px]"
+                            >
+                                {{ action.type }}
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <SvcChip :id="action.target_service" />
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <Pill
+                                    :variant="
+                                        action.status === 'completed'
+                                            ? 'ok'
+                                            : 'default'
+                                    "
+                                >
+                                    {{ action.status.replace('_', ' ') }}
+                                </Pill>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-4 py-2.5 text-[11px] text-fg-subtle"
+                            >
+                                {{ formatTime(action.created_at) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>

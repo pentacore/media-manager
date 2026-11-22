@@ -39,7 +39,7 @@ test('returns unavailable when scout driver is not typesense', function (): void
 test('returns unavailable when query embedding generation throws', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
-    Embeddings::fake(fn () => throw new RuntimeException('provider down'));
+    Embeddings::fake(fn (): never => throw new RuntimeException('provider down'));
 
     $result = resolve(SemanticLibrarySearch::class)->search('moody sci-fi');
 
@@ -181,7 +181,7 @@ test('reranking failure falls back to vector ordering', function (): void {
     config()->set('ai.providers.cohere.key', 'test-key');
     Embeddings::fake();
 
-    Reranking::fake(fn () => throw new RuntimeException('rerank provider down'));
+    Reranking::fake(fn (): never => throw new RuntimeException('rerank provider down'));
 
     $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [

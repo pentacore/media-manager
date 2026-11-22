@@ -252,7 +252,7 @@ test('a stopped run for a trimmed event still records a Failed decision', functi
 });
 
 test('a failed agent run stores its error without upstream paths or credentials', function (): void {
-    DecisionAgent::fake(fn () => throw new RuntimeException('Provider said: cannot read /srv/keys/openai.key via https://api.example/v1?key=sk-live-123'));
+    DecisionAgent::fake(fn (): never => throw new RuntimeException('Provider said: cannot read /srv/keys/openai.key via https://api.example/v1?key=sk-live-123'));
     $event = WebhookEvent::factory()->create();
 
     runJob($event->id);
@@ -263,7 +263,7 @@ test('a failed agent run stores its error without upstream paths or credentials'
 });
 
 test('a failed agent run with an empty error blames the agent, not an upstream service', function (): void {
-    DecisionAgent::fake(fn () => throw new RuntimeException('   '));
+    DecisionAgent::fake(fn (): never => throw new RuntimeException('   '));
     $event = WebhookEvent::factory()->create();
 
     runJob($event->id);
@@ -335,7 +335,7 @@ test('an agent answer stores the run invocation id on the decision', function ()
 });
 
 test('a failed agent run and a worker-stopped run store no invocation id', function (): void {
-    DecisionAgent::fake(fn () => throw new RuntimeException('boom'));
+    DecisionAgent::fake(fn (): never => throw new RuntimeException('boom'));
     $event = WebhookEvent::factory()->create();
     runJob($event->id);
 
@@ -386,7 +386,7 @@ test('an agent run past its deadline still prompts with the minimum timeout', fu
 });
 
 test('an agent call that times out records a Failed decision with the reason', function (): void {
-    DecisionAgent::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out after 20001 milliseconds with 0 bytes received'));
+    DecisionAgent::fake(fn (): never => throw new ConnectionException('cURL error 28: Operation timed out after 20001 milliseconds with 0 bytes received'));
     $event = WebhookEvent::factory()->create();
 
     runJob($event->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);

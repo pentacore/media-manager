@@ -54,7 +54,7 @@ test('NtfyChannel skips users without a topic', function (): void {
 
 test('NtfyChannel swallows delivery failures and logs a warning', function (): void {
     config()->set('services.ntfy.server', 'https://ntfy.example.com');
-    Http::fake(fn () => throw new ConnectionException('down'));
+    Http::fake(fn (): never => throw new ConnectionException('down'));
     Log::shouldReceive('warning')->once();
 
     $user = User::factory()->create(['ntfy_topic' => 'mm-alerts']);

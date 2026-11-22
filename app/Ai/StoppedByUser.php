@@ -15,8 +15,9 @@ use Throwable;
  * Whether a run ended because the user pressed Stop (or left the chat).
  * MediaAgent's only cancelling middleware is the client-disconnect `Stop`, so
  * a "cancelled" stream means the user left. A structured sub-agent's
- * disconnect surfaces as a ClientDisconnectedException on its own run, and as
- * an "Agent failed: …" result on the parent's tool call.
+ * disconnect surfaces as a ClientDisconnectedException on its own run, and
+ * laravel/ai rethrows it from the parent's AgentTool call, so that call fires
+ * ToolFailed carrying the same exception (RecordToolFailure).
  */
 final class StoppedByUser
 {
@@ -40,18 +41,5 @@ final class StoppedByUser
         }
 
         return false;
-    }
-
-    /**
-     * Whether a sub-agent tool call's result is the one a client disconnect
-     * leaves. laravel/ai's AgentTool catches every exception the sub-agent
-     * throws and degrades it to an "Agent failed: <message>" result so the
-     * parent run survives, so a structured sub-agent's
-     * ClientDisconnectedException never reaches the parent as an exception —
-     * only this exact string does.
-     */
-    public static function toolResult(mixed $result): bool
-    {
-        return $result === 'Agent failed: '.ClientDisconnectedException::MESSAGE;
     }
 }

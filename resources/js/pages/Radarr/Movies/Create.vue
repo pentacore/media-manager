@@ -244,7 +244,7 @@ function submitAdd() {
                                                 : null)
                                     "
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger class="max-sm:w-full">
                                         <SelectValue
                                             :placeholder="
                                                 qualityProfiles === undefined
@@ -279,7 +279,10 @@ function submitAdd() {
                                     v-model="form.rootFolderPath"
                                     :disabled="rootFolders === undefined"
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger
+                                        class="max-sm:w-full"
+                                        data-add-root-folder
+                                    >
                                         <SelectValue
                                             :placeholder="
                                                 rootFolders === undefined
@@ -333,6 +336,7 @@ function submitAdd() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                :data-add-result="result.tmdb_id ?? undefined"
                                 @click="startAdd(result)"
                             >
                                 Add

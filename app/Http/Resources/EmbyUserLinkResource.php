@@ -18,7 +18,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'emby_user_id' => 'string',
     'emby_username' => 'string',
     'created_at' => 'string | null',
-    'user' => '{ id: number; name: string; email: string } | null',
+    'user?' => '{ id: number; name: string; email: string } | null',
 ])]
 class EmbyUserLinkResource extends JsonResource
 {

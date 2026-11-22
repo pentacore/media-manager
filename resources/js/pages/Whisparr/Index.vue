@@ -305,7 +305,7 @@ function sync(): void {
                 </div>
 
                 <div
-                    class="flex items-center gap-1 rounded-md border border-border bg-bg-elev p-0.5"
+                    class="flex items-center gap-1 rounded-md border border-border bg-bg-elev p-0.5 max-sm:flex-wrap"
                 >
                     <button
                         v-for="option in FILTERS"
@@ -314,7 +314,7 @@ function sync(): void {
                         :data-whisparr-filter="option.id"
                         :class="
                             cn(
-                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
+                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors touch:h-10 touch:min-w-10',
                                 filter === option.id
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',

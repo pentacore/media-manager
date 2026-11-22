@@ -308,7 +308,7 @@ test('an HTTP refusal in front of SABnzbd reads as a refusal worded for the view
 test('a dropped connection to SABnzbd still says it could not reach SABnzbd for every role', function (string $role): void {
     Sleep::fake();
     ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
-    Http::fake(['sab.local:8080/api*' => fn () => throw new ConnectionException('Connection refused')]);
+    Http::fake(['sab.local:8080/api*' => fn (): never => throw new ConnectionException('Connection refused')]);
 
     $this->actingAs(User::factory()->{$role}()->create())
         ->get(route('sabnzbd.queue.index'))
@@ -332,7 +332,7 @@ test('a priority change SABnzbd does not place in the queue is refused and write
 test('a SABnzbd outage during a queue pause is reported with the failure toast', function (): void {
     Sleep::fake();
     ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
-    Http::fake(['sab.local:8080/api*' => fn () => throw new ConnectionException('Connection refused')]);
+    Http::fake(['sab.local:8080/api*' => fn (): never => throw new ConnectionException('Connection refused')]);
 
     $this->actingAs($this->user)
         ->from(route('sabnzbd.queue.index'))

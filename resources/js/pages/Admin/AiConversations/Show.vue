@@ -162,7 +162,7 @@ function formatDate(iso: string | null): string {
             <template #eyebrow>
                 <a
                     :href="AiConversationController.index.url()"
-                    class="mb-1.5 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:underline"
+                    class="touch-target mb-1.5 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:underline"
                 >
                     <ArrowLeft class="size-3.5" />
                     All conversations

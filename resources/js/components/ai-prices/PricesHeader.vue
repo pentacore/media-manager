@@ -31,7 +31,7 @@ const emit = defineEmits<{ refresh: [] }>();
                 shows up.
             </p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 touch:gap-3">
             <Button
                 variant="outline"
                 size="sm"

@@ -11,7 +11,7 @@ use Laravel\Ai\Responses\EmbeddingsResponse;
 use Laravel\Ai\Responses\RerankingResponse;
 
 test('a failed embeddings call bills a failed row with its error', function (): void {
-    Embeddings::fake(fn () => throw new RuntimeException('embeddings down'));
+    Embeddings::fake(fn (): never => throw new RuntimeException('embeddings down'));
 
     expect(fn (): EmbeddingsResponse => Embeddings::for(['Dune'])->generate())->toThrow(RuntimeException::class);
 
@@ -25,7 +25,7 @@ test('a failed embeddings call bills a failed row with its error', function (): 
 });
 
 test('a failed rerank call bills a failed row with its error', function (): void {
-    Reranking::fake(fn () => throw new RuntimeException('rerank down'));
+    Reranking::fake(fn (): never => throw new RuntimeException('rerank down'));
 
     expect(fn (): RerankingResponse => Reranking::of(['a', 'b'])->rerank('q'))->toThrow(RuntimeException::class);
 
@@ -38,7 +38,7 @@ test('a failed rerank call bills a failed row with its error', function (): void
 
 test("a failed call's error is sanitized", function (): void {
     $message = 'read /etc/ai/key.json from https://gw.example/v1?token=abc123';
-    Embeddings::fake(fn () => throw new RuntimeException($message));
+    Embeddings::fake(fn (): never => throw new RuntimeException($message));
 
     expect(fn (): EmbeddingsResponse => Embeddings::for(['Dune'])->generate())->toThrow(RuntimeException::class);
 

@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { MoreHorizontal, X } from '@lucide/vue';
-import { computed, onMounted, onUnmounted, useId, watch } from 'vue';
+import { useResizeObserver } from '@vueuse/core';
+import {
+    computed,
+    onMounted,
+    onUnmounted,
+    useId,
+    useTemplateRef,
+    watch,
+} from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -28,9 +36,11 @@ const emit = defineEmits<{
 
 /**
  * `default`: every action, inline (and the only layout when `primary` is
- * absent). `primary` + `menu`: below `sm` the bar is one 56 px row, made of
- * the count, the `primary` action and a ⋯ menu of `menu` items plus "Clear
- * selection". Pass each phone action its own hook, never the inline button's.
+ * absent; below `sm` the count and Clear then share the first row and the
+ * actions wrap below them). `primary` + `menu`: below `sm` the bar is one
+ * 56 px row, made of the count, the `primary` action and a ⋯ menu of `menu`
+ * items plus "Clear selection". Pass each phone action its own hook, never
+ * the inline button's.
  */
 const slots = defineSlots<{
     default(props: { disabled: boolean }): unknown;
@@ -54,11 +64,14 @@ function isCompact(): boolean {
 /** Whether this bar currently counts towards `<body data-bulk-bar-open>`. */
 let padsPage = false;
 
+const bar = useTemplateRef<HTMLElement>('bar');
+
 /**
- * Tells the page that a compact bar is on screen, so on a phone it ends with
- * room for the fixed bar (app.css): whatever follows the bar in the DOM
- * (pagination, the SABnzbd history) must scroll clear of it too. A count, so
- * two bars on one page do not clear each other's flag. Client-only.
+ * Tells the page that a bar is on screen, so on a phone it ends with room for
+ * the fixed bar (app.css): whatever follows the bar in the DOM (pagination,
+ * the SABnzbd history) must scroll clear of it too. A count, so two bars on
+ * one page do not clear each other's flag; the last one out also drops the
+ * measured `--bulk-bar-height`. Client-only.
  */
 function setPagePadding(on: boolean): void {
     if (on === padsPage) {
@@ -73,15 +86,29 @@ function setPagePadding(on: boolean): void {
         body.dataset.bulkBarOpen = String(open);
     } else {
         delete body.dataset.bulkBarOpen;
+        body.style.removeProperty('--bulk-bar-height');
     }
 }
 
-onMounted(() => {
-    watch(
-        () => (props.count > 0 || props.busy) && isCompact(),
-        setPagePadding,
-        { immediate: true },
+/**
+ * The page-end spacer is the bar's own height (border box), so a bar that
+ * wraps to two or three rows (the library bars) still clears the page end.
+ */
+useResizeObserver(bar, ([entry]) => {
+    if (!padsPage || entry === undefined) {
+        return;
+    }
+
+    document.body.style.setProperty(
+        '--bulk-bar-height',
+        `${Math.round(entry.borderBoxSize[0].blockSize)}px`,
     );
+});
+
+onMounted(() => {
+    watch(() => props.count > 0 || props.busy, setPagePadding, {
+        immediate: true,
+    });
 });
 
 onUnmounted(() => setPagePadding(false));
@@ -90,19 +117,23 @@ onUnmounted(() => setPagePadding(false));
 <template>
     <!-- Stays mounted while a run is in flight, so the action component that
          owns the request can't be unmounted (and re-mounted idle) mid-run.
-         Below sm a compact bar is fixed to the screen's bottom edge (sticky
+         Below sm a bar is fixed to the screen's bottom edge (sticky
          cannot stick there: the layout's overflow-x-hidden content box is the
          sticky container while the window scrolls); `data-bulk-bar-open` on
-         <body> makes the page end with room for it (app.css). -->
+         <body> and its measured `--bulk-bar-height` make the page end with
+         room for it (app.css). -->
     <div
         v-if="count > 0 || busy"
+        ref="bar"
         role="region"
         aria-label="Bulk actions"
         :class="
             cn(
                 'sticky bottom-4 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 shadow-lg',
-                isCompact() &&
-                    'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:min-h-14 max-sm:flex-nowrap max-sm:gap-2 max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-3 max-sm:py-0 max-sm:pb-[env(safe-area-inset-bottom)]',
+                'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0',
+                isCompact()
+                    ? 'max-sm:min-h-14 max-sm:flex-nowrap max-sm:gap-2 max-sm:px-3 max-sm:py-0 max-sm:pb-[env(safe-area-inset-bottom)]'
+                    : 'max-sm:pb-[calc(0.625rem+env(safe-area-inset-bottom))]',
             )
         "
         data-bulk-bar
@@ -125,19 +156,30 @@ onUnmounted(() => setPagePadding(false));
             :class="
                 cn(
                     'text-[12px] text-destructive',
-                    isCompact() && 'max-sm:hidden',
+                    isCompact()
+                        ? 'max-sm:hidden'
+                        : 'max-sm:min-w-0 max-sm:truncate',
                 )
             "
             data-bulk-over-limit
         >
-            Bulk actions take at most {{ max }} at a time — narrow the
-            selection.
+            <span class="max-sm:sr-only"
+                >Bulk actions take at most {{ max }} at a time — narrow the
+                selection.</span
+            ><span
+                class="sm:hidden"
+                aria-hidden="true"
+                data-bulk-over-limit-phone
+                >At most {{ max }} at a time</span
+            >
         </span>
         <div
             :class="
                 cn(
                     'flex flex-wrap items-center gap-2',
-                    isCompact() && 'max-sm:hidden',
+                    isCompact()
+                        ? 'max-sm:hidden'
+                        : 'max-sm:order-last max-sm:basis-full',
                 )
             "
             role="group"

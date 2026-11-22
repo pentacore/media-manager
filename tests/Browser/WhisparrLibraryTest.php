@@ -358,3 +358,46 @@ test('a card checkbox sits beside the card link, and focusing it still reveals t
     $webpage->script("document.querySelector('[data-bulk-select=\"11\"] button').focus()");
     $webpage->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="false"]');
 });
+
+/**
+ * A library of 120 titles, so every filter count has two or three digits
+ * (120 all, 110 monitored, 10 unmonitored, 60 missing).
+ *
+ * @return list<array<string, mixed>>
+ */
+function whisparrBrowserLargeLibrary(): array
+{
+    return array_map(static fn (int $id): array => [
+        'id' => $id, 'title' => sprintf('Example Scene %03d', $id), 'year' => 2024,
+        'monitored' => $id % 12 !== 0, 'hasFile' => $id % 2 === 0, 'sizeOnDisk' => 0, 'qualityProfileId' => 1, 'images' => whisparrBrowserPoster(),
+    ], range(1, 120));
+}
+
+test('the library filters stay on a phone screen with three-digit counts', function (): void {
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie' => Http::response(whisparrBrowserLargeLibrary()),
+        'whisparr.local:6969/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'Any']]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.whisparr.index', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->assertSeeIn('[data-whisparr-filter="all"]', '120')
+        ->assertScript(phoneOverflowScript('main'), '')
+        ->assertScript('document.querySelector("main").scrollWidth - document.querySelector("main").clientWidth', 0)
+        ->assertScript('[...document.querySelectorAll("[data-whisparr-filter]")].filter((filter) => { const rect = filter.getBoundingClientRect(); return rect.left < 0 || rect.right > window.innerWidth; }).map((filter) => filter.dataset.whisparrFilter).join(" ")', '');
+});
+
+test('the title page toolbar keeps 40 px targets on a phone when the quality profiles fail', function (): void {
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie/11*' => Http::response(whisparrBrowserMovies()[0]),
+        'whisparr.local:6969/api/v3/qualityprofile' => Http::response(['message' => 'Internal Server Error'], 500),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.whisparr.show', ['id' => 11], absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->assertVisible('[data-quality-profile-error]');
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertScript(phoneSmallTargetsScript(), '')
+        ->assertScript(phoneOverlapScript('main'), '');
+});

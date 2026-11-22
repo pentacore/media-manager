@@ -237,13 +237,20 @@ function save(): void {
                                     :key="channel"
                                     class="px-3 py-2.5 text-center"
                                 >
-                                    <input
-                                        type="checkbox"
-                                        v-model="
-                                            entry.severities[severity][channel]
-                                        "
-                                        class="size-4 rounded border-border accent-accent disabled:opacity-40"
-                                    />
+                                    <label
+                                        class="contents touch:inline-flex touch:size-10 touch:items-center touch:justify-center"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            v-model="
+                                                entry.severities[severity][
+                                                    channel
+                                                ]
+                                            "
+                                            :aria-label="`${entry.label}: ${SEVERITY_LABELS[severity] ?? severity} by ${channelLabel(channel)}`"
+                                            class="size-4 rounded border-border accent-accent disabled:opacity-40"
+                                        />
+                                    </label>
                                 </td>
                             </tr>
                         </tbody>

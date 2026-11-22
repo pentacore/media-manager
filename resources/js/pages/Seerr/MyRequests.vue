@@ -151,7 +151,7 @@ function confirmCancel(): void {
                         :src="tmdbPosterUrl(request.poster_path)"
                     />
                     <div class="min-w-0 flex-1">
-                        <div class="text-[13px] font-medium">
+                        <div class="text-[13px] font-medium max-sm:break-words">
                             {{ request.title }}
                         </div>
                         <div class="text-[11.5px] text-muted-foreground">

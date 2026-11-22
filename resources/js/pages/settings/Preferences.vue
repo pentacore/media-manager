@@ -325,7 +325,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </template>
                     <div>
                         <label
-                            class="inline-flex items-center gap-2 text-[13px]"
+                            class="inline-flex items-center gap-2 text-[13px] touch:min-h-10"
                         >
                             <input
                                 type="checkbox"
@@ -357,7 +357,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         </template>
                         <div>
                             <label
-                                class="inline-flex items-center gap-2 text-[13px]"
+                                class="inline-flex items-center gap-2 text-[13px] touch:min-h-10"
                             >
                                 <input
                                     type="checkbox"

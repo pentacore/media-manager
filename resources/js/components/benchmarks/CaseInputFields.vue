@@ -152,7 +152,7 @@ function attachmentError(key: string): string | undefined {
 }
 
 const selectClass =
-    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground';
+    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground touch:h-10';
 const textareaClass =
     'rounded-md border border-input bg-background px-3 py-2 text-[13px] text-foreground';
 </script>

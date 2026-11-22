@@ -71,7 +71,7 @@ const showBatch = defineModel<boolean>('showBatch', { required: true });
                 type="button"
                 role="tab"
                 :aria-selected="!showBatch"
-                class="h-6 rounded px-2.5 font-medium transition-colors"
+                class="h-6 rounded px-2.5 font-medium transition-colors touch:h-10 touch:min-w-10"
                 :class="
                     !showBatch
                         ? 'bg-card text-foreground shadow-sm'
@@ -85,7 +85,7 @@ const showBatch = defineModel<boolean>('showBatch', { required: true });
                 type="button"
                 role="tab"
                 :aria-selected="showBatch"
-                class="h-6 rounded px-2.5 font-medium transition-colors"
+                class="h-6 rounded px-2.5 font-medium transition-colors touch:h-10 touch:min-w-10"
                 :class="
                     showBatch
                         ? 'bg-card text-foreground shadow-sm'

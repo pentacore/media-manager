@@ -36,7 +36,7 @@ test('a re-embed covers movies then series and stamps the new signature', functi
 });
 
 test('a re-embed with failures leaves the library marked stale', function (): void {
-    Embeddings::fake(fn () => throw new RuntimeException('provider down'));
+    Embeddings::fake(fn (): never => throw new RuntimeException('provider down'));
     IndexedMovie::factory()->create(['embedding' => [0.1]]);
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setEmbeddingsModel('text-embedding-3-large');

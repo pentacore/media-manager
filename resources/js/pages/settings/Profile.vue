@@ -265,7 +265,8 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                         <PasswordInput
                             id="emby-password"
                             name="password"
-                            class="h-8 max-w-[360px] text-sm"
+                            class="max-w-[360px]"
+                            input-class="h-8 text-sm"
                             required
                             placeholder="Emby password"
                         />

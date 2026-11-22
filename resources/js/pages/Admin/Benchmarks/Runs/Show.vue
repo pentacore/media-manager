@@ -341,7 +341,7 @@ function cellClass(cell: BenchmarkMatrixCell): string {
                     >
                 </div>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2 max-sm:flex-wrap">
                 <DropdownMenu v-if="compareOptions.length > 0">
                     <DropdownMenuTrigger as-child>
                         <Button

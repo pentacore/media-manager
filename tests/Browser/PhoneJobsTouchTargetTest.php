@@ -12,47 +12,6 @@ use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
-/**
- * Every visible control in $root (default `main`) whose tappable area — its box or its
- * touch-target ::after, measured with elementFromPoint from its centre — is
- * under 40 px in either direction, as "tag[hook] "text" Npx". Inline text
- * links are exempt. Empty when every control is a 40 px target.
- */
-function phoneJobsSmallTargetsScript(string $root = 'main'): string
-{
-    return str_replace('__ROOT__', $root, <<<'JS'
-        (() => {
-            const offenders = [];
-            const controls = document.querySelectorAll(['a[href]', 'button', '[role="button"]', '[role="checkbox"]', '[role="switch"]', '[role="tab"]', '[role="combobox"]', 'select'].map((control) => `__ROOT__ ${control}`).join(', '));
-            for (const element of controls) {
-                const style = getComputedStyle(element);
-                if (element.closest('[aria-hidden="true"], .sr-only') || style.visibility !== 'visible' || style.pointerEvents === 'none') {
-                    continue;
-                }
-                if (element.tagName === 'A' && style.display === 'inline') {
-                    continue;
-                }
-                if (element.getBoundingClientRect().width === 0 || element.getBoundingClientRect().height === 0) {
-                    continue;
-                }
-                element.scrollIntoView({ block: 'center', inline: 'center' });
-                const rect = element.getBoundingClientRect();
-                const x = rect.left + rect.width / 2;
-                const y = rect.top + rect.height / 2;
-                const hits = (px, py) => { const hit = document.elementFromPoint(px, py); return !!hit && element.contains(hit); };
-                const reach = (dx, dy) => { let step = 0; while (step < 30 && hits(x + dx * (step + 1), y + dy * (step + 1))) { step++; } return step; };
-                const size = hits(x, y) ? Math.min(reach(0, -1) + reach(0, 1) + 1, reach(-1, 0) + reach(1, 0) + 1) : 0;
-                if (size < 39) {
-                    const hook = [...element.attributes].map((attribute) => attribute.name).find((name) => name.startsWith('data-')) ?? '';
-                    const text = (element.innerText || element.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 24);
-                    offenders.push(`${element.tagName.toLowerCase()}[${hook}] "${text}" ${size}px`);
-                }
-            }
-            return offenders.slice(0, 15).join(' | ');
-        })()
-    JS);
-}
-
 function phoneJobsTouchFakes(): void
 {
     $poster = [['coverType' => 'poster', 'remoteUrl' => 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7']];
@@ -114,7 +73,7 @@ test('every control on a phone-job page is a 40 px target on a phone', function 
     $webpage->script(appHydratedScript());
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("main [data-slot=\"skeleton\"]")'));
 
-    $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
 })->with([
     'action queue' => ['actions.requests.index', []],
     'requests' => ['media.requests.index', []],
@@ -139,13 +98,13 @@ test('the calendar month grid and the grab queue history tabs are 40 px targets 
     $webpage->script(appHydratedScript());
     $webpage->click('[data-calendar-view="month"]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-calendar-day]")'));
-    $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
 
     $webpage->navigate(route('media.library.activity.queue', absolute: false));
     $webpage->script(appHydratedScript());
     $webpage->click('[data-activity-tab="history"]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-history-service-tab]")'));
-    $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
 });
 
 test("the series detail's episode rows are 40 px targets on a phone", function (): void {
@@ -154,7 +113,7 @@ test("the series detail's episode rows are 40 px targets on a phone", function (
     $webpage->click('[data-season-card="1"] button');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-season-actions=\\"1\\"]") && !document.querySelector("main [data-slot=\\"skeleton\\"]") && !!document.querySelector("[data-episode-actions]")'));
 
-    $webpage->assertScript(phoneJobsSmallTargetsScript(), '');
+    $webpage->assertScript(phoneSmallTargetsScript(), '');
 });
 
 test('the open action sheet and the chat sheet are 40 px targets on a phone', function (): void {
@@ -164,11 +123,11 @@ test('the open action sheet and the chat sheet are 40 px targets on a phone', fu
     $webpage->script(appHydratedScript());
     $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet]") && document.querySelector("[data-action-sheet]").getAnimations().length === 0'));
-    $webpage->assertScript(phoneJobsSmallTargetsScript('[data-action-sheet]'), '');
+    $webpage->assertScript(phoneSmallTargetsScript('[data-action-sheet]'), '');
 
     $webpage->click('[data-action-sheet] [data-sheet-close]');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-action-sheet]")'));
     $webpage->click('[data-header-ai-chat-sheet]');
     $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\\"sheet-content\\"] [data-chat-input]")'));
-    $webpage->assertScript(phoneJobsSmallTargetsScript('[data-slot="sheet-content"]'), '');
+    $webpage->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
 });

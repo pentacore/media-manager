@@ -54,7 +54,9 @@ const emit = defineEmits<{
                 >.
             </p>
         </div>
-        <div class="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+        <div
+            class="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end touch:gap-3"
+        >
             <div data-usage-kind-filter>
                 <Select
                     :model-value="kind ?? 'all'"
@@ -162,7 +164,7 @@ const emit = defineEmits<{
             <a
                 :href="exportUrl"
                 data-usage-export
-                class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                class="touch-target inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
             >
                 <Download class="size-3.5" />Export CSV
             </a>

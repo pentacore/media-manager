@@ -141,7 +141,7 @@ test('the show page carries a quality-profile outage too', function (): void {
     whisparrPageConnection();
     Http::fake([
         'whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene']),
-        'whisparr.local:6969/api/v3/qualityprofile' => fn () => throw new ConnectionException('Connection refused'),
+        'whisparr.local:6969/api/v3/qualityprofile' => fn (): never => throw new ConnectionException('Connection refused'),
     ]);
 
     $this->actingAs($this->admin)
@@ -154,7 +154,7 @@ test('the show page carries a quality-profile outage too', function (): void {
 test('a dropped connection to Whisparr reads as an outage', function (): void {
     Sleep::fake();
     whisparrPageConnection();
-    Http::fake(['whisparr.local:6969/api/v3/movie' => fn () => throw new ConnectionException('Connection refused')]);
+    Http::fake(['whisparr.local:6969/api/v3/movie' => fn (): never => throw new ConnectionException('Connection refused')]);
 
     $this->actingAs($this->admin)
         ->get(route('media.whisparr.index'))
