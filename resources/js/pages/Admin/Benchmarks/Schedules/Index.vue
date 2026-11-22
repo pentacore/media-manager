@@ -199,6 +199,7 @@ async function remove(schedule: BenchmarkScheduleRow): Promise<void> {
                         <TableCell data-benchmark-schedule-toggle>
                             <Toggle
                                 :model-value="schedule.enabled"
+                                :aria-label="`${schedule.name}: enabled`"
                                 :label="schedule.enabled ? 'Enabled' : 'Paused'"
                                 @update:model-value="
                                     (enabled) => setEnabled(schedule, enabled)
