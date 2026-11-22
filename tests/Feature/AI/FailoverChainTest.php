@@ -99,7 +99,7 @@ test('a delegated sub-agent fails over when the primary provider errors', functi
     expect($providersTried)->toBe(['openai', 'anthropic'])
         ->and((string) $agentResponse->toolResults->first()->result)
         ->toContain('"recommendation":"remove"')
-        ->not->toContain('Agent failed');
+        ->not->toContain('The tool call failed');
 });
 
 test('a sub-agent delegated from a streamed turn fails over too', function (): void {
@@ -117,7 +117,7 @@ test('a sub-agent delegated from a streamed turn fails over too', function (): v
     expect($providersTried)->toBe(['openai', 'anthropic'])
         ->and((string) $toolResult->toolResult->result)
         ->toContain('"recommendation":"remove"')
-        ->not->toContain('Agent failed');
+        ->not->toContain('The tool call failed');
 });
 
 test('a chat turn fails over without the controller passing a provider', function (): void {

@@ -46,7 +46,7 @@ test('deliver throws on a non-2xx response', function (): void {
 })->throws(RequestException::class);
 
 test('send swallows delivery failures and logs a warning', function (): void {
-    Http::fake(fn () => throw new ConnectionException('down'));
+    Http::fake(fn (): never => throw new ConnectionException('down'));
     Log::shouldReceive('warning')->once()->withArgs(fn (string $message): bool => $message === 'Discord delivery failed');
 
     $user = User::factory()->create(['discord_webhook_url' => 'https://discord.com/api/webhooks/1/abc']);

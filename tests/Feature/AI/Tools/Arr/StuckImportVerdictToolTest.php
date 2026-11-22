@@ -45,7 +45,7 @@ test('an unconfident verdict points the agent at the full investigation', functi
 });
 
 test('no verdict is reported plainly', function (): void {
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     $result = json_decode((new StuckImportVerdictTool)->handle(new Request(['service' => 'sonarr', 'download_id' => 'dl-1'])), true);
 

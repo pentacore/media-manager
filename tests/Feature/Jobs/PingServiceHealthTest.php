@@ -117,7 +117,7 @@ test('records connection-level failures with a connection prefix', function (): 
         'health_status' => HealthStatus::Healthy,
     ]);
 
-    Http::fake(fn () => throw new ConnectionException('cURL error 7: Failed to connect'));
+    Http::fake(fn (): never => throw new ConnectionException('cURL error 7: Failed to connect'));
 
     new PingServiceHealth($connection)->handle();
 
@@ -135,7 +135,7 @@ test('redacts url query strings from persisted failure messages', function (): v
 
     // Guzzle ConnectException messages include the full effective URI — for
     // SABnzbd that query string carries the mandatory apikey credential.
-    Http::fake(fn () => throw new ConnectionException(
+    Http::fake(fn (): never => throw new ConnectionException(
         'cURL error 28: Operation timed out for http://sab.local:8080/api?output=json&apikey=supersecret&mode=version',
     ));
 
@@ -165,7 +165,7 @@ test('truncates a very long connection-failure message to 255 chars', function (
         'url' => 'http://sonarr.local:8989',
     ]);
 
-    Http::fake(['sonarr.local:8989/*' => fn () => throw new ConnectionException(str_repeat('A', 5000))]);
+    Http::fake(['sonarr.local:8989/*' => fn (): never => throw new ConnectionException(str_repeat('A', 5000))]);
 
     new PingServiceHealth($connection)->handle();
 
@@ -350,7 +350,7 @@ test('a stored and broadcast health message never carries an upstream path', fun
 test('a connection failure naming a Windows path stores it redacted', function (): void {
     Sleep::fake();
     $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'health_status' => HealthStatus::Healthy]);
-    Http::fake(['sonarr.local:8989/*' => fn () => throw new ConnectionException('Could not open C:\ProgramData\Sonarr\sonarr.db')]);
+    Http::fake(['sonarr.local:8989/*' => fn (): never => throw new ConnectionException('Could not open C:\ProgramData\Sonarr\sonarr.db')]);
 
     new PingServiceHealth($connection)->handle();
 

@@ -950,12 +950,10 @@ const budgetState = computed<{
                             Library embeddings are stale — built with
                             <span class="font-mono-tabular">{{
                                 embeddings.indexed_with
-                            }}</span
-                            >, search now uses
+                            }}</span>, search now uses
                             <span class="font-mono-tabular">{{
                                 embeddings.signature
-                            }}</span
-                            >.
+                            }}</span>.
                         </span>
                         <Button
                             type="button"

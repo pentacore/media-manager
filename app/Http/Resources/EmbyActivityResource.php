@@ -21,7 +21,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'action' => 'string | null',
     'play_position' => 'number | null',
     'duration_ticks' => 'number | null',
-    'emby_username' => 'string | null',
+    'emby_username?' => 'string | null',
     'created_at' => 'string | null',
     'can_toggle_played' => 'boolean',
 ])]
