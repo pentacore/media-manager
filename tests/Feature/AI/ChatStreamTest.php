@@ -434,7 +434,7 @@ test('a provider failure mid-stream ends with a friendly RUN_ERROR', function ()
 });
 
 test('a provider stream error without an error event ends with a friendly RUN_ERROR', function (): void {
-    MediaAgent::fake([fn () => throw new StreamErrorException]);
+    MediaAgent::fake([fn (): never => throw new StreamErrorException]);
     $admin = User::factory()->admin()->create();
 
     $body = $this->actingAs($admin)
@@ -677,6 +677,7 @@ test('a client gone at a step that would cross the hard cap is stopped, not fail
 
 test('a sub-agent the client left during is recorded as stopped, and the parent stops at its next step', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
+    Exceptions::fake();
     chatStreamClientLeavingAfter(1);
     MediaAgent::fake([
         new ToolCall(id: 'call-1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Investigate the stuck download of Example Show']),
@@ -706,6 +707,7 @@ test('a sub-agent the client left during is recorded as stopped, and the parent 
         ->and($parentUsage->status)->toBe('stopped')
         ->and($assistant->status)->toBe('completed')
         ->and(json_decode((string) $assistant->meta, true))->toHaveKey('stopped', true);
+    Exceptions::assertNotReported(ClientDisconnectedException::class);
 });
 
 test('a client gone before the first step stores the turn as an empty stopped reply without calling the model', function (): void {

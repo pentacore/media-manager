@@ -106,8 +106,13 @@ function deepLinkKey(url: string): string | null {
  * Drops the deep-link params from the URL as a client-side replace (no
  * request, no remount, no new history entry), so a reload does not reopen
  * the dialog and following the same link again changes `page.url`.
+ *
+ * An async response (the deferred `episodes`) that lands while the replace
+ * is in flight can win and put the link's URL back without `page.url` ever
+ * showing the clean one, so the `page.url` watcher never fires. Re-check
+ * once the replace has finished, a few times at most.
  */
-function dropDeepLinkParams(): void {
+function dropDeepLinkParams(attemptsLeft = 3): void {
     const url = new URL(page.url, 'http://localhost');
 
     if (
@@ -124,6 +129,15 @@ function dropDeepLinkParams(): void {
         url: url.pathname + url.search + url.hash,
         preserveState: true,
         preserveScroll: true,
+        onFinish: () => {
+            if (
+                attemptsLeft > 1 &&
+                dismissedDeepLink.value !== null &&
+                deepLinkKey(page.url) === dismissedDeepLink.value
+            ) {
+                dropDeepLinkParams(attemptsLeft - 1);
+            }
+        },
     });
 }
 

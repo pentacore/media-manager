@@ -90,7 +90,7 @@ test('routing disabled or failing means the full toolset', function (): void {
     expect(resolve(ChatToolRouter::class)->route('delete Dune', null))->toBeNull();
 
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
     expect(resolve(ChatToolRouter::class)->route('delete Dune', null))->toBeNull();
 });
 

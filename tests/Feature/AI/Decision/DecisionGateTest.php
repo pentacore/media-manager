@@ -56,7 +56,7 @@ test('an event above the threshold runs the agent', function (): void {
 });
 
 test('a classifier failure fails open and runs the agent', function (): void {
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     runGateJob('Grab');
 

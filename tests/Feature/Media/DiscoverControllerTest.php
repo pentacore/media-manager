@@ -109,7 +109,7 @@ test('title detail returns the sheet payload with season states', function (): v
 
 test('title detail answers 502 when Seerr is down', function (): void {
     discoverSeerr();
-    Http::fake(['seerr.local:5055/api/v1/movie/1' => fn () => throw new ConnectionException('down')]);
+    Http::fake(['seerr.local:5055/api/v1/movie/1' => fn (): never => throw new ConnectionException('down')]);
 
     $this->actingAs(User::factory()->create())
         ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
@@ -273,7 +273,7 @@ test('an admin whose request Seerr refuses is sent to the connection settings', 
 
 test('a lost Seerr response tells the user to check before retrying', function (): void {
     discoverSeerr();
-    fakeDiscoverSeerr(['seerr.local:5055/api/v1/request' => fn () => throw new ConnectionException('reset')]);
+    fakeDiscoverSeerr(['seerr.local:5055/api/v1/request' => fn (): never => throw new ConnectionException('reset')]);
 
     $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
         ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])

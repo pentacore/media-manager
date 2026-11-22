@@ -114,7 +114,7 @@ test('an unknown choice or a malformed answer is no decision', function (array $
 
 test('a classifier failure is no decision', function (): void {
     fakeDeciderManualImport();
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     expect(resolve(StuckImportDecider::class)->decide(deciderSonarr(), 'sonarr', 'dl-1'))->toBeNull();
 });

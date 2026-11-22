@@ -23,6 +23,7 @@ use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Tools\AgentTool;
+use Laravel\Ai\Tools\ToolNameResolver;
 
 test('writes one row per ToolInvoked event', function (): void {
     $event = new ToolInvoked(
@@ -122,6 +123,7 @@ test('ToolFailed writes a failed row with the exception code', function (): void
     ));
 
     expect(AiToolInvocation::where('tool_invocation_id', 't3')->sole())
+        ->tool_name->toBe(ToolNameResolver::resolve(resolve(SearchMediaTool::class)))
         ->status->toBe('failed')
         ->error_code->toBe('runtime_exception')
         ->duration_ms->toBe(5);
@@ -154,13 +156,13 @@ test('a benchmark replay records the tool it stands in for', function (): void {
 });
 
 test('a sub-agent call a client disconnect ended is recorded as stopped without an error code', function (): void {
-    (new RecordToolInvocation)->handle(new ToolInvoked(
+    (new RecordToolFailure)->handle(new ToolFailed(
         invocationId: 'inv-s',
         toolInvocationId: 't-stopped',
         agent: new MediaAgent,
         tool: new AgentTool(new StuckDownloadInvestigatorAgent),
         arguments: ['task' => 'Investigate'],
-        result: 'Agent failed: '.ClientDisconnectedException::MESSAGE,
+        exception: new ClientDisconnectedException,
         time: 3.0,
     ));
 
@@ -169,19 +171,32 @@ test('a sub-agent call a client disconnect ended is recorded as stopped without 
         ->error_code->toBeNull();
 });
 
-test('a sub-agent call that failed for another reason, or a plain tool echoing the stop text, is not stopped', function (Closure $makeTool, string $result): void {
-    (new RecordToolInvocation)->handle(new ToolInvoked(
+test('a sub-agent call that failed for another reason is not stopped', function (): void {
+    (new RecordToolFailure)->handle(new ToolFailed(
         invocationId: 'inv-ns',
         toolInvocationId: 't-not-stopped',
         agent: new MediaAgent,
-        tool: $makeTool(),
+        tool: new AgentTool(new StuckDownloadInvestigatorAgent),
         arguments: [],
-        result: $result,
+        exception: new RuntimeException('boom'),
         time: 3.0,
     ));
 
-    expect(AiToolInvocation::where('tool_invocation_id', 't-not-stopped')->sole()->status)->toBe('success');
-})->with([
-    'a sub-agent that failed otherwise' => [fn (): AgentTool => new AgentTool(new StuckDownloadInvestigatorAgent), 'Agent failed: boom'],
-    'a plain tool' => [fn (): SearchMediaTool => resolve(SearchMediaTool::class), 'Agent failed: '.ClientDisconnectedException::MESSAGE],
-]);
+    expect(AiToolInvocation::where('tool_invocation_id', 't-not-stopped')->sole())
+        ->status->toBe('failed')
+        ->error_code->toBe('runtime_exception');
+});
+
+test('a plain tool whose result echoes the stop text is a success', function (): void {
+    (new RecordToolInvocation)->handle(new ToolInvoked(
+        invocationId: 'inv-echo',
+        toolInvocationId: 't-echo',
+        agent: new MediaAgent,
+        tool: resolve(SearchMediaTool::class),
+        arguments: [],
+        result: ClientDisconnectedException::MESSAGE,
+        time: 3.0,
+    ));
+
+    expect(AiToolInvocation::where('tool_invocation_id', 't-echo')->sole()->status)->toBe('success');
+});

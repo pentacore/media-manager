@@ -532,7 +532,7 @@ test('a free-text decision case without an event key runs unscoped as the agent'
 test('the run context is unbound after a decision case, even when the agent throws', function (): void {
     $benchmarkCase = runnerDecisionEventCase('library_change');
     runnerStartContext($benchmarkCase);
-    DecisionAgent::fake(fn () => throw new RuntimeException('provider down'));
+    DecisionAgent::fake(fn (): never => throw new RuntimeException('provider down'));
 
     expect(fn () => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))->toThrow(RuntimeException::class, 'provider down');
     expect(App::bound(DecisionRunContext::class))->toBeFalse();

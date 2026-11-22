@@ -41,13 +41,13 @@ test('the classifier fails open when the provider has no key', function (): void
 });
 
 test('the classifier fails open when classification throws', function (): void {
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     expect(resolve(Classifier::class)->probability('x', 'payload', 'Needs action?'))->toBeNull();
 });
 
 test('a failed classification call bills a failed row with its error and caller, and still fails open', function (): void {
-    Classification::fake(fn () => throw new RuntimeException('provider down'));
+    Classification::fake(fn (): never => throw new RuntimeException('provider down'));
 
     expect(resolve(Classifier::class)->probability(RunDecisionAgent::class, 'payload', 'Needs action?'))->toBeNull();
 

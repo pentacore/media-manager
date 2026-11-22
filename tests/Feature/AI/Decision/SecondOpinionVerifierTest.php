@@ -72,7 +72,7 @@ test('a verdict without a boolean agrees is a failed check', function (mixed $an
 ]);
 
 test('an agent failure or a reached budget cap is a failed check', function (): void {
-    DecisionVerifierAgent::fake(fn () => throw new RuntimeException('upstream 502'));
+    DecisionVerifierAgent::fake(fn (): never => throw new RuntimeException('upstream 502'));
     expect(resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase())->failed)->toBeTrue();
 
     $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new AiBudgetExceededException(10.0, 5.0));
@@ -99,7 +99,7 @@ test('jev decides with the threshold inclusive', function (float $probability, b
 
 test('jev decides without a classifier answer is a failed check', function (): void {
     secondOpinionEngine(SecondOpinionEngine::Jev);
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
 
     $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase());
 
@@ -136,7 +136,7 @@ test('jev then llm hands doubt and audit samples to the llm, whose verdict is fi
 
 test('jev then llm falls through to the llm when jev is unavailable', function (): void {
     secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
-    Classification::fake(fn () => throw new RuntimeException('down'));
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
     DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Fine.']]);
 
     $secondOpinionVerdict = resolve(SecondOpinionVerifier::class)->verify(secondOpinionCase());
@@ -284,7 +284,7 @@ test('an unexpected failure is labelled with the configured engine', function (?
 test('a cascade whose llm fails after a doubtful jev answer holds and leaves the jev answer open', function (): void {
     secondOpinionEngine(SecondOpinionEngine::JevThenLlm);
     Classification::fake([['decision' => new BooleanAnswer(0.4)]]);
-    DecisionVerifierAgent::fake(fn () => throw new RuntimeException('upstream 502'));
+    DecisionVerifierAgent::fake(fn (): never => throw new RuntimeException('upstream 502'));
     $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
 
     $secondOpinionVerdict = $secondOpinionVerifier->verify(secondOpinionCase());
