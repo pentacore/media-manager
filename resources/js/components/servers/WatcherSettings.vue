@@ -68,6 +68,7 @@ async function clear(): Promise<void> {
             <SettingsRow>
                 <template #label>
                     <Field
+                        for="watcher-push-url"
                         label="Push URL"
                         :hint="
                             watcher.push_url_source === 'environment'
@@ -78,11 +79,12 @@ async function clear(): Promise<void> {
                 </template>
                 <div class="min-w-0 space-y-2">
                     <Input
+                        id="watcher-push-url"
+                        aria-describedby="watcher-push-url-hint"
                         name="push_url"
                         type="url"
                         autocomplete="off"
                         placeholder="https://kuma.example/api/push/…"
-                        aria-label="Push URL"
                         data-watcher-push-url
                     />
                     <p

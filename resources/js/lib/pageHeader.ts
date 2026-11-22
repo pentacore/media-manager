@@ -19,14 +19,46 @@ export function returnFocusToMoreButton(
         return;
     }
 
-    const more = document.querySelector<HTMLElement>(moreSelector);
+    returnFocusTo(event, document.querySelector<HTMLElement>(moreSelector));
+}
 
-    if (more === null || more.getClientRects().length === 0) {
+/**
+ * A dialog's `@close-auto-focus` handler (or `useConfirm`'s
+ * `onCloseAutoFocus`) that sends focus to `element` while it is still on the
+ * page with a box, in place of Reka's restore. When it is gone or has no box,
+ * Reka's default restore runs.
+ */
+export function returnFocusTo(event: Event, element: HTMLElement | null): void {
+    if (
+        element === null ||
+        !element.isConnected ||
+        element.getClientRects().length === 0
+    ) {
         return;
     }
 
     event.preventDefault();
-    more.focus({ preventScroll: true });
+    element.focus({ preventScroll: true });
+}
+
+/**
+ * The trigger of the dropdown menu that has focus (one of its items, or the
+ * menu itself after a touch open): Reka labels the menu by its trigger's id.
+ * A row ⋯ menu item that asks with `confirm()` reads it before asking. The
+ * app-wide confirm dialog has no trigger of its own and would restore focus
+ * to the menu item, which is gone by the time the dialog closes, so focus
+ * would drop to `<body>`; pass the trigger to `returnFocusTo` instead.
+ */
+export function focusedMenuTrigger(): HTMLElement | null {
+    const labelledBy = document.activeElement
+        ?.closest('[role="menu"]')
+        ?.getAttribute('aria-labelledby');
+
+    if (!labelledBy) {
+        return null;
+    }
+
+    return document.getElementById(labelledBy);
 }
 
 /**

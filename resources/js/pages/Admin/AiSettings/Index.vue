@@ -226,6 +226,7 @@ const budgetState = computed<{
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="ai-settings-mode"
                             label="Mode"
                             hint="Executive routes destructive tool calls through the approval pipeline. Advisory short-circuits them."
                         >
@@ -238,7 +239,12 @@ const budgetState = computed<{
                             v-model="selectedMode"
                             :default-value="settings.mode"
                         >
-                            <SelectTrigger class="h-8 w-48 text-sm">
+                            <SelectTrigger
+                                id="ai-settings-mode"
+                                aria-describedby="ai-settings-mode-hint"
+                                aria-labelledby="ai-settings-mode-label ai-settings-mode"
+                                class="h-8 w-48 text-sm"
+                            >
                                 <SelectValue placeholder="Select a mode" />
                             </SelectTrigger>
                             <SelectContent>
@@ -261,6 +267,7 @@ const budgetState = computed<{
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="chat_timeout"
                             label="Chat timeout"
                             hint="How long a chat turn may wait on the provider before it is aborted. A turn that chains several tool calls needs more time than a plain answer. Raising this past the server request limit (OCTANE_MAX_EXECUTION_TIME) has no effect. Leave blank to use the .env default."
                         >
@@ -271,6 +278,7 @@ const budgetState = computed<{
                         <div class="relative max-w-[200px]">
                             <Input
                                 id="chat_timeout"
+                                aria-describedby="chat_timeout-hint"
                                 name="chat_timeout"
                                 type="number"
                                 step="1"
@@ -329,6 +337,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-openrouter-sort"
                                 label="Sort upstreams"
                                 hint="Leave on OpenRouter default for load-balanced routing."
                             >
@@ -340,7 +349,12 @@ const budgetState = computed<{
                                 name="openrouter_sort"
                                 v-model="openRouterSort"
                             >
-                                <SelectTrigger class="h-8 w-56 text-sm">
+                                <SelectTrigger
+                                    id="ai-settings-openrouter-sort"
+                                    aria-describedby="ai-settings-openrouter-sort-hint"
+                                    aria-labelledby="ai-settings-openrouter-sort-label ai-settings-openrouter-sort"
+                                    class="h-8 w-56 text-sm"
+                                >
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -366,6 +380,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-openrouter-data-collection"
                                 label="Data collection"
                                 hint="Only use upstreams that neither store nor train on prompts."
                             >
@@ -374,6 +389,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-openrouter-data-collection"
+                                aria-describedby="ai-settings-openrouter-data-collection-hint"
+                                aria-labelledby="ai-settings-openrouter-data-collection-label"
                                 v-model="openRouterDenyDataCollection"
                                 data-openrouter-deny-data-collection
                                 :label="
@@ -395,6 +413,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-openrouter-allow-fallbacks"
                                 label="Allow fallbacks"
                                 hint="Let OpenRouter use other upstreams when the preferred ones fail."
                             >
@@ -403,6 +422,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-openrouter-allow-fallbacks"
+                                aria-describedby="ai-settings-openrouter-allow-fallbacks-hint"
+                                aria-labelledby="ai-settings-openrouter-allow-fallbacks-label"
                                 v-model="openRouterAllowFallbacks"
                                 data-openrouter-allow-fallbacks
                                 :label="
@@ -422,6 +444,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="openrouter_order"
                                 label="Preferred upstreams"
                                 hint="Comma-separated, tried in this order."
                             >
@@ -431,6 +454,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="openrouter_order"
+                                aria-describedby="openrouter_order-hint"
                                 name="openrouter_order"
                                 type="text"
                                 class="h-8 max-w-[420px] text-sm"
@@ -447,6 +471,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="openrouter_ignore"
                                 label="Ignored upstreams"
                                 hint="Comma-separated upstreams OpenRouter must never use."
                             >
@@ -456,6 +481,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="openrouter_ignore"
+                                aria-describedby="openrouter_ignore-hint"
                                 name="openrouter_ignore"
                                 type="text"
                                 class="h-8 max-w-[420px] text-sm"
@@ -492,6 +518,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-classification-provider"
                                 label="Provider"
                                 hint="Provider that answers classification calls."
                             >
@@ -507,7 +534,12 @@ const budgetState = computed<{
                                         settings.classification_provider
                                     "
                                 >
-                                    <SelectTrigger class="h-8 w-48 text-sm">
+                                    <SelectTrigger
+                                        id="ai-settings-classification-provider"
+                                        aria-describedby="ai-settings-classification-provider-hint"
+                                        aria-labelledby="ai-settings-classification-provider-label ai-settings-classification-provider"
+                                        class="h-8 w-48 text-sm"
+                                    >
                                         <SelectValue
                                             placeholder="Select a provider"
                                         />
@@ -544,6 +576,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="classification_model"
                                 label="Model"
                                 hint="Classification model. Leave blank to use the provider's default."
                             >
@@ -553,6 +586,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="classification_model"
+                                aria-describedby="classification_model-hint"
                                 name="classification_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -569,15 +603,24 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                label-id="ai-settings-decision-gate-label"
                                 label="Webhook decision gate"
                                 hint="Skips the run when classification says the event is unlikely to need action. Stuck-import events always run."
                             >
                                 <span />
                             </Field>
                         </template>
-                        <div class="flex flex-col gap-2">
+                        <div
+                            id="ai-settings-decision-gate"
+                            role="group"
+                            aria-labelledby="ai-settings-decision-gate-label"
+                            aria-describedby="ai-settings-decision-gate-label-hint"
+                            class="flex flex-col gap-2"
+                        >
                             <div>
                                 <Toggle
+                                    id="ai-settings-decision-gate-enabled"
+                                    aria-labelledby="ai-settings-decision-gate-label"
                                     v-model="decisionGateEnabled"
                                     data-decision-gate-toggle
                                     :label="
@@ -622,15 +665,24 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                label-id="ai-settings-subtitle-triage-label"
                                 label="Subtitle escalation triage"
                                 hint="Sends cases unlikely to benefit from an automatic replacement straight to review."
                             >
                                 <span />
                             </Field>
                         </template>
-                        <div class="flex flex-col gap-2">
+                        <div
+                            id="ai-settings-subtitle-triage"
+                            role="group"
+                            aria-labelledby="ai-settings-subtitle-triage-label"
+                            aria-describedby="ai-settings-subtitle-triage-label-hint"
+                            class="flex flex-col gap-2"
+                        >
                             <div>
                                 <Toggle
+                                    id="ai-settings-subtitle-triage-enabled"
+                                    aria-labelledby="ai-settings-subtitle-triage-label"
                                     v-model="subtitleTriageEnabled"
                                     data-subtitle-triage-toggle
                                     :label="
@@ -675,6 +727,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-chat-routing"
                                 label="Chat tool routing"
                                 hint="Sends MediaAgent only the tools a message needs."
                             >
@@ -683,6 +736,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-chat-routing"
+                                aria-describedby="ai-settings-chat-routing-hint"
+                                aria-labelledby="ai-settings-chat-routing-label"
                                 v-model="chatRoutingEnabled"
                                 data-chat-routing-toggle
                                 :label="
@@ -704,6 +760,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-decision-tool-scoping"
                                 label="Webhook tool scoping"
                                 hint="Also asks which kind of action the event needs, and loads only those tools. Stuck-import events always get every tool."
                             >
@@ -712,6 +769,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-decision-tool-scoping"
+                                aria-describedby="ai-settings-decision-tool-scoping-hint"
+                                aria-labelledby="ai-settings-decision-tool-scoping-label"
                                 v-model="decisionToolScopingEnabled"
                                 data-decision-tool-scoping-toggle
                                 :label="
@@ -735,15 +795,24 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                label-id="ai-settings-stuck-import-label"
                                 label="Stuck-import fast path"
                                 hint="Lets classification import or remove a stuck download without an agent run when it is confident. Removals still need approval; anything less confident runs the agent."
                             >
                                 <span />
                             </Field>
                         </template>
-                        <div class="flex flex-col gap-2">
+                        <div
+                            id="ai-settings-stuck-import"
+                            role="group"
+                            aria-labelledby="ai-settings-stuck-import-label"
+                            aria-describedby="ai-settings-stuck-import-label-hint"
+                            class="flex flex-col gap-2"
+                        >
                             <div>
                                 <Toggle
+                                    id="ai-settings-stuck-import-enabled"
+                                    aria-labelledby="ai-settings-stuck-import-label"
                                     v-model="stuckImportFastPathEnabled"
                                     data-stuck-import-toggle
                                     :label="
@@ -790,6 +859,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="classification_audit_sample_rate"
                                 label="Audit sample rate"
                                 hint="Share of events the webhook gate or subtitle triage would skip that run anyway, to measure how often a skip is wrong. 0 turns audits off."
                             >
@@ -799,6 +869,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="classification_audit_sample_rate"
+                                aria-describedby="classification_audit_sample_rate-hint"
                                 name="classification_audit_sample_rate"
                                 type="number"
                                 step="0.01"
@@ -840,6 +911,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="reranking_provider"
                                 label="Provider"
                                 hint="Provider that reranks semantic search results."
                             >
@@ -855,6 +927,8 @@ const budgetState = computed<{
                                 >
                                     <SelectTrigger
                                         id="reranking_provider"
+                                        aria-describedby="reranking_provider-hint"
+                                        aria-labelledby="reranking_provider-label reranking_provider"
                                         class="h-8 w-48 text-sm"
                                     >
                                         <SelectValue
@@ -892,6 +966,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="reranking_model"
                                 label="Model"
                                 hint="Reranking model. Leave blank to use the provider's default."
                             >
@@ -901,6 +976,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="reranking_model"
+                                aria-describedby="reranking_model-hint"
                                 name="reranking_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -978,6 +1054,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-embeddings-provider"
                                 label="Provider"
                                 hint="Provider library and query embeddings are generated on."
                             >
@@ -990,7 +1067,12 @@ const budgetState = computed<{
                                 v-model="selectedEmbeddingsProvider"
                                 :default-value="settings.embeddings_provider"
                             >
-                                <SelectTrigger class="h-8 w-48 text-sm">
+                                <SelectTrigger
+                                    id="ai-settings-embeddings-provider"
+                                    aria-describedby="ai-settings-embeddings-provider-hint"
+                                    aria-labelledby="ai-settings-embeddings-provider-label ai-settings-embeddings-provider"
+                                    class="h-8 w-48 text-sm"
+                                >
                                     <SelectValue
                                         placeholder="Select a provider"
                                     />
@@ -1015,6 +1097,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="embeddings_model"
                                 label="Model"
                                 hint="Embeddings model. Leave blank to use the provider's default. Must support 256 dimensions."
                             >
@@ -1024,6 +1107,7 @@ const budgetState = computed<{
                         <div>
                             <Input
                                 id="embeddings_model"
+                                aria-describedby="embeddings_model-hint"
                                 name="embeddings_model"
                                 type="text"
                                 class="h-8 max-w-[320px] text-sm"
@@ -1095,6 +1179,7 @@ const budgetState = computed<{
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="soft_budget_usd"
                             label="Soft monthly budget"
                             hint="Triggers a one-shot notification to admins when current-month spend crosses this amount. Leave blank to disable."
                         >
@@ -1110,6 +1195,7 @@ const budgetState = computed<{
                             </span>
                             <Input
                                 id="soft_budget_usd"
+                                aria-describedby="soft_budget_usd-hint"
                                 name="soft_budget_usd"
                                 type="number"
                                 step="0.01"
@@ -1129,6 +1215,7 @@ const budgetState = computed<{
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="hard_budget_usd"
                             label="Hard monthly budget"
                             hint="Refuses new AI requests once current-month spend reaches this amount. Resets at the start of each calendar month. Leave blank to disable."
                         >
@@ -1144,6 +1231,7 @@ const budgetState = computed<{
                             </span>
                             <Input
                                 id="hard_budget_usd"
+                                aria-describedby="hard_budget_usd-hint"
                                 name="hard_budget_usd"
                                 type="number"
                                 step="0.01"
@@ -1163,6 +1251,7 @@ const budgetState = computed<{
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="ai-settings-rate-limits"
                             label="Model rate limits"
                             hint="When enforced, a model whose per-minute/hour/day limit (set on the AI Prices page) is already used up is refused, and the failover provider takes the turn if one is configured. When informational, limits are only shown on the AI Usage page."
                         >
@@ -1171,6 +1260,9 @@ const budgetState = computed<{
                     </template>
                     <div>
                         <Toggle
+                            id="ai-settings-rate-limits"
+                            aria-describedby="ai-settings-rate-limits-hint"
+                            aria-labelledby="ai-settings-rate-limits-label"
                             v-model="rateLimitsEnforced"
                             data-rate-limits-toggle
                             :label="
@@ -1253,6 +1345,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-models-dev-pricing"
                                 label="Models.dev feed"
                                 hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the first-party verifier agent only."
                             >
@@ -1261,6 +1354,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-models-dev-pricing"
+                                aria-describedby="ai-settings-models-dev-pricing-hint"
+                                aria-labelledby="ai-settings-models-dev-pricing-label"
                                 v-model="modelsDevPricingEnabled"
                                 data-models-dev-toggle
                                 :label="
@@ -1284,6 +1380,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-litellm-pricing"
                                 label="LiteLLM cross-check"
                                 hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
                             >
@@ -1292,6 +1389,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-litellm-pricing"
+                                aria-describedby="ai-settings-litellm-pricing-hint"
+                                aria-labelledby="ai-settings-litellm-pricing-label"
                                 v-model="liteLlmPricingEnabled"
                                 data-litellm-pricing-toggle
                                 :label="
@@ -1315,6 +1415,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-openrouter-pricing"
                                 label="OpenRouter API"
                                 hint="Prices OpenRouter model rows from OpenRouter's public models API."
                             >
@@ -1323,6 +1424,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-openrouter-pricing"
+                                aria-describedby="ai-settings-openrouter-pricing-hint"
+                                aria-labelledby="ai-settings-openrouter-pricing-label"
                                 v-model="openRouterPricingEnabled"
                                 data-openrouter-pricing-toggle
                                 :label="
@@ -1346,6 +1450,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                for="ai-settings-xai-pricing"
                                 label="xAI pricing API"
                                 hint="Prices xAI rows from xAI's own pricing API. These prices count as first-party verified."
                             >
@@ -1354,6 +1459,9 @@ const budgetState = computed<{
                         </template>
                         <div>
                             <Toggle
+                                id="ai-settings-xai-pricing"
+                                aria-describedby="ai-settings-xai-pricing-hint"
+                                aria-labelledby="ai-settings-xai-pricing-label"
                                 v-model="xaiPricingEnabled"
                                 data-xai-pricing-toggle
                                 :label="
@@ -1383,6 +1491,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                label-id="ai-settings-ignored-providers-label"
                                 label="Ignored providers"
                                 hint="Providers excluded from every automatic pricing path (feed sync, agent fallback, CLI scope). Their existing rows are kept as last-known-good."
                             >
@@ -1390,7 +1499,13 @@ const budgetState = computed<{
                             </Field>
                         </template>
                         <div>
-                            <div class="flex flex-col gap-2">
+                            <div
+                                id="ai-settings-ignored-providers"
+                                role="group"
+                                aria-labelledby="ai-settings-ignored-providers-label"
+                                aria-describedby="ai-settings-ignored-providers-label-hint"
+                                class="flex flex-col gap-2"
+                            >
                                 <label
                                     v-for="provider in pricingProviders"
                                     :key="provider.value"
@@ -1424,6 +1539,7 @@ const budgetState = computed<{
                     <SettingsRow>
                         <template #label>
                             <Field
+                                label-id="ai-settings-auto-create-providers-label"
                                 label="Add new models"
                                 hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, and only new models the app uses (usage history or picked in these settings) are added."
                             >
@@ -1431,7 +1547,13 @@ const budgetState = computed<{
                             </Field>
                         </template>
                         <div data-auto-create-providers>
-                            <div class="flex flex-col gap-2">
+                            <div
+                                id="ai-settings-auto-create-providers"
+                                role="group"
+                                aria-labelledby="ai-settings-auto-create-providers-label"
+                                aria-describedby="ai-settings-auto-create-providers-label-hint"
+                                class="flex flex-col gap-2"
+                            >
                                 <label
                                     v-for="provider in pricingProviders"
                                     :key="provider.value"

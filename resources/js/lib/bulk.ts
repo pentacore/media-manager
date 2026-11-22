@@ -56,27 +56,93 @@ const MAX_DIALOG_WAIT_FRAMES = 120;
  * first, and decide only then.
  */
 export function focusAfterBulk(): void {
+    afterDialogLeaves(moveFocusToBulkTarget);
+}
+
+/**
+ * Runs `move` after the next render, and, when focus is inside a closing
+ * dialog, only once that dialog has left the DOM and Reka's zero-delay focus
+ * restore has run.
+ */
+function afterDialogLeaves(move: () => void): void {
     void nextTick(() => {
         const dialog = document.activeElement?.closest(DIALOG_SELECTOR) ?? null;
 
         if (dialog === null) {
-            moveFocusToBulkTarget();
+            move();
 
             return;
         }
 
-        waitForDialogToLeave(dialog, 0);
+        waitForDialogToLeave(dialog, 0, move);
     });
 }
 
-function waitForDialogToLeave(dialog: Element, frame: number): void {
+function waitForDialogToLeave(
+    dialog: Element,
+    frame: number,
+    move: () => void,
+): void {
     if (dialog.isConnected && frame < MAX_DIALOG_WAIT_FRAMES) {
-        requestAnimationFrame(() => waitForDialogToLeave(dialog, frame + 1));
+        requestAnimationFrame(() =>
+            waitForDialogToLeave(dialog, frame + 1, move),
+        );
 
         return;
     }
 
-    window.setTimeout(moveFocusToBulkTarget, 0);
+    window.setTimeout(move, 0);
+}
+
+function visibleElements(selector: string): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(
+        (element) => element.getClientRects().length > 0,
+    );
+}
+
+/**
+ * Keeps a row ⋯ menu's place after the action it confirmed re-renders the
+ * list. Call it once the user has confirmed, while the row is still on the
+ * page, with the trigger `focusedMenuTrigger()` (`@/lib/pageHeader`) captured
+ * and a selector matching every row's trigger. Run the returned callback when
+ * each visit that can re-render the list finishes. Like `focusAfterBulk()`,
+ * it waits for a closing dialog to leave and acts only when focus fell to
+ * `<body>`. It then focuses the visible trigger at the row's old position:
+ * the row's own when the row survived, the next row's when it was removed,
+ * the new last row's when it was the last one, and the page heading when no
+ * row is left.
+ */
+export function rowMenuFocusKeeper(
+    trigger: HTMLElement | null,
+    triggerSelector: string,
+): () => void {
+    const position =
+        trigger === null
+            ? -1
+            : visibleElements(triggerSelector).indexOf(trigger);
+
+    return () =>
+        afterDialogLeaves(() => {
+            const active = document.activeElement;
+
+            if (active !== null && active !== document.body) {
+                return;
+            }
+
+            const triggers = visibleElements(triggerSelector);
+            const target =
+                position < 0
+                    ? undefined
+                    : (triggers[position] ?? triggers.at(-1));
+
+            if (target === undefined) {
+                focusPageHeading();
+
+                return;
+            }
+
+            target.focus({ preventScroll: true });
+        });
 }
 
 /**

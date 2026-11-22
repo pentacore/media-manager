@@ -261,12 +261,12 @@ test('the model pickers are named by tier', function (): void {
 
     visit(route('admin.ai-models.index', absolute: false))
         ->assertNoSmoke()
-        ->assertPresent('[data-task="chat"] [aria-label="Chat model"]')
-        ->assertMissing('[data-task="chat"] [aria-label="Chat tier 1 model"]')
+        ->assertPresent('[data-task="chat"] [data-select-name="Chat model"]')
+        ->assertMissing('[data-task="chat"] [data-select-name="Chat tier 1 model"]')
         ->click('[data-task="chat"] [data-tier-add]')
-        ->assertPresent('[data-task="chat"] [aria-label="Chat tier 1 model"]')
-        ->assertPresent('[data-task="chat"] [aria-label="Chat tier 2 model"]')
-        ->assertMissing('[data-task="chat"] [aria-label="Chat model"]');
+        ->assertPresent('[data-task="chat"] [data-select-name="Chat tier 1 model"]')
+        ->assertPresent('[data-task="chat"] [data-select-name="Chat tier 2 model"]')
+        ->assertMissing('[data-task="chat"] [data-select-name="Chat model"]');
 });
 
 test('an event override that inherits shows which list its tier came from', function (): void {
@@ -317,6 +317,6 @@ test('the model pickers of event overrides are named by task and event', functio
         ->click('[data-event-option="sonarr:Download"]')
         ->click('[data-decision-verifier-add-event-override] button')
         ->click('[data-decision-verifier-event-option="sonarr:Download"]')
-        ->assertPresent('[data-event-override="sonarr:Download"] [aria-label="Decision agent sonarr:Download model"]')
-        ->assertPresent('[data-decision-verifier-event-override="sonarr:Download"] [aria-label="Decision verifier sonarr:Download model"]');
+        ->assertPresent('[data-event-override="sonarr:Download"] [data-select-name="Decision agent sonarr:Download model"]')
+        ->assertPresent('[data-decision-verifier-event-override="sonarr:Download"] [data-select-name="Decision verifier sonarr:Download model"]');
 });

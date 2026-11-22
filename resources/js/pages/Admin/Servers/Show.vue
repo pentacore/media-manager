@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/composables/useConfirm';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 import type { DbPingEngine, HostCheckType } from '@/typefinder';
 
@@ -90,6 +91,8 @@ async function remove(): Promise<void> {
             'Its checks, incidents and metrics are deleted and its agent can no longer report. This cannot be undone.',
         confirmLabel: 'Remove',
         destructive: true,
+        onCloseAutoFocus: (event) =>
+            returnFocusToPageHeaderMenu(event, '[data-server-delete]'),
     });
 
     if (!confirmed) {
