@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 import { AlertTriangle, Loader2, Search } from '@lucide/vue';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, useId, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaReplacementController from '@/actions/App/Http/Controllers/Media/MediaReplacementController';
@@ -103,6 +103,7 @@ const snapshot = ref<ReplacementSnapshot | null>(null);
 const fingerprint = ref<string | null>(null);
 const requiredLanguages = ref<string[]>([]);
 const verifySubtitles = ref(false);
+const verifyId = useId();
 const candidates = ref<ReplacementCandidate[]>([]);
 const searchedOnce = ref(false);
 const selectedFingerprint = ref<string | null>(null);
@@ -408,14 +409,24 @@ onMounted(() => {
                     class="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
                 >
                     <div>
-                        <p class="text-[13px] font-medium">Verify subtitles</p>
-                        <p class="text-[12px] text-muted-foreground">
+                        <p
+                            :id="`${verifyId}-label`"
+                            class="text-[13px] font-medium"
+                        >
+                            Verify subtitles
+                        </p>
+                        <p
+                            :id="`${verifyId}-hint`"
+                            class="text-[12px] text-muted-foreground"
+                        >
                             Require evidence of the languages this file needs
                             before queuing.
                         </p>
                     </div>
                     <Toggle
                         v-model="verifySubtitles"
+                        :aria-labelledby="`${verifyId}-label`"
+                        :aria-describedby="`${verifyId}-hint`"
                         data-replacement-verify-toggle
                         :disabled="isBusy"
                     />
