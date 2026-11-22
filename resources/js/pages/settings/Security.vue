@@ -79,6 +79,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="current_password"
                             label="Current password"
                             hint="Confirms it's really you."
                         >
@@ -88,6 +89,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="current_password"
+                            aria-describedby="current_password-hint"
                             name="current_password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"
@@ -106,6 +108,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="password"
                             label="New password"
                             hint="At least 8 characters."
                         >
@@ -115,6 +118,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="password"
+                            aria-describedby="password-hint"
                             name="password"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"
@@ -130,6 +134,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                 <SettingsRow>
                     <template #label>
                         <Field
+                            for="password_confirmation"
                             label="Confirm password"
                             hint="Type the new password again."
                         >
@@ -139,6 +144,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     <div>
                         <PasswordInput
                             id="password_confirmation"
+                            aria-describedby="password_confirmation-hint"
                             name="password_confirmation"
                             class="max-w-[360px]"
                             input-class="h-8 text-sm"

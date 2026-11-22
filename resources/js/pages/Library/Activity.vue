@@ -21,8 +21,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
-import { focusAfterBulk, returnFocusToBulkMenu, submitBulk } from '@/lib/bulk';
+import {
+    focusAfterBulk,
+    returnFocusToBulkMenu,
+    rowMenuFocusKeeper,
+    submitBulk,
+} from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
+import { focusedMenuTrigger, returnFocusTo } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 import type { ManualImportCandidatesRequest } from '@/typefinder';
 
@@ -280,17 +286,23 @@ function isRemoving(row: QueueRow): boolean {
     );
 }
 
+/** Every queue row's ⋯: the table's on desktop, the cards' on a phone. */
+const QUEUE_ROW_MENU_SELECTOR = '[data-queue-row-menu], [data-queue-card-menu]';
+
 async function forceGrab(row: QueueRow): Promise<void> {
+    const trigger = focusedMenuTrigger();
     const confirmed = await confirm({
         title: `Force grab "${row.title ?? 'this item'}" now?`,
         description: 'This bypasses the RSS sync delay.',
         confirmLabel: 'Grab now',
+        onCloseAutoFocus: (event) => returnFocusTo(event, trigger),
     });
 
     if (!confirmed) {
         return;
     }
 
+    const keepFocus = rowMenuFocusKeeper(trigger, QUEUE_ROW_MENU_SELECTOR);
     const key = actionKey(row, 'grab');
     acting.value = key;
     router.post(
@@ -301,11 +313,14 @@ async function forceGrab(row: QueueRow): Promise<void> {
         { service_connection_id: row.service_connection_id },
         {
             preserveScroll: true,
-            onSuccess: () => router.reload({ only: ['queue'] }),
+            onSuccess: () =>
+                router.reload({ only: ['queue'], onFinish: keepFocus }),
             onFinish: () => {
                 if (acting.value === key) {
                     acting.value = null;
                 }
+
+                keepFocus();
             },
         },
     );
@@ -316,6 +331,9 @@ async function removeQueueItem(
     verb: 'remove' | 'block',
 ): Promise<void> {
     const title = row.title ?? 'this item';
+    const trigger = focusedMenuTrigger();
+    const onCloseAutoFocus = (event: Event): void =>
+        returnFocusTo(event, trigger);
     const confirmed = await confirm(
         verb === 'block'
             ? {
@@ -323,11 +341,13 @@ async function removeQueueItem(
                   description: 'A fresh search runs afterwards.',
                   confirmLabel: 'Blocklist & retry',
                   destructive: true,
+                  onCloseAutoFocus,
               }
             : {
                   title: `Remove "${title}" from the queue?`,
                   confirmLabel: 'Remove',
                   destructive: true,
+                  onCloseAutoFocus,
               },
     );
 
@@ -335,6 +355,7 @@ async function removeQueueItem(
         return;
     }
 
+    const keepFocus = rowMenuFocusKeeper(trigger, QUEUE_ROW_MENU_SELECTOR);
     const key = actionKey(row, verb);
     acting.value = key;
     router.post(
@@ -345,11 +366,14 @@ async function removeQueueItem(
         { verb, service_connection_id: row.service_connection_id },
         {
             preserveScroll: true,
-            onSuccess: () => router.reload({ only: ['queue'] }),
+            onSuccess: () =>
+                router.reload({ only: ['queue'], onFinish: keepFocus }),
             onFinish: () => {
                 if (acting.value === key) {
                     acting.value = null;
                 }
+
+                keepFocus();
             },
         },
     );

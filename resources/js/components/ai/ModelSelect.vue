@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import {
     Select,
     SelectContent,
@@ -33,6 +33,16 @@ const props = withDefaults(
 );
 
 const provider = defineModel<string>('provider', { default: '' });
+
+/**
+ * `ariaLabel` names the trigger through an sr-only span plus the trigger
+ * itself, so the selected model stays in the accessible name.
+ */
+const generatedId = useId();
+const triggerId = computed(
+    () => props.id ?? props.name ?? `${generatedId}-trigger`,
+);
+const nameId = `${generatedId}-name`;
 const model = defineModel<string>('model', { default: '' });
 
 /**
@@ -101,10 +111,20 @@ const groups = computed<Record<string, string[]>>(() => {
 
 <template>
     <div>
+        <span
+            v-if="ariaLabel"
+            :id="nameId"
+            class="sr-only"
+            aria-hidden="true"
+            :data-select-name="ariaLabel"
+            >{{ ariaLabel }}</span
+        >
         <Select v-model="selected" :disabled="disabled">
             <SelectTrigger
-                :id="id ?? name"
-                :aria-label="ariaLabel"
+                :id="triggerId"
+                :aria-labelledby="
+                    ariaLabel ? `${nameId} ${triggerId}` : undefined
+                "
                 class="h-8 max-w-[320px] text-sm"
             >
                 <SelectValue :placeholder="placeholder" />

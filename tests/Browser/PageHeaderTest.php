@@ -8,6 +8,7 @@ use App\Enums\WhisparrVersion;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ActionRequest;
+use App\Models\Server;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\ServiceWarning;
@@ -610,6 +611,50 @@ test("the phone menu's Import from Emby asks first; Cancel calls nothing and Imp
         ->assertNoSmoke();
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/Users'));
+});
+
+test("the phone menu's Remove server asks first; Cancel keeps it and returns focus to the ⋯", function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create(['name' => 'Example Server']);
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="delete"]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Remove "Example Server"?');
+    $webpage->script(pageHeaderMenuGoneScript());
+    $webpage->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->assertScript(pageHeaderFocusOnMoreScript(), true);
+
+    expect(Server::query()->whereKey($server->id)->exists())->toBeTrue();
+
+    $webpage->click('[data-page-header-more]')
+        ->click('[data-page-header-item="delete"]')
+        ->click('[data-confirm-accept]')
+        ->assertSee('Server removed.')
+        ->assertNoSmoke();
+
+    expect(Server::query()->whereKey($server->id)->exists())->toBeFalse();
+});
+
+test("at desktop width Cancel on Remove server's question returns focus to the inline button", function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create(['name' => 'Example Server']);
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertMissing('[data-page-header-more]')
+        ->click('[data-server-delete]')
+        ->assertSeeIn('[data-confirm-dialog]', 'Remove "Example Server"?')
+        ->click('[data-confirm-cancel]');
+
+    $webpage->script(confirmDialogGoneScript());
+    $webpage->script(confirmDialogWaitUntilScript('document.activeElement?.hasAttribute("data-server-delete") === true'));
+    $webpage->assertScript('document.activeElement?.hasAttribute("data-server-delete") === true', true);
+
+    expect(Server::query()->whereKey($server->id)->exists())->toBeTrue();
 });
 
 test('the Capture & store toggle flips, sends the request and persists from the phone filters row', function (): void {
