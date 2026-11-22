@@ -38,17 +38,6 @@ function detailToolbarPhoneFakes(): void
 }
 
 /**
- * Waits until the focused element matches the selector (the dialog's close
- * focus runs as it unmounts), then reports whether it does.
- */
-function detailToolbarFocusScript(string $selector): string
-{
-    $condition = sprintf('document.activeElement?.matches(%s) === true', json_encode($selector));
-
-    return '(async () => { await '.confirmDialogWaitUntilScript($condition).'; return '.$condition.'; })()';
-}
-
-/**
  * The ⋯ menu restores focus to its trigger as it unmounts after its exit
  * animation; close the dialog only once that is over and focus sits in the
  * dialog, or the menu's late restore hides where the dialog sends focus.
@@ -86,7 +75,7 @@ test('the movie toolbar keeps Monitor and Search on a phone and moves the rest i
     $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
     $webpage->keys('[data-interactive-search-dialog]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-interactive-search-dialog]")'));
-    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true);
+    $webpage->assertScript(focusLandsOnScript('[data-page-header-more]'), true);
 
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="replace"]')
@@ -94,7 +83,7 @@ test('the movie toolbar keeps Monitor and Search on a phone and moves the rest i
     $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
     $webpage->keys('[data-replacement-dialog]', 'Escape');
     $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-replacement-dialog]")'));
-    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true);
+    $webpage->assertScript(focusLandsOnScript('[data-page-header-more]'), true);
 
     $webpage->click('[data-page-header-more]')
         ->click('[data-page-header-item="delete"]')
@@ -102,7 +91,7 @@ test('the movie toolbar keeps Monitor and Search on a phone and moves the rest i
 
     $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
     $webpage->keys('[data-delete-confirm]', 'Escape');
-    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true)
+    $webpage->assertScript(focusLandsOnScript('[data-page-header-more]'), true)
         ->assertNoSmoke();
 });
 
@@ -127,7 +116,7 @@ test('the series toolbar keeps Monitor and Search on a phone and moves Open in S
 
     $webpage->script(confirmDialogWaitUntilScript(detailToolbarMenuGoneCondition()));
     $webpage->keys('[data-delete-confirm]', 'Escape');
-    $webpage->assertScript(detailToolbarFocusScript('[data-page-header-more]'), true)
+    $webpage->assertScript(focusLandsOnScript('[data-page-header-more]'), true)
         ->assertNoSmoke();
 });
 
@@ -181,5 +170,5 @@ test('at desktop width the detail toolbars keep every action inline', function (
         ->assertSeeIn('[data-delete-description]', 'Removes the series from Sonarr.');
 
     $webpage->keys('[data-delete-confirm]', 'Escape');
-    $webpage->assertScript(detailToolbarFocusScript('[data-delete-trigger]'), true);
+    $webpage->assertScript(focusLandsOnScript('[data-delete-trigger]'), true);
 });
