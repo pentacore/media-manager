@@ -122,7 +122,9 @@ function setThreshold(
             :data-second-opinion-override="override.event_key"
         >
             <div class="flex flex-wrap items-center gap-2">
-                <span class="font-mono-tabular text-[13px]">
+                <span
+                    class="font-mono-tabular text-[13px] max-sm:min-w-0 max-sm:break-all"
+                >
                     {{ override.event_key }}
                 </span>
                 <Pill
@@ -222,7 +224,7 @@ function setThreshold(
             </div>
             <Link
                 :href="modelLinkHref"
-                class="w-fit text-[12px] underline underline-offset-2"
+                class="w-fit text-[12px] underline underline-offset-2 touch:flex touch:min-h-10 touch:items-center"
                 data-override-model-link
             >
                 Model: set on AI Models

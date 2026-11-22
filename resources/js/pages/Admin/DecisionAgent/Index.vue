@@ -205,7 +205,7 @@ function submit(): void {
                                 <label
                                     v-for="event in events"
                                     :key="event"
-                                    class="flex cursor-pointer items-center gap-1.5 text-[12.5px]"
+                                    class="flex cursor-pointer items-center gap-1.5 text-[12.5px] touch:min-h-10"
                                 >
                                     <input
                                         type="checkbox"

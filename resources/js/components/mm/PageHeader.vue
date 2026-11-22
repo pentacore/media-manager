@@ -16,6 +16,9 @@ import { cn } from '@/lib/utils';
  * holding the secondary actions. Secondary actions are passed twice: inline
  * buttons in #secondaryActions (desktop) and DropdownMenuItems in #menu
  * (phone), because a menu needs real menu items for its keyboard model.
+ * Between `sm` and `lg` (a tablet, or a desktop window beside an expanded
+ * sidebar) the row wraps: the title block keeps up to 12rem of its own width,
+ * and actions that do not fit beside it move to their own line and wrap there.
  */
 const props = withDefaults(
     defineProps<{
@@ -54,13 +57,15 @@ const alignClasses = {
         data-page-header
         :class="
             cn(
-                'flex flex-col gap-3 sm:flex-row sm:justify-between',
+                'flex flex-col gap-3 sm:flex-row sm:justify-between sm:max-lg:flex-wrap',
                 alignClasses[props.align],
                 props.class,
             )
         "
     >
-        <div class="min-w-0 break-words">
+        <div
+            class="min-w-0 break-words sm:max-lg:max-w-max sm:max-lg:grow sm:max-lg:basis-48"
+        >
             <slot name="eyebrow" />
             <slot name="title" />
             <slot name="description" />
@@ -75,7 +80,7 @@ const alignClasses = {
             data-page-header-actions
             :class="
                 cn(
-                    'flex flex-wrap items-center gap-2 sm:flex-nowrap touch:gap-y-3',
+                    'flex flex-wrap items-center gap-2 sm:max-lg:min-w-0 lg:flex-nowrap touch:gap-y-3',
                     props.actionsClass,
                 )
             "

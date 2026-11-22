@@ -191,7 +191,7 @@ onMounted(subscribe);
     <div class="flex flex-col gap-4 p-5">
         <Link
             :href="MediaReplacementAttemptController.index.url()"
-            class="inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+            class="touch-target inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
         >
             <ArrowLeft class="size-3.5" /> All attempts
         </Link>
@@ -349,7 +349,7 @@ onMounted(subscribe);
                     <Field label="Action request">
                         <Link
                             :href="attempt.links.action_request"
-                            class="inline-flex items-center gap-1 text-accent hover:underline"
+                            class="touch-target inline-flex items-center gap-1 text-accent hover:underline"
                         >
                             act_{{ attempt.action_request.id }}
                             <span class="text-muted-foreground">
@@ -362,14 +362,14 @@ onMounted(subscribe);
                             <Link
                                 v-if="attempt.links.media"
                                 :href="attempt.links.media"
-                                class="inline-flex items-center gap-1 text-accent hover:underline"
+                                class="touch-target inline-flex items-center gap-1 text-accent hover:underline"
                             >
                                 <ExternalLink class="size-3" /> Media page
                             </Link>
                             <Link
                                 v-if="attempt.links.grab_queue"
                                 :href="attempt.links.grab_queue"
-                                class="inline-flex items-center gap-1 text-accent hover:underline"
+                                class="touch-target inline-flex items-center gap-1 text-accent hover:underline"
                             >
                                 <ExternalLink class="size-3" /> Grab queue
                             </Link>

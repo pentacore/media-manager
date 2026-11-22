@@ -236,6 +236,7 @@ function freeSpaceLabel(bytes: number | null): string {
                         class="w-full"
                         size="sm"
                         :disabled="!result.tvdb_id"
+                        :data-add-result="result.tvdb_id ?? undefined"
                         @click="selectResult(result)"
                     >
                         <Plus class="mr-2 size-4" />
@@ -252,7 +253,10 @@ function freeSpaceLabel(bytes: number | null): string {
                             v-model="form.qualityProfileId"
                             :disabled="qualityProfilesLoading"
                         >
-                            <SelectTrigger :id="`quality-${result.tvdb_id}`">
+                            <SelectTrigger
+                                :id="`quality-${result.tvdb_id}`"
+                                class="max-sm:w-full"
+                            >
                                 <SelectValue
                                     :placeholder="
                                         qualityProfilesLoading
@@ -290,7 +294,11 @@ function freeSpaceLabel(bytes: number | null): string {
                             v-model="form.rootFolderPath"
                             :disabled="rootFoldersLoading"
                         >
-                            <SelectTrigger :id="`root-${result.tvdb_id}`">
+                            <SelectTrigger
+                                :id="`root-${result.tvdb_id}`"
+                                class="max-sm:w-full"
+                                data-add-root-folder
+                            >
                                 <SelectValue
                                     :placeholder="
                                         rootFoldersLoading

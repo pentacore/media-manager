@@ -89,7 +89,8 @@ onUnmounted(() => clearTwoFactorAuthData());
                         <PasswordInput
                             id="current_password"
                             name="current_password"
-                            class="h-8 max-w-[360px] text-sm"
+                            class="max-w-[360px]"
+                            input-class="h-8 text-sm"
                             autocomplete="current-password"
                             placeholder="Current password"
                         />
@@ -115,7 +116,8 @@ onUnmounted(() => clearTwoFactorAuthData());
                         <PasswordInput
                             id="password"
                             name="password"
-                            class="h-8 max-w-[360px] text-sm"
+                            class="max-w-[360px]"
+                            input-class="h-8 text-sm"
                             autocomplete="new-password"
                             placeholder="New password"
                         />
@@ -138,7 +140,8 @@ onUnmounted(() => clearTwoFactorAuthData());
                         <PasswordInput
                             id="password_confirmation"
                             name="password_confirmation"
-                            class="h-8 max-w-[360px] text-sm"
+                            class="max-w-[360px]"
+                            input-class="h-8 text-sm"
                             autocomplete="new-password"
                             placeholder="Confirm password"
                         />
@@ -213,6 +216,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                                 size="sm"
                                 class="h-8 text-xs"
                                 :disabled="processing"
+                                data-two-factor-enable
                             >
                                 Enable 2FA
                             </Button>

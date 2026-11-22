@@ -375,7 +375,7 @@ test('a failed test send never leaks the telegram bot token to the user', functi
     config()->set('services.telegram.token', '123:abc');
     Http::preventStrayRequests();
     Http::fake([
-        'api.telegram.org/*' => fn () => throw new ConnectionException('cURL error 6: https://api.telegram.org/bot123:abc/sendMessage'),
+        'api.telegram.org/*' => fn (): never => throw new ConnectionException('cURL error 6: https://api.telegram.org/bot123:abc/sendMessage'),
     ]);
     $user = User::factory()->create(['telegram_chat_id' => '-1001']);
 

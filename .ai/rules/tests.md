@@ -19,3 +19,6 @@ Exercise the real service client against `Http::fake(['&lt;service&gt;.local:&lt
 
 ## Reserve Mockery for internal collaborators
 Use `Mockery::mock()`/`$this->mock()` plus `app()->instance()` only for in-app services (executors, indexers, guards, handlers) — never for the HTTP service clients. Fake AI agents with `&lt;Agent&gt;::fake([...])`; an unfaked agent fails loudly because phpunit.xml sets dummy API keys. Prefer selective `Event::fake([...])` over global fakes.
+
+## Agents get compact tool output through PAO, but only when the agent variable reaches Sail
+`laravel/pao` (dev) replaces Pest, Paratest, PHPStan and Rector output with one JSON line, and strips decoration from Artisan output, but only when it detects an AI agent through environment variables such as `CLAUDECODE` or `AI_AGENT`. `docker exec` and `vendor/bin/sail` do not forward host variables, so an agent running tools in the Sail container sets the variable on the command itself: `vendor/bin/sail bash -c 'CLAUDECODE=1 php artisan test --compact …'`, or `docker exec -e CLAUDECODE=1 …`. Without it the output is the human format. Exit codes are the same either way. Scripts that grep the human `Tests:` line must not set the variable.

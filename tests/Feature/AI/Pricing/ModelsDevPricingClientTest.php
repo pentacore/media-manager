@@ -186,7 +186,7 @@ test('fetch does not retry a deterministic client error', function (): void {
 test('fetch classifies a connection failure', function (): void {
     Sleep::fake();
 
-    Http::fake(fn () => throw new ConnectionException('cURL error 7: Failed to connect to models.dev'));
+    Http::fake(fn (): never => throw new ConnectionException('cURL error 7: Failed to connect to models.dev'));
 
     $caught = null;
 
@@ -203,7 +203,7 @@ test('fetch classifies a connection failure', function (): void {
 test('fetch classifies a timeout distinctly from a plain connection failure', function (): void {
     Sleep::fake();
 
-    Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out after 30000 ms'));
+    Http::fake(fn (): never => throw new ConnectionException('cURL error 28: Operation timed out after 30000 ms'));
 
     $caught = null;
 

@@ -35,7 +35,7 @@ test('inspect returns the assessment and the file descriptions', function (): vo
 
 test('inspect lets a failed lookup surface to the caller', function (): void {
     $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
-    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => fn () => throw new ConnectionException('down')]);
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => fn (): never => throw new ConnectionException('down')]);
 
     resolve(StuckImportInspector::class)->inspect($sonarr, 'sonarr', 'dl-1');
 })->throws(ConnectionException::class);

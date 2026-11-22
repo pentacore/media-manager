@@ -371,7 +371,7 @@ function save(): void {
 }
 
 const selectClass =
-    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground disabled:opacity-60';
+    'h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground disabled:opacity-60 touch:h-10';
 </script>
 
 <template>

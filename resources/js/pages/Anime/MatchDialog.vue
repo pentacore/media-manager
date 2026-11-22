@@ -165,8 +165,7 @@ function confirm(): void {
                     Pick the TMDB title that matches
                     <span class="font-medium text-foreground">{{
                         entry.title
-                    }}</span
-                    >. We'll remember the mapping and file the request.
+                    }}</span>. We'll remember the mapping and file the request.
                 </DialogDescription>
             </DialogHeader>
 
@@ -191,6 +190,7 @@ function confirm(): void {
                     v-for="candidate in candidates"
                     :key="`${candidate.mediaType}-${candidate.tmdbId}`"
                     type="button"
+                    data-anime-match-candidate
                     :class="
                         cn(
                             'flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',

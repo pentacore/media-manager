@@ -91,7 +91,7 @@ test('a disagreement under reject creates a rejected request that never runs', f
 
 test('a failed check under reject holds instead of rejecting', function (): void {
     secondOpinionRule('monitor_series', SecondOpinionMode::Reject);
-    DecisionVerifierAgent::fake(fn () => throw new RuntimeException('timeout'));
+    DecisionVerifierAgent::fake(fn (): never => throw new RuntimeException('timeout'));
 
     $actionRequest = secondOpinionDispatch();
 

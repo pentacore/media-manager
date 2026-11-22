@@ -37,7 +37,7 @@ function toggle() {
         :disabled="disabled"
         :class="
             cn(
-                'inline-flex items-center gap-2 disabled:opacity-50',
+                'inline-flex items-center gap-2 disabled:opacity-50 touch:min-h-10',
                 'cursor-pointer',
             )
         "

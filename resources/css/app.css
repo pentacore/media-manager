@@ -18,6 +18,17 @@
     }
 }
 
+/*
+ * Short viewports: a phone turned sideways (wider than `sm`, under 500 px
+ * tall), and also any desktop window under 500 px tall. Dialogs take their
+ * phone body-scroller layout here too.
+ */
+@custom-variant short {
+    @media (max-height: 500px) {
+        @slot;
+    }
+}
+
 @theme inline {
     --font-sans:
         Inter, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
@@ -463,16 +474,84 @@
 }
 
 /*
- * While a compact bulk bar is mounted (BulkActionBar sets
- * `data-bulk-bar-open` on <body>), a phone's bar is fixed to the bottom of
- * the screen. The page then ends with room for it, so whatever comes last
- * (pagination, a history list) scrolls clear of the bar.
+ * Admin tables on a phone (put it on the <table>): the first column, the
+ * row's name, stays at the frame's left edge while the rest scrolls sideways
+ * inside the frame. Desktop is untouched. max-width on a table cell is not
+ * reliable, so the 45vw cap also applies to the cell's element children,
+ * which also hold the column at 8rem: overflow-wrap would otherwise let a
+ * table wider than the phone squeeze it to a glyph. An empty-state
+ * `colspan` cell is never sticky. The frame's scroll padding makes focus and
+ * scrollIntoView() bring a cell into view beside the sticky column, not
+ * under it. The cell paints over the table's collapsed row dividers, so it
+ * draws its own (none under the last body row, as `last:border-b-0` and
+ * shadcn's TableBody do), and it takes the row's hover tint.
+ */
+@utility sticky-first-column {
+    @media (width < 40rem) {
+        & :is(th, td):first-child:not([colspan]) {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            max-width: 45vw;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            background-color: var(--color-card);
+            box-shadow:
+                inset -1px 0 0 var(--color-border),
+                inset 0 -1px 0 var(--color-border);
+        }
+
+        & tbody tr:last-child > td:first-child:not([colspan]) {
+            box-shadow: inset -1px 0 0 var(--color-border);
+        }
+
+        @media (hover: hover) {
+            & tbody tr:hover > td:first-child:not([colspan]) {
+                background-image: linear-gradient(
+                    var(--color-bg-hover),
+                    var(--color-bg-hover)
+                );
+            }
+
+            &[data-slot='table']
+                tbody
+                tr:hover
+                > td:first-child:not([colspan]) {
+                background-image: linear-gradient(
+                    color-mix(in oklab, var(--color-muted) 50%, transparent),
+                    color-mix(in oklab, var(--color-muted) 50%, transparent)
+                );
+            }
+        }
+
+        & :is(th, td):first-child:not([colspan]) > * {
+            min-width: min(8rem, 45vw);
+            max-width: 45vw;
+        }
+
+        :has(> &) {
+            scroll-padding-inline-start: calc(45vw + 1.5rem);
+        }
+    }
+}
+
+/*
+ * Every bulk bar is fixed to the bottom of a phone's screen. While one is
+ * mounted (BulkActionBar sets `data-bulk-bar-open` on <body>, and its measured
+ * border-box height as `--bulk-bar-height`), the page ends with a spacer of
+ * that height plus 1rem, so whatever comes last (pagination, a history list,
+ * the last library row) scrolls clear of the bar, however many rows it wraps
+ * to. The fallback covers the frame before the first measurement: a compact
+ * bar is at least 3.5rem (min-height includes its inset padding).
  */
 @media (width < 40rem) {
     body[data-bulk-bar-open] main[data-slot='sidebar-inset']::after {
         content: '';
         display: block;
         flex-shrink: 0;
-        height: calc(4.5rem + env(safe-area-inset-bottom));
+        height: calc(
+            var(--bulk-bar-height, calc(3.5rem + env(safe-area-inset-bottom))) +
+                1rem
+        );
     }
 }

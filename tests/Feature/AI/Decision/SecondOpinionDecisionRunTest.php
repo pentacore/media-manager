@@ -131,7 +131,7 @@ test('the verifier usage row is a child of the decision run', function (): void 
 
 test('a verifier crash inside a run still queues the proposal for approval', function (): void {
     secondOpinionDeleteRule(SecondOpinionMode::Reject);
-    DecisionVerifierAgent::fake(fn () => throw new RuntimeException('boom'));
+    DecisionVerifierAgent::fake(fn (): never => throw new RuntimeException('boom'));
     DecisionAgent::fake([
         new ToolCall(id: 'c1', name: 'ProposeActionTool', arguments: secondOpinionDeleteProposal()),
         'Queued a deletion for approval.',

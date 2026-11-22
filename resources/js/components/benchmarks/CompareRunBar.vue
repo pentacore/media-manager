@@ -69,7 +69,7 @@ function swap(): void {
         >
             <Link
                 :href="BenchmarkRunController.show.url(run.id)"
-                class="truncate font-medium hover:underline"
+                class="truncate font-medium hover:underline touch:py-2.5"
                 >{{ run.name }}</Link
             >
             <Pill v-if="run.is_baseline" variant="info" data-compare-baseline
