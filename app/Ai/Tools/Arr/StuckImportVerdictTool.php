@@ -13,6 +13,7 @@ use App\Models\ServiceConnection;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
+use Override;
 use Stringable;
 
 /**
@@ -41,13 +42,7 @@ class StuckImportVerdictTool extends BaseTool
         $validated = $request->validate([
             'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
             'download_id' => ['required', 'string'],
-        ], [
-            'service.required' => 'service must be "sonarr" or "radarr".',
-            'service.string' => 'service must be "sonarr" or "radarr".',
-            'service.regex' => 'service must be "sonarr" or "radarr".',
-            'download_id.required' => 'download_id is required.',
-            'download_id.string' => 'download_id must be a string.',
-        ]);
+        ], $this->argumentMessages());
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];
 
@@ -74,6 +69,21 @@ class StuckImportVerdictTool extends BaseTool
             'message' => $stuckImportDecision->isConfident
                 ? 'Confident verdict. Tell the user, and use the manual-import or remove tools only if they agree.'
                 : 'Not confident. Use InvestigateStuckDownload for a full investigation.',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function argumentMessages(): array
+    {
+        return [
+            'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.string' => 'service must be "sonarr" or "radarr".',
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'download_id.required' => 'download_id is required.',
+            'download_id.string' => 'download_id must be a string.',
         ];
     }
 

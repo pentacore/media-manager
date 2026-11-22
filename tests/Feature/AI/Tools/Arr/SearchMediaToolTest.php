@@ -58,10 +58,11 @@ test('searches the Whisparr lookup when service is whisparr', function (): void 
     expect($result)->toHaveCount(1);
 });
 
-test('returns tool_failed for an unknown service', function (): void {
+test('rejects an unknown service against the schema enum', function (): void {
     $result = json_decode((new SearchMediaTool)->handle(new Request(['service' => 'emby', 'query' => 'x'])), true);
 
-    expect($result['error'])->toBe('tool_failed');
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('service');
 });
 
 test('returns tool_failed when no connection is configured', function (): void {
