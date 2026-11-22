@@ -1,12 +1,4 @@
-export type MediaSearchCommand =
-    | 'series_search'
-    | 'season_search'
-    | 'episode_search'
-    | 'missing_episode_search'
-    | 'cutoff_unmet_episode_search'
-    | 'movies_search'
-    | 'missing_movies_search'
-    | 'cutoff_unmet_movies_search';
+export type { MediaSearchCommand } from '@/typefinder';
 
 export interface ReleaseRow {
     key: string;

@@ -18,8 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
-import type { SecondOpinionMode } from '@/typefinder';
-import type { SecondOpinionEngine } from '@/typefinder/enums/SecondOpinionEngine';
+import type { SecondOpinionEngine, SecondOpinionMode } from '@/typefinder';
 
 interface DecisionAgentState {
     enabled: boolean;

@@ -1,4 +1,4 @@
-import type { SharedUserResource } from '@/typefinder/resources/SharedUserResource';
+import type { SharedUserResource } from '@/typefinder';
 
 export type UserPreferences = SharedUserResource['preferences'];
 

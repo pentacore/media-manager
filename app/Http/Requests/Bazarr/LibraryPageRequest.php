@@ -18,8 +18,11 @@ final class LibraryPageRequest extends FormRequest
     {
         return [
             ...$this->bazarrPageRules(),
+            /** @query */
             'media_type' => ['nullable', 'in:episode,movie'],
+            /** @query */
             'scope' => ['nullable', 'in:anime,tv,movie'],
+            /** @query */
             'missing_only' => ['nullable', 'boolean'],
         ];
     }

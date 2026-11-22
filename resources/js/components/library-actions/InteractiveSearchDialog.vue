@@ -17,8 +17,8 @@ import {
 import { formatBytes } from '@/lib/format';
 import { jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
+import type { ReleaseSearchRequest } from '@/typefinder';
 import type { ReleaseRow } from '@/types';
-import type { QueryParams } from '@/wayfinder';
 
 type SortKey = 'title' | 'quality' | 'size' | 'age_hours' | 'peers' | 'indexer';
 
@@ -31,7 +31,7 @@ interface GrabResponse {
 const props = withDefaults(
     defineProps<{
         open: boolean;
-        service: 'sonarr' | 'radarr';
+        service: ReleaseSearchRequest['service'];
         connectionId: number;
         itemId: number;
         seasonNumber?: number | null;
@@ -66,7 +66,10 @@ const sortDescending = ref(true);
 let requestSeq = 0;
 let slowTimer: ReturnType<typeof setTimeout> | null = null;
 
-function query(): QueryParams {
+// The whole request is the query string; its keys come from a rules helper shared
+// with POST requests, so they cannot be tagged @query yet:
+// https://github.com/pentacore/Laravel-Typefinder/issues/129
+function query(): ReleaseSearchRequest {
     return {
         service: props.service,
         service_connection_id: props.connectionId,

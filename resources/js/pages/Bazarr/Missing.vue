@@ -8,7 +8,10 @@ import SubtitleItemDrawer from '@/components/bazarr/SubtitleItemDrawer.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
-import type { SubtitleItemResource } from '@/typefinder/resources/SubtitleItemResource';
+import type {
+    MissingPageRequestQuery,
+    SubtitleItemResource,
+} from '@/typefinder';
 
 type SubtitleItem = SubtitleItemResource;
 
@@ -29,16 +32,15 @@ const props = defineProps<{
     filters: {
         page: number;
         per_page: number;
-        media_type?: string | null;
-        scope?: string | null;
-    };
+    } & Pick<MissingPageRequestQuery, 'media_type' | 'scope'>;
 }>();
 
 const selectedItem = ref<SubtitleItem | null>(null);
 
 function navigate(overrides: Record<string, string | number | null>): void {
     const query: Record<string, string | number> = {};
-    const next = {
+    // Overrides carry raw <select> values, '' meaning "any".
+    const next: Record<string, string | number | null> = {
         connection: props.selected_connection_id,
         media_type: props.filters.media_type ?? null,
         scope: props.filters.scope ?? null,

@@ -1,4 +1,5 @@
 import BenchmarkComparisonController from '@/actions/App/Http/Controllers/Admin/BenchmarkComparisonController';
+import type { ShowBenchmarkComparisonRequestQuery } from '@/typefinder';
 import { formatLatency, formatPercent, formatScore, formatUsd } from './format';
 import type {
     BenchmarkComparison,
@@ -30,7 +31,8 @@ export function compareState(comparison: BenchmarkComparison): CompareState {
 }
 
 export function compareUrl(state: CompareState): string {
-    const query: Record<string, string | number> = {
+    // `runs` is read raw and turned into the run_ids rule key in prepareForValidation().
+    const query: ShowBenchmarkComparisonRequestQuery & { runs: string } = {
         runs: state.runs.join(','),
         baseline: state.baseline,
     };

@@ -18,7 +18,9 @@ class SearchChatTemplateLibraryRequest extends FormRequest
     {
         return [
             // Deliberate two-case subset of ChatTemplateVariableType: only library types search.
+            /** @query */
             'type' => ['required', Rule::in([ChatTemplateVariableType::Series->value, ChatTemplateVariableType::Movie->value])],
+            /** @query */
             'q' => ['required', 'string', 'min:1', 'max:200'],
         ];
     }

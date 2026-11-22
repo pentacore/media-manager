@@ -11,10 +11,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import type { RateLimitMetric, RateLimitPeriod } from '@/typefinder';
 
 interface RateLimitDraft {
-    metric: 'requests' | 'tokens';
-    period: 'minute' | 'hour' | 'day';
+    metric: RateLimitMetric;
+    period: RateLimitPeriod;
     limit_value: number | undefined;
 }
 

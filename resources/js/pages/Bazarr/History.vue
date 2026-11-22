@@ -5,6 +5,7 @@ import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewCo
 import InventoryPager from '@/components/bazarr/InventoryPager.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { dashboard } from '@/routes';
+import type { HistoryPageRequestQuery } from '@/typefinder';
 
 interface HistoryItem {
     media_type: 'episode' | 'movie';
@@ -34,9 +35,7 @@ const props = defineProps<{
     filters: {
         page: number;
         per_page: number;
-        media_type?: string | null;
-        provider?: string | null;
-    };
+    } & Pick<HistoryPageRequestQuery, 'media_type' | 'provider'>;
 }>();
 
 function navigate(overrides: Record<string, string | number | null>): void {
