@@ -6,10 +6,9 @@ use App\Enums\ActionRequestStatus;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
 });
 
 function actionQueueSheetOpenScript(): string

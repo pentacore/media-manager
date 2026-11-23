@@ -26,9 +26,7 @@ function actionQueueFailureWaitForToastScript(int $actionRequestId, string $stat
 
 test('an admin sees why an action failed, and a plain failure retries in one click', function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    // Faked after the factories: a later Queue::fake replaces the Browser
-    // beforeEach fake, and the WebhookEvent factory creates a connection.
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('actions.requests.index', absolute: false))
@@ -49,7 +47,7 @@ test('an admin sees why an action failed, and a plain failure retries in one cli
 
 test('retrying an action with an unknown outcome asks first and repeats the reason', function (): void {
     $actionRequest = ActionRequest::factory()->described()->needsReconciliation()->create();
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -84,7 +82,7 @@ test('a request that never started is not treated as an unknown outcome', functi
         'indeterminate' => false,
         'never_started' => true,
     ]]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('actions.requests.index', absolute: false))
@@ -233,7 +231,7 @@ test('a broadcast for an unlisted request, or without a result, changes nothing'
 
 test('a live failure after missed events replaces the old outcome with the new one', function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -466,9 +464,7 @@ test('a status for an unlisted request is not remembered for a later reload', fu
 
 test("an admin's retry is not undone by a failure remembered from a live event", function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    // Faked after the factories: a later Queue::fake replaces the Browser
-    // beforeEach fake, and the WebhookEvent factory creates a connection.
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -498,7 +494,7 @@ test("an admin's retry is not undone by a failure remembered from a live event",
 
 test("an admin's review of a pending row is not undone by a status remembered from a live event", function (string $button, string $toast, ActionRequestStatus $status): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -526,7 +522,7 @@ test("an admin's review of a pending row is not undone by a status remembered fr
 
 test("an admin's bulk review is not undone by a status remembered from a live event", function (): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
