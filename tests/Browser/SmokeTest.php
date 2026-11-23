@@ -155,6 +155,8 @@ test('admin can classify imported Sonarr root folders without browser errors', f
             ['id' => 1, 'path' => '/tv'],
             ['id' => 2, 'path' => '/anime'],
         ]),
+        'sonarr.local:8989/api/v3/tag' => Http::response([]),
+        'sonarr.local:8989/api/v3/diskspace' => Http::response([]),
     ]);
 
     $this->actingAs(User::factory()->admin()->create());
@@ -303,6 +305,7 @@ test('admin edit page for a Prowlarr connection renders without console errors',
         'url' => 'http://prowlarr.local:9696',
         'api_key' => 'test',
     ]);
+    Http::fake(['prowlarr.local:9696/api/v1/indexer' => Http::response([])]);
 
     $this->actingAs($admin);
 
