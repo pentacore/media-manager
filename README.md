@@ -516,7 +516,7 @@ vendor/bin/sail bin rector
 vendor/bin/sail bin pint --dirty --format agent
 ```
 
-Static analysis (Larastan, level 6, existing errors baselined in `phpstan-baseline.neon`; CI runs it with `rector --dry-run` in the `PHP static analysis` job):
+Static analysis (Larastan, level 7, no baseline: every error is fixed in code; CI runs it with `rector --dry-run` in the `PHP static analysis` job):
 
 ```bash
 vendor/bin/sail composer analyse
