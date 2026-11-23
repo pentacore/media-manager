@@ -199,49 +199,50 @@ jobs:
       - name: TypeScript types
         run: npm run types:check
 
+  # Works out how many browser shards the suite needs from the per-class
+  # timings in tests/.pest/shards.json (.github/scripts/browser-shard-matrix.sh):
+  # total time / target per shard, capped where the slowest class would decide
+  # the wall clock anyway. Tune with the repository variables
+  # BROWSER_SHARD_TARGET_SECONDS (local serial seconds per shard; CI runs about
+  # 1.3x slower) and BROWSER_SHARD_MAX.
+  test-matrix:
+    name: Plan Pest legs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/scripts
+            tests/.pest/shards.json
+          sparse-checkout-cone-mode: false
+
+      - name: Plan browser shards
+        id: plan
+        env:
+          TARGET_SECONDS: ${{ vars.BROWSER_SHARD_TARGET_SECONDS || '180' }}
+          MAX_SHARDS: ${{ vars.BROWSER_SHARD_MAX || '12' }}
+        run: .github/scripts/browser-shard-matrix.sh tests/.pest/shards.json "$TARGET_SECONDS" "$MAX_SHARDS" 2>> "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
+
   tests:
     name: Pest (${{ matrix.name }})
     runs-on: ubuntu-latest
+    needs: test-matrix
     # A hung Playwright browser otherwise burns the 6h default.
     timeout-minutes: 40
 
     # The browser suite runs serially (see below) and dominated the wall
     # clock, so it is split across runners with Pest's --shard. Unit & feature
-    # run on their own leg alongside. Shards are balanced by duration from
-    # tests/.pest/shards.json; new browser test classes not in it are spread
-    # round-robin and the shard log warns that the file is out of date.
-    # Refresh it with `composer test:browser -- --update-shards` (see
-    # .ai/rules/browser.md). To change the shard count, edit the matrix only.
+    # run on their own leg alongside. The test-matrix job picks the shard
+    # count; Pest balances the shards by duration from tests/.pest/shards.json,
+    # and new browser test classes not in it are spread round-robin while the
+    # shard log warns that the file is out of date. Refresh it with
+    # `composer test:browser -- --update-shards` (see .ai/rules/browser.md).
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: unit & feature
-            suite: unit-feature
-          - name: browser 1/8
-            suite: browser
-            shard: 1/8
-          - name: browser 2/8
-            suite: browser
-            shard: 2/8
-          - name: browser 3/8
-            suite: browser
-            shard: 3/8
-          - name: browser 4/8
-            suite: browser
-            shard: 4/8
-          - name: browser 5/8
-            suite: browser
-            shard: 5/8
-          - name: browser 6/8
-            suite: browser
-            shard: 6/8
-          - name: browser 7/8
-            suite: browser
-            shard: 7/8
-          - name: browser 8/8
-            suite: browser
-            shard: 8/8
+      matrix: ${{ fromJSON(needs.test-matrix.outputs.matrix) }}
 
     services:
       pgsql:
