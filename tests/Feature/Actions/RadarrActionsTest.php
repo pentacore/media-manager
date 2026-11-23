@@ -26,7 +26,7 @@ beforeEach(function (): void {
 
 function radarrActionsConnectionId(): int
 {
-    return ServiceConnection::query()->where('type', 'radarr')->firstOrFail()->id;
+    return ServiceConnection::query()->where('type', 'radarr')->where('is_active', true)->firstOrFail()->id;
 }
 
 test('deleteMovie sends DELETE to radarr with deleteFiles flag', function (): void {
@@ -178,7 +178,7 @@ test('a movie write starts from what Radarr holds now, not from a cached snapsho
         },
     ]);
 
-    new RadarrClient(ServiceConnection::query()->where('type', 'radarr')->sole())->getMovieById(42);
+    new RadarrClient(ServiceConnection::query()->where('type', 'radarr')->where('is_active', true)->sole())->getMovieById(42);
     $upstream->movie = [...$upstream->movie, ...$changedInRadarr];
 
     resolve(RadarrActions::class)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload]));

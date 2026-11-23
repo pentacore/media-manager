@@ -163,7 +163,7 @@ test('an approved delete against a deactivated pinned connection sends nothing',
 
 function sonarrActionsConnectionId(): int
 {
-    return ServiceConnection::query()->where('type', 'sonarr')->firstOrFail()->id;
+    return ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->firstOrFail()->id;
 }
 
 /**
@@ -417,7 +417,7 @@ test('a series write starts from what Sonarr holds now, not from a cached snapsh
     ]);
 
     // A page view caches the series; then someone changes it in Sonarr itself.
-    new SonarrClient(ServiceConnection::query()->where('type', 'sonarr')->sole())->getSeriesById(42);
+    new SonarrClient(ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->sole())->getSeriesById(42);
     $upstream->series = [...$upstream->series, ...$changedInSonarr];
 
     new SonarrActions()->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload]));
