@@ -26,8 +26,15 @@ function upstreamEchoReviewedLines(): array
             "'message' => \$rateLimitedException->getMessage(),",
             // Context array handed to Log::error(), never to the response.
             "'message' => \$throwable->getMessage(),",
+            // Context array handed to Log::error(), never to the response.
+            "\$context['response_body'] = \$throwable->response->body();",
             // Only when app()->isLocal().
             "\$payload['message'] = \$throwable->getMessage();",
+        ],
+        'app/Http/Controllers/Media/DiscoverController.php' => [
+            // Only read for a quota keyword match; the sanitized copy on the
+            // next lines is what the toast can quote.
+            "\$json = \$requestException->response->json('message');",
         ],
         'app/Http/Controllers/Admin/AiModelCatalogController.php' => [
             // CatalogUnavailableException carries app-authored pricing-feed text.
@@ -35,6 +42,8 @@ function upstreamEchoReviewedLines(): array
             "'models' => __('Could not load the pricing catalog: :message', ['message' => \$catalogUnavailableException->getMessage()]),",
         ],
         'app/Http/Controllers/Prowlarr/GrabReleaseController.php' => [
+            // Passed through UpstreamErrorText::sanitize() before it is shown.
+            "\$message = \$response->json('message') ?? \$response->json('0.errorMessage');",
             // ArrWriteUnconfirmed carries a fixed, app-authored sentence
             // (D2) — it never quotes the upstream body.
             "return response()->json(['message' => \$arrWriteUnconfirmed->getMessage()], 502);",
@@ -57,6 +66,17 @@ function upstreamEchoReviewedLines(): array
 }
 
 /**
+ * Whether a line reads text an upstream service or exception supplied: an
+ * exception message, a response body, or a response's message/error field.
+ */
+function upstreamEchoReadsUpstreamText(string $line): bool
+{
+    return str_contains($line, '->getMessage()')
+        || str_contains($line, '->body()')
+        || preg_match('/->json\(\s*[\'"][^\'"]*(?:message|error)[^\'"]*[\'"]/i', $line) === 1;
+}
+
+/**
  * @param  list<string>  $reviewedLines
  * @return list<string>
  */
@@ -68,7 +88,7 @@ function upstreamEchoOffenders(string $path, string $code, array $reviewedLines)
     $offenders = [];
 
     foreach (explode("\n", $code) as $line) {
-        if (! str_contains($line, '->getMessage()')) {
+        if (! upstreamEchoReadsUpstreamText($line)) {
             continue;
         }
 
@@ -84,7 +104,7 @@ function upstreamEchoOffenders(string $path, string $code, array $reviewedLines)
     return $offenders;
 }
 
-test('the echo scanner flags a raw message and ignores sanitized, logged and reviewed ones', function (): void {
+test('the echo scanner flags raw messages, bodies and message fields and ignores sanitized, logged and reviewed ones', function (): void {
     $code = <<<'PHP'
         Log::info('No context here.');
         return new JsonResponse(['error' => $throwable->getMessage()], 502);
@@ -93,10 +113,20 @@ test('the echo scanner flags a raw message and ignores sanitized, logged and rev
         ]);
         Inertia::flash('toast', ['message' => UpstreamErrorText::sanitize($throwable->getMessage())]);
         'message' => $reviewedException->getMessage(),
+        return back()->with('error', $requestException->response->body());
+        $message = $response->json('message') ?? $response->json('0.errorMessage');
+        $detail = $response->json("data.error_description");
+        $id = $response->json('User.Id');
+        $safe = UpstreamErrorText::sanitize($response->body());
         PHP;
 
     expect(upstreamEchoOffenders('app/Http/Controllers/Example.php', $code, ["'message' => \$reviewedException->getMessage(),"]))
-        ->toBe(["app/Http/Controllers/Example.php: return new JsonResponse(['error' => \$throwable->getMessage()], 502);"]);
+        ->toBe([
+            "app/Http/Controllers/Example.php: return new JsonResponse(['error' => \$throwable->getMessage()], 502);",
+            "app/Http/Controllers/Example.php: return back()->with('error', \$requestException->response->body());",
+            "app/Http/Controllers/Example.php: \$message = \$response->json('message') ?? \$response->json('0.errorMessage');",
+            'app/Http/Controllers/Example.php: $detail = $response->json("data.error_description");',
+        ]);
 });
 
 test('controllers never hand a raw exception message to the browser', function (): void {

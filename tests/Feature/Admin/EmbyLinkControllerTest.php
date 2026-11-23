@@ -73,3 +73,14 @@ test('admin cannot link an emby account already owned by another user', function
         'emby_user_id' => 'emby-user-taken',
     ]);
 });
+
+test('an Emby user list answered with a login page is a contact failure, not an empty import', function (): void {
+    Http::fake(['emby.local:8096/Users' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.users.import-from-emby'))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Failed to contact Emby.');
+
+    expect(User::query()->count())->toBe(1);
+});

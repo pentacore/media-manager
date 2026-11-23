@@ -291,6 +291,21 @@ test('members can store a new movie', function (): void {
     );
 });
 
+test('a movie add answered with a login page is worded as not confirmed, not as failed', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/movie' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->post(route('media.movies.store'), [
+            'title' => 'New Movie',
+            'tmdbId' => 999,
+            'qualityProfileId' => 1,
+            'rootFolderPath' => '/movies',
+            'monitored' => true,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Radarr did not confirm adding the movie — check it there before trying again.');
+});
+
 test('store validates required fields', function (): void {
     $member = User::factory()->member()->create();
 

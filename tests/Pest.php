@@ -69,7 +69,7 @@ pest()->extend(TestCase::class)
         // connection with subtitle-check tags it would inspect the arr and sweep
         // every indexer. Its own test calls handle() directly and the handler
         // tests re-fake the queue, so neither is affected.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class, AuditImportedSubtitles::class]);
+        featureQueueFake();
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged
@@ -182,6 +182,19 @@ function fakeServiceHttp(Closure $handler): void
 }
 
 /**
+ * Fakes the jobs every Feature test keeps off the sync queue (see the global
+ * beforeEach above), plus $jobs. A later Queue::fake() replaces the earlier
+ * fake instead of adding to it, so a test that fakes another job calls this
+ * rather than repeating the default list.
+ *
+ * @param  class-string  ...$jobs
+ */
+function featureQueueFake(string ...$jobs): void
+{
+    Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class, AuditImportedSubtitles::class, ...$jobs]);
+}
+
+/**
  * Fakes the jobs every browser test keeps off the sync queue, plus $jobs.
  * A later Queue::fake() replaces the earlier fake instead of adding to it, so
  * a browser test that fakes another job calls this rather than Queue::fake():
@@ -198,10 +211,14 @@ function browserQueueFake(string ...$jobs): void
 
 /**
  * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
- * so script() returns only once an async UI change has landed.
+ * so script() returns only once an async UI change has landed. It throws when
+ * the condition never holds: a wait that returned silently would let the test
+ * carry on against a page that never reached the state it waits for.
  */
 function confirmDialogWaitUntilScript(string $condition): string
 {
+    $message = json_encode('confirmDialogWaitUntilScript timed out waiting for: '.$condition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
     return <<<JS
         (async () => {
             for (let attempt = 0; attempt < 250; attempt++) {
@@ -210,6 +227,7 @@ function confirmDialogWaitUntilScript(string $condition): string
                 }
                 await new Promise((resolve) => setTimeout(resolve, 20));
             }
+            throw new Error({$message});
         })()
     JS;
 }

@@ -50,7 +50,7 @@ final readonly class StuckImportResolver
             $connection = $decisionRunContext->resolveConnection($type);
             $candidates = $this->arrConnections->client($connection)->getManualImport(['downloadId' => $downloadId]);
         } catch (Throwable $throwable) {
-            Log::warning('ResolveManualImportTool: candidate lookup failed', [
+            Log::warning('StuckImportResolver::import: candidate lookup failed', [
                 'service' => $service,
                 'download_id' => $downloadId,
                 'exception' => $throwable::class,
@@ -96,7 +96,7 @@ final readonly class StuckImportResolver
                 decisionRunContext: $decisionRunContext,
             );
         } catch (Throwable $throwable) {
-            Log::warning('ResolveManualImportTool: dispatch failed', [
+            Log::warning('StuckImportResolver::import: dispatch failed', [
                 'service' => $service,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
@@ -164,7 +164,7 @@ final readonly class StuckImportResolver
                 decisionRunContext: $decisionRunContext,
             );
         } catch (Throwable $throwable) {
-            Log::warning('RemoveStuckDownloadTool: dispatch failed', [
+            Log::warning('StuckImportResolver::remove: dispatch failed', [
                 'service' => $service,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),

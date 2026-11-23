@@ -1,6 +1,11 @@
 ---
 paths:
   - 'app/Services/Actions/**'
+  - 'app/Services/Library/LibraryActionRequester.php'
+  - 'app/Http/Controllers/Library/MediaActionController.php'
+  - 'app/Http/Controllers/Whisparr/WhisparrActionController.php'
+  - 'app/Http/Requests/Library/Bulk*.php'
+  - 'app/Http/Requests/Whisparr/Bulk*.php'
 ---
 
 # Actions

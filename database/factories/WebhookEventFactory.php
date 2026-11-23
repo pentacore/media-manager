@@ -20,7 +20,12 @@ class WebhookEventFactory extends Factory
     public function definition(): array
     {
         return [
-            'service_connection_id' => ServiceConnection::factory(),
+            // Inactive, so an incidental event (the one an ActionRequest factory
+            // brings along) is never polled by a page: the connection has a random
+            // type on a loopback port, and an active one made dashboard, health and
+            // calendar pages call that unfaked host. Give a test that needs a live
+            // connection its own (`'service_connection_id' => ...`).
+            'service_connection_id' => ServiceConnection::factory()->inactive(),
             'event_type' => fake()->randomElement(['grab', 'download', 'rename', 'test']),
             'payload' => ['eventType' => 'Test', 'data' => fake()->words(3)],
             'processed_at' => null,

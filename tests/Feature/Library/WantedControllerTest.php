@@ -110,7 +110,7 @@ test('a service with no active connection is not connected, keeps the requested 
 });
 
 test('the first active connection by id is the one listed and pinned', function (): void {
-    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->sole();
+    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->sole();
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989']);
     Http::fake([
         'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),

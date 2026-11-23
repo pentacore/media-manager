@@ -269,3 +269,51 @@ test('excluded_paths must be a list of strings', function (): void {
         ->and($result['errors'])->toHaveKey('excluded_paths.0');
     expect(ActionRequest::count())->toBe(0);
 });
+
+test('an unknown excluded path leaves a fully mapped set importable and is kept in the payload', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    fakeCandidates([cleanCandidate()]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => ['/dl/not-a-candidate.mkv'],
+    ])), true);
+
+    $actionRequest = ActionRequest::firstWhere('type', 'resolve_manual_import');
+
+    expect($result['queued'])->toBeTrue()
+        ->and($result['partial'])->toBeFalse()
+        ->and($result['requires_approval'])->toBeFalse()
+        ->and($actionRequest->payload['assessment']['total'])->toBe(1)
+        ->and($actionRequest->payload['excluded_paths'])->toBe(['/dl/not-a-candidate.mkv']);
+});
+
+test('an unknown excluded path does not rescue a partially mapped set from approval', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    fakeCandidates([cleanCandidate(), array_replace(cleanCandidate(), ['path' => '/dl/extra.mkv', 'series' => [], 'episodes' => []])]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'excluded_paths' => ['/dl/typo-extra.mkv'],
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and($result['partial'])->toBeTrue()
+        ->and($result['requires_approval'])->toBeTrue();
+});
+
+test('a numeric-string download id is accepted and queued as a string', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([cleanCandidate()]),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+            ['downloadId' => '1234', 'title' => 'Show.S01E01.1080p', 'series' => ['title' => 'Show']],
+        ]]),
+    ]);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr'));
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => '1234',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and(ActionRequest::firstWhere('type', 'resolve_manual_import')->payload['download_id'])->toBe('1234');
+});

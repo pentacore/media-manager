@@ -205,6 +205,28 @@ test('full feed success writes the catalog without invoking the agent', function
         ->and($aiPriceRefreshRun->completed_at)->not->toBeNull();
 });
 
+test('the feed locks the provider rows in id order before writing in feed order', function (): void {
+    PriceFetcherAgent::fake(['ok']);
+
+    $first = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-a']);
+    $second = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-b']);
+
+    fakeFeed(['openai' => ['models' => ['gpt-b' => feedModel(1.0, 2.0), 'gpt-a' => feedModel(1.0, 2.0)]]]);
+
+    $locks = [];
+    DB::listen(function ($query) use (&$locks): void {
+        if (str_contains($query->sql, 'for update')) {
+            $locks[] = $query->sql;
+        }
+    });
+
+    runCoordinator(source: AiPriceRefreshCoordinator::SOURCE_MODELS_DEV, scope: RefreshScope::forProviders(['openai']));
+
+    expect($locks)->toHaveCount(1)
+        ->and($locks[0])->toContain('"ai_model_prices"')->toContain('order by "id" asc')
+        ->and($first->id)->toBeLessThan($second->id);
+});
+
 test('global transport failure falls back to every provider with something to refresh', function (): void {
     Sleep::fake();
     config()->set('ai.providers.openrouter.key');

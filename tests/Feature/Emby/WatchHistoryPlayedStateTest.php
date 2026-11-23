@@ -7,6 +7,7 @@ use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Emby\EmbyWriteUnconfirmed;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -116,3 +117,17 @@ test('watch history rows say which ones the viewer may toggle', function (): voi
         ->get(route('monitoring.watch-history'))
         ->assertInertia(fn ($page) => $page->where('activities.data.0.can_toggle_played', true)->where('activities.data.1.can_toggle_played', true));
 });
+
+test('a played-state change answered with a login page is worded as unknown, not as a success', function (bool $played): void {
+    [$viewer, $activity] = playedStateRow();
+    Http::fake(['emby.local:8096/Users/*/PlayedItems/*' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs($viewer)
+        ->from(route('monitoring.watch-history'))
+        ->post(route('monitoring.watch-history.played', $activity), ['played' => $played])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', EmbyWriteUnconfirmed::MESSAGE);
+
+    Http::assertSentCount(1);
+    expect(ActivityLog::query()->where('action', 'like', 'emby.item.marked_%')->exists())->toBeFalse();
+})->with([true, false]);

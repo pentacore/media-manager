@@ -556,14 +556,33 @@ function mobileLayoutHoverOnlyScript(string $root = 'main'): string
 }
 
 /**
- * Text that runs past its box in $root (every match, default `main`): a long
- * unbroken file name that a frame's overflow clips, which the box-based
- * overflow check cannot see. Each non-empty text node's line boxes are
- * measured against the content box of its nearest ancestor that lays out a
- * box of its own (not `inline`, not `contents`), so text inside a `span` or a
- * link counts against its block, and a `touch-target` `::after` is never
- * taken for text. A box that scrolls, clips on purpose or ends in an ellipsis
- * is skipped.
+ * Text in $root (every match, default `main`) that a phone cannot read: a long
+ * unbroken file name a frame cuts off, which the box-based overflow check
+ * cannot see. Each non-empty text node's line boxes are measured against every
+ * ancestor below `body` that clips them, so a frame far above the text's own
+ * box counts as much as the box itself:
+ * - a box whose `overflow-x`/`overflow-y` is `hidden` or `clip` (or that has
+ *   `contain: paint`) clips that axis at its padding box; a line past it (by
+ *   more than 1 px sideways, or by more than a quarter of the line's height
+ *   up or down, since a glyph box is taller than a tight line) is cut. That
+ *   covers a `-webkit-line-clamp` box and a box that clips its own text.
+ * - a box that scrolls an axis (`auto` or `scroll`) ends the search for that
+ *   axis: what runs past it can be scrolled to.
+ * - inline and `display: contents` ancestors lay out no box and clip nothing;
+ *   a `position: absolute` box skips the ancestors below its containing
+ *   block, and a `position: fixed` one everything above it.
+ * Cut on purpose, and so not reported: text cut sideways by a box that ends
+ * it in an ellipsis (`truncate`), lines a line-clamp box hides whole below its
+ * last line (the clamp draws the ellipsis), and text inside `svg`, `.sr-only`,
+ * a reka-ui `VisuallyHidden` (the inline-style test of `phoneOverflowScript()`),
+ * an element that is not `visibility: visible`, or a clipping box of zero
+ * width or height (a collapsed panel). Text that clips nowhere but runs
+ * sideways past its nearest box with a box of its own (not `inline`, not
+ * `contents`) is reported too — it spills over its neighbours — unless an
+ * ancestor scrolls sideways; a `touch-target` `::after` is never taken for
+ * text. Returns up to ten `tag[data-…] "text" cut sideways|up|down a..b >
+ * c..d` entries (the clipping box, or the box the text spills past, with
+ * `spills sideways`), '' when every text is readable.
  */
 function mobileLayoutClippedTextScript(string $root = 'main'): string
 {
@@ -573,22 +592,83 @@ function mobileLayoutClippedTextScript(string $root = 'main'): string
         (() => {
             const found = [];
             const range = document.createRange();
+            const styles = new Map();
+            const styleOf = (el) => {
+                if (!styles.has(el)) { styles.set(el, getComputedStyle(el)); }
+                return styles.get(el);
+            };
+            const scrolls = (value) => value === 'auto' || value === 'scroll';
+            const clips = (value) => value === 'hidden' || value === 'clip';
+            const boxless = (style) => style.display === 'inline' || style.display === 'contents';
+            const visuallyHidden = (el) => el.style.position === 'absolute' && el.style.width === '1px' && el.style.height === '1px' && el.style.overflow === 'hidden' && el.style.clipPath === 'inset(50%)';
+            const containsPaint = (style) => /\b(paint|strict|content)\b/.test(style.contain || '');
+            const clamped = (style) => { const value = style.webkitLineClamp || style.getPropertyValue('-webkit-line-clamp'); return value !== '' && value !== 'none'; };
+            const containingBlock = (style) => style.position !== 'static' || style.transform !== 'none' || style.filter !== 'none' || containsPaint(style);
+            const describe = (el, text) => {
+                const hooks = [...el.attributes].filter((attribute) => attribute.name.startsWith('data-') && !attribute.name.startsWith('data-v-')).slice(0, 2).map((attribute) => `[\${attribute.name}\${attribute.value ? '=' + attribute.value : ''}]`).join('');
+                return `\${el.tagName.toLowerCase()}\${hooks} "\${text.slice(0, 40)}"`;
+            };
+            const span = (lines, start, end) => `\${Math.round(Math.min(...lines.map((rect) => rect[start])))}..\${Math.round(Math.max(...lines.map((rect) => rect[end])))}`;
             for (const root of document.querySelectorAll({$selector})) {
                 const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-                while (walker.nextNode()) {
+                while (walker.nextNode() && found.length < 10) {
                     const node = walker.currentNode;
-                    if (node.textContent.trim() === '') { continue; }
-                    let box = node.parentElement;
-                    while (box && box !== root && ['inline', 'contents'].includes(getComputedStyle(box).display)) { box = box.parentElement; }
-                    const style = box ? getComputedStyle(box) : null;
-                    if (!box || box.clientWidth === 0 || style.overflowX !== 'visible' || style.textOverflow === 'ellipsis') { continue; }
-                    const outer = box.getBoundingClientRect();
-                    const left = outer.left + box.clientLeft;
-                    const right = left + box.clientWidth;
+                    const text = node.textContent.trim();
+                    const parent = node.parentElement;
+                    if (text === '' || !parent || parent.closest('svg, .sr-only') || styleOf(parent).visibility !== 'visible') { continue; }
                     range.selectNodeContents(node);
-                    const past = [...range.getClientRects()].filter((rect) => rect.width > 0 && (rect.right > right + 1 || rect.left < left - 1));
+                    let lines = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0).map(({ left, right, top, bottom }) => ({ left, right, top, bottom }));
+                    if (lines.length === 0) { continue; }
+                    let cut = null;
+                    let hidden = false;
+                    let sideways = false;
+                    let vertical = false;
+                    let awaitingBlock = false;
+                    for (let el = parent; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+                        if (visuallyHidden(el)) { hidden = true; break; }
+                        const style = styleOf(el);
+                        if (awaitingBlock && containingBlock(style)) { awaitingBlock = false; }
+                        if (!awaitingBlock && !boxless(style)) {
+                            const paint = containsPaint(style);
+                            const clipsX = !sideways && (clips(style.overflowX) || paint);
+                            const clipsY = !vertical && (clips(style.overflowY) || paint);
+                            if ((clipsX || clipsY) && (el.clientWidth === 0 || el.clientHeight === 0)) { hidden = true; break; }
+                            const outer = el.getBoundingClientRect();
+                            const left = outer.left + el.clientLeft;
+                            const right = left + el.clientWidth;
+                            const top = outer.top + el.clientTop;
+                            const bottom = top + el.clientHeight;
+                            if (clipsX) {
+                                const past = lines.filter((rect) => rect.right > right + 1 || rect.left < left - 1);
+                                if (past.length > 0 && style.textOverflow !== 'ellipsis') { cut = `\${describe(el, text)} cut sideways \${span(past, 'left', 'right')} > \${Math.round(left)}..\${Math.round(right)}`; break; }
+                                lines = lines.map((rect) => ({ ...rect, left: Math.max(rect.left, left), right: Math.min(rect.right, right) })).filter((rect) => rect.right > rect.left);
+                            }
+                            if (clipsY) {
+                                const slack = (rect) => Math.max(2, (rect.bottom - rect.top) / 4);
+                                const clampedAway = (rect) => clamped(style) && rect.top >= bottom - slack(rect);
+                                const past = lines.filter((rect) => !clampedAway(rect) && (rect.bottom > bottom + slack(rect) || rect.top < top - slack(rect)));
+                                if (past.length > 0) { cut = `\${describe(el, text)} cut \${past.some((rect) => rect.top < top - slack(rect)) ? 'up' : 'down'} \${span(past, 'top', 'bottom')} > \${Math.round(top)}..\${Math.round(bottom)}`; break; }
+                                lines = lines.filter((rect) => !clampedAway(rect)).map((rect) => ({ ...rect, top: Math.max(rect.top, top), bottom: Math.min(rect.bottom, bottom) })).filter((rect) => rect.bottom > rect.top);
+                            }
+                            if (lines.length === 0) { hidden = true; break; }
+                            sideways = sideways || scrolls(style.overflowX);
+                            vertical = vertical || scrolls(style.overflowY);
+                            if (sideways && vertical) { break; }
+                        }
+                        if (style.position === 'fixed') { break; }
+                        if (style.position === 'absolute') { awaitingBlock = true; }
+                    }
+                    if (hidden) { continue; }
+                    if (cut !== null) { found.push(cut); continue; }
+                    if (sideways) { continue; }
+                    let box = parent;
+                    while (box !== root && box.parentElement && boxless(styleOf(box))) { box = box.parentElement; }
+                    if (box.clientWidth === 0 || styleOf(box).overflowX !== 'visible') { continue; }
+                    const left = box.getBoundingClientRect().left + box.clientLeft;
+                    const right = left + box.clientWidth;
+                    const past = lines.filter((rect) => rect.right > right + 1 || rect.left < left - 1);
                     if (past.length > 0) {
-                        found.push(`\${box.tagName.toLowerCase()} "\${node.textContent.trim().slice(0, 40)}" \${Math.round(Math.min(...past.map((rect) => rect.left)))}..\${Math.round(Math.max(...past.map((rect) => rect.right)))} > \${Math.round(left)}..\${Math.round(right)}`);
+                        found.push(`\${describe(box, text)} spills sideways \${span(past, 'left', 'right')} > \${Math.round(left)}..\${Math.round(right)}`);
                     }
                 }
             }
@@ -1425,7 +1505,7 @@ test('the clipped-text check names text past its box and passes a touch target',
     // Unbroken text inside a span is measured against its block, which a frame clips.
     $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden"><div><span>ExampleUnbrokenTextThatRunsPastItsBox</span></div></div>`)');
 
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div "ExampleUnbrokenTextThatRunsPastItsBox"');
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
 
     // A touch-target's 40 px ::after is wider than its 24 px button, but its text fits.
     $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture><button class="touch-target" style="width:24px;height:24px;padding:0;font-size:10px">OK</button></div>`');
@@ -1435,6 +1515,60 @@ test('the clipped-text check names text past its box and passes a touch target',
     // Text that ends in an ellipsis is clipped on purpose.
     $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px"><div class="truncate">ExampleUnbrokenTextThatRunsPastItsBox</div></div>`');
     $webpage->assertScript(mobileLayoutClippedTextScript(), '');
+});
+
+test('the clipped-text check finds the frame that cuts text above a box the text fits', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // A flex item grows to its unwrapped text, so the text fits its own box; the frame two levels up cuts it.
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden"><div style="display:flex"><span style="white-space:nowrap">Words that run past the frame</span></div></div>`)');
+    $webpage->assertScript('(() => { const span = document.querySelector("[data-clipped-fixture] span"); return span.scrollWidth <= span.clientWidth && span.getBoundingClientRect().right > document.querySelector("[data-clipped-fixture]").getBoundingClientRect().right; })()', true);
+
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "Words that run past the frame" cut sideways');
+
+    // A position: absolute box escapes a frame that is not its containing block.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="position:relative;width:200px;height:40px"><div style="width:100px;height:20px;overflow:hidden"><span style="position:absolute;white-space:nowrap">Words past the frame</span></div></div>`');
+    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
+});
+
+test('the clipped-text check names text a line clamp or its own overflow cuts without an ellipsis', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // A line clamp hides its extra lines behind its own ellipsis, but cuts an unbroken word sideways.
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2">An ExampleUnbrokenTextThatRunsPastItsBox</div>`)');
+
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "An ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
+
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2">Many short words that wrap onto five or six lines in all</div>`');
+    $webpage->assertScript('(() => { const box = document.querySelector("[data-clipped-fixture]"); return box.scrollHeight > box.clientHeight; })()', true)
+        ->assertScript(mobileLayoutClippedTextScript(), '');
+
+    // A box that clips its own text to one line hides the rest without an ellipsis.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;height:20px;line-height:20px;overflow:hidden">Short words that wrap onto more lines</div>`');
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "Short words that wrap onto more lines" cut down');
+
+    // A clipping box that ends in an ellipsis cuts on purpose.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture class="truncate" style="width:100px"><span>ExampleUnbrokenTextThatRunsPastItsBox</span></div>`');
+    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
+});
+
+test('the clipped-text check passes text a scroller reveals', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    // The paragraph is as wide as its scroller, so its text runs past it, but the scroller reaches it.
+    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow-x:auto"><p style="white-space:nowrap">ExampleUnbrokenTextThatRunsPastItsBox</p></div>`)');
+    $webpage->assertScript('(() => { const scroller = document.querySelector("[data-clipped-fixture]"); return scroller.scrollWidth > scroller.clientWidth; })()', true)
+        ->assertScript(mobileLayoutClippedTextScript(), '');
+
+    // A frame inside the scroller still cuts.
+    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;overflow-x:auto"><div data-inner-frame style="width:80px;overflow:hidden"><p style="white-space:nowrap">ExampleUnbrokenTextThatRunsPastItsBox</p></div></div>`');
+    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-inner-frame] "ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
 });
 
 test('the phone gate classifies every page route', function (): void {

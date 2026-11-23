@@ -31,6 +31,8 @@ interface StreamChatOptions extends StreamCallbacks {
     pinnedToolGroups?: ToolGroupValue[];
     /** Tool groups to load for this turn alone (the assistant's request). */
     loadToolGroups?: ToolGroupValue[];
+    /** The id of the choices or tool request card this turn answers. */
+    answeredCard?: string;
     /** Aborting it stops reading the stream and closes the request. */
     signal?: AbortSignal;
 }
@@ -98,6 +100,9 @@ function requestBody(options: StreamChatOptions): {
                 ...(override ? { override } : {}),
                 ...(pinned?.length ? { pinned_tool_groups: pinned } : {}),
                 ...(load?.length ? { load_tool_groups: load } : {}),
+                ...(options.answeredCard
+                    ? { answered_card: options.answeredCard }
+                    : {}),
             }),
             headers: { 'Content-Type': 'application/json' },
         };
@@ -121,6 +126,10 @@ function requestBody(options: StreamChatOptions): {
 
     pinned?.forEach((group) => form.append('pinned_tool_groups[]', group));
     load?.forEach((group) => form.append('load_tool_groups[]', group));
+
+    if (options.answeredCard) {
+        form.append('answered_card', options.answeredCard);
+    }
 
     options.attachments.forEach((file) => form.append('attachments[]', file));
 

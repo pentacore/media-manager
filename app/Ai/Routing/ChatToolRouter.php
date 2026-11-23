@@ -25,7 +25,7 @@ use Throwable;
  */
 final readonly class ChatToolRouter
 {
-    public const float INCLUDE_AT = 0.5;
+    public const float INCLUDE_AT = AiSettings::CHAT_ROUTING_INCLUDE_AT;
 
     /**
      * The stored name of RequestToolsTool, the tool the assistant asks for more groups with.
@@ -187,7 +187,14 @@ final readonly class ChatToolRouter
                 ->unique()
                 ->all();
 
+            // A turn whose classification failed recorded no rows: nothing to resolve.
+            $open = $this->classificationOutcomeRecorder->openQuestions(ClassificationGate::ChatRouting, $turnKey, [ClassificationVerdict::Included]);
+
             foreach (ToolGroup::cases() as $toolGroup) {
+                if (! in_array($toolGroup->value, $open, true)) {
+                    continue;
+                }
+
                 $isUsed = in_array($toolGroup->value, $used, true);
 
                 $this->classificationOutcomeRecorder->resolve(

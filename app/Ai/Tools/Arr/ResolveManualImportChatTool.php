@@ -54,7 +54,7 @@ class ResolveManualImportChatTool extends BaseTool
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) $validated['download_id'];
         $reason = trim((string) $validated['reason']);
-        $excludedPaths = array_values(array_filter((array) ($validated['excluded_paths'] ?? []), is_string(...)));
+        $excludedPaths = resolve(ManualImportResolver::class)->normalizeExcludedPaths($validated['excluded_paths'] ?? null);
 
         $type = match ($service) {
             'sonarr' => ServiceType::Sonarr,

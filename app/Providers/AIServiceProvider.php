@@ -7,6 +7,7 @@ namespace App\Providers;
 use App\Ai\AiRunAttribution;
 use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\ChatTurnContext;
+use App\Ai\Conversations\ChatAnsweredCard;
 use App\Ai\Conversations\ConversationStore;
 use App\Ai\ReasoningOptions;
 use App\Ai\Routing\ChatToolRunContext;
@@ -56,6 +57,9 @@ class AIServiceProvider extends ServiceProvider
 
         // The routed tool groups of the chat turn in flight; scoped for the same reason.
         $this->app->scoped(ChatToolRunContext::class);
+
+        // The card the chat turn in flight answers; scoped for the same reason.
+        $this->app->scoped(ChatAnsweredCard::class);
 
         // The benchmark job's run, candidate and fixtures; scoped so a run never
         // pins models or replays tools in the next Octane request or queued job.

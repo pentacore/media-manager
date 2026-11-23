@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Actions;
 
+use App\Services\Arr\ArrWriteUnconfirmed;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 
@@ -61,11 +62,17 @@ final readonly class BulkItemOutcome
     }
 
     /**
-     * Transport errors and 5xx read as an outage, 4xx as a refusal. The
-     * upstream body and URL are never echoed.
+     * Transport errors and 5xx read as an outage, 4xx as a refusal, and a 200
+     * that is not API data (a proxy login page) as not confirmed: the change
+     * may have landed, so it must not read as a failure. The upstream body
+     * and URL are never echoed.
      */
     public static function fromUpstreamFailure(RequestException|ConnectionException $exception, string $service): self
     {
+        if ($exception instanceof ArrWriteUnconfirmed) {
+            return self::failed(__(':service did not confirm the change — check it there before retrying.', ['service' => $service]));
+        }
+
         return $exception instanceof RequestException && $exception->response->clientError()
             ? self::failed(__(':service refused the change.', ['service' => $service]))
             : self::failed(__(':service is unreachable right now.', ['service' => $service]));

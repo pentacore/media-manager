@@ -1,3 +1,4 @@
+import type { PillVariant } from '@/components/mm';
 import { isUncertainOutcome } from './failure';
 import type { ActionRequestRow } from './types';
 
@@ -162,7 +163,7 @@ export function replacementIsSeasonPack(row: ActionRequestRow): boolean {
     return row.payload?.['season_pack'] === true;
 }
 
-export type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
+export type { PillVariant };
 
 export function attemptVariant(status: string): PillVariant {
     switch (status) {

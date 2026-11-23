@@ -473,7 +473,7 @@ abstract class ArrClient
      * sweeps per attempt. Dedicated long timeout, no transparent retry.
      *
      * @param  array<string, mixed>  $params
-     * @return array<int, array<string, mixed>>
+     * @return array<array-key, mixed>
      *
      * @throws RequestException|ConnectionException
      */

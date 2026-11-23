@@ -47,3 +47,6 @@ graphify-out
 
 # Local SSR wrapper for filtered browser test runs
 /browser-filter.sh
+
+# Coverage reports (CI writes build/coverage/clover.xml)
+/build

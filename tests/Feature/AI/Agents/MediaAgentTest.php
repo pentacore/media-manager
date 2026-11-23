@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Routing\ChatToolRunContext;
+use App\Ai\Routing\RoutedToolGroups;
+use App\Ai\Routing\ToolGroupSource;
 use App\Ai\Tools\BaseTool;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
@@ -108,6 +111,75 @@ test('the instructions tell the agent about choice buttons and inline approval',
 
     expect($instructions)->toContain('OfferChoicesTool')
         ->and($instructions)->toContain('Approve/Reject buttons');
+});
+
+/**
+ * One bold-headed section of the instructions, up to the next bold heading.
+ */
+function mediaAgentPromptSection(string $heading): string
+{
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    expect($instructions)->toContain($heading);
+
+    [, $section] = explode($heading, $instructions, 2);
+    [$section] = preg_split('/\n\n(?=\*\*|Important rules:)/', $section, 2);
+
+    return $section;
+}
+
+test('the stuck-download instructions pin the single batched investigation and the action rails', function (): void {
+    $section = mediaAgentPromptSection('**Stuck downloads (manual intervention required):**');
+
+    expect($section)->toContain('Call InvestigateStuckDownload ONCE')
+        ->toContain('never call it once per download')
+        ->toContain('at most 20 download_ids per call')
+        ->toContain('ResolveManualImportChatTool or RemoveStuckDownloadChatTool')
+        ->toContain('blocklist/search_replacement flags')
+        ->toContain('Pass its excluded_paths to ResolveManualImportChatTool')
+        ->toContain('Partially-mapped file sets always need human approval')
+        ->toContain('let the user decide');
+});
+
+test('the fixed-answer instructions send picks through OfferChoicesTool and end the turn', function (): void {
+    $section = mediaAgentPromptSection('**Questions with fixed answers:**');
+
+    expect($section)->toContain('call OfferChoicesTool instead of listing options in text')
+        ->toContain('end your turn')
+        ->toContain('Their click arrives as their next message');
+});
+
+test('the batched-workflow instructions route three or more destructive operations through one proposal', function (): void {
+    $section = mediaAgentPromptSection('**Batched workflows (3+ destructive operations):**');
+
+    expect($section)->toContain('DO NOT call multiple destructive tools in sequence')
+        ->toContain('call ProposeWorkflowTool ONCE')
+        ->toContain('awaiting_confirmation')
+        ->toContain('call NO destructive tools until the continuation')
+        ->toContain('The user has APPROVED workflow');
+});
+
+test('the important rules forbid guessing ids and bypassing the workflow proposal', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    [, $rules] = explode('Important rules:', $instructions, 2);
+
+    expect($rules)->toContain('NEVER guess IDs')
+        ->toContain('never bypass it by calling tools individually')
+        ->toContain('advisory_mode_blocks_destructive')
+        ->toContain('no_action_type_config');
+});
+
+test('routed turns append the tool-group instructions and full-toolset turns do not', function (): void {
+    expect((string) (new MediaAgent)->instructions())->not->toContain('**Tools you may not have loaded:**');
+
+    resolve(ChatToolRunContext::class)->routed = new RoutedToolGroups(['playback' => ToolGroupSource::Picked]);
+    $routed = (string) (new MediaAgent)->instructions();
+
+    expect($routed)->toContain('**Tools you may not have loaded:**')
+        ->toContain('call FindToolsTool with the need before answering')
+        ->toContain('call RequestToolsTool with that group')
+        ->toContain('Load / No thanks buttons');
 });
 
 test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {

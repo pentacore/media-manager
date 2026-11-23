@@ -47,6 +47,8 @@ export interface ConversationMessage {
     stopped?: boolean;
     /** The model behind an assistant reply; null when it is not known. */
     answered_by?: AnsweredBy | null;
+    /** The id of the choices or tool request card a user message answered. */
+    answered_card?: string | null;
     /** Choice and approval cards under an assistant reply. */
     cards?: ChatCard[];
     /** The routed tool groups behind an assistant reply. */

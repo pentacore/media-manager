@@ -455,3 +455,67 @@ test('a full toolset reply reports all tool groups', function (): void {
         ->assertOk()
         ->assertJsonPath('messages.0.tool_groups', 'all');
 });
+
+test('a reply with no text whose only action card was deleted is left out', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Scan Emby', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => '',
+        'steps' => json_encode([[
+            ...conversationStep('', ''),
+            'tool_calls' => [
+                ['id' => 'call_1', 'name' => 'LibraryScanTool', 'arguments' => [], 'result' => json_encode(['queued' => true, 'action_request_id' => 999_999, 'status' => 'pending', 'requires_approval' => true, 'title' => 'Scan']), 'result_id' => null],
+            ],
+        ]]),
+    ]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages)->toHaveCount(1)
+        ->and($messages[0]['text'])->toBe('Scan Emby');
+});
+
+test('a reply with text keeps its place when its action card was deleted', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Scan Emby', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'assistant',
+        'content' => 'Queued the scan.',
+        'steps' => json_encode([[
+            ...conversationStep('Queued the scan.', ''),
+            'tool_calls' => [
+                ['id' => 'call_1', 'name' => 'LibraryScanTool', 'arguments' => [], 'result' => json_encode(['queued' => true, 'action_request_id' => 999_999, 'status' => 'pending', 'requires_approval' => true, 'title' => 'Scan']), 'result_id' => null],
+            ],
+        ]]),
+    ]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect($messages)->toHaveCount(2)
+        ->and($messages[1]['text'])->toBe('Queued the scan.')
+        ->and($messages[1]['cards'])->toBe([]);
+});
+
+test('a user message names the card it answered', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Hi', 'steps' => '[]']);
+    insertConversationRow($conversationId, $admin, ['role' => 'assistant', 'content' => 'Pick', 'steps' => json_encode([conversationStep('Pick', '')]), 'meta' => json_encode(['answered_card' => 'call_x'])]);
+    insertConversationRow($conversationId, $admin, ['role' => 'user', 'content' => 'Yes', 'steps' => '[]', 'meta' => json_encode(['answered_card' => 'call_2'])]);
+
+    $messages = $this->actingAs($admin)
+        ->getJson(route('ai.conversations.show', ['conversation' => $conversationId]))
+        ->assertOk()
+        ->json('messages');
+
+    expect(array_column($messages, 'answered_card'))->toBe([null, null, 'call_2']);
+});

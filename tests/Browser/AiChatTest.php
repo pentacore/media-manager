@@ -590,6 +590,29 @@ function aiChatChoicesResult(string $toolCallId, string $question, array $labels
 }
 
 /**
+ * A stored RequestToolsTool call (with its result) asking to load the given groups.
+ *
+ * @param  array<string, string>  $groups  label keyed by group value
+ * @return array<string, mixed>
+ */
+function aiChatToolRequestResult(string $toolCallId, array $groups): array
+{
+    return [
+        'id' => $toolCallId,
+        'name' => 'RequestToolsTool',
+        'arguments' => [],
+        'result' => json_encode([
+            'tool_request' => [
+                'groups' => array_map(fn (string $group, string $label): array => ['group' => $group, 'label' => $label], array_keys($groups), $groups),
+                'reason' => 'I need these tools.',
+            ],
+            'instruction' => 'End your turn now.',
+        ]),
+        'result_id' => null,
+    ];
+}
+
+/**
  * A stored destructive-tool call (with its result) that queued the given action request.
  *
  * @return array<string, mixed>
@@ -836,6 +859,225 @@ test('an answered choices card on an older reply stays locked and shows the pick
         ->assertDisabled('[data-choice-option="B"]')
         ->assertVisible('[data-choice-option="B"][data-choice-chosen]')
         ->assertMissing('[data-choice-option="A"][data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('two choices cards in one reply lock only the card that was picked, also after a reload', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Grabbing the subtitles too.']);
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Two cards chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Two questions.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Yes', 'No']),
+        aiChatChoicesResult('call_subs', 'Also grab subtitles?', ['Yes', 'No']),
+    ]);
+
+    $this->actingAs($admin);
+
+    $page = visit(route('ai.chat', absolute: false));
+
+    $page->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-choice-card="call_subs"]', 'Also grab subtitles?')
+        ->click('[data-choice-card="call_subs"] [data-choice-option="Yes"]')
+        ->assertSeeIn('[data-chat-thread]', 'Grabbing the subtitles too.')
+        ->assertVisible('[data-choice-card="call_subs"] [data-choice-option="Yes"][data-choice-chosen]')
+        ->assertMissing('[data-choice-card="call_release"] [data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+
+    $answer = DB::table('agent_conversation_messages')->where('role', 'user')->where('content', 'Yes')->sole();
+    expect(json_decode((string) $answer->meta, true))->toBe(['answered_card' => 'call_subs']);
+
+    $page->navigate(route('ai.chat', absolute: false))
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Grabbing the subtitles too.')
+        ->assertVisible('[data-choice-card="call_subs"] [data-choice-option="Yes"][data-choice-chosen]')
+        ->assertMissing('[data-choice-card="call_release"] [data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('an older answer that names no card marks only the first card it answers', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Legacy two cards chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Two questions.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Keep it', 'Replace it']),
+        aiChatChoicesResult('call_subs', 'Also grab subtitles?', ['Grab them', 'Skip them']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Grab them');
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Grabbing the subtitles.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Grabbing the subtitles.')
+        ->assertVisible('[data-choice-card="call_subs"] [data-choice-option="Grab them"][data-choice-chosen]')
+        ->assertMissing('[data-choice-card="call_release"] [data-choice-chosen]')
+        ->assertDisabled('[data-choice-card="call_release"] [data-choice-option="Keep it"]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('an answer that matches no offered option locks no card', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Free text chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'One question.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Keep it', 'Replace it']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Neither, try a 4K one instead');
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Looking for a 4K release.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Looking for a 4K release.')
+        ->assertPresent('[data-choice-card="call_release"]')
+        ->assertMissing('[data-choice-chosen]')
+        ->assertDisabled('[data-choice-card="call_release"] [data-choice-option="Keep it"]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('a multi-select card answered with several labels restores every pick', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Multi pick chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Get subtitles for Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Which languages?', toolCalls: [
+        aiChatChoicesResult('call_langs', 'Which languages?', ['Dutch', 'English', 'Swedish'], multiple: true),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Dutch, Swedish', meta: ['answered_card' => 'call_langs']);
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Fetching Dutch and Swedish.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Fetching Dutch and Swedish.')
+        ->assertPresent('[data-choice-card="call_langs"] [data-choice-toggle="Dutch"][data-choice-chosen]')
+        ->assertPresent('[data-choice-card="call_langs"] [data-choice-toggle="Swedish"][data-choice-chosen]')
+        ->assertMissing('[data-choice-card="call_langs"] [data-choice-toggle="English"][data-choice-chosen]')
+        ->assertDisabled('[data-choice-card="call_langs"] [data-choice-confirm]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('an answer that names a card the reply no longer has locks nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Unknown card chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'One question.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Keep it', 'Replace it']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Keep it', meta: ['answered_card' => 'call_deleted']);
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Keeping it.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Keeping it.')
+        ->assertPresent('[data-choice-card="call_release"]')
+        ->assertMissing('[data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('a card answered in an earlier turn stays locked while the latest reply keeps its own card open', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Two turns chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Fix Severance');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'First question.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Keep it', 'Replace it']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Replace it', meta: ['answered_card' => 'call_release']);
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Second question.', toolCalls: [
+        aiChatChoicesResult('call_subs', 'Also grab subtitles?', ['Grab them', 'Skip them']),
+    ]);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-choice-card="call_subs"]', 'Also grab subtitles?')
+        ->assertPresent('[data-choice-card="call_release"] [data-choice-option="Replace it"][data-choice-chosen]')
+        ->assertDisabled('[data-choice-card="call_release"] [data-choice-option="Keep it"]')
+        ->assertEnabled('[data-choice-card="call_subs"] [data-choice-option="Grab them"]')
+        ->assertMissing('[data-choice-card="call_subs"] [data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('a tool request answered next to a choices card locks only the tool request', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Tool request chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Replace this file');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'Two questions.', toolCalls: [
+        aiChatChoicesResult('call_release', 'Keep the 1080p release?', ['Load', 'Skip']),
+        aiChatToolRequestResult('call_request', ['subtitles_replacement' => 'Subtitles & replacement']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', 'Loaded Subtitles & replacement — continue.', meta: ['answered_card' => 'call_request']);
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Loaded, continuing.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Loaded, continuing.')
+        ->assertPresent('[data-tool-request-load][data-tool-request-chosen]')
+        ->assertMissing('[data-tool-request-decline][data-tool-request-chosen]')
+        ->assertMissing('[data-choice-card="call_release"] [data-choice-chosen]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('an older declined tool request without a card id is read back from its text', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Legacy tool request chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Replace this file');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', 'May I load the tools?', toolCalls: [
+        aiChatToolRequestResult('call_request', ['subtitles_replacement' => 'Subtitles & replacement']),
+    ]);
+    aiChatInsertMessage($admin, $conversationId, 3, 'user', "Don't load Subtitles & replacement — continue without it.");
+    aiChatInsertMessage($admin, $conversationId, 4, 'assistant', 'Understood.');
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-chat-thread]', 'Understood.')
+        ->assertPresent('[data-tool-request-decline][data-tool-request-chosen]')
+        ->assertMissing('[data-tool-request-load][data-tool-request-chosen]')
+        ->assertDisabled('[data-tool-request-load]')
         ->assertNoJavaScriptErrors();
 });
 

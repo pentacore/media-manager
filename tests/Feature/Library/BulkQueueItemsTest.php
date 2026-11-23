@@ -136,6 +136,22 @@ test('blocklisting in bulk blocklists and lets a fresh search run', function ():
     expect(ActivityLog::query()->where('category', 'audit')->where('action', 'queue.blocklisted')->count())->toBe(2);
 });
 
+test('an item answered with a login page is worded as not confirmed, not as unreachable', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])
+            : Http::response(['records' => [['id' => 41, 'title' => 'Severance.S01E01.1080p', 'series' => ['title' => 'Severance']]]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+        'radarr.local:7878/api/v3/*' => Http::response(['records' => []]),
+    ]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['ids' => [41]]))
+        ->assertOk()
+        ->assertJsonPath('started', 0)
+        ->assertJsonPath('failed.0.reason', 'Sonarr did not confirm the change — check it there before retrying.');
+});
+
 test('an unreachable item is named from the queue while the rest are removed', function (): void {
     Sleep::fake();
     fakeBulkSonarrQueue(failingIds: [42]);
@@ -279,12 +295,12 @@ test('a bulk queue action pinned to a connection that is gone, deactivated or an
 })->with([
     'deleted' => [fn (): int => 999_999],
     'deactivated' => [function (): int {
-        $serviceConnection = ServiceConnection::query()->where('type', 'radarr')->sole();
+        $serviceConnection = ServiceConnection::query()->where('type', 'radarr')->where('is_active', true)->sole();
         ServiceConnection::query()->whereKey($serviceConnection->id)->update(['is_active' => false]);
 
         return $serviceConnection->id;
     }],
-    'another service' => [fn (): int => ServiceConnection::query()->where('type', 'sonarr')->sole()->id],
+    'another service' => [fn (): int => ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->sole()->id],
 ]);
 
 test('a bulk queue action acts on the pinned connection, not the active one', function (): void {

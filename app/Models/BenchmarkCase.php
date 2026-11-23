@@ -28,7 +28,7 @@ use Override;
  * @property list<string> $tags
  * @property string|null $notes
  * @property array<string, mixed> $input
- * @property list<array<string, mixed>> $fixtures
+ * @property list<array{tool: string, arguments: array<string, mixed>, result: string}> $fixtures
  * @property array<string, mixed> $scoring
  * @property string|null $source_invocation_id
  * @property int|null $source_prompt_tokens

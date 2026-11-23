@@ -109,6 +109,12 @@ class AiSettings
      */
     private const float DEFAULT_STUCK_IMPORT_THRESHOLD = 0.85;
 
+    /** Probability at or above which a classified action kind scopes a decision run. */
+    public const float ACTION_KIND_SCOPE_AT = 0.5;
+
+    /** Probability at or above which chat routing includes a tool group. */
+    public const float CHAT_ROUTING_INCLUDE_AT = 0.5;
+
     /**
      * Share of below-threshold gate decisions that run anyway, so skipped
      * events still produce outcome data.
@@ -390,6 +396,24 @@ class AiSettings
     public function setClassificationModel(?string $model): void
     {
         $this->appSettings->set(self::CLASSIFICATION_MODEL_KEY, $model);
+    }
+
+    /**
+     * Probability at or above which a classified action kind scopes a decision
+     * run. Fixed, not an admin setting.
+     */
+    public function actionKindThreshold(): float
+    {
+        return self::ACTION_KIND_SCOPE_AT;
+    }
+
+    /**
+     * Probability at or above which chat routing includes a tool group. Fixed,
+     * not an admin setting.
+     */
+    public function chatRoutingThreshold(): float
+    {
+        return self::CHAT_ROUTING_INCLUDE_AT;
     }
 
     /**

@@ -2,8 +2,13 @@
 import { Deferred, Head, router } from '@inertiajs/vue3';
 import HistoryController from '@/actions/App/Http/Controllers/Bazarr/HistoryController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import {
+    historyActionLabel,
+    isIsoTimestamp,
+} from '@/components/bazarr/history';
 import InventoryPager from '@/components/bazarr/InventoryPager.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
+import { useDateTime } from '@/composables/useDateTime';
 import { dashboard } from '@/routes';
 import type { HistoryPageRequestQuery } from '@/typefinder';
 
@@ -13,8 +18,8 @@ interface HistoryItem {
     title: string;
     language?: string;
     provider?: string;
-    action?: string;
-    score?: number;
+    action?: number;
+    score?: string;
     occurred_at?: string;
 }
 
@@ -37,6 +42,16 @@ const props = defineProps<{
         per_page: number;
     } & Pick<HistoryPageRequestQuery, 'media_type' | 'provider'>;
 }>();
+
+const { formatDateTime } = useDateTime();
+
+function occurredAt(value: string | undefined): string {
+    if (isIsoTimestamp(value)) {
+        return formatDateTime(value);
+    }
+
+    return value ? value : 'Time unavailable';
+}
 
 function navigate(overrides: Record<string, string | number | null>): void {
     const query: Record<string, string | number> = {};
@@ -170,6 +185,7 @@ defineOptions({
                 <div
                     v-for="item in history?.data ?? []"
                     :key="`${item.media_type}-${item.media_id}-${item.occurred_at}`"
+                    :data-history-row="item.media_id"
                     class="grid grid-cols-1 gap-1 border-b border-border p-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center"
                 >
                     <div>
@@ -182,9 +198,21 @@ defineOptions({
                         </p>
                     </div>
                     <div class="text-sm sm:text-right">
-                        <p class="capitalize">{{ item.action ?? 'updated' }}</p>
-                        <p class="text-xs text-muted-foreground">
-                            {{ item.occurred_at ?? 'Time unavailable' }}
+                        <p data-history-action>
+                            {{ historyActionLabel(item.action) }}
+                        </p>
+                        <p
+                            class="text-xs text-muted-foreground"
+                            data-history-time
+                        >
+                            <time
+                                :datetime="
+                                    isIsoTimestamp(item.occurred_at)
+                                        ? item.occurred_at
+                                        : undefined
+                                "
+                                >{{ occurredAt(item.occurred_at) }}</time
+                            >
                         </p>
                     </div>
                 </div>

@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\PriceFetcherAgent;
+use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
+use App\Models\AiTaskModel;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
 use App\Services\AiUsage\Pricing\PriceRefreshLedger;
@@ -12,9 +14,13 @@ use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\Pricing\PricingFeedFetcher;
 use App\Services\AiUsage\Pricing\PricingTransportException;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Exceptions\ProviderOverloadedException;
+use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
@@ -82,16 +88,40 @@ test("the worker resetting scoped instances between jobs clears the previous job
 
 test('a provider failover restarting the verifier at step 0 still stops the run once the box no longer fits', function (): void {
     Sleep::fake();
+    config()->set('ai.default', 'openai');
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS * 2);
+
+    // The primary provider runs its step 0 with room to spare, burns the
+    // box and then reports itself overloaded, so the SDK restarts the loop
+    // on the failover provider at step 0 — which the middleware must still
+    // refuse. Without that check the failover provider would be prompted.
+    $providersTried = [];
+    PriceFetcherAgent::fake(function (string $prompt, Collection $attachments, Provider $provider) use (&$providersTried): never {
+        $providersTried[] = $provider->name();
+        $this->travel(PriceRefreshTimeBox::AGENT_STEP_SECONDS + 10)->seconds();
+
+        throw ProviderOverloadedException::forProvider($provider->name());
+    });
+
+    $refreshReport = resolve(AiPriceRefreshCoordinator::class)->run(
+        mode: AiPriceRefreshCoordinator::MODE_APPLY,
+        source: AiPriceRefreshCoordinator::SOURCE_AGENT,
+        scope: RefreshScope::forProviders(['anthropic']),
+        triggeredBy: null,
+        trigger: 'test',
+    );
+
+    expect($providersTried)->toBe(['openai'])
+        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.')
+        ->and(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->status)->not->toBe('running');
+});
+
+test('a verifier that starts with the box already too tight is never prompted', function (): void {
+    Sleep::fake();
     PriceFetcherAgent::fake(['ok']);
     resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS - 1);
 
-    // This pins the same scenario as the review's F1 finding end to end: even
-    // though the phase's own pre-prompt check (PriceVerifierPhase::run()) is
-    // the thing that actually fires here (the box is already too tight before
-    // step 0 of the FIRST provider), it proves the fix holds up through the
-    // coordinator rather than only at the middleware unit level — the run
-    // never reads as "running" and the message names the time limit, exactly
-    // as it would after a failover's step 0 restart.
     $refreshReport = resolve(AiPriceRefreshCoordinator::class)->run(
         mode: AiPriceRefreshCoordinator::MODE_APPLY,
         source: AiPriceRefreshCoordinator::SOURCE_AGENT,
@@ -102,8 +132,7 @@ test('a provider failover restarting the verifier at step 0 still stops the run 
 
     PriceFetcherAgent::assertNeverPrompted();
 
-    expect($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.')
-        ->and(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->status)->not->toBe('running');
+    expect($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.');
 });
 
 test('a mid-agent time-box stop resolves the provider the agent had already verified, instead of failing every provider', function (): void {
@@ -196,11 +225,22 @@ test('a hybrid run skipped out of time mid-feed is recorded distinctly from a re
     // being contacted.
     resolve(PriceRefreshTimeBox::class)->open(250);
 
+    // openrouter has a row the feed answers for, so that provider resolves;
+    // openai depends on the skipped models.dev feed and on a verifier that no
+    // longer fits the remaining 50 s, so it does not: a partial run.
+    PriceFetcherAgent::fake(['ok']);
+    AiModelPrice::factory()->create([
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-opus-5.5',
+        'input_per_mtok' => 3.0,
+        'output_per_mtok' => 15.0,
+    ]);
+
     Http::fake([
         'openrouter.ai/*' => function () {
             $this->travel(200)->seconds();
 
-            return Http::response(['data' => []]);
+            return Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json')));
         },
         'models.dev/*' => Http::response(['openai' => []]),
     ]);
@@ -208,17 +248,19 @@ test('a hybrid run skipped out of time mid-feed is recorded distinctly from a re
     $refreshReport = resolve(AiPriceRefreshCoordinator::class)->run(
         mode: AiPriceRefreshCoordinator::MODE_APPLY,
         source: AiPriceRefreshCoordinator::SOURCE_HYBRID,
-        scope: RefreshScope::all(),
+        scope: RefreshScope::forProviders(['openrouter', 'openai']),
         triggeredBy: null,
         trigger: 'test',
     );
 
     $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
+    PriceFetcherAgent::assertNeverPrompted();
+
     expect($aiPriceRefreshRun->source_statuses['models_dev'])->toBe(PricingTransportException::CATEGORY_SKIPPED_OUT_OF_TIME)
         ->and($aiPriceRefreshRun->source_statuses['models_dev'])->not->toBe(PricingTransportException::CATEGORY_TIMEOUT)
         ->and($aiPriceRefreshRun->source_statuses['openrouter'])->toBe('ok')
-        ->and($refreshReport->finalResult)->toBeIn([RefreshReport::RESULT_PARTIAL, RefreshReport::RESULT_FAILED])
+        ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL)
         ->and($aiPriceRefreshRun->status)->not->toBe('running');
 
     Http::assertSentCount(1);

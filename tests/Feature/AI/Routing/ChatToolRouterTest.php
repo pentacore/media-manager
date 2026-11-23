@@ -248,6 +248,25 @@ test('recording tool use marks included groups used or unused', function (): voi
         ->and($rows['indexers']->outcome_at)->toBeNull();
 });
 
+test('recording tool use runs no update for a turn that recorded no rows', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
+    $chatToolRouter = resolve(ChatToolRouter::class);
+
+    $chatToolRouter->route('what is playing?', null, 'chat_turn:t5');
+
+    $updates = [];
+    DB::listen(function ($query) use (&$updates): void {
+        if (str_starts_with($query->sql, 'update')) {
+            $updates[] = $query->sql;
+        }
+    });
+
+    $chatToolRouter->recordToolUse('chat_turn:t5', [class_basename(NowPlayingTool::class)]);
+
+    expect($updates)->toBe([]);
+});
+
 test('routing without a turn key records nothing', function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
@@ -420,6 +439,72 @@ test('an assistant group keeps its source while it is used', function (): void {
 
     expect($routed?->sources['subtitles_replacement'])->toBe(ToolGroupSource::Assistant)
         ->and($chatToolRouter->carriedOver($conversationId))->toBe(['subtitles_replacement' => ToolGroupSource::Assistant]);
+});
+
+/**
+ * A conversation whose latest reply called a subtitles tool and asked for that group.
+ */
+function routerCarriedAndRequestedConversation(?string $source = null): string
+{
+    return routerSeedConversation(
+        [['id' => 'c1', 'name' => 'InspectMediaFile', 'arguments' => [], 'result' => '{}'], routerToolRequestCall()],
+        $source === null ? [] : ['tool_groups' => [['group' => 'subtitles_replacement', 'label' => 'Subtitles & replacement', 'source' => $source]]],
+    );
+}
+
+test('a carried-over group beats the same group picked by the classifier', function (): void {
+    $conversationId = routerSeedConversation([['id' => 'c1', 'name' => 'NowPlayingTool', 'arguments' => [], 'result' => '{}']]);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('and now?', $conversationId);
+
+    expect($routed?->sources)->toBe(['playback' => ToolGroupSource::CarriedOver]);
+});
+
+test('an approved group beats the same group picked by the classifier', function (): void {
+    $conversationId = routerSeedConversation([routerToolRequestCall()]);
+    Classification::fake([routerGroupAnswers(['subtitles_replacement' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('go ahead', $conversationId, requestedLoads: [ToolGroup::SubtitlesReplacement]);
+
+    expect($routed?->sources)->toBe(['subtitles_replacement' => ToolGroupSource::Assistant]);
+});
+
+test('an approved group beats the same group carried over', function (): void {
+    $conversationId = routerCarriedAndRequestedConversation('picked');
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('go ahead', $conversationId, requestedLoads: [ToolGroup::SubtitlesReplacement]);
+
+    expect($routed?->sources)->toHaveKey('subtitles_replacement', ToolGroupSource::Assistant)
+        ->and(resolve(ChatToolRouter::class)->carriedOver($conversationId))->toBe(['subtitles_replacement' => ToolGroupSource::CarriedOver]);
+});
+
+test('a pinned group beats the same group approved by the assistant', function (): void {
+    $conversationId = routerSeedConversation([routerToolRequestCall()]);
+    Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('go ahead', $conversationId, pinned: [ToolGroup::SubtitlesReplacement], requestedLoads: [ToolGroup::SubtitlesReplacement]);
+
+    expect($routed?->sources)->toHaveKey('subtitles_replacement', ToolGroupSource::Pinned);
+});
+
+test('a pinned group beats the same group carried over', function (): void {
+    $conversationId = routerSeedConversation([['id' => 'c1', 'name' => 'NowPlayingTool', 'arguments' => [], 'result' => '{}']]);
+    Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('and now?', $conversationId, pinned: [ToolGroup::Playback]);
+
+    expect($routed?->sources)->toBe(['downloads' => ToolGroupSource::Picked, 'playback' => ToolGroupSource::Pinned]);
+});
+
+test('an assistant group carried over from an assistant-loaded reply stays assistant when also picked', function (): void {
+    $conversationId = routerCarriedAndRequestedConversation('assistant');
+    Classification::fake([routerGroupAnswers(['subtitles_replacement' => 0.9])]);
+
+    $routed = resolve(ChatToolRouter::class)->route('and now?', $conversationId);
+
+    expect($routed?->sources)->toBe(['subtitles_replacement' => ToolGroupSource::Assistant]);
 });
 
 test('routed telemetry counts pinned and approved groups as included', function (): void {

@@ -421,7 +421,8 @@ test('manual import candidates flag samples and files that do not map', function
 });
 
 /**
- * @return array<string, mixed>
+ * @param  list<array{reason: string, type?: string}>  $rejections
+ * @return array{path: string, series: array{id: int, title: string}, episodes: list<array{id: int, seasonNumber: int, episodeNumber: int}>, quality: array{quality: array{id: int}}, languages: list<array{id: int}>, releaseType: string, rejections: list<array{reason: string, type?: string}>}
  */
 function activityManualImportCandidate(string $path, int $episodeId, array $rejections = []): array
 {

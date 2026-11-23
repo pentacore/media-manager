@@ -834,6 +834,46 @@ test('a Whisparr executor read answered with a login page is retried like Sonarr
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT');
 });
 
+test('a Sonarr or Radarr read answered with a login page sends no PUT, and the retry then sends exactly one', function (string $factoryState, string $host, string $type, string $idKey, string $path): void {
+    Http::preventStrayRequests();
+    $connection = ServiceConnection::factory()->{$factoryState}()->create(['url' => 'http://'.$host, 'api_key' => 'k']);
+    $upstream = new stdClass;
+    $upstream->reads = 0;
+    Http::fake([
+        $host.'/api/v3/'.$path => function (Request $request) use ($upstream) {
+            if ($request->method() === 'PUT') {
+                return Http::response($request->data());
+            }
+
+            $upstream->reads++;
+
+            return $upstream->reads === 1
+                ? Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])
+                : Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => true]);
+        },
+    ]);
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => $type,
+        'payload' => [$idKey => 42, 'monitored' => false, 'service_connection_id' => $connection->id],
+    ]);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ArrUnexpectedResponse::class);
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Executing)
+        ->and($request->fresh()->result)->toBe(['retry_scheduled' => true, 'attempt' => 1]);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT');
+
+    executeActionRequestOnAttempt($request->fresh(), 2)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
+    Http::assertSentCount(3);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT' && $request['monitored'] === false);
+})->with([
+    'sonarr' => ['sonarr', 'sonarr.local:8989', 'monitor_series', 'series_id', 'series/42'],
+    'radarr' => ['radarr', 'radarr.local:7878', 'monitor_movie', 'movie_id', 'movie/42'],
+]);
+
 test('an arr write answered with a login page fails for reconciliation after one request and is never retried', function (): void {
     Http::preventStrayRequests();
     $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
