@@ -93,6 +93,72 @@ test('an admin links an app user to an Emby user from the list', function (): vo
         ->assertNoSmoke();
 });
 
+test('an admin links their own Emby account by username and password, then unlinks it', function (): void {
+    fakeEmbyManagement();
+    Http::fake(['emby.local:8096/Users/AuthenticateByName' => Http::response(['User' => ['Id' => 'emby-2', 'Name' => 'Bob'], 'AccessToken' => 'example-token'])]);
+    $admin = User::factory()->admin()->create(['name' => 'Ada']);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('emby.links.index', absolute: false))
+        ->assertNoSmoke()
+        ->type('[data-emby-link-form] [name="emby_username"]', 'Bob')
+        ->type('[data-emby-link-form] [name="password"]', 'example-password')
+        ->click('[data-emby-link-account]')
+        ->assertSee('Emby account linked.')
+        ->assertSeeIn('[data-emby-own-link]', 'Bob')
+        ->assertMissing('[data-emby-link-form]');
+
+    $embyUserLink = EmbyUserLink::query()->sole();
+    expect($embyUserLink->user_id)->toBe($admin->id)
+        ->and($embyUserLink->emby_user_id)->toBe('emby-2');
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/Users/AuthenticateByName')
+        && $request['Username'] === 'Bob' && $request['Pw'] === 'example-password');
+
+    $webpage->click('[data-emby-unlink]')
+        ->assertSee('Link removed.')
+        ->assertVisible('[data-emby-link-form]')
+        ->assertMissing('[data-emby-own-link]')
+        ->assertMissing(sprintf('[data-emby-link-row="%d"]', $embyUserLink->id))
+        ->assertNoSmoke();
+
+    expect(EmbyUserLink::query()->exists())->toBeFalse();
+});
+
+test('wrong Emby credentials show an error and link nothing', function (): void {
+    fakeEmbyManagement();
+    Http::fake(['emby.local:8096/Users/AuthenticateByName' => Http::response('Invalid username or password.', 401)]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('emby.links.index', absolute: false))
+        ->assertNoSmoke()
+        ->type('[data-emby-link-form] [name="emby_username"]', 'Bob')
+        ->type('[data-emby-link-form] [name="password"]', 'wrong-password')
+        ->click('[data-emby-link-account]')
+        ->assertSee('Invalid Emby credentials.')
+        ->assertVisible('[data-emby-link-form]')
+        ->assertMissing('[data-emby-own-link]')
+        ->assertNoSmoke();
+
+    expect(EmbyUserLink::query()->exists())->toBeFalse();
+});
+
+test("an admin revokes a member's link from the linked accounts table", function (): void {
+    fakeEmbyManagement();
+    $this->actingAs(User::factory()->admin()->create(['name' => 'Ada']));
+    $member = User::factory()->member()->create(['name' => 'Bobby']);
+    $embyUserLink = EmbyUserLink::factory()->create(['user_id' => $member->id, 'emby_user_id' => 'emby-2', 'emby_username' => 'Bob']);
+
+    visit(route('emby.links.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn(sprintf('[data-emby-link-row="%d"]', $embyUserLink->id), 'Bobby')
+        ->click(sprintf('[data-emby-revoke="%d"]', $embyUserLink->id))
+        ->assertSee('Link removed.')
+        ->assertMissing(sprintf('[data-emby-link-row="%d"]', $embyUserLink->id))
+        ->assertNoSmoke();
+
+    expect(EmbyUserLink::query()->exists())->toBeFalse();
+});
+
 test('an Emby outage shows an error banner instead of an empty list', function (): void {
     fakeEmbyManagement(usersDown: true);
     $this->actingAs(User::factory()->admin()->create());
