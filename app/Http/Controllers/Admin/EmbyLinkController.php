@@ -12,6 +12,7 @@ use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Emby\EmbyUnexpectedResponse;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -208,18 +209,23 @@ class EmbyLinkController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyUnexpectedResponse|RequestException|ConnectionException
      */
     private function fetchEmbyUsers(ServiceConnection $serviceConnection): array
     {
-        return Http::baseUrl(rtrim($serviceConnection->url, '/'))
+        $response = Http::baseUrl(rtrim($serviceConnection->url, '/'))
             ->withHeaders([
                 'X-Emby-Token' => $serviceConnection->api_key,
             ])
             ->timeout(10)
             ->connectTimeout(3)
             ->get('/Users')
-            ->throw()
-            ->json() ?? [];
+            ->throw();
+        $users = $response->json();
+
+        // A 200 login page must not read as "Emby has no users".
+        throw_if(! is_array($users) || ! array_is_list($users), EmbyUnexpectedResponse::class, $response);
+
+        return $users;
     }
 }

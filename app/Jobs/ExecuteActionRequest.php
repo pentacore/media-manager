@@ -20,6 +20,7 @@ use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\Emby\EmbyActions;
 use App\Services\Emby\EmbyUnexpectedResponse;
+use App\Services\Emby\EmbyWriteUnconfirmed;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Sabnzbd\SabnzbdRefused;
@@ -159,7 +160,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             ]);
 
             return;
-        } catch (ArrWriteUnconfirmed|SeerrWriteUnconfirmed $writeUnconfirmed) {
+        } catch (ArrWriteUnconfirmed|EmbyWriteUnconfirmed|SeerrWriteUnconfirmed $writeUnconfirmed) {
             // The service answered the write with something other than its
             // API data (usually a proxy login page). Whether the change landed
             // is unknown, so it is never retried: a second send could repeat it.
@@ -178,7 +179,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             // mislabeled it retries_exhausted. Everything else retries:
             // connection loss, upstream 5xx, and a 200 that isn't usable
             // data (ArrUnexpectedResponse/SabnzbdRefused) — an unconfirmed
-            // write (ArrWriteUnconfirmed, SeerrWriteUnconfirmed) is caught
+            // write (ArrWriteUnconfirmed, EmbyWriteUnconfirmed, SeerrWriteUnconfirmed) is caught
             // above and never reaches here — the same policy as
             // BaseArrController::upstreamFailureMessage(), which treats
             // anything short of a clientError() as an outage, not a refusal.

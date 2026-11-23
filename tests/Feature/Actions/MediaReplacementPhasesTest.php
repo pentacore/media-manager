@@ -5,12 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementStatus;
 use App\Events\MediaReplacementAttemptChanged;
-use App\Jobs\Ai\GenerateConversationTitle;
-use App\Jobs\AuditImportedSubtitles;
-use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
-use App\Jobs\FetchLatestServiceVersion;
-use App\Jobs\PingServiceHealth;
 use App\Jobs\SweepCompetingGrabs;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
@@ -33,25 +28,8 @@ use Illuminate\Support\Facades\Queue;
 beforeEach(function (): void {
     Cache::flush();
     Http::preventStrayRequests();
-    // tests/Pest.php's global beforeEach already fakes PingServiceHealth,
-    // FetchLatestServiceVersion, GenerateConversationTitle, EmbedLibraryItem,
-    // ExecuteActionRequest and AuditImportedSubtitles so the ServiceConnection
-    // observer's sync-queue jobs don't make real GitHub/health HTTP calls
-    // during factory creation. Queue::fake() replaces the whole fake set
-    // rather than merging into it, so this file's own Queue::fake call must
-    // repeat that list alongside SweepCompetingGrabs — observed by running
-    // this suite against today's code: without the full list, creating the
-    // Sonarr/Radarr ServiceConnection dispatches a real FetchLatestServiceVersion
-    // job that hits https://api.github.com and throws StrayRequestException.
-    Queue::fake([
-        PingServiceHealth::class,
-        FetchLatestServiceVersion::class,
-        GenerateConversationTitle::class,
-        EmbedLibraryItem::class,
-        ExecuteActionRequest::class,
-        AuditImportedSubtitles::class,
-        SweepCompetingGrabs::class,
-    ]);
+    // Same fake set as tests/Pest.php's global beforeEach, plus SweepCompetingGrabs.
+    featureQueueFake(SweepCompetingGrabs::class);
 
     $confirmingRule = static fn (string $name): array => [[
         'name' => $name, 'enabled' => true, 'strength' => 'guarantee', 'languages' => ['English'],

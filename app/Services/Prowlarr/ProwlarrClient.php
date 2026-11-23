@@ -86,13 +86,25 @@ class ProwlarrClient extends ArrClient
         $response = $this->buildClient()
             ->post(sprintf('/api/%s/indexer/%d/test', $this->apiVersion, $indexerId));
 
+        $body = $response->json();
+
         if ($response->successful()) {
-            return ['success' => true, 'errors' => []];
+            // Prowlarr answers a passing test with `{}` (or nothing). A 200
+            // that is not JSON data is a reverse-proxy login page in front
+            // of it, which must not read as a passing test.
+            if (trim($response->body()) === '' || is_array($body)) {
+                return ['success' => true, 'errors' => []];
+            }
+
+            return [
+                'success' => false,
+                'errors' => [['errorMessage' => 'Prowlarr answered with something other than its API data — check the connection settings.']],
+            ];
         }
 
         return [
             'success' => false,
-            'errors' => $response->json() ?? [],
+            'errors' => is_array($body) ? $body : [],
         ];
     }
 

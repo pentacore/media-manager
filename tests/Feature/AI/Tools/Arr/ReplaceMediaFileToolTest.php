@@ -35,8 +35,9 @@ beforeEach(function (): void {
 
 /**
  * @param  array<string, mixed>  $releaseOverrides
+ * @param  list<array<string, mixed>>  $extraReleases  further releases for the same episode, each overriding the base release
  */
-function fakeReplaceableTarget(array $releaseOverrides = []): void
+function fakeReplaceableTarget(array $releaseOverrides = [], array $extraReleases = []): void
 {
     Http::fake([
         'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
@@ -49,11 +50,11 @@ function fakeReplaceableTarget(array $releaseOverrides = []): void
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [
             ['id' => 999, 'eventType' => 'grabbed', 'episodeId' => 101, 'downloadId' => 'ABC'],
         ]]),
-        'sonarr.local:8989/api/v3/release*' => Http::response([array_replace([
+        'sonarr.local:8989/api/v3/release*' => Http::response(array_map(fn (array $overrides): array => array_replace([
             'guid' => 'g1', 'indexerId' => 10, 'title' => 'Trusted.Anime.S01E01.CR',
             'episodeIds' => [101], 'downloadAllowed' => true, 'rejections' => [], 'fullSeason' => false,
             'customFormatScore' => 0, 'qualityWeight' => 100, 'seeders' => 5, 'ageMinutes' => 60,
-        ], $releaseOverrides)]),
+        ], $overrides), [$releaseOverrides, ...$extraReleases])),
     ]);
 }
 
@@ -79,13 +80,13 @@ function configureReplacementGuidance(bool $automatic): void
     ]);
 }
 
-function candidateFingerprint(): string
+function candidateFingerprint(int $index = 0): string
 {
     $result = resolve(ReplacementCandidateFinder::class)->find([
         'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42, 'episode_ids' => [101], 'installed_release' => 'Trusted.Anime.S01E01.OLD',
     ]);
 
-    return $result['candidates'][0]['fingerprint'];
+    return $result['candidates'][$index]['fingerprint'];
 }
 
 test('the replace tool is destructive', function (): void {
@@ -117,6 +118,27 @@ test('manual selection queues an approval-gated replacement action request', fun
     ])
         ->and($actionRequest->description)->toStartWith('Requested in chat by an unknown user.')
         ->and($actionRequest->description_verified)->toBeTrue();
+});
+
+test('manual selection queues the candidate whose fingerprint was chosen among several releases', function (): void {
+    fakeReplaceableTarget(extraReleases: [[
+        'guid' => 'g2', 'indexerId' => 11, 'title' => 'Trusted.Anime.S01E01.CR.1080p', 'qualityWeight' => 200,
+    ]]);
+    $first = candidateFingerprint(0);
+    $second = candidateFingerprint(1);
+
+    expect($first)->not->toBe($second);
+
+    $result = json_decode((new ReplaceMediaFileTool)->handle(new Request([
+        'service' => 'sonarr', 'item_id' => 42, 'season_number' => 1, 'episode_number' => 1,
+        'absolute_episode_number' => null, 'candidate_fingerprint' => $second,
+        'selection_mode' => 'manual', 'required_languages' => ['English'],
+        'reason' => 'Current file has no English subtitles.',
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($result['queued'])->toBeTrue()
+        ->and(ActionRequest::query()->sole()->payload)->toMatchArray(['candidate_fingerprint' => $second])
+        ->and(ActionRequest::query()->sole()->payload['candidate_fingerprint'])->not->toBe($first);
 });
 
 test('a Sonarr-rejected candidate forces approval even when the action type is configured to auto-execute', function (): void {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ReleaseGrabFailed;
 use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Radarr\RadarrActions;
@@ -138,6 +139,15 @@ test('grab_release posts the release to Radarr', function (): void {
     ]));
 
     Http::assertSent(fn (Request $request): bool => $request->data() === ['guid' => 'g-2', 'indexerId' => 4]);
+});
+
+test('grab_release reports an expired release as a search-again failure', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/release' => Http::response(['message' => "Couldn't find requested release in cache, try searching again"], 404)]);
+
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x'], 'service_connection_id' => radarrActionsConnectionId()],
+    ])))->toThrow(ReleaseGrabFailed::class, 'Radarr no longer has this release');
 });
 
 test('grab_release completes even when busting the cache afterward fails', function (): void {

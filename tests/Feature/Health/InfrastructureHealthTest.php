@@ -38,10 +38,13 @@ test('the health endpoint answers 500 when the database is unreachable', functio
     ]);
     config()->set('database.default', 'unreachable');
 
-    $this->get('/up')->assertInternalServerError();
-
-    // RefreshDatabase's teardown re-reads database.default to roll back its
-    // transaction; leaving it pointed at the unreachable connection would
-    // make teardown itself try (and fail) to connect.
-    config()->set('database.default', $originalDefaultConnection);
+    try {
+        $this->get('/up')->assertInternalServerError();
+    } finally {
+        // RefreshDatabase's teardown re-reads database.default to roll back
+        // its transaction; leaving it pointed at the unreachable connection
+        // would make teardown itself try (and fail) to connect, also when
+        // the assertion above throws.
+        config()->set('database.default', $originalDefaultConnection);
+    }
 });
