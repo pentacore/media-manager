@@ -1,3 +1,28 @@
+<script lang="ts">
+/**
+ * The measured border-box height of every bar that is open right now, by
+ * instance. `--bulk-bar-height` is the tallest of them, so two bars on one
+ * page never leave the spacer at the height the last one to resize happened to
+ * report, and a bar that closes lets it fall back to the one still open.
+ */
+const openBarHeights = new Map<symbol, number>();
+
+function publishBarHeight(): void {
+    const body = document.body;
+
+    if (openBarHeights.size === 0) {
+        body.style.removeProperty('--bulk-bar-height');
+
+        return;
+    }
+
+    body.style.setProperty(
+        '--bulk-bar-height',
+        `${Math.max(...openBarHeights.values())}px`,
+    );
+}
+</script>
+
 <script setup lang="ts">
 import { MoreHorizontal, X } from '@lucide/vue';
 import { useResizeObserver } from '@vueuse/core';
@@ -63,6 +88,7 @@ function isCompact(): boolean {
 
 /** Whether this bar currently counts towards `<body data-bulk-bar-open>`. */
 let padsPage = false;
+const barKey = Symbol('bulk-bar');
 
 const bar = useTemplateRef<HTMLElement>('bar');
 
@@ -70,8 +96,9 @@ const bar = useTemplateRef<HTMLElement>('bar');
  * Tells the page that a bar is on screen, so on a phone it ends with room for
  * the fixed bar (app.css): whatever follows the bar in the DOM (pagination,
  * the SABnzbd history) must scroll clear of it too. A count, so two bars on
- * one page do not clear each other's flag; the last one out also drops the
- * measured `--bulk-bar-height`. Client-only.
+ * one page do not clear each other's flag; a bar that leaves also drops its
+ * own measured height (`--bulk-bar-height` is the tallest still open, and goes
+ * with the last one out). Client-only.
  */
 function setPagePadding(on: boolean): void {
     if (on === padsPage) {
@@ -86,7 +113,11 @@ function setPagePadding(on: boolean): void {
         body.dataset.bulkBarOpen = String(open);
     } else {
         delete body.dataset.bulkBarOpen;
-        body.style.removeProperty('--bulk-bar-height');
+    }
+
+    if (!on) {
+        openBarHeights.delete(barKey);
+        publishBarHeight();
     }
 }
 
@@ -99,10 +130,8 @@ useResizeObserver(bar, ([entry]) => {
         return;
     }
 
-    document.body.style.setProperty(
-        '--bulk-bar-height',
-        `${Math.round(entry.borderBoxSize[0].blockSize)}px`,
-    );
+    openBarHeights.set(barKey, Math.round(entry.borderBoxSize[0].blockSize));
+    publishBarHeight();
 });
 
 onMounted(() => {
