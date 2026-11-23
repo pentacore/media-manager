@@ -500,6 +500,14 @@ vendor/bin/sail artisan users:create            # create a user with a chosen ro
 
 ## Running tests
 
+Run the full local gate before every commit. It runs Pint, Rector (dry run), Larastan, ESLint, Prettier, vue-tsc and the Unit and Feature suites in parallel, the same checks as CI apart from the browser suite:
+
+```bash
+vendor/bin/sail composer test
+```
+
+Run single suites or filters directly:
+
 ```bash
 vendor/bin/sail artisan test --compact
 vendor/bin/sail artisan test --compact --filter='Media\\Series'

@@ -22,6 +22,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Events/** | .ai/rules/events.md |
 | database/factories/*.php | .ai/rules/factories.md |
 | tests/Feature/** | .ai/rules/feature.md |
+| ** | .ai/rules/general.md |
 | app/Http/** | .ai/rules/http.md |
 | app/Jobs/** | .ai/rules/jobs.md |
 | resources/js/**/*.vue, resources/js/** | .ai/rules/js.md |
