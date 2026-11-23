@@ -11,12 +11,15 @@ use App\Services\Chat\ChatTemplateRenderer;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
 /**
  * Value rules are built from the bound template's current variables, so a
  * template edited after the fill dialog opened asks for its new fields.
- * Library existence is the renderer's job.
+ * Library existence is the renderer's job. Typefinder skips it: the rules
+ * depend on the bound template, so there is no static request type.
  */
+#[TypefinderIgnore]
 class RenderChatTemplateRequest extends FormRequest
 {
     public function authorize(): bool
