@@ -1129,3 +1129,30 @@ test('a subtitle upload the server fails to queue says so in the drawer', functi
     // never left behind as an orphan with no linked action.
     expect(SubtitleUpload::query()->sole()->cancelled_at)->not->toBeNull();
 });
+
+test('the history list names each action and formats its time', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create(['url' => 'http://bazarr.test', 'api_key' => 'bazarr-secret']);
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => ServiceConnection::factory()->radarr()->create()->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $row = ['radarrId' => 801, 'title' => 'Example Movie', 'language' => ['code3' => 'swe'], 'provider' => 'example-provider', 'score' => '93.0%'];
+
+    fakeServiceHttp(fn (Request $request) => parse_url($request->url(), PHP_URL_PATH) === '/api/movies/history'
+        ? Http::response(['data' => [
+            [...$row, 'action' => 5, 'timestamp' => 'yesterday', 'parsed_timestamp' => '07/15/26 18:00:00'],
+            [...$row, 'radarrId' => 802, 'title' => 'Another Movie', 'action' => 42, 'timestamp' => 'a while ago'],
+        ], 'total' => 2])
+        : Http::response(['data' => [], 'total' => 0]));
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.history', ['connection' => $bazarr->id, 'media_type' => 'movie'], false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-history-row="801"] [data-history-action]', 'Synced')
+        ->assertSeeIn('[data-history-row="801"] [data-history-time]', '2026-07-15 18:00')
+        ->assertAttribute('[data-history-row="801"] time', 'datetime', '2026-07-15T18:00:00+00:00')
+        ->assertSeeIn('[data-history-row="802"] [data-history-action]', 'Updated')
+        ->assertSeeIn('[data-history-row="802"] [data-history-time]', 'a while ago');
+});

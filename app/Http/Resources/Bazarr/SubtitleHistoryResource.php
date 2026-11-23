@@ -15,8 +15,8 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'title' => 'string',
     'language' => 'string | undefined',
     'provider' => 'string | undefined',
-    'action' => 'string | undefined',
-    'score' => 'number | undefined',
+    'action' => 'number | undefined',
+    'score' => 'string | undefined',
     'occurred_at' => 'string | undefined',
 ])]
 class SubtitleHistoryResource extends JsonResource
