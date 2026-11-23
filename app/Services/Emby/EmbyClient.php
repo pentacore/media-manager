@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -77,21 +78,39 @@ class EmbyClient
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyUnexpectedResponse|RequestException|ConnectionException
      */
     public function getUserItems(string $userId, array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/Users/%s/Items', $userId), $params)->throw()->json() ?? [];
+        return $this->jsonData($this->buildClient()->get(sprintf('/Users/%s/Items', $userId), $params)->throw(), 'Emby answered with a body that is not a JSON item list.');
     }
 
     /**
      * @return array<int, array<string, mixed>>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyUnexpectedResponse|RequestException|ConnectionException
      */
     public function getActiveSessions(): array
     {
-        return $this->buildClient()->get('/Sessions')->throw()->json() ?? [];
+        return $this->jsonData($this->buildClient()->get('/Sessions')->throw(), 'Emby answered with a body that is not a JSON session list.');
+    }
+
+    /**
+     * The decoded body of a read. A 200 that is not JSON data (an SSO or
+     * reverse-proxy login page, an HTML error page) is a failed request,
+     * never an empty result.
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws EmbyUnexpectedResponse
+     */
+    private function jsonData(Response $response, string $message): array
+    {
+        $body = $response->json();
+
+        throw_unless(is_array($body), EmbyUnexpectedResponse::class, $response, $message);
+
+        return $body;
     }
 
     /**

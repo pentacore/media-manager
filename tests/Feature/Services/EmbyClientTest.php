@@ -168,3 +168,15 @@ test('a 200 system info that is not JSON data is a RequestException with a fixed
         expect($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not JSON data.');
     });
 });
+
+test('a 200 item list or session list that is not JSON data is a failed request, never an empty result', function (string $path, Closure $read, string $message): void {
+    Http::fake(['emby.local:8096/'.$path.'*' => Http::response('<html>Sign in at /sso/login?token=abc</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => $read($this->client))->toThrow(function (EmbyUnexpectedResponse $embyUnexpectedResponse) use ($message): void {
+        expect($embyUnexpectedResponse->response->status())->toBe(200)
+            ->and($embyUnexpectedResponse->getMessage())->toBe($message);
+    });
+})->with([
+    'user items' => ['Users/user1/Items', fn (EmbyClient $embyClient): array => $embyClient->getUserItems('user1'), 'Emby answered with a body that is not a JSON item list.'],
+    'sessions' => ['Sessions', fn (EmbyClient $embyClient): array => $embyClient->getActiveSessions(), 'Emby answered with a body that is not a JSON session list.'],
+]);
