@@ -153,6 +153,7 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                 <div
                     v-if="myLink"
                     class="flex items-center justify-between gap-4"
+                    data-emby-own-link
                 >
                     <div>
                         <p class="font-medium">{{ myLink.emby_username }}</p>
@@ -163,6 +164,7 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                     <Button
                         variant="destructive"
                         size="sm"
+                        data-emby-unlink
                         @click="revoke(myLink)"
                     >
                         <Trash2 class="mr-2 size-4" />
@@ -175,6 +177,7 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                     v-bind="UserLinkController.store.form()"
                     v-slot="{ errors, processing }"
                     class="space-y-4"
+                    data-emby-link-form
                 >
                     <div class="space-y-2">
                         <Label for="emby_username">Emby Username</Label>
@@ -196,7 +199,11 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                         />
                         <InputError :message="errors.password" />
                     </div>
-                    <Button type="submit" :disabled="processing">
+                    <Button
+                        type="submit"
+                        :disabled="processing"
+                        data-emby-link-account
+                    >
                         <Link2 class="mr-2 size-4" />
                         Link Account
                     </Button>
@@ -233,6 +240,7 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                         <TableRow
                             v-for="link in props.links ?? []"
                             :key="link.id"
+                            :data-emby-link-row="link.id"
                         >
                             <TableCell class="font-medium"
                                 ><span class="block">{{
@@ -256,6 +264,7 @@ function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
                                 <Button
                                     variant="ghost"
                                     size="sm"
+                                    :data-emby-revoke="link.id"
                                     @click="revoke(link)"
                                 >
                                     <Trash2 class="mr-2 size-4" />
