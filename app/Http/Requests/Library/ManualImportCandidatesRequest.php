@@ -18,7 +18,7 @@ class ManualImportCandidatesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Sent as a query parameter on this GET.
+            /** @query */
             ...$this->pinnedConnectionRules(),
         ];
     }
