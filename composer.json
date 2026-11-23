@@ -90,7 +90,7 @@
             "npm run lint:check",
             "npm run format:check",
             "npm run types:check",
-            "@php artisan test --compact --parallel --exclude-testsuite=Browser"
+            "@php artisan test --compact --parallel --cache-directory=storage/framework/cache/phpunit --exclude-testsuite=Browser"
         ],
         "test:browser": [
             "Composer\\Config::disableProcessTimeout",
