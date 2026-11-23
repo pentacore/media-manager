@@ -291,7 +291,8 @@ jobs:
           php-version: ${{ env.PHP_VERSION }}
           extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, sodium
           tools: composer:v2
-          coverage: none
+          # PCOV only where coverage is collected: the browser shards gain nothing from it.
+          coverage: ${{ matrix.suite == 'unit-feature' && 'pcov' || 'none' }}
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -326,7 +327,21 @@ jobs:
 
       - name: Run Pest (unit & feature)
         if: matrix.suite == 'unit-feature'
-        run: vendor/bin/pest --compact --parallel --exclude-testsuite=Browser
+        run: vendor/bin/pest --compact --parallel --exclude-testsuite=Browser --coverage-clover=build/coverage/clover.xml
+
+      # Coverage is reported, not gated: the summary lands on the run page and
+      # the Clover file is kept as an artifact for tools that read it.
+      - name: Summarise coverage
+        if: matrix.suite == 'unit-feature' && !cancelled() && hashFiles('build/coverage/clover.xml') != ''
+        run: php .github/scripts/coverage-summary.php build/coverage/clover.xml >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: matrix.suite == 'unit-feature' && !cancelled() && hashFiles('build/coverage/clover.xml') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-clover
+          path: build/coverage/clover.xml
+          retention-days: 14
 
       # Browser tests drive a real Chromium via Playwright. Running them under
       # --parallel starves the box and intermittently trips Playwright's 15s
