@@ -461,7 +461,7 @@ test('a Seerr request decline asks first; Cancel sends nothing and Decline decli
 });
 
 test('clearing Seerr requests by status asks first; Cancel queues nothing and the confirm queues the clear', function (): void {
-    Queue::fake([ClearSeerrRequests::class]);
+    browserQueueFake(ClearSeerrRequests::class);
     confirmDialogFakeSeerr();
     $this->actingAs(User::factory()->admin()->create());
 

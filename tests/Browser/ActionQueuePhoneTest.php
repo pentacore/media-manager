@@ -12,7 +12,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
 });
 
 test('action cards fit a phone and show the type, target, status, age and failure reason', function (): void {

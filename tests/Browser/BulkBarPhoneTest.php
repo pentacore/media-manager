@@ -9,10 +9,9 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
 });
 
 /**

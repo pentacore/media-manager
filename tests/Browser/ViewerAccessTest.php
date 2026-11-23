@@ -120,7 +120,10 @@ test('a member sees the library index with the add button', function (): void {
 
 test('a viewer searching gets no scope switcher', function (): void {
     ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
-    Http::fake(['seerr.local:5055/api/v1/search*' => Http::response(['results' => []])]);
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+    ]);
 
     $this->actingAs(User::factory()->create());
 

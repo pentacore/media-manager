@@ -63,7 +63,7 @@ test('member retries a review case with Media Advisor after confirmation', funct
     // actually run, so both gates are open here and the queued job is faked.
     config()->set('mediamanager.ai.enabled', true);
     resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
-    Queue::fake([RunSubtitleAdvisor::class]);
+    browserQueueFake(RunSubtitleAdvisor::class);
     $bazarr = ServiceConnection::factory()->bazarr()->create([
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',

@@ -10,7 +10,6 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 
 /**
  * @return list<array{coverType: string, remoteUrl: string}>
@@ -200,7 +199,7 @@ test('a quality-profile outage is shown next to the select on the title page', f
 test('a profile change that waits for approval leaves the select on the current profile', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     ActionTypeConfig::query()->where('type', 'whisparr_set_quality_profile')->update(['requires_approval' => true]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     fakeWhisparrBrowserLibrary();
     $this->actingAs(User::factory()->admin()->create());
 
@@ -277,7 +276,7 @@ test('a v2 site lists its scenes by year', function (): void {
 
 test('an admin monitors, searches and deletes from the Whisparr title page', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     fakeWhisparrBrowserLibrary();
     $this->actingAs(User::factory()->admin()->create());
 
@@ -301,7 +300,7 @@ test('an admin monitors, searches and deletes from the Whisparr title page', fun
 
 test('an admin changes the quality profile from the title page', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     fakeWhisparrBrowserLibrary();
     $this->actingAs(User::factory()->admin()->create());
 
@@ -316,7 +315,7 @@ test('an admin changes the quality profile from the title page', function (): vo
 
 test('an admin monitors several Whisparr titles in bulk', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     fakeWhisparrBrowserLibrary();
     $this->actingAs(User::factory()->admin()->create());
 

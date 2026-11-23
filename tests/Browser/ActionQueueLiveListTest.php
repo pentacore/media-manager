@@ -173,7 +173,7 @@ test('a live status change renders on a listed row under the batch filter', func
         'updated_at' => $actionRequest->updated_at->addSeconds(60)->toISOString(),
         'status_version' => $actionRequest->status_version + 1,
     ], 3));
-    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('[data-action-row=\"%d\"]')?.innerText.includes('executing')", $actionRequest->id)));
+    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('[data-action-row=\"%d\"]')?.innerText.includes('Executing')", $actionRequest->id)));
 
     $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'executing')
         ->assertNoSmoke();
