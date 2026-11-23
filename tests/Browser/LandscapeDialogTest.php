@@ -234,7 +234,9 @@ function landscapeDialogOpen(AwaitableWebpage|PendingAwaitablePage|Webpage $webp
  * 'ok', or the first way the open dialog fails a phone: its box leaves the
  * screen; scrolled to its end, its last control (the footer, not a row of an
  * inner list) is not inside the dialog; or its close X leaves the screen or
- * the dialog. A dialog without a footer (every control in an inner list) has
+ * the dialog; or a hit test at the centre of the last control or the close X
+ * finds something else (the rects alone pass a covered control). A dialog
+ * without a footer (every control in an inner list) has
  * its inner lists scrolled to their end too, and their last control checked;
  * a dialog with no control at all has its last content block checked.
  * A control inside a sideways-scrolling frame is checked vertically only.
@@ -331,11 +333,33 @@ function landscapeDialogReachScript(): string
                 return `last control unreachable: "${name}" ${round(lastRect)} outside the dialog ${round(dialog.getBoundingClientRect())}`;
             }
 
+            // The rect says where the control is, not whether a tap lands on it:
+            // something laid over it (a bulk bar, a sticky footer) passes the
+            // rect check. The point at its centre must hit the control itself.
+            // A disabled control has `pointer-events: none`, so the point goes
+            // to what is under it: nothing a tap could be stolen from.
+            const hitsControl = (el) => {
+                if (getComputedStyle(el).pointerEvents === 'none') {
+                    return true;
+                }
+                el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                const rect = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                return !!hit && el.contains(hit);
+            };
+            if (!lastIsBlock && !hitsControl(last)) {
+                const name = (last.innerText || last.getAttribute('aria-label') || last.tagName).trim().slice(0, 40);
+                return `last control covered: "${name}" ${round(last.getBoundingClientRect())} is not what its centre hits`;
+            }
+
             const close = dialog.querySelector('[data-slot="dialog-close"]');
             if (close) {
                 const closeRect = close.getBoundingClientRect();
                 if (!inside(closeRect, viewport) || !inside(closeRect, dialog.getBoundingClientRect())) {
                     return `close X off screen: ${round(closeRect)}`;
+                }
+                if (!hitsControl(close)) {
+                    return `close X covered: ${round(closeRect)} is not what its centre hits`;
                 }
             }
 
