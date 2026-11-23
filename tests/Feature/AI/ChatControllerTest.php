@@ -361,13 +361,22 @@ function chatRouterAnswers(array $probabilities): array
 test('a chat turn with routing disabled writes and updates no outcome rows', function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(false);
     MediaAgent::fake(['Nothing is playing.']);
+    $outcomeQueries = [];
+    DB::listen(function ($query) use (&$outcomeQueries): void {
+        if (str_contains($query->sql, 'classification_outcomes')) {
+            $outcomeQueries[] = $query->sql;
+        }
+    });
 
     $this->actingAs(User::factory()->admin()->create())
         ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
         ->assertOk();
 
     Classification::assertNothingClassified();
-    expect(ClassificationOutcome::query()->count())->toBe(0);
+    // No insert and no update: a bare count of the rows could not see an UPDATE
+    // that touched nothing.
+    expect($outcomeQueries)->toBe([])
+        ->and(ClassificationOutcome::query()->count())->toBe(0);
 });
 
 test('a routed chat turn records which tool groups the reply used', function (): void {

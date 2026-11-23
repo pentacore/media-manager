@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Routing\ToolGroup;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\User;
 use App\Services\Chat\ConversationToolPins;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -201,4 +204,37 @@ test('repeated or excess tool group arrays are rejected', function (): void {
     $this->actingAs($admin)
         ->putJson(route('ai.conversations.tool-groups', $id), ['groups' => ['indexers', 'indexers']])
         ->assertJsonValidationErrors('groups.0');
+});
+
+test('a streamed first turn that fails after a step keeps the pins sent with it', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([toolPinsAnswers()]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        fn (): never => throw new RuntimeException('boom'),
+    ]);
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello', 'pinned_tool_groups' => ['indexers', 'playback']], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect($body)->toContain('"type":"RUN_ERROR"')
+        ->and(DB::table('agent_conversations')->pluck('pinned_tool_groups')->all())->toBe(['["indexers","playback"]']);
+});
+
+test('a streamed first turn that fails before any step stores no conversation and so no pins', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([toolPinsAnswers()]);
+    MediaAgent::fake(function (): never {
+        throw new RuntimeException('boom');
+    });
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello', 'pinned_tool_groups' => ['indexers']], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect($body)->toContain('"type":"RUN_ERROR"')
+        ->and(DB::table('agent_conversations')->count())->toBe(0);
 });

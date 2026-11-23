@@ -39,3 +39,33 @@ test('a word only in a sub-agent inner tool description still finds its group', 
     expect($matches[0]['group'])->toBe('subtitles_replacement')
         ->and(array_column($matches[0]['tools'], 'name'))->toContain('InspectMediaFile');
 });
+
+test('at most three groups are returned even when more match', function (): void {
+    $toolGroupCatalogue = resolve(ToolGroupCatalogue::class);
+
+    // "request" appears in tools of downloads, library changes, requests and
+    // subtitles & replacement: four matching groups.
+    expect($toolGroupCatalogue->search('request'))->toHaveCount(3);
+});
+
+test('at most three tools are listed per group even when more match', function (): void {
+    $requestTools = array_filter(
+        ToolGroup::Requests->toolClasses(),
+        static fn (string $class): bool => str_contains(strtolower(class_basename($class)), 'request'),
+    );
+
+    $matches = collect(resolve(ToolGroupCatalogue::class)->search('request'))->keyBy('group');
+
+    expect(count($requestTools))->toBeGreaterThan(3)
+        ->and($matches['requests']['tools'])->toHaveCount(3);
+});
+
+test('a need word in the group label ranks that group first on an otherwise equal score', function (): void {
+    $groups = array_column(resolve(ToolGroupCatalogue::class)->search('request'), 'group');
+
+    // Downloads precedes requests in the enum and ties on tool score, so only the
+    // label bonus can put requests first.
+    expect(array_search('downloads', array_column(ToolGroup::cases(), 'value'), true))
+        ->toBeLessThan(array_search('requests', array_column(ToolGroup::cases(), 'value'), true))
+        ->and($groups[0])->toBe('requests');
+});

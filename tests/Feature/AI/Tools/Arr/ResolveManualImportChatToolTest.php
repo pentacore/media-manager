@@ -284,3 +284,38 @@ test('excluded_paths must be a list of strings', function (): void {
         ->and($result['errors'])->toHaveKey('excluded_paths');
     Http::assertNothingSent();
 });
+
+test('an unknown excluded path does not rescue a partially mapped set from approval', function (): void {
+    DB::table('action_type_configs')
+        ->where('type', 'resolve_manual_import')
+        ->update(['requires_approval' => false, 'is_enabled' => true]);
+    fakeSonarrManualImport(mappedAndExtraCandidates());
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'Leave out the extra.',
+        'excluded_paths' => ['/downloads/typo-file.mkv'],
+    ])), true);
+
+    $actionRequest = ActionRequest::findOrFail($result['action_request_id']);
+    expect($actionRequest->requires_approval)->toBeTrue()
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->payload['assessment']['total'])->toBe(2)
+        ->and($actionRequest->payload['excluded_paths'])->toBe(['/downloads/typo-file.mkv']);
+});
+
+test('a numeric-string download id is accepted and queued as a string', function (): void {
+    DB::table('action_type_configs')
+        ->where('type', 'resolve_manual_import')
+        ->update(['requires_approval' => false, 'is_enabled' => true]);
+    fakeSonarrManualImport([mappedAndExtraCandidates()[0]]);
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => '1234',
+        'reason' => 'File maps cleanly.',
+    ])), true);
+
+    expect(ActionRequest::findOrFail($result['action_request_id'])->payload['download_id'])->toBe('1234');
+});
