@@ -1,3 +1,9 @@
+## [1.62.1](https://github.com/pentacore/media-manager/compare/v1.62.0...v1.62.1) (2026-11-23)
+
+### Bug Fixes
+
+* **ci:** keep CI builds from regenerating the committed Typefinder types ([352df98](https://github.com/pentacore/media-manager/commit/352df98fadb3f8620bcc08240f64ec8260731cfe))
+
 # [1.62.0](https://github.com/pentacore/media-manager/compare/v1.61.2...v1.62.0) (2026-11-23)
 
 
