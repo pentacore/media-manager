@@ -44,10 +44,6 @@ function bars(gate: GateSummary): BarChartPoint[] {
     }));
 }
 
-function countLabel(band: GateBand): string {
-    return band.resolved === 0 ? '–' : String(band.count);
-}
-
 function summaryLine(gate: GateSummary): string {
     if (gate.total === 0) {
         return 'No decisions in this window.';
@@ -77,16 +73,18 @@ function summaryLine(gate: GateSummary): string {
         data-classification-gates
     >
         <div
-            class="flex items-center justify-between border-b border-border px-4 py-3"
+            class="flex items-center justify-between gap-4 border-b border-border px-4 py-3"
         >
             <span
-                class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                class="shrink-0 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
             >
                 Classification gates
             </span>
-            <span class="text-[11.5px] text-muted-foreground">
+            <span class="text-[11.5px] text-muted-foreground" data-gate-caption>
                 How often each probability band turned out right. The dashed
-                line is the current threshold.
+                line is the current threshold, the numbers below each chart
+                count the events per band, and a dashed bar has none resolved
+                yet.
             </span>
         </div>
         <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
@@ -111,17 +109,18 @@ function summaryLine(gate: GateSummary): string {
                     :max="100"
                 />
                 <div
-                    class="flex justify-between text-[10px] text-muted-foreground tabular-nums"
+                    class="flex text-[10px] text-muted-foreground tabular-nums"
                     data-gate-counts
                 >
                     <span
                         v-for="band in gate.bands"
                         :key="`count-${gate.gate}-${band.label}`"
-                        class="flex-1 text-center"
+                        class="min-w-0 flex-1 truncate text-center"
+                        :data-gate-count="band.label"
+                        >{{ band.count }}</span
                     >
-                        {{ countLabel(band) }}
-                    </span>
                 </div>
+
                 <p
                     class="text-[11.5px] text-muted-foreground"
                     data-gate-summary

@@ -191,6 +191,26 @@ test('more than 100 selected disables every bulk action', function (): void {
     expect(ActionRequest::query()->count())->toBe(0);
 });
 
+test('the bulk bar stays at the bottom of a desktop window while a long library scrolls', function (int $width): void {
+    fakeBulkSonarrLibrary($this->sonarr, 60);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false));
+    $webpage->resize($width, 900);
+
+    // Sticky only holds while no ancestor between the bar and the window is
+    // a scroll container; the layout's content box used to be one
+    // (overflow-x: hidden), which parked the bar at the end of the page.
+    $webpage
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select="1"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertScript('document.scrollingElement.scrollHeight > window.innerHeight * 2', true)
+        ->assertScript('(() => { window.scrollTo(0, 400); const rect = document.querySelector("[data-bulk-bar]").getBoundingClientRect(); return window.scrollY > 0 && rect.top >= 0 && rect.bottom <= window.innerHeight && window.innerHeight - rect.bottom < 40; })()', true)
+        ->assertScript('getComputedStyle(document.querySelector("[data-bulk-bar]")).position', 'sticky');
+})->with([1440, 640]);
+
 test('a member changes the quality profile of several movies at once', function (): void {
     $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
     $movies = [];

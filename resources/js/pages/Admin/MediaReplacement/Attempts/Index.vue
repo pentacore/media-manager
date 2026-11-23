@@ -7,6 +7,7 @@ import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Ad
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
 import MediaReplacementTabs from '@/components/media-replacement/MediaReplacementTabs.vue';
 import { Pill, SvcChip, TimeStamp, Toggle } from '@/components/mm';
+import type { PillVariant } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -108,8 +109,6 @@ defineOptions({
         ],
     },
 });
-
-type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
 
 const STATUS_VARIANTS: Record<string, PillVariant> = {
     requested: 'info',

@@ -117,11 +117,13 @@ onUnmounted(() => setPagePadding(false));
 <template>
     <!-- Stays mounted while a run is in flight, so the action component that
          owns the request can't be unmounted (and re-mounted idle) mid-run.
-         Below sm a bar is fixed to the screen's bottom edge (sticky
-         cannot stick there: the layout's overflow-x-hidden content box is the
-         sticky container while the window scrolls); `data-bulk-bar-open` on
-         <body> and its measured `--bulk-bar-height` make the page end with
-         room for it (app.css). -->
+         From sm up it is sticky to the window's bottom, which needs every
+         ancestor to leave overflow visible or `clip` (the layout's content
+         box is overflow-x-clip: `hidden` would make it the sticky container
+         and park the bar at the page end). Below sm it is fixed to the
+         screen's bottom edge; `data-bulk-bar-open` on <body> and its
+         measured `--bulk-bar-height` make the page end with room for it
+         (app.css). -->
     <div
         v-if="count > 0 || busy"
         ref="bar"
