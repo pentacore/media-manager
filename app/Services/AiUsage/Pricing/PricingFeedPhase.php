@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\AiUsage\Pricing;
 
 use App\Enums\PricingSource;
+use App\Models\AiModelPrice;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
@@ -130,6 +131,10 @@ class PricingFeedPhase
 
         try {
             DB::transaction(function () use ($providerPricingResult, $refreshScope, $dryRun, &$state, &$anomalousModels): void {
+                if (! $dryRun) {
+                    $this->lockProviderRowsInIdOrder($providerPricingResult);
+                }
+
                 foreach ($providerPricingResult->candidates as $candidate) {
                     $outcome = $this->aiModelPriceWriter->write(
                         $candidate,
@@ -204,6 +209,26 @@ class PricingFeedPhase
         foreach ([...$anomalousModels, ...$providerPricingResult->conflicts] as $targetModel) {
             $priceRefreshLedger->fallbackTargets[$provider][] = $targetModel;
         }
+    }
+
+    /**
+     * Take the row locks the writes below would take one by one, up front and
+     * in ascending id order, the order the bulk price actions lock in. Writing
+     * in feed order instead could take the same rows in the opposite order as
+     * a concurrent bulk action and deadlock with it.
+     */
+    private function lockProviderRowsInIdOrder(ProviderPricingResult $providerPricingResult): void
+    {
+        $providers = array_values(array_unique(array_filter(array_map(
+            static fn (ModelPriceCandidate $modelPriceCandidate): ?string => RefreshScope::canonicalProvider($modelPriceCandidate->provider),
+            $providerPricingResult->candidates,
+        ))));
+
+        if ($providers === []) {
+            return;
+        }
+
+        AiModelPrice::query()->whereIn('provider', $providers)->orderBy('id')->lockForUpdate()->pluck('id');
     }
 
     /**
