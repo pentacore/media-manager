@@ -1,8 +1,8 @@
 {
     "timings": {
         "Tests\\Browser\\ActionQueueBulkTest": 54.4181,
-        "Tests\\Browser\\ActionQueueFailureTest": 374.9574,
-        "Tests\\Browser\\ActionQueueLiveListTest": 58.6135,
+        "Tests\\Browser\\ActionQueueFailureTest": 44.3864,
+        "Tests\\Browser\\ActionQueueLiveListTest": 47.8815,
         "Tests\\Browser\\ActionQueuePhoneSheetTest": 209.0489,
         "Tests\\Browser\\ActionQueuePhoneTest": 146.4165,
         "Tests\\Browser\\ActionRequestTest": 9.0378,
@@ -27,7 +27,7 @@
         "Tests\\Browser\\AiSettingsClassificationTest": 4.3473,
         "Tests\\Browser\\AiUnpricedModelWarningTest": 2.3614,
         "Tests\\Browser\\AiUsageClassificationGatesTest": 1.2152,
-        "Tests\\Browser\\AiUsageDetailAbortTest": 72.7298,
+        "Tests\\Browser\\AiUsageDetailAbortTest": 14.2545,
         "Tests\\Browser\\AiUsageSecondOpinionTest": 5.2543,
         "Tests\\Browser\\AiUsageSectionsTest": 8.2772,
         "Tests\\Browser\\AiUsageTelemetryTest": 12.3679,
@@ -68,7 +68,7 @@
         "Tests\\Browser\\LibraryActionsTest": 9.554,
         "Tests\\Browser\\LibraryBulkActionsTest": 289.3044,
         "Tests\\Browser\\LibraryBulkBarPhoneTest": 41.4645,
-        "Tests\\Browser\\LibraryLiveReloadTest": 92.6291,
+        "Tests\\Browser\\LibraryLiveReloadTest": 20.1711,
         "Tests\\Browser\\LibraryQualityProfileNameTest": 3.781,
         "Tests\\Browser\\LibrarySyncTest": 1.7624,
         "Tests\\Browser\\LinkButtonNestingTest": 9.0945,
