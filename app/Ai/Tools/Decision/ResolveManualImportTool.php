@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Tools\Decision;
 
 use App\Ai\Decision\StuckImportResolver;
+use App\Services\Arr\ManualImportResolver;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -62,7 +63,7 @@ class ResolveManualImportTool extends DecisionTool
         ], $this->argumentMessages());
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];
-        $excludedPaths = array_values(array_filter((array) ($validated['excluded_paths'] ?? []), is_string(...)));
+        $excludedPaths = resolve(ManualImportResolver::class)->normalizeExcludedPaths($validated['excluded_paths'] ?? null);
 
         return resolve(StuckImportResolver::class)->import($decisionRunContext, $service, $downloadId, $excludedPaths);
     }
