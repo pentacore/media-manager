@@ -45,7 +45,7 @@ function confirmPicked(): void {
 <template>
     <div
         class="mb-2 rounded-lg border border-border bg-bg-elev p-2.5"
-        data-choice-card
+        :data-choice-card="card.id"
     >
         <div class="mb-2 flex items-center gap-1.5">
             <ListChecks class="size-3.5 shrink-0 text-fg-subtle" />

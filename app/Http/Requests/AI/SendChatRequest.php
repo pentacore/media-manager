@@ -42,6 +42,7 @@ class SendChatRequest extends FormRequest
             'pinned_tool_groups.*' => ['string', 'distinct', Rule::enum(ToolGroup::class)],
             'load_tool_groups' => ['sometimes', 'array', 'max:'.count(ToolGroup::cases())],
             'load_tool_groups.*' => ['string', 'distinct', Rule::enum(ToolGroup::class)],
+            'answered_card' => ['nullable', 'string', 'max:255'],
             'override' => ['nullable', 'array:provider,model,reasoning'],
             ...$this->selectionRules('override'),
         ];

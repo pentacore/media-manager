@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\AnsweredBy;
+use App\Ai\Conversations\ChatAnsweredCard;
 use App\Ai\Routing\ChatToolRouter;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\Routing\ToolGroup;
@@ -50,6 +51,7 @@ class ChatController extends Controller
     public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ChatWorkflowContinuation $chatWorkflowContinuation, ConversationModelOverride $conversationModelOverride, ConversationToolPins $conversationToolPins, AiSettings $aiSettings, ChatCardExtractor $chatCardExtractor): JsonResponse
     {
         $validated = $sendChatRequest->validated();
+        resolve(ChatAnsweredCard::class)->id = $validated['answered_card'] ?? null;
 
         $conversationModelOverride->applyToTurn($validated['conversation_id'] ?? null, $validated['override'] ?? []);
 
@@ -131,6 +133,7 @@ class ChatController extends Controller
     public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ChatTurnGuard $chatTurnGuard, ChatFailureResponder $chatFailureResponder, ConversationModelOverride $conversationModelOverride, ConversationToolPins $conversationToolPins, AiSettings $aiSettings): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
+        resolve(ChatAnsweredCard::class)->id = $validated['answered_card'] ?? null;
 
         $conversationModelOverride->applyToTurn($validated['conversation_id'] ?? null, $validated['override'] ?? []);
 
