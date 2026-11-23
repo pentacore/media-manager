@@ -291,7 +291,7 @@ class AiModelPriceController extends Controller
      * those (and genuine booleans) to a bool while preserving null for an
      * absent field — the update flow relies on that null to mean "unchanged".
      *
-     * @param  array<string, mixed>  $validated
+     * @param  array<array-key, mixed>  $validated
      */
     private function pullBooleanFlag(array &$validated, string $key): ?bool
     {

@@ -22,7 +22,7 @@ class VerifyWebhookToken
             ->where('is_active', true)
             ->first();
 
-        abort_unless($connection, 404);
+        abort_if($connection === null, 404);
 
         // Header is preferred, but Sonarr/Radarr/Prowlarr's webhook
         // configuration only lets you append the URL — not custom

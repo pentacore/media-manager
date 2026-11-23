@@ -128,14 +128,13 @@ class AiSettingsController extends Controller
         /** @var array<string, string> $map */
         $map = config('mediamanager.ai.pricing.providers', []);
 
-        return collect(array_values($map))
+        return array_values(collect(array_values($map))
             ->unique()
-            ->values()
             ->map(fn (string $provider): array => [
                 'value' => $provider,
                 'label' => $this->providerLabel($provider),
             ])
-            ->all();
+            ->all());
     }
 
     /**

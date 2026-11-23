@@ -143,7 +143,7 @@ class StatisticsController extends Controller
         /** @var Collection<int, string> $names */
         $names = ServiceConnection::query()->findMany($ids)->pluck('name', 'id');
 
-        return $uptimeRows
+        return array_values($uptimeRows
             ->map(function (array $row) use ($names, $latencyRows): array {
                 $id = (int) $row['key'];
                 $count = $row['count'];
@@ -156,7 +156,6 @@ class StatisticsController extends Controller
                     'latency' => $latencyCount > 0 ? round($latency['sum'] / $latencyCount, 1) : null,
                 ];
             })
-            ->values()
-            ->all();
+            ->all());
     }
 }

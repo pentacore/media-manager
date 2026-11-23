@@ -18,10 +18,13 @@ use App\Services\Arr\ArrConnections;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
 use App\Services\Bazarr\SubtitleCaseSupersession;
+use App\Services\Emby\EmbyClient;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Sabnzbd\SabnzbdClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
 use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\Builder;
@@ -119,8 +122,8 @@ class ServiceConnectionController extends Controller
                 'name' => $serviceConnection->name,
                 'url' => $serviceConnection->url,
                 'external_url' => $serviceConnection->external_url,
-                'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
-                'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
+                'api_key_set' => $serviceConnection->api_key !== '',
+                'webhook_token_set' => $serviceConnection->webhook_token !== '',
                 'webhook_url' => $this->webhookUrlFor($serviceConnection),
                 'supports_webhook_configuration' => $serviceConnection->type->supportsWebhookConfiguration(),
                 'is_active' => $serviceConnection->is_active,
@@ -234,7 +237,7 @@ class ServiceConnectionController extends Controller
             $builder->whereKeyNot($editingConnection->getKey());
         }
 
-        return $builder
+        return array_values($builder
             ->where(function (Builder $builder) use ($selectedConnectionIds): void {
                 $builder->where('is_active', true);
 
@@ -249,7 +252,7 @@ class ServiceConnectionController extends Controller
                 'type' => $serviceConnection->type->value,
                 'name' => $serviceConnection->name.($serviceConnection->is_active ? '' : ' (inactive)'),
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -268,7 +271,7 @@ class ServiceConnectionController extends Controller
             return $validated;
         }
 
-        $existingSettings = $validated['settings'] ?? $serviceConnection?->settings ?? [];
+        $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
         $existingSettings['whisparr_version'] = $version;
         $validated['settings'] = $existingSettings;
 
@@ -344,7 +347,7 @@ class ServiceConnectionController extends Controller
 
         $token = $serviceConnection->webhook_token;
 
-        return is_string($token) && $token !== ''
+        return $token !== ''
             ? $base.'?token='.urlencode($token)
             : $base;
     }
@@ -684,10 +687,10 @@ class ServiceConnectionController extends Controller
         try {
             $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
 
-            $result = match ($serviceConnection->type) {
-                ServiceType::Emby => $client->getSystemInfo(),
-                ServiceType::Seerr => $client->getStatus(),
-                ServiceType::SABnzbd => $client->getVersion(),
+            $result = match (true) {
+                $client instanceof EmbyClient => $client->getSystemInfo(),
+                $client instanceof SeerrClient => $client->getStatus(),
+                $client instanceof SabnzbdClient => $client->getVersion(),
                 default => $client->getSystemStatus(),
             };
 

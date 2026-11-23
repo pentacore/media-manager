@@ -423,7 +423,8 @@ class AnimeController extends Controller
             return 'all';
         }
 
-        $seasons = collect($details['seasons'] ?? [])
+        $rawSeasons = $details['seasons'] ?? [];
+        $seasons = collect(is_array($rawSeasons) ? $rawSeasons : [])
             ->filter(fn (array $s): bool => (int) ($s['seasonNumber'] ?? $s['season_number'] ?? 0) > 0
                 && ! empty($s['airDate'] ?? $s['air_date'] ?? null));
 
@@ -447,7 +448,9 @@ class AnimeController extends Controller
      */
     private function mapCandidates(array $results): array
     {
-        return collect($results['results'] ?? [])
+        $rawResults = $results['results'] ?? [];
+
+        return collect(is_array($rawResults) ? $rawResults : [])
             ->filter(fn (array $r): bool => in_array($r['mediaType'] ?? null, ['tv', 'movie'], true))
             ->take(3)
             ->map(fn (array $r): array => [

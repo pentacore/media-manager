@@ -206,6 +206,8 @@ class MediaActionController extends Controller
         $arrClient = $arrConnections->client($connection);
 
         try {
+            // The upstream body is untrusted: a row is not guaranteed to be an object.
+            /** @var array<int, mixed> $releases */
             $releases = $arrClient->getReleases($params);
         } catch (RequestException|ConnectionException) {
             return response()->json(['message' => sprintf('%s is unreachable.', ucfirst($serviceType->value))], 502);

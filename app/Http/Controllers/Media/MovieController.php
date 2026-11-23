@@ -19,6 +19,9 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * @extends BaseArrController<RadarrClient>
+ */
 class MovieController extends BaseArrController
 {
     public function index(Request $request): Response|RedirectResponse

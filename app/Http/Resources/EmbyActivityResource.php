@@ -43,7 +43,7 @@ class EmbyActivityResource extends JsonResource
             'action' => $this->action,
             'play_position' => $this->play_position,
             'duration_ticks' => $this->duration_ticks,
-            'emby_username' => $this->whenLoaded('embyUserLink', fn () => $this->embyUserLink?->emby_username),
+            'emby_username' => $this->whenLoaded('embyUserLink', fn () => $this->embyUserLink->emby_username),
             'created_at' => $this->created_at?->toISOString(),
             'can_toggle_played' => $this->relationLoaded('embyUserLink')
                 && $request->user() !== null

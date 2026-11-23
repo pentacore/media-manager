@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\ConversationStore;
-use Laravel\Ai\Contracts\PaginatesConversations;
 use Laravel\Ai\Storage\StoredMessage;
 
 class AiConversationController extends Controller
@@ -125,11 +124,11 @@ class AiConversationController extends Controller
             'status' => ($storedMessage->meta['stopped'] ?? false) === true ? 'stopped' : $storedMessage->status->value,
             'error' => is_string($error) ? $error : null,
             'tool_groups' => RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null),
-            'steps' => array_values(array_map(static fn (array $step): array => [
+            'steps' => array_map(static fn (array $step): array => [
                 'content' => (string) ($step['content'] ?? ''),
                 'reasoning' => (string) ($step['reasoning'] ?? ''),
                 'tool_calls' => array_values($step['tool_calls'] ?? []),
-            ], $storedMessage->steps)),
+            ], $storedMessage->steps),
             'created_at' => (string) $storedMessage->createdAt?->toJSON(),
         ];
     }
@@ -147,7 +146,6 @@ class AiConversationController extends Controller
             : null;
 
         $conversationStore = resolve(ConversationStore::class);
-        abort_unless($conversationStore instanceof PaginatesConversations, 500);
 
         $cursorPaginator = $conversationStore->paginateConversationMessages(
             $conversation,

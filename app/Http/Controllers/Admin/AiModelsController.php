@@ -149,7 +149,7 @@ class AiModelsController extends Controller
     private function sameModelWarning(ResolvedSelection $verifier, ResolvedSelection $decision): ?string
     {
         return $verifier->provider === $decision->provider && $verifier->model === $decision->model
-            ? __('Runs on the same model as the Decision agent, so its second opinion is less independent.')
+            ? (string) __('Runs on the same model as the Decision agent, so its second opinion is less independent.')
             : null;
     }
 
@@ -250,13 +250,13 @@ class AiModelsController extends Controller
             return [['provider' => null, 'model' => null, 'reasoning' => null, 'min_pool_percent' => null, 'min_pool_tokens' => null]];
         }
 
-        return $tiers->map(fn (AiTaskModel $aiTaskModel): array => [
+        return array_values($tiers->map(fn (AiTaskModel $aiTaskModel): array => [
             'provider' => $this->savedProvider($aiTaskModel),
             'model' => $aiTaskModel->model,
             'reasoning' => $aiTaskModel->reasoning?->value,
             'min_pool_percent' => $aiTaskModel->min_pool_percent,
             'min_pool_tokens' => $aiTaskModel->min_pool_tokens,
-        ])->values()->all();
+        ])->all());
     }
 
     /**
@@ -376,7 +376,7 @@ class AiModelsController extends Controller
 
     /**
      * @param  array<string, array{supports_reasoning: bool|null, levels: list<string>|null}>  $modelCapabilities  keyed "provider|model"
-     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string, reasoning_hint: string|null, tier: array{position: int, count: int, reason: string|null}|null}
+     * @return array{provider: string, model: string, reasoning: string, reasoning_label: string, reasoning_hint: string|null, tier: array{position: int, count: int, reason: string|null, via: string|null}|null}
      */
     private function summary(ResolvedSelection $resolvedSelection, array $modelCapabilities): array
     {
@@ -389,8 +389,8 @@ class AiModelsController extends Controller
             'reasoning_label' => $resolvedSelection->reasoning->label(),
             'tier' => $resolvedSelection->tier?->toArray(),
             'reasoning_hint' => match (true) {
-                ! ReasoningOptions::supportsProvider($resolvedSelection->provider) => __('Not supported by this provider'),
-                $supported === false => __("Model doesn't reason"),
+                ! ReasoningOptions::supportsProvider($resolvedSelection->provider) => (string) __('Not supported by this provider'),
+                $supported === false => (string) __("Model doesn't reason"),
                 default => null,
             },
         ];
