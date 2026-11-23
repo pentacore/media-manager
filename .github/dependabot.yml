@@ -48,6 +48,16 @@ updates:
       # once a release with it is out.
       - dependency-name: vue-tsc
         versions: ['3.3.12', '3.3.13', '3.3.14']
+      # eslint-plugin-vue 10.12.1 peers @stylistic/eslint-plugin ^5. Support
+      # for 6 is merged (vuejs/eslint-plugin-vue#3264) but unreleased. Drop
+      # this once an eslint-plugin-vue release allows ^6.
+      - dependency-name: '@stylistic/eslint-plugin'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint 8.73 peers typescript <6.1, and vue-tsc still needs
+      # the classic compiler API that TypeScript 7 drops. Drop this once both
+      # support 7.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
