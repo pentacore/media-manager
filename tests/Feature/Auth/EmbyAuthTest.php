@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Actions\CreateUserWithBootstrapRole;
 use App\Enums\UserRole;
 use App\Models\EmbyUserLink;
