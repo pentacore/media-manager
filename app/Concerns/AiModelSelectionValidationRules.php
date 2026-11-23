@@ -7,7 +7,6 @@ namespace App\Concerns;
 use App\Ai\ModelCatalog;
 use App\Enums\AiReasoningLevel;
 use App\Models\AiModelPrice;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
@@ -27,7 +26,10 @@ trait AiModelSelectionValidationRules
     protected function selectionRules(string $prefix, bool $withReasoning = true): array
     {
         return [
-            $this->selectionKey($prefix, 'provider') => ['nullable', 'string', Rule::in(resolve(ModelCatalog::class)->textProviders())],
+            // Only configured providers are valid, but that set follows the
+            // environment's API keys, so validatePricedSelection() checks it:
+            // an `in:` rule here would make the generated request type differ per .env.
+            $this->selectionKey($prefix, 'provider') => ['nullable', 'string', 'max:100'],
             $this->selectionKey($prefix, 'model') => ['nullable', 'string', 'max:100'],
             ...($withReasoning ? [$this->selectionKey($prefix, 'reasoning') => ['nullable', 'string', AiReasoningLevel::validationRule()]] : []),
         ];
@@ -53,6 +55,13 @@ trait AiModelSelectionValidationRules
     {
         // Non-string values are reported by the field rules; this hook still runs after them.
         if (! is_null($provider) && ! is_string($provider) || ! is_null($model) && ! is_string($model)) {
+            return;
+        }
+
+        if (filled($provider) && ! in_array($provider, resolve(ModelCatalog::class)->textProviders(), true)) {
+            $key = $this->selectionKey($prefix, 'provider');
+            $validator->errors()->add($key, __('validation.in', ['attribute' => $validator->getDisplayableAttribute($key)]));
+
             return;
         }
 

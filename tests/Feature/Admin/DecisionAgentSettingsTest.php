@@ -293,7 +293,7 @@ test('a jev engine stored for an event survives a save once the classifier is go
             decisionAgentEventOverride('sonarr:Download', ['engine' => 'jev']),
             decisionAgentEventOverride('radarr:Grab', ['engine' => 'jev']),
         ]]))
-        ->assertSessionHasErrors('second_opinion_event_overrides.1.engine')
+        ->assertSessionHasErrors(['second_opinion_event_overrides.1.engine' => 'Configure a classification provider on AI Settings before using Jev.'])
         ->assertSessionDoesntHaveErrors('second_opinion_event_overrides.0.engine');
 
     expect(resolve(DecisionAgentSettings::class)->maxActionsPerRun())->toBe(5);
