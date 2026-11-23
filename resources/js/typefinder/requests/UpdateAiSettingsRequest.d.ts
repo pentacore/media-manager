@@ -29,7 +29,7 @@ export type UpdateAiSettingsRequest = {
   classification_audit_sample_rate?: number;
   reranking_provider?: 'cohere' | 'jina' | 'openrouter';
   reranking_model?: string | null;
-  embeddings_provider?: 'ollama' | 'openai' | 'openrouter';
+  embeddings_provider?: string;
   embeddings_model?: string | null;
   openrouter_sort?: 'price' | 'throughput' | 'latency' | 'default' | null;
   openrouter_deny_data_collection?: boolean;
