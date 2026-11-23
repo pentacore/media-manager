@@ -13,6 +13,6 @@ export type UploadRequest = {
   forced: boolean;
   hearing_impaired: boolean;
   subtitle_file: File;
-  path?: unknown;
-  url?: unknown;
+  path?: never;
+  url?: never;
 };

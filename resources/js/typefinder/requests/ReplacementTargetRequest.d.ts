@@ -4,7 +4,9 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-export type ReplacementTargetRequest = {
+export type ReplacementTargetRequest = Record<string, never>;
+
+export type ReplacementTargetRequestQuery = {
   service: 'sonarr' | 'radarr';
   service_connection_id: number;
   item_id: number;

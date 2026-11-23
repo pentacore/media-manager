@@ -4,7 +4,9 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-export type ReleaseSearchRequest = {
+export type ReleaseSearchRequest = Record<string, never>;
+
+export type ReleaseSearchRequestQuery = {
   service: 'sonarr' | 'radarr';
   service_connection_id: number;
   origin?: 'seasonal_anime' | null;

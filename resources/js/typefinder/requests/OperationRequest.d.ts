@@ -24,9 +24,9 @@ export type OperationRequest = {
     gss?: boolean | null;
     original_format?: boolean | null;
   } | null;
-  path?: unknown;
-  url?: unknown;
-  subtitle?: unknown;
-  provider?: unknown;
-  provider_url?: unknown;
+  path?: never;
+  url?: never;
+  subtitle?: never;
+  provider?: never;
+  provider_url?: never;
 };

@@ -11,9 +11,9 @@ export type SearchRequestQuery = {
   media_type: 'episode' | 'movie';
   media_id: number;
   target_fingerprint: string;
-  path?: unknown;
-  url?: unknown;
-  subtitle?: unknown;
-  provider?: unknown;
-  provider_url?: unknown;
+  path?: never;
+  url?: never;
+  subtitle?: never;
+  provider?: never;
+  provider_url?: never;
 };
