@@ -538,7 +538,7 @@ vendor/bin/sail artisan wayfinder:generate --with-form
 vendor/bin/sail artisan typefinder:generate
 ```
 
-`resources/js/actions/`, `resources/js/routes/`, and `resources/js/typefinder/` are all auto-generated — don't edit by hand.
+`resources/js/actions/`, `resources/js/routes/`, and `resources/js/typefinder/` are all auto-generated — don't edit by hand. Wayfinder's folders are gitignored. `resources/js/typefinder/` is committed: regenerate it in the same commit as the backend change, and `tests/Feature/GeneratedTypesTest.php` fails when it is stale or when generation warns (a skipped class has no type).
 
 ## Architecture
 
@@ -616,7 +616,7 @@ Frontend composables in `resources/js/composables/` subscribe to these (`useServ
 - Every change needs a test (Pest feature tests preferred); run the suite before committing
 - Run `rector` then `pint --dirty` before committing PHP changes
 - Regenerate Wayfinder + Typefinder output after backend changes that touch routes, models, enums, or form requests
-- Don't commit changes to `resources/js/actions/`, `resources/js/routes/`, or `resources/js/typefinder/` directly — regenerate them
+- Don't edit `resources/js/actions/`, `resources/js/routes/`, or `resources/js/typefinder/` by hand — regenerate them; commit the regenerated `resources/js/typefinder/` with the change
 
 ## License
 

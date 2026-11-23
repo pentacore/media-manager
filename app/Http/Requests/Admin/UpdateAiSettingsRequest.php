@@ -12,6 +12,7 @@ use App\Settings\AiSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 use Override;
 
 class UpdateAiSettingsRequest extends FormRequest
@@ -53,7 +54,8 @@ class UpdateAiSettingsRequest extends FormRequest
             'classification_audit_sample_rate' => ['sometimes', 'numeric', 'between:0,1'],
             'reranking_provider' => ['sometimes', 'string', Rule::in(AiSettings::RERANKING_PROVIDERS)],
             'reranking_model' => ['nullable', 'string', 'max:100'],
-            'embeddings_provider' => ['sometimes', 'string', Rule::in(resolve(ModelCatalog::class)->embeddingProviders())],
+            // Configured providers only, checked in after(): the set follows the API keys.
+            'embeddings_provider' => ['sometimes', 'string', 'max:100'],
             'embeddings_model' => ['nullable', 'string', 'max:100'],
             // The select's "OpenRouter default" option posts the `default`
             // sentinel alongside the enum values, so the controller can
@@ -113,6 +115,24 @@ class UpdateAiSettingsRequest extends FormRequest
         $map = config('mediamanager.ai.pricing.providers', []);
 
         return array_values(array_unique(array_values($map)));
+    }
+
+    /**
+     * Only a configured provider that can embed is valid. That set follows
+     * the API keys, so it is checked here rather than in the field rule
+     * (a rule-level list would make the generated request type differ per .env).
+     *
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $provider = $this->input('embeddings_provider');
+
+            if (is_string($provider) && ! $validator->errors()->has('embeddings_provider') && ! in_array($provider, resolve(ModelCatalog::class)->embeddingProviders(), true)) {
+                $validator->errors()->add('embeddings_provider', __('validation.in', ['attribute' => $validator->getDisplayableAttribute('embeddings_provider')]));
+            }
+        }];
     }
 
     /**

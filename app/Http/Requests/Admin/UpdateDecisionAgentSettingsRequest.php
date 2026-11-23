@@ -11,6 +11,7 @@ use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 #[TypefinderOverrides(['second_opinion_event_overrides' => 'Array<{ event_key: string; mode: string | null; engine: string | null; jev_threshold: number | null }>'])]
@@ -29,26 +30,50 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
             'notify_on_suggest' => ['required', 'boolean'],
             'notify_on_act' => ['required', 'boolean'],
             'max_actions_per_run' => ['required', 'integer', 'min:1', 'max:20'],
-            'second_opinion_engine' => ['required', 'string', Rule::in($this->allowedSecondOpinionEngines())],
+            'second_opinion_engine' => ['required', 'string', SecondOpinionEngine::validationRule()],
             'second_opinion_jev_threshold' => ['required', 'numeric', 'min:0', 'max:1'],
             'second_opinion_event_overrides' => ['sometimes', 'array', 'list'],
             'second_opinion_event_overrides.*' => ['array:event_key,mode,engine,jev_threshold'],
             'second_opinion_event_overrides.*.event_key' => ['required', 'string', 'distinct', Rule::in(DecisionAgentSettings::availableEventKeys())],
             'second_opinion_event_overrides.*.mode' => ['nullable', 'string', SecondOpinionMode::validationRule()],
             'second_opinion_event_overrides.*.jev_threshold' => ['nullable', 'numeric', 'min:0', 'max:1'],
-            ...$this->eventOverrideEngineRules(),
+            'second_opinion_event_overrides.*.engine' => ['nullable', 'string', SecondOpinionEngine::validationRule()],
         ];
     }
 
     /**
-     * @return array<string, string>
+     * The field rules accept every engine; whether Jev is allowed follows the
+     * classifier's API key and the stored settings, so it is checked here
+     * (a rule-level list would make the generated request type differ per .env).
+     *
+     * @return array<int, callable(Validator): void>
      */
-    public function messages(): array
+    public function after(): array
     {
-        return [
-            'second_opinion_engine.in' => 'Configure a classification provider on AI Settings before using Jev.',
-            'second_opinion_event_overrides.*.engine.in' => 'Configure a classification provider on AI Settings before using Jev.',
-        ];
+        return [function (Validator $validator): void {
+            $message = 'Configure a classification provider on AI Settings before using Jev.';
+            $engine = $this->input('second_opinion_engine');
+
+            if (is_string($engine) && ! $validator->errors()->has('second_opinion_engine') && ! in_array($engine, $this->allowedSecondOpinionEngines(), true)) {
+                $validator->errors()->add('second_opinion_engine', $message);
+            }
+
+            $overrides = $this->input('second_opinion_event_overrides');
+
+            if (! is_array($overrides)) {
+                return;
+            }
+
+            foreach ($overrides as $index => $override) {
+                $key = sprintf('second_opinion_event_overrides.%s.engine', $index);
+                $overrideEngine = data_get($override, 'engine');
+                $eventKey = data_get($override, 'event_key');
+
+                if (is_string($overrideEngine) && ! $validator->errors()->has($key) && ! in_array($overrideEngine, $this->allowedEventOverrideEngines(is_string($eventKey) ? $eventKey : null), true)) {
+                    $validator->errors()->add($key, $message);
+                }
+            }
+        }];
     }
 
     /**
@@ -68,32 +93,6 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
             SecondOpinionEngine::Llm->value,
             resolve(DecisionAgentSettings::class)->secondOpinionEngine()->value,
         ]));
-    }
-
-    /**
-     * @return array<string, list<mixed>>
-     */
-    private function eventOverrideEngineRules(): array
-    {
-        $overrides = $this->input('second_opinion_event_overrides');
-
-        if (! is_array($overrides)) {
-            return [];
-        }
-
-        $rules = [];
-
-        foreach (array_keys($overrides) as $index) {
-            $eventKey = data_get($overrides, sprintf('%s.event_key', $index));
-
-            $rules[sprintf('second_opinion_event_overrides.%s.engine', $index)] = [
-                'nullable',
-                'string',
-                Rule::in($this->allowedEventOverrideEngines(is_string($eventKey) ? $eventKey : null)),
-            ];
-        }
-
-        return $rules;
     }
 
     /**

@@ -11,6 +11,11 @@ import { defineConfig } from 'vite';
 // regenerating types automatically.
 const skipTypeGeneration = process.env.SKIP_TYPE_GENERATION === '1';
 
+// resources/js/typefinder is committed and gated by tests/Feature/GeneratedTypesTest.php, so CI
+// builds use it as is: regenerating there would run against a database that is not migrated yet
+// and overwrite the committed files with column-less models. Local dev/build still regenerate.
+const skipTypefinder = skipTypeGeneration || process.env.CI === 'true';
+
 export default defineConfig({
     plugins: [
         laravel({
@@ -39,7 +44,7 @@ export default defineConfig({
             // types are already on disk. Args still get appended; `:` ignores them.
             ...(skipTypeGeneration ? { command: ':' } : {}),
         }),
-        typefinder(skipTypeGeneration ? { buildCommand: false } : {}),
+        typefinder(skipTypefinder ? { buildCommand: false } : {}),
     ],
     // Vite externalises every runtime dependency from the SSR build by default, leaving bare
     // `import ... from "vue"` specifiers that need node_modules on disk to resolve. The production
