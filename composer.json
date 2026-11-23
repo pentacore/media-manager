@@ -78,17 +78,19 @@
         "analyse": [
             "phpstan analyse --memory-limit=2G"
         ],
-        "ci:check": [
+        "refactor:check": [
+            "rector process --dry-run --no-progress-bar"
+        ],
+        "test": [
             "Composer\\Config::disableProcessTimeout",
+            "@php artisan config:clear --ansi",
+            "@lint:check",
+            "@refactor:check",
+            "@analyse",
             "npm run lint:check",
             "npm run format:check",
             "npm run types:check",
-            "@test"
-        ],
-        "test": [
-            "@php artisan config:clear --ansi",
-            "@lint:check",
-            "@php artisan test"
+            "@php artisan test --compact --parallel --exclude-testsuite=Browser"
         ],
         "test:browser": [
             "Composer\\Config::disableProcessTimeout",
