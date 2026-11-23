@@ -46,7 +46,8 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '25'
+          # semantic-release 26 requires Node >= 26.13.
+          node-version: '26'
           cache: npm
 
       - name: Install npm dependencies
@@ -55,10 +56,25 @@ jobs:
       - name: Stage releaserc
         run: cp .releaserc.main.json .releaserc.json
 
+      # Runs the repo's own semantic-release (package-lock) on the Node set up
+      # above. cycjimmy/semantic-release-action ran it inside the action's own
+      # Node 24 runtime, which semantic-release 26 no longer supports. The
+      # outputs it exposed are rebuilt here: a release leaves a new v* tag on the
+      # chore(release) commit that @semantic-release/git made at HEAD (a re-run
+      # on an already released tip finds the old tag and publishes nothing).
       - id: sr
-        uses: cycjimmy/semantic-release-action@ad51787758d9654d5a75150a89a6fa9b3ccef95e # v8.1.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          before="$(git tag --points-at HEAD --list 'v*' | head -n 1)"
+          npx --no-install semantic-release
+          tag="$(git tag --points-at HEAD --list 'v*' | head -n 1)"
+          if [ -n "$tag" ] && [ "$tag" != "$before" ]; then
+            echo "new_release_published=true" >> "$GITHUB_OUTPUT"
+            echo "new_release_version=${tag#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "new_release_published=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Tags pushed via GITHUB_TOKEN do NOT trigger other workflows
       # (GitHub safety rule against recursive runs). docker.yml therefore
