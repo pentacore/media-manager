@@ -30,9 +30,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read EmbyUserLink $embyUserLink
  *
  * @method static EmbyActivityFactory factory($count = null, $state = [])
- * @method static Builder<static>|EmbyActivity newModelQuery()
- * @method static Builder<static>|EmbyActivity newQuery()
- * @method static Builder<static>|EmbyActivity query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  * @method static Builder<static>|EmbyActivity whereAction($value)
  * @method static Builder<static>|EmbyActivity whereCreatedAt($value)
  * @method static Builder<static>|EmbyActivity whereDurationTicks($value)
@@ -75,6 +75,8 @@ class EmbyActivity extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

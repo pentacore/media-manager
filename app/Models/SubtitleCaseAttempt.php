@@ -80,6 +80,11 @@ class SubtitleCaseAttempt extends Model
         return $this->belongsTo(ActionRequest::class);
     }
 
+    /**
+     * Set-only: the `array` cast decodes reads, this validates and encodes writes.
+     *
+     * @return Attribute<array<string, mixed>|null, mixed>
+     */
     protected function summary(): Attribute
     {
         return Attribute::make(

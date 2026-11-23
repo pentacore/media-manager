@@ -6,8 +6,8 @@ namespace App\Concerns;
 
 use App\Ai\Decision\DecisionPrompt;
 use App\Settings\DecisionAgentSettings;
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\In;
 use Illuminate\Validation\Rules\RequiredIf;
 use Illuminate\Validation\Validator;
 
@@ -19,7 +19,7 @@ trait DecisionEventValidationRules
 {
     /**
      * @param  string  $prefix  the event's dotted path with a trailing dot, e.g. `input.event.`
-     * @return array<string, array<int, RequiredIf|ValidationRule|string>>
+     * @return array<string, list<In|RequiredIf|string>>
      */
     protected function decisionEventRules(string $prefix, bool $required): array
     {

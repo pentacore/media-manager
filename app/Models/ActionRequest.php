@@ -47,9 +47,9 @@ use Override;
  * @property-read MediaReplacementAttempt|null $mediaReplacementAttempt
  *
  * @method static ActionRequestFactory factory($count = null, $state = [])
- * @method static Builder<static>|ActionRequest newModelQuery()
- * @method static Builder<static>|ActionRequest newQuery()
- * @method static Builder<static>|ActionRequest query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  * @method static Builder<static>|ActionRequest whereApprovedBy($value)
  * @method static Builder<static>|ActionRequest whereCreatedAt($value)
  * @method static Builder<static>|ActionRequest whereDescription($value)
@@ -180,7 +180,7 @@ class ActionRequest extends Model
      * replacement attempt (that FK cascades; the attempt is pruned on its own
      * window first).
      *
-     * @return Builder<self>
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

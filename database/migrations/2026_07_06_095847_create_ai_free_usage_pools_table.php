@@ -78,6 +78,7 @@ return new class extends Migration
             ->get(['id', 'free_usage_pool_id']);
 
         foreach ($prices as $price) {
+            /** @var object{unified: mixed, free_input_tokens: mixed, free_output_tokens: mixed}|null $pool */
             $pool = DB::table('ai_free_usage_pools')->find($price->free_usage_pool_id);
             if ($pool === null) {
                 continue;

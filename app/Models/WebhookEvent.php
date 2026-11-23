@@ -36,9 +36,9 @@ use Override;
  * @property-read Collection<int, ActivityLog> $activityLogs
  *
  * @method static WebhookEventFactory factory($count = null, $state = [])
- * @method static Builder<static>|WebhookEvent newModelQuery()
- * @method static Builder<static>|WebhookEvent newQuery()
- * @method static Builder<static>|WebhookEvent query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  * @method static Builder<static>|WebhookEvent whereCreatedAt($value)
  * @method static Builder<static>|WebhookEvent whereEventType($value)
  * @method static Builder<static>|WebhookEvent whereId($value)
@@ -146,6 +146,8 @@ class WebhookEvent extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

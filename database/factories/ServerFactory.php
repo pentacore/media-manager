@@ -22,7 +22,7 @@ class ServerFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => Str::slug(fake()->unique()->words(2, true)),
+            'name' => Str::slug(implode(' ', (array) fake()->unique()->words(2, true))),
         ];
     }
 

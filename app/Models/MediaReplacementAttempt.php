@@ -141,6 +141,8 @@ class MediaReplacementAttempt extends Model
      * Only terminal attempts (completed_at set) are ever pruned — an
      * in-flight attempt carries the durable state the executor, tracker,
      * and sweep coordinate through.
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

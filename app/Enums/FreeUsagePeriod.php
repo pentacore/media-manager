@@ -53,6 +53,9 @@ enum FreeUsagePeriod: string
      * Matching granularity for Postgres date_trunc(); date_trunc('week', …)
      * is ISO (Monday-based), which lines up with currentPeriodStart().
      */
+    /**
+     * @return 'day'|'week'|'month'
+     */
     public function sqlDateTrunc(): string
     {
         return match ($this) {

@@ -21,7 +21,7 @@ class BenchmarkRunFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => Str::ucfirst(fake()->unique()->words(3, true)),
+            'name' => Str::ucfirst(implode(' ', (array) fake()->unique()->words(3, true))),
             'status' => BenchmarkRunStatus::Pending,
             'candidates' => [['provider' => 'openai', 'model' => 'gpt-5-mini']],
             'judge' => null,
