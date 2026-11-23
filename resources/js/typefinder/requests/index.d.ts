@@ -35,7 +35,7 @@ export type { HistoryPageRequest, HistoryPageRequestQuery } from './HistoryPageR
 export type { LibraryPageRequest, LibraryPageRequestQuery } from './LibraryPageRequest';
 export type { LinkDirectoryUserRequest } from './LinkDirectoryUserRequest';
 export type { LinkEmbyAccountRequest } from './LinkEmbyAccountRequest';
-export type { ManualImportCandidatesRequest } from './ManualImportCandidatesRequest';
+export type { ManualImportCandidatesRequest, ManualImportCandidatesRequestQuery } from './ManualImportCandidatesRequest';
 export type { MarkHistoryFailedRequest } from './MarkHistoryFailedRequest';
 export type { MissingPageRequest, MissingPageRequestQuery } from './MissingPageRequest';
 export type { MonitorEpisodesRequest } from './MonitorEpisodesRequest';
@@ -51,10 +51,10 @@ export type { PreviewVerifierPromptRequest } from './PreviewVerifierPromptReques
 export type { ProfileDeleteRequest } from './ProfileDeleteRequest';
 export type { ProfileUpdateRequest } from './ProfileUpdateRequest';
 export type { QueueReplacementRequest } from './QueueReplacementRequest';
-export type { ReleaseSearchRequest } from './ReleaseSearchRequest';
+export type { ReleaseSearchRequest, ReleaseSearchRequestQuery } from './ReleaseSearchRequest';
 export type { RemoveQueueItemRequest } from './RemoveQueueItemRequest';
 export type { RenameConversationRequest } from './RenameConversationRequest';
-export type { ReplacementTargetRequest } from './ReplacementTargetRequest';
+export type { ReplacementTargetRequest, ReplacementTargetRequestQuery } from './ReplacementTargetRequest';
 export type { RequestAnimeRequest } from './RequestAnimeRequest';
 export type { SearchChatTemplateLibraryRequest, SearchChatTemplateLibraryRequestQuery } from './SearchChatTemplateLibraryRequest';
 export type { SearchMediaRequest } from './SearchMediaRequest';

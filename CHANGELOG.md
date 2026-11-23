@@ -1,3 +1,5 @@
+## [1.62.3](https://github.com/pentacore/media-manager/compare/v1.62.2...v1.62.3) (2026-11-23)
+
 ## [1.62.2](https://github.com/pentacore/media-manager/compare/v1.62.1...v1.62.2) (2026-11-23)
 
 ### Bug Fixes

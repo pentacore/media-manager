@@ -20,7 +20,7 @@ import { formatBytes } from '@/lib/format';
 import { jsonRequest } from '@/lib/http';
 import { cn } from '@/lib/utils';
 import type {
-    ReplacementTargetRequest,
+    ReplacementTargetRequestQuery,
     SubtitleRuleStrength,
 } from '@/typefinder';
 
@@ -83,7 +83,7 @@ interface ReplaceResponse {
 }
 
 const props = defineProps<{
-    service: ReplacementTargetRequest['service'];
+    service: ReplacementTargetRequestQuery['service'];
     connectionId: number;
     itemId: number;
     seasonNumber?: number;
@@ -126,10 +126,7 @@ const selectedCandidate = computed(
         ) ?? null,
 );
 
-// The whole request is the query string; its keys come from a rules helper shared
-// with POST requests, so they cannot be tagged @query yet:
-// https://github.com/pentacore/Laravel-Typefinder/issues/129
-function targetQuery(): ReplacementTargetRequest {
+function targetQuery(): ReplacementTargetRequestQuery {
     return {
         service: props.service,
         service_connection_id: props.connectionId,

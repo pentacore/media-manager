@@ -30,7 +30,7 @@ import {
 import { formatBytes } from '@/lib/format';
 import { focusedMenuTrigger, returnFocusTo } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
-import type { ManualImportCandidatesRequest } from '@/typefinder';
+import type { ManualImportCandidatesRequestQuery } from '@/typefinder';
 
 interface QueueRow {
     id: number;
@@ -404,13 +404,10 @@ function openManualImport(row: QueueRow): void {
                 service: row.service,
                 downloadId: row.download_id,
             },
-            // ManualImportCandidatesRequest's only key is the query string; it comes
-            // from a shared rules helper, so it cannot be tagged @query yet:
-            // https://github.com/pentacore/Laravel-Typefinder/issues/129
             {
                 query: {
                     service_connection_id: row.service_connection_id,
-                } satisfies ManualImportCandidatesRequest,
+                } satisfies ManualImportCandidatesRequestQuery,
             },
         ),
         { headers: { Accept: 'application/json' }, credentials: 'same-origin' },

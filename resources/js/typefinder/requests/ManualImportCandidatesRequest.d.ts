@@ -4,6 +4,8 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-export type ManualImportCandidatesRequest = {
+export type ManualImportCandidatesRequest = Record<string, never>;
+
+export type ManualImportCandidatesRequestQuery = {
   service_connection_id: number;
 };

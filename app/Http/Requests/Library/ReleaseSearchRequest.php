@@ -20,9 +20,13 @@ class ReleaseSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @query */
             ...$this->mediaActionTargetRules(),
+            /** @query */
             'item_id' => ['required', 'integer', 'min:1'],
+            /** @query */
             'season_number' => ['nullable', 'integer', 'min:0'],
+            /** @query */
             'episode_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
