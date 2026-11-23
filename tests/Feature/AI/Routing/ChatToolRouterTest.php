@@ -248,6 +248,25 @@ test('recording tool use marks included groups used or unused', function (): voi
         ->and($rows['indexers']->outcome_at)->toBeNull();
 });
 
+test('recording tool use runs no update for a turn that recorded no rows', function (): void {
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake(fn (): never => throw new RuntimeException('down'));
+    $chatToolRouter = resolve(ChatToolRouter::class);
+
+    $chatToolRouter->route('what is playing?', null, 'chat_turn:t5');
+
+    $updates = [];
+    DB::listen(function ($query) use (&$updates): void {
+        if (str_starts_with($query->sql, 'update')) {
+            $updates[] = $query->sql;
+        }
+    });
+
+    $chatToolRouter->recordToolUse('chat_turn:t5', [class_basename(NowPlayingTool::class)]);
+
+    expect($updates)->toBe([]);
+});
+
 test('routing without a turn key records nothing', function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
     Classification::fake([routerGroupAnswers(['downloads' => 0.9])]);

@@ -32,18 +32,46 @@ final readonly class ClassificationOutcomeRecorder
         ?float $threshold = null,
         ?string $predicted = null,
     ): void {
+        $this->create($classificationGate, $subjectKey, $question, $probability, $classificationVerdict, $threshold, $predicted);
+    }
+
+    /**
+     * Store a row whose outcome is already known, so no later resolve() has to
+     * find it among the subject's other open rows.
+     */
+    public function recordResolved(
+        ClassificationGate $classificationGate,
+        string $subjectKey,
+        string $question,
+        ?float $probability,
+        ClassificationVerdict $classificationVerdict,
+        ?float $threshold,
+        ?string $predicted,
+        bool $positive,
+        string $detail,
+    ): void {
+        $this->create($classificationGate, $subjectKey, $question, $probability, $classificationVerdict, $threshold, $predicted, [
+            'outcome_positive' => $positive,
+            'outcome_detail' => Str::limit($detail, 255, ''),
+            'outcome_at' => now(),
+        ]);
+    }
+
+    /**
+     * The questions of the subject's open rows that carry one of the given
+     * verdicts, so a caller can skip resolving a subject that recorded none.
+     *
+     * @param  list<ClassificationVerdict>  $verdicts
+     * @return list<string>
+     */
+    public function openQuestions(ClassificationGate $classificationGate, string $subjectKey, array $verdicts): array
+    {
         try {
-            ClassificationOutcome::query()->create([
-                'gate' => $classificationGate,
-                'subject_key' => Str::limit($subjectKey, 100, ''),
-                'question' => Str::limit($question, 100, ''),
-                'predicted' => $predicted === null ? null : Str::limit($predicted, 100, ''),
-                'probability' => $probability,
-                'threshold' => $threshold,
-                'verdict' => $classificationVerdict,
-            ]);
+            return array_values($this->openRows($classificationGate, $subjectKey, $verdicts, null)->pluck('question')->all());
         } catch (Throwable $throwable) {
-            $this->logFailure('record', $classificationGate, $subjectKey, $throwable);
+            $this->logFailure('openQuestions', $classificationGate, $subjectKey, $throwable);
+
+            return [];
         }
     }
 
@@ -85,13 +113,15 @@ final readonly class ClassificationOutcomeRecorder
     public function resolveAgainst(ClassificationGate $classificationGate, string $subjectKey, string $actual, array $verdicts, ?string $predicted = null): void
     {
         try {
+            $detail = sprintf('actual: %s', $actual);
+
             $this->openRows($classificationGate, $subjectKey, $verdicts, null, $predicted)
-                ->get()
-                ->each(fn (ClassificationOutcome $classificationOutcome): bool => $classificationOutcome->update([
-                    'outcome_positive' => $classificationOutcome->predicted === $actual,
-                    'outcome_detail' => sprintf('actual: %s', $actual),
-                    'outcome_at' => now(),
-                ]));
+                ->where('predicted', $actual)
+                ->update(['outcome_positive' => true, 'outcome_detail' => $detail, 'outcome_at' => now(), 'updated_at' => now()]);
+
+            $this->openRows($classificationGate, $subjectKey, $verdicts, null, $predicted)
+                ->where(fn (Builder $builder): Builder => $builder->whereNull('predicted')->orWhere('predicted', '!=', $actual))
+                ->update(['outcome_positive' => false, 'outcome_detail' => $detail, 'outcome_at' => now(), 'updated_at' => now()]);
         } catch (Throwable $throwable) {
             $this->logFailure('resolveAgainst', $classificationGate, $subjectKey, $throwable);
         }
@@ -105,6 +135,35 @@ final readonly class ClassificationOutcomeRecorder
         $rate = $this->aiSettings->classificationAuditSampleRate();
 
         return $rate > 0.0 && (bool) Lottery::odds($rate)->choose();
+    }
+
+    /**
+     * @param  array<string, mixed>  $outcome
+     */
+    private function create(
+        ClassificationGate $classificationGate,
+        string $subjectKey,
+        string $question,
+        ?float $probability,
+        ClassificationVerdict $classificationVerdict,
+        ?float $threshold,
+        ?string $predicted,
+        array $outcome = [],
+    ): void {
+        try {
+            ClassificationOutcome::query()->create([
+                'gate' => $classificationGate,
+                'subject_key' => Str::limit($subjectKey, 100, ''),
+                'question' => Str::limit($question, 100, ''),
+                'predicted' => $predicted === null ? null : Str::limit($predicted, 100, ''),
+                'probability' => $probability,
+                'threshold' => $threshold,
+                'verdict' => $classificationVerdict,
+                ...$outcome,
+            ]);
+        } catch (Throwable $throwable) {
+            $this->logFailure('record', $classificationGate, $subjectKey, $throwable);
+        }
     }
 
     /**

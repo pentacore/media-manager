@@ -75,9 +75,32 @@ class ManualImportResolver
      */
     public function toImportPayload(array $candidates, string $service, string $downloadId, array $excludedPaths = []): array
     {
+        return $this->importFiles($this->kept($candidates, $excludedPaths)[0], $service, $downloadId);
+    }
+
+    /**
+     * The `excluded_paths` argument as a list of strings, whatever shape it
+     * arrived in (absent, null, or a list with stray non-strings).
+     *
+     * @return list<string>
+     */
+    public function normalizeExcludedPaths(mixed $excludedPaths): array
+    {
+        return array_values(array_filter((array) $excludedPaths, is_string(...)));
+    }
+
+    /**
+     * The ManualImport file rows for candidates already stripped of samples and
+     * exclusions; candidates that lack the required foreign key are dropped.
+     *
+     * @param  list<array<string, mixed>>  $kept
+     * @return array<int, array<string, mixed>>
+     */
+    private function importFiles(array $kept, string $service, string $downloadId): array
+    {
         $files = [];
 
-        foreach ($this->kept($candidates, $excludedPaths)[0] as $candidate) {
+        foreach ($kept as $candidate) {
             if (! $this->maps($candidate, $service)) {
                 continue;
             }
@@ -130,7 +153,7 @@ class ManualImportResolver
         [$kept, $skipped] = $this->kept($candidates, $excludedPaths);
 
         $total = count($kept);
-        $importable = count($this->toImportPayload($kept, $service, $downloadId));
+        $importable = count($this->importFiles($kept, $service, $downloadId));
 
         $reasons = [];
         if ($total === 0) {
