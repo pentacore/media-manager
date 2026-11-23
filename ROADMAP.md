@@ -1,0 +1,174 @@
+# Roadmap
+
+What is still open, as of v1.62.2 (2026-11-23). Every item lands as its own pull
+request. Finished items are removed here in the same pull request that finishes
+them. New follow-ups from reviews are added here.
+
+Markers: **decision** means the owner chooses first. **brainstorm** means a design
+discussion comes before any plan. Unmarked items can be picked up as they are.
+
+## Decisions
+
+- **Project conventions as repo rules** (decision): move the working conventions
+  into `.ai/rules/general.md` so every contributor and agent gets them. These are:
+    - Limits are admin settings.
+    - Follow-ups go to this file.
+    - UI pull requests get screenshots with fake data.
+    - Rebase and re-time the browser shards before a pull request.
+    - Parallel work gets its own worktree and test database.
+    - The Sail quirks.
+- **Dependency approval rule** (decision): no new Composer or npm package without
+  the owner's approval, with each approval dated in the rule.
+- **Browser shard target** (decision): the `BROWSER_SHARD_TARGET_SECONDS` repo
+  variable. 180 s today gives 8 shards; 240 s would give about 6 shards of about
+  6.5 minutes each.
+- **Optional tooling** (decision):
+    - Vite+ (`vp check`: oxlint with type checks, oxfmt) in place of ESLint and
+      Prettier. The custom ESLint rules would need porting, so evaluate it first.
+    - `php artisan dev` in place of the long `concurrently` line in `composer dev`.
+    - An automated responsive check of every page and dialog at 375 and 1440 px, in
+      light and dark mode. The alternative is to extend `MobileLayoutTest`.
+- **Jev cascade ruling** (decision): confirm that a human review does not
+  overwrite a cascade Jev row that the model already resolved.
+- **Chat template follow-ups** (decision, add or drop):
+    - `?body=` length (414).
+    - Per-route auth dataset.
+    - Duplicated `resolveActive`.
+    - Picker refresh races.
+    - Double insert on double-click.
+    - Raw "Failed to fetch" toast.
+    - Missing accessible labels: the template picker, and the `TimeWindowFilter`
+      group.
+
+## Brainstorms
+
+- **Frontend unit tests** (brainstorm): Vitest, `@vue/test-utils` and jsdom. For
+  example, the `inferChoices` unit cases are covered only by browser tests today.
+- **Project knowledge files** (brainstorm): `GLOSSARY.md` (domain terms and words
+  to avoid), `docs/adr/` for decisions that are hard to reverse, and a rule to
+  keep them current. When this lands, retire `TODO.md`.
+- **Rule files per feature area** (brainstorm): one rule file each for the action
+  queue, AI chat and tools, the *arr libraries and media replacement, each
+  covering every layer. Migrate one area at a time, when it is touched.
+- **Inertia live props** (brainstorm): replace `useRealtimeReload`, used in 14
+  files.
+- **AI runs and an MCP server** (brainstorm): the draft design covers AI runs, an
+  MCP foundation and AI management tools.
+- **AI features** (brainstorm):
+    - Jev score questions pick the chat model and reasoning tier per message.
+    - The scoped DecisionAgent prompt should list only the tools in scope.
+    - `SearchMediaReleasesTool` should reach Whisparr.
+    - `QueryActivityTool` uses `visibleTo(null)`, which is safe only while the AI
+      pages are admin-only.
+    - Turn on ToolSearch for the primary provider only, not the whole chain.
+    - Benchmark replay should answer `OfferChoicesTool`.
+    - Short-circuit a stuck download that is all samples.
+    - A multi-download stuck-import verdict.
+    - The price refresh's step reserve should bound tool calls.
+    - Refresh the cached tool-group options.
+    - Don't make `deliverTemplate` wait for the pins save.
+- **Stopped-run leftovers** (brainstorm, part of the AI features):
+    - Map stopped turns stored as failed before the change.
+    - Guard the usage and failure listeners.
+    - Don't count zero-token rows as requests.
+    - Avoid two user messages in a row after an empty stopped turn.
+    - Recheck the "Agent failed: " prefix on every laravel/ai upgrade.
+- **Platform extras** (brainstorm):
+    - PWA.
+    - Onboarding.
+    - Settings backup.
+    - Keyboard shortcuts.
+    - Resend a failed invite.
+- **Host monitoring, later phases** (brainstorm): AI diagnosis and intrusion
+  baselines (including restart-loop detection), then actions, then reflexes, then
+  Dockhand events.
+
+## Ready to pick up
+
+- **AI routing minors**, from the review of each AI routing pull request.
+    - Decision runs and the benchmark:
+        - A deadline for the whole decision run.
+        - Sweep window shorter than `retry_after`.
+        - Sweep never-claimed pending benchmark results.
+        - Apply the benchmark filter to the tool stats, rate limits and gates.
+        - Provider names vs driver literals.
+        - Entity-encoded fence tags.
+        - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
+          end to end.
+    - Scheduled benchmarks:
+        - A budget hard cap reads as "every model regressed".
+        - The regression banner needs a reload.
+        - Re-judging leaves stored regressions stale.
+        - More than 8 tier models break the estimate preview.
+        - Email channel offered with only one `toMail()`.
+        - A failed launch uses the "skipped" title.
+        - DST handling.
+    - Cross-run comparison:
+        - The drawer shows the original score in neutral mode.
+        - Duplicated task order, comparability rule, concurrency middleware and
+          candidate lookup.
+        - Test gaps.
+    - Chat cases:
+        - The 3-per-turn cap.
+        - Draft id scoping.
+        - Attachment storage, orphan files and preview.
+        - Duplicated attachment mapping.
+        - Re-judging a vanished image.
+    - Decision reproduction:
+        - Record the "payloads stored as JSON text" rule.
+        - Compact parsed-prompt payloads.
+        - Preview `aria-live`.
+        - Empty event type allowed on the client.
+    - Verifier:
+        - `judges_differ` for unjudged scopes.
+        - Unindexed `invocation_id` lookup.
+        - Browser test gaps.
+    - Overrides:
+        - Page hints.
+        - Skip-marker guard.
+        - Show every error, not just the first.
+        - Phone check.
+    - Agreement panel:
+        - Zero-height bar on a 0 % day.
+        - "All" is unbounded when retention is 0.
+        - The per-event pill can over-claim.
+        - "1 false alarms" plural.
+        - Table accessible name.
+- **Series subtitle audit**:
+    - A multi-chunk review refetches only at the end.
+    - `outcomeLabel('queued')` returns an empty string.
+    - The sweeper uses `get()` where `each()` would do.
+    - Close-watcher race with a reload.
+- **Host monitoring minors**:
+    - Agent:
+        - Crash-loop self-heal.
+        - A hung inspection pins mounts.
+        - Config apply saves every non-null value.
+        - Empty `platform_url` in the install script.
+        - `nosuid`/`nodev` on a read-only remount.
+        - Run the extracted binary before moving it.
+        - `platform_url` is read only at startup.
+    - Platform:
+        - One bad row stops the sweep.
+        - The rollup assumes UTC.
+        - Filesystem index.
+        - Missing tests.
+- **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
+- **AI price refresh batching** with a dedicated model, once laravel/ai supports
+  batch requests.
+
+## Held dependency updates
+
+- **vue-tsc**: held at 3.3.11. 3.3.12 to 3.3.14 break `types:check`
+  (vuejs/language-tools#6240). Lift the hold when a release includes #6297.
+- **@stylistic/eslint-plugin 6**: lift when eslint-plugin-vue peers `^6`.
+- **TypeScript 7**: lift when typescript-eslint and vue-tsc both support it.
+- **pest-plugin-browser**: a long `script()` waits for the 30 s timeout
+  (pestphp/pest#1852). Bump and recheck when a fixed release lands.
+- **PHP 8.6**: move to it once it reaches general availability.
+
+## Not planned
+
+- qBittorrent and other torrent clients.
+- Jellyfin.
+- Translations (i18n).

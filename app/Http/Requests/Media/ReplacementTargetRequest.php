@@ -17,6 +17,7 @@ class ReplacementTargetRequest extends FormRequest
     public function rules(): array
     {
         return [
+            /** @query */
             ...$this->replacementTargetRules(),
         ];
     }
