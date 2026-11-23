@@ -9,16 +9,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Decisions
 
-- **Project conventions as repo rules** (decision): move the working conventions
-  into `.ai/rules/general.md` so every contributor and agent gets them. These are:
-    - Limits are admin settings.
-    - Follow-ups go to this file.
-    - UI pull requests get screenshots with fake data.
-    - Rebase and re-time the browser shards before a pull request.
-    - Parallel work gets its own worktree and test database.
-    - The Sail quirks.
-- **Dependency approval rule** (decision): no new Composer or npm package without
-  the owner's approval, with each approval dated in the rule.
 - **Browser shard target** (decision): the `BROWSER_SHARD_TARGET_SECONDS` repo
   variable. 180 s today gives 8 shards; 240 s would give about 6 shards of about
   6.5 minutes each.
