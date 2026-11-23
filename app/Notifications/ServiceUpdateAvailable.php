@@ -14,7 +14,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Queue\Attributes\Timeout;
 
+#[Timeout(120)]
 class ServiceUpdateAvailable extends Notification implements ShouldQueue
 {
     use Queueable;
