@@ -65,6 +65,7 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
             // stale, or a bad sync run deletes the whole index.
             $presentIds = [];
 
+            /** @var array<int, mixed> $items Decoded HTTP body: entries are not guaranteed to be objects. */
             foreach ($items as $item) {
                 if (! is_array($item)) {
                     continue;
@@ -117,6 +118,7 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 
             $presentIds = [];
 
+            /** @var array<int, mixed> $items Decoded HTTP body: entries are not guaranteed to be objects. */
             foreach ($items as $item) {
                 if (! is_array($item)) {
                     continue;

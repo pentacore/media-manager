@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification\Boolean;
 use Laravel\Ai\Contracts\ConversationStore;
-use Laravel\Ai\Contracts\PaginatesConversations;
 use Laravel\Ai\Responses\Data\Answer;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Laravel\Ai\Storage\StoredMessage;
@@ -214,9 +213,11 @@ final readonly class ChatToolRouter
      * Keep the core tools plus every tool in the given groups, in declared
      * order. Tools the agent did not declare (missing connections) stay out.
      *
-     * @param  array<int, object>  $declared
+     * @template TTool of object
+     *
+     * @param  array<int, TTool>  $declared
      * @param  list<ToolGroup>  $groups
-     * @return array<int, object>
+     * @return array<int, TTool>
      */
     public function filter(array $declared, array $groups): array
     {
@@ -237,7 +238,7 @@ final readonly class ChatToolRouter
         $none = ['reply' => '', 'tools' => [], 'groups' => null, 'requested' => []];
         $conversationStore = resolve(ConversationStore::class);
 
-        if ($conversationId === null || ! $conversationStore instanceof PaginatesConversations) {
+        if ($conversationId === null) {
             return $none;
         }
 

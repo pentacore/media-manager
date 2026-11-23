@@ -55,7 +55,7 @@ class RefreshAiPrices extends Command
 
         /** @var list<string> $providers */
         $providers = array_values(array_filter(
-            array_map(trim(...), (array) $this->option('provider')),
+            array_map(static fn (mixed $provider): string => trim((string) $provider), (array) $this->option('provider')),
             fn (string $provider): bool => $provider !== '',
         ));
 

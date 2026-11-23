@@ -78,7 +78,7 @@ abstract class BaseTool implements Tool
      * and may add 'description' (ActionDescription), 'fallback_title' (string, the
      * model's name for the target), 'origin' (string, default 'chat').
      *
-     * @return array<string, mixed>
+     * @return array<mixed>
      */
     abstract protected function execute(Request $request): array;
 
@@ -190,7 +190,7 @@ abstract class BaseTool implements Tool
 
     protected function requestedInChat(): string
     {
-        return sprintf('Requested in chat by %s.', auth()->user()?->name ?? 'an unknown user');
+        return sprintf('Requested in chat by %s.', auth()->user()->name ?? 'an unknown user');
     }
 
     /**
@@ -229,7 +229,7 @@ abstract class BaseTool implements Tool
      * envelope when encoding fails (e.g. invalid UTF-8 in upstream metadata,
      * NaN/Inf, etc.) so handle() never violates its string return contract.
      *
-     * @param  array<string, mixed>  $payload
+     * @param  array<mixed>  $payload
      */
     private function safeEncode(array $payload): string
     {

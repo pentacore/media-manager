@@ -44,7 +44,7 @@ class WatchHistoryTool extends BaseTool
                 'media_type' => $embyActivity->media_type,
                 'media_title' => $embyActivity->media_title,
                 'series_title' => $embyActivity->series_title,
-                'emby_username' => $embyActivity->embyUserLink?->emby_username,
+                'emby_username' => $embyActivity->embyUserLink->emby_username,
                 'created_at' => $embyActivity->created_at?->toISOString(),
             ])->all();
 

@@ -28,7 +28,7 @@ class RecordRerankingUsage
             'prompt_tokens' => $reranked->response->usage->inputTokens,
             'completion_tokens' => 0,
             'search_units' => $reranked->response->usage->searchUnits ?? 0,
-            'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
         ]);
     }
 }

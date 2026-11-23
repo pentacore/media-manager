@@ -45,7 +45,7 @@ class DebugEmbySessions extends Command
                     ->get('/Sessions');
             }
         } catch (RequestException $requestException) {
-            $this->error(sprintf('HTTP error (%d): %s', $requestException->response?->status() ?? 0, $requestException->getMessage()));
+            $this->error(sprintf('HTTP error (%d): %s', $requestException->response->status(), $requestException->getMessage()));
 
             return self::FAILURE;
         } catch (ConnectionException $connectionException) {
@@ -68,7 +68,7 @@ class DebugEmbySessions extends Command
         }
 
         if ($this->option('raw')) {
-            $this->line(json_encode($raw, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            $this->line(json_encode($raw, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return self::SUCCESS;
         }

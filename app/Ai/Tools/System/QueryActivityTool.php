@@ -77,7 +77,7 @@ class QueryActivityTool extends BaseTool
             'media_title' => $embyActivity->media_title,
             'series_title' => $embyActivity->series_title,
             'action' => $embyActivity->action,
-            'emby_username' => $embyActivity->embyUserLink?->emby_username,
+            'emby_username' => $embyActivity->embyUserLink->emby_username,
             'created_at' => $embyActivity->created_at?->toISOString(),
         ])->all();
 

@@ -6,6 +6,7 @@ namespace App\Listeners;
 
 use App\Events\WebhookEventProcessed;
 use App\Jobs\RunDecisionAgent;
+use App\Models\ServiceConnection;
 use App\Providers\AIServiceProvider;
 use App\Settings\DecisionAgentSettings;
 
@@ -29,7 +30,11 @@ class RunDecisionAgentForWebhook
         $webhookEvent = $webhookEventProcessed->webhookEvent;
         $webhookEvent->loadMissing('serviceConnection');
 
-        $service = $webhookEvent->serviceConnection?->type->value;
+        // The connection can be deleted after the event was queued, so the relation may be null despite the FK.
+        /** @var ServiceConnection|null $connection */
+        $connection = $webhookEvent->serviceConnection;
+
+        $service = $connection?->type->value;
         if ($service === null) {
             return;
         }
