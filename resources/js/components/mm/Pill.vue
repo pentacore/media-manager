@@ -3,11 +3,11 @@ import { computed } from 'vue';
 import type { HTMLAttributes } from 'vue';
 import { cn } from '@/lib/utils';
 
-type Variant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
+export type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
 
 const props = withDefaults(
     defineProps<{
-        variant?: Variant;
+        variant?: PillVariant;
         dot?: boolean;
         class?: HTMLAttributes['class'];
     }>(),
