@@ -295,12 +295,12 @@ test('a bulk queue action pinned to a connection that is gone, deactivated or an
 })->with([
     'deleted' => [fn (): int => 999_999],
     'deactivated' => [function (): int {
-        $serviceConnection = ServiceConnection::query()->where('type', 'radarr')->sole();
+        $serviceConnection = ServiceConnection::query()->where('type', 'radarr')->where('is_active', true)->sole();
         ServiceConnection::query()->whereKey($serviceConnection->id)->update(['is_active' => false]);
 
         return $serviceConnection->id;
     }],
-    'another service' => [fn (): int => ServiceConnection::query()->where('type', 'sonarr')->sole()->id],
+    'another service' => [fn (): int => ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->sole()->id],
 ]);
 
 test('a bulk queue action acts on the pinned connection, not the active one', function (): void {

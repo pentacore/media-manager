@@ -206,7 +206,7 @@ test('automatic selection queues when the fingerprint matches the automatic cand
 });
 
 test('multiple active service connections require an explicit pinned connection id', function (): void {
-    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->firstOrFail();
+    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->where('is_active', true)->firstOrFail();
     ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://another-sonarr.test',
         'api_key' => 'another-secret',
