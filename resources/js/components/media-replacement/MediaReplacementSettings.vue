@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, toRaw } from 'vue';
+import { computed, reactive, toRaw } from 'vue';
+import InputError from '@/components/InputError.vue';
 import { Field, SettingsRow } from '@/components/mm';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,15 @@ export interface SubtitleCheckConfiguration {
     cooldown_hours: number;
 }
 
+export interface SubtitleAuditConfiguration {
+    search_minutes_per_episode: number;
+    min_search_minutes: number;
+    max_search_minutes: number;
+    in_chat_wait_seconds: number;
+    watchdog_delay_seconds: number;
+    sweep_grace_minutes: number;
+}
+
 export interface MediaReplacementConfiguration {
     automatic_selection_enabled: boolean;
     automatic_selection_threshold: number;
@@ -35,6 +45,7 @@ export interface MediaReplacementConfiguration {
     scoped_languages: Record<Scope, string[] | null>;
     season_pack_policy: string;
     subtitle_check: SubtitleCheckConfiguration;
+    subtitle_audit: SubtitleAuditConfiguration;
     guidance: Record<Scope, ScopeGuidance>;
 }
 
@@ -43,6 +54,8 @@ const props = defineProps<{
     seasonPackPolicies: Array<{ value: string; label: string }>;
     subtitleRuleStrengths: Array<{ value: string; label: string }>;
     conditionFields: Array<{ value: string; label: string }>;
+    requestCeilingSeconds: number;
+    effectiveWatchdogDelaySeconds: number;
     errors: Record<string, string>;
 }>();
 
@@ -50,6 +63,15 @@ const defaultSubtitleCheck: SubtitleCheckConfiguration = {
     enabled: false,
     max_attempts_per_target: 1,
     cooldown_hours: 24,
+};
+
+const defaultSubtitleAudit: SubtitleAuditConfiguration = {
+    search_minutes_per_episode: 3,
+    min_search_minutes: 30,
+    max_search_minutes: 720,
+    in_chat_wait_seconds: 60,
+    watchdog_delay_seconds: 180,
+    sweep_grace_minutes: 5,
 };
 
 const incomingConfiguration = structuredClone(toRaw(props.configuration));
@@ -63,7 +85,73 @@ const state = reactive<MediaReplacementConfiguration>({
         ...defaultSubtitleCheck,
         ...(incomingConfiguration.subtitle_check ?? {}),
     },
+    subtitle_audit: {
+        ...defaultSubtitleAudit,
+        ...(incomingConfiguration.subtitle_audit ?? {}),
+    },
 });
+
+interface SubtitleAuditField {
+    key: keyof SubtitleAuditConfiguration;
+    label: string;
+    hint: string;
+    min: number;
+    max: number;
+}
+
+const subtitleAuditFields = computed<SubtitleAuditField[]>(() => [
+    {
+        key: 'search_minutes_per_episode',
+        label: 'Search minutes per episode',
+        hint: 'Search time allowed per missing episode when the chat repairs the subtitles of a series. The searches run one after another.',
+        min: 1,
+        max: 30,
+    },
+    {
+        key: 'min_search_minutes',
+        label: 'Shortest search window (minutes)',
+        hint: 'A repair batch gets at least this long, however few episodes are missing. Another repair of the same series waits until the window ends. Must not exceed the longest window.',
+        min: 5,
+        max: 720,
+    },
+    {
+        key: 'max_search_minutes',
+        label: 'Longest search window (minutes)',
+        hint: 'A repair batch gets at most this long, however many episodes are missing.',
+        min: 30,
+        max: 1440,
+    },
+    {
+        key: 'in_chat_wait_seconds',
+        label: 'Chat wait (seconds)',
+        hint: 'How long the chat waits for the searches before it hands the batch off and admins are notified instead. 0 hands it off at once. Never longer than what is left of the request.',
+        min: 0,
+        max: 120,
+    },
+    {
+        key: 'watchdog_delay_seconds',
+        label: 'Watchdog delay (seconds)',
+        hint:
+            props.requestCeilingSeconds > 0
+                ? `When the chat never shows or hands off a batch, it is picked up after this delay so admins still get notified. Must be longer than the server's request time limit (${props.requestCeilingSeconds} s).`
+                : 'When the chat never shows or hands off a batch, it is picked up after this delay so admins still get notified.',
+        min: props.requestCeilingSeconds + 1,
+        max: 3600,
+    },
+    {
+        key: 'sweep_grace_minutes',
+        label: 'Expiry grace (minutes)',
+        hint: 'How long past its search window a batch waits before unfinished searches are marked failed and the batch is settled. At least 5 minutes, so a running search is never cut off.',
+        min: 5,
+        max: 120,
+    },
+]);
+
+const watchdogDelayClamped = computed(
+    () =>
+        props.effectiveWatchdogDelaySeconds !==
+        props.configuration.subtitle_audit?.watchdog_delay_seconds,
+);
 
 const scopes: Array<{ key: Scope; label: string }> = [
     { key: 'anime', label: 'Anime' },
@@ -226,6 +314,58 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 class="h-8 max-w-[120px] text-sm"
             />
         </SettingsRow>
+
+        <Separator />
+        <div>
+            <h3 class="text-sm font-semibold">Series subtitle repair</h3>
+            <p class="mt-1 text-[13px] text-muted-foreground">
+                Limits for the batch the chat starts when it repairs the missing
+                subtitles of a whole series. How many searches run at once is
+                set per Sonarr connection.
+            </p>
+        </div>
+
+        <SettingsRow v-for="field in subtitleAuditFields" :key="field.key">
+            <template #label>
+                <Field
+                    :for="`media-replacement-subtitle-audit-${field.key}`"
+                    :label="field.label"
+                    :hint="field.hint"
+                >
+                    <span />
+                </Field>
+            </template>
+            <div class="space-y-1">
+                <Input
+                    :id="`media-replacement-subtitle-audit-${field.key}`"
+                    :aria-describedby="`media-replacement-subtitle-audit-${field.key}-hint`"
+                    v-model.number="state.subtitle_audit[field.key]"
+                    type="number"
+                    :min="field.min"
+                    :max="field.max"
+                    class="h-8 max-w-[120px] text-sm"
+                />
+                <p
+                    v-if="
+                        field.key === 'watchdog_delay_seconds' &&
+                        watchdogDelayClamped
+                    "
+                    class="text-xs text-warning"
+                    data-subtitle-audit-watchdog-effective
+                >
+                    The saved delay is not past the request time limit, so the
+                    watchdog runs after
+                    {{ effectiveWatchdogDelaySeconds }} s.
+                </p>
+                <InputError
+                    :message="
+                        errors[`media_replacement.subtitle_audit.${field.key}`]
+                    "
+                />
+            </div>
+        </SettingsRow>
+
+        <Separator />
 
         <SettingsRow>
             <template #label>

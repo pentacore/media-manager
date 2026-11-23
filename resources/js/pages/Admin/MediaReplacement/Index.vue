@@ -20,6 +20,8 @@ const props = defineProps<{
     subtitleRuleStrengths: EnumOption[];
     conditionFields: EnumOption[];
     attentionCount: number;
+    requestCeilingSeconds: number;
+    effectiveWatchdogDelaySeconds: number;
 }>();
 
 defineOptions({
@@ -67,6 +69,10 @@ defineOptions({
                     :season-pack-policies="props.seasonPackPolicies"
                     :subtitle-rule-strengths="props.subtitleRuleStrengths"
                     :condition-fields="props.conditionFields"
+                    :request-ceiling-seconds="props.requestCeilingSeconds"
+                    :effective-watchdog-delay-seconds="
+                        props.effectiveWatchdogDelaySeconds
+                    "
                     :errors="errors"
                 />
 
