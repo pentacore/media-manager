@@ -19,6 +19,7 @@ import TurnToolGroups from './TurnToolGroups.vue';
 import type {
     ActionRequestCard,
     ChatMessage,
+    ChoicesCard as ChoicesCardData,
     SubtitleAuditBatchCard as SubtitleAuditBatchCardData,
     ToolRequestCard as ToolRequestCardData,
 } from './types';
@@ -42,7 +43,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'approve'): void;
     (e: 'decline'): void;
-    (e: 'choose', labels: string[]): void;
+    (e: 'choose', card: ChoicesCardData, labels: string[]): void;
     (e: 'answerToolRequest', card: ToolRequestCardData, load: boolean): void;
     (e: 'review', card: ActionRequestCard, action: 'approve' | 'reject'): void;
     (
@@ -140,15 +141,19 @@ const caseQuery = computed(() =>
                 <ChoiceCard
                     v-if="card.type === 'choices'"
                     :card="card"
-                    :interactive="isLatestAssistant && !busy && !message.chosen"
-                    :chosen="message.chosen ?? null"
-                    @choose="(labels) => emit('choose', labels)"
+                    :interactive="
+                        isLatestAssistant && !busy && !message.chosen?.[card.id]
+                    "
+                    :chosen="message.chosen?.[card.id] ?? null"
+                    @choose="(labels) => emit('choose', card, labels)"
                 />
                 <ToolRequestCard
                     v-else-if="card.type === 'tool_request'"
                     :card="card"
-                    :interactive="isLatestAssistant && !busy && !message.chosen"
-                    :chosen="message.chosen?.[0] ?? null"
+                    :interactive="
+                        isLatestAssistant && !busy && !message.chosen?.[card.id]
+                    "
+                    :chosen="message.chosen?.[card.id]?.[0] ?? null"
                     @answer="(load) => emit('answerToolRequest', card, load)"
                 />
                 <SubtitleAuditBatchCard

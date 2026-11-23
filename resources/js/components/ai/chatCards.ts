@@ -166,3 +166,15 @@ export function toolRequestAnswer(
         ? `Loaded ${labels} — continue.`
         : `Don't load ${labels} — continue without it.`;
 }
+
+/** A reloaded tool request's answer ('load' / 'decline') from the reply text, or none. */
+export function toolRequestPick(
+    card: ToolRequestCard,
+    answer: string,
+): string[] {
+    if (answer === toolRequestAnswer(card, true)) {
+        return ['load'];
+    }
+
+    return answer === toolRequestAnswer(card, false) ? ['decline'] : [];
+}

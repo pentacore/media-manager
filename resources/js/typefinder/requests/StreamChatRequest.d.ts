@@ -13,6 +13,7 @@ export type StreamChatRequest = {
   attachments?: File[] | null;
   pinned_tool_groups?: ToolGroup[];
   load_tool_groups?: ToolGroup[];
+  answered_card?: string | null;
   override?: {
     provider?: string | null;
     model?: string | null;

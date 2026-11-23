@@ -818,3 +818,37 @@ test('RUN_FINISHED has no tool groups when routing is off', function (): void {
 
     expect($frame['toolGroups'])->toBeNull();
 });
+
+test('a streamed turn that answers a card stores the card id on the user message', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Grabbing subtitles too.']);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Yes', 'answered_card' => 'call_2'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $user = DB::table('agent_conversation_messages')->where('role', 'user')->sole();
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+
+    expect(json_decode((string) $user->meta, true))->toBe(['answered_card' => 'call_2'])
+        ->and(json_decode((string) $assistant->meta, true))->not->toHaveKey('answered_card');
+});
+
+test('a streamed turn that answers no card leaves the user message meta empty', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Hi.']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect(json_decode((string) DB::table('agent_conversation_messages')->where('role', 'user')->value('meta'), true))->toBe([]);
+});
+
+test('streaming refuses an answered card id that is too long', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.stream'), ['message' => 'Yes', 'answered_card' => str_repeat('a', 256)])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('answered_card');
+});
