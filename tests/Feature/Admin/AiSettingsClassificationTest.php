@@ -159,6 +159,23 @@ test('admin saves the Jev usage settings', function (): void {
         ->and($aiSettings->classificationAuditSampleRate())->toBe(0.1);
 });
 
+test('omitted Jev usage fields leave the saved settings untouched', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setStuckImportFastPathEnabled(true);
+    $aiSettings->setStuckImportThreshold(0.7);
+    $aiSettings->setDecisionToolScopingEnabled(true);
+    $aiSettings->setClassificationAuditSampleRate(0.3);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), validAiSettingsPayload())
+        ->assertRedirect();
+
+    expect($aiSettings->stuckImportFastPathEnabled())->toBeTrue()
+        ->and($aiSettings->stuckImportThreshold())->toBe(0.7)
+        ->and($aiSettings->decisionToolScopingEnabled())->toBeTrue()
+        ->and($aiSettings->classificationAuditSampleRate())->toBe(0.3);
+});
+
 test('the Jev usage thresholds must lie between zero and one', function (string $field): void {
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), validAiSettingsPayload([$field => '1.5']))

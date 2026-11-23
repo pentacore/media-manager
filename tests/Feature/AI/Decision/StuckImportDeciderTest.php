@@ -24,6 +24,20 @@ function fakeDeciderManualImport(): void
     ]])]);
 }
 
+/**
+ * @return array<string, mixed>
+ */
+function cleanDeciderCandidate(): array
+{
+    return [
+        'path' => '/dl/show.s01e01.mkv',
+        'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+        'series' => ['id' => 5],
+        'episodes' => [['id' => 11]],
+        'rejections' => [],
+    ];
+}
+
 beforeEach(function (): void {
     Http::preventStrayRequests();
 });
@@ -136,6 +150,19 @@ test('more than 20 candidate files are capped before classifying', function (): 
     resolve(StuckImportDecider::class)->decide(deciderSonarr(), 'sonarr', 'dl-1');
 
     Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => is_array($prompt->state) && count($prompt->state['files']) === 20);
+});
+
+test('a rejection reason longer than 300 characters is truncated before classifying', function (): void {
+    $reason = str_repeat('x', 500);
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([array_replace(cleanDeciderCandidate(), [
+        'rejections' => [['reason' => $reason], ['reason' => 'short reason']],
+    ])])]);
+    Classification::fake([deciderAnswers('import', 0.9)]);
+
+    resolve(StuckImportDecider::class)->decide(deciderSonarr(), 'sonarr', 'dl-1');
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => is_array($prompt->state)
+        && $prompt->state['files'][0]['rejections'] === [str_repeat('x', 300), 'short reason']);
 });
 
 test('a failed inspection is no decision and never classifies', function (): void {

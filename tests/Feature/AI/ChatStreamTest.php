@@ -756,6 +756,48 @@ test('a stopped routed turn leaves its chat-routing outcomes open', function ():
         ->and($outcomes->whereNotNull('outcome_positive'))->toBeEmpty();
 });
 
+test('a completed streamed routed turn resolves its chat-routing outcomes by the tools it called', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([collect(ToolGroup::cases())
+        ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer(in_array($toolGroup, [ToolGroup::Playback, ToolGroup::Downloads], true) ? 0.9 : 0.05)])
+        ->all()]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'NowPlayingTool', arguments: []),
+        'Nothing is playing.',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'What is playing?'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $outcomes = ClassificationOutcome::query()->where('gate', ClassificationGate::ChatRouting)->get()->keyBy('question');
+
+    expect($outcomes)->toHaveCount(count(ToolGroup::cases()))
+        ->and($outcomes['playback']->outcome_positive)->toBeTrue()
+        ->and($outcomes['downloads']->outcome_positive)->toBeFalse()
+        ->and($outcomes['indexers']->outcome_at)->toBeNull();
+});
+
+test('a streamed turn with routing off writes and updates no outcome rows', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Hi.']);
+    $outcomeQueries = [];
+    DB::listen(function ($query) use (&$outcomeQueries): void {
+        if (str_contains($query->sql, 'classification_outcomes')) {
+            $outcomeQueries[] = $query->sql;
+        }
+    });
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    Classification::assertNothingClassified();
+    expect($outcomeQueries)->toBe([]);
+});
+
 test('a client that leaves after the final step still gets a successful run', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
     chatStreamClientLeavingAfter(1);

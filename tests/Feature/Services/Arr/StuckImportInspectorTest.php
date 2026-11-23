@@ -62,3 +62,26 @@ test('inspectMany returns one entry per download and marks an unreadable one loo
         ->and($entries[0])->toMatchArray(['download_id' => 'A', 'ok' => true, 'total' => 1, 'importable' => 1])
         ->and($entries[1])->toBe(['download_id' => 'B', 'ok' => false, 'reason' => 'lookup_failed']);
 });
+
+test('inspectMany keeps numeric-string download ids as strings', function (): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(function (Request $request) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return ($query['downloadId'] ?? null) === '1234'
+            ? Http::response([[
+                'path' => '/dl/show.s01e01.mkv',
+                'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+                'series' => ['id' => 5],
+                'episodes' => [['id' => 11]],
+                'rejections' => [],
+            ]])
+            : Http::response([], 500);
+    });
+
+    $entries = resolve(StuckImportInspector::class)->inspectMany($sonarr, 'sonarr', ['1234', '5678']);
+
+    expect($entries[0]['download_id'])->toBe('1234')
+        ->and($entries[0]['ok'])->toBeTrue()
+        ->and($entries[1])->toBe(['download_id' => '5678', 'ok' => false, 'reason' => 'lookup_failed']);
+});

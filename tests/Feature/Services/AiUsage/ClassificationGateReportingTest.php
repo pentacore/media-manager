@@ -38,7 +38,7 @@ test('the summary reports audit runs, verdict counts and the current threshold',
     $gate = collect(resolve(ClassificationGateReporting::class)->summary(null))->firstWhere('gate', 'decision_gate');
 
     expect($gate)->threshold->toBe(0.4)->audit_runs->toBe(1)->audit_resolved->toBe(1)->audit_positive->toBe(1)
-        ->and($gate['verdicts'])->toBe(['skipped' => 1, 'audit_run' => 1]);
+        ->and($gate['verdicts'])->toHaveCount(2)->toHaveKey('skipped', 1)->toHaveKey('audit_run', 1);
 });
 
 test('audit_resolved counts only resolved audit rows', function (): void {
