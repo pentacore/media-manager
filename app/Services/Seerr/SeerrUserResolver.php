@@ -92,14 +92,18 @@ final readonly class SeerrUserResolver
             $failure = $exception;
         }
 
+        // match() only appends to the list it was handed, so it is still a list.
+        /** @var list<array{id: int, label: string}> $pickerUsers */
+        $pickerUsers = $users;
+
         return [
-            'users' => $users,
+            'users' => $pickerUsers,
             'defaultId' => $defaultId,
             'partial' => $partial,
             'error' => match (true) {
-                $users !== [] => null,
+                $pickerUsers !== [] => null,
                 $failure !== null => SeerrReadFailure::message($failure, $user),
-                default => __(self::UNREACHABLE),
+                default => (string) __(self::UNREACHABLE),
             },
         ];
     }

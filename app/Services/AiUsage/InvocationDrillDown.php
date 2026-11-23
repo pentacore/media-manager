@@ -103,7 +103,7 @@ class InvocationDrillDown
             ])
             ->all();
 
-        $children = AiUsageRecord::query()
+        $children = array_values(AiUsageRecord::query()
             ->where('parent_invocation_id', $aiUsageRecord->invocation_id)
             ->orderBy('id')
             ->get()
@@ -118,8 +118,7 @@ class InvocationDrillDown
                     + $child->cache_write_input_tokens
                     + $child->reasoning_tokens,
             ])
-            ->values()
-            ->all();
+            ->all());
 
         [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario, (float) ($aiUsageRecord->search_unit_per_k ?? 0));
 

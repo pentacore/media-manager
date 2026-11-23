@@ -16,6 +16,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use JsonException;
+use RuntimeException;
 use stdClass;
 use Throwable;
 use UnexpectedValueException;
@@ -66,7 +67,7 @@ final class BazarrClient
     public function __construct(private readonly ServiceConnection $serviceConnection)
     {
         throw_if($this->serviceConnection->type !== ServiceType::Bazarr, InvalidArgumentException::class, 'BazarrClient requires a Bazarr service connection.');
-        throw_if(! is_int($this->serviceConnection->id) || $this->serviceConnection->id <= 0, InvalidArgumentException::class, 'BazarrClient requires a persisted service connection with a positive ID.');
+        throw_if(! is_int($this->serviceConnection->getKey()) || $this->serviceConnection->getKey() <= 0, InvalidArgumentException::class, 'BazarrClient requires a persisted service connection with a positive ID.');
     }
 
     /**
@@ -396,7 +397,7 @@ final class BazarrClient
 
         $this->write(
             $this->buildClient(withRetry: false)
-                ->attach('file', $uploadedFile->get(), $uploadedFile->getClientOriginalName())
+                ->attach('file', $this->uploadContents($uploadedFile), $uploadedFile->getClientOriginalName())
                 ->post('/api/episodes/subtitles', [
                     'seriesid' => $seriesId,
                     'episodeid' => $episodeId,
@@ -419,7 +420,7 @@ final class BazarrClient
 
         $this->write(
             $this->buildClient(withRetry: false)
-                ->attach('file', $uploadedFile->get(), $uploadedFile->getClientOriginalName())
+                ->attach('file', $this->uploadContents($uploadedFile), $uploadedFile->getClientOriginalName())
                 ->post('/api/movies/subtitles', [
                     'radarrid' => $radarrId,
                     'language' => $language,
@@ -728,6 +729,8 @@ final class BazarrClient
     }
 
     /**
+     * @return stdClass|array<mixed>
+     *
      * @throws ConnectionException|RequestException|UnexpectedValueException
      */
     private function decodedJson(Response $response): stdClass|array
@@ -984,7 +987,7 @@ final class BazarrClient
     {
         $normalizedIds = array_values(array_unique(array_filter(
             $ids,
-            static fn (mixed $id): bool => is_int($id) && $id > 0,
+            static fn (int $id): bool => $id > 0,
         )));
         sort($normalizedIds, SORT_NUMERIC);
 
@@ -1004,8 +1007,17 @@ final class BazarrClient
         ));
     }
 
+    private function uploadContents(UploadedFile $uploadedFile): string
+    {
+        $contents = $uploadedFile->get();
+
+        throw_if($contents === false, RuntimeException::class, 'The uploaded subtitle file could not be read.');
+
+        return $contents;
+    }
+
     /**
-     * @param  list<mixed>  $values
+     * @param  array<mixed>  $values
      */
     private function containsOnlyObjects(array $values): bool
     {

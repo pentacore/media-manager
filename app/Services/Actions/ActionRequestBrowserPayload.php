@@ -54,12 +54,15 @@ final readonly class ActionRequestBrowserPayload
     public function description(ActionRequest $actionRequest): array
     {
         $rationale = $actionRequest->payload['agent_rationale'] ?? null;
+        // Rows from before descriptions existed hold anything in `details`.
+        /** @var list<mixed> $storedDetails */
+        $storedDetails = $actionRequest->details ?? [];
 
         return [
             'title' => $actionRequest->title,
             'description' => $actionRequest->description,
             'details' => array_values(array_filter(
-                $actionRequest->details ?? [],
+                $storedDetails,
                 static fn (mixed $detail): bool => is_array($detail) && is_string($detail['label'] ?? null) && is_string($detail['value'] ?? null),
             )),
             'description_verified' => $actionRequest->description_verified,

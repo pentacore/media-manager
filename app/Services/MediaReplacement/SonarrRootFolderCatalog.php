@@ -44,11 +44,7 @@ class SonarrRootFolderCatalog
 
         $catalog = [];
 
-        foreach ($importedRootFolders as $importedRootFolder) {
-            if (! is_array($importedRootFolder)) {
-                continue;
-            }
-
+        foreach (array_filter($importedRootFolders, is_array(...)) as $importedRootFolder) {
             $rootFolderId = $importedRootFolder['id'] ?? null;
             $path = $importedRootFolder['path'] ?? null;
             if (! is_int($rootFolderId)) {

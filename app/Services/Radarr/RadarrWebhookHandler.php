@@ -69,7 +69,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        if ($webhookEvent->serviceConnection !== null && in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
+        if (in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
             new RadarrCache($webhookEvent->serviceConnection)->bustAll();
         }
 
@@ -95,9 +95,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             subjectId: $payload['movie']['id'] ?? null,
         );
 
-        if ($webhookEvent->serviceConnection !== null) {
-            $this->mediaReplacementTracker->recordGrab($webhookEvent->serviceConnection, $payload);
-        }
+        $this->mediaReplacementTracker->recordGrab($webhookEvent->serviceConnection, $payload);
     }
 
     /**
@@ -120,14 +118,12 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             subjectId: $payload['movie']['id'] ?? null,
         );
 
-        if ($webhookEvent->serviceConnection !== null) {
-            $this->mediaReplacementTracker->verifyDownload($webhookEvent->serviceConnection, $payload);
+        $this->mediaReplacementTracker->verifyDownload($webhookEvent->serviceConnection, $payload);
 
-            // Queued, not inline: the audit sweeps every indexer when a language
-            // is missing, and its delay lets Radarr finish the mediainfo scan
-            // this import's subtitle list is read from.
-            AuditImportedSubtitles::queueFor($webhookEvent);
-        }
+        // Queued, not inline: the audit sweeps every indexer when a language
+        // is missing, and its delay lets Radarr finish the mediainfo scan
+        // this import's subtitle list is read from.
+        AuditImportedSubtitles::queueFor($webhookEvent);
 
         $scanPayload = ['trigger' => 'radarr_download', 'movie_title' => $movieTitle];
 
@@ -136,7 +132,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Radarr imported "%s".', $movieTitle))
-                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
+                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection->name)),
             webhookEvent: $webhookEvent,
         );
     }
@@ -182,7 +178,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
 
         $movie = $payload['movie'] ?? null;
 
-        if (is_array($movie) && $webhookEvent->serviceConnection !== null) {
+        if (is_array($movie)) {
             $this->movieIndexer->upsert($movie, $webhookEvent->serviceConnection);
         }
     }
@@ -208,7 +204,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
 
         $radarrId = (int) ($payload['movie']['id'] ?? 0);
 
-        if ($radarrId > 0 && $webhookEvent->serviceConnection !== null) {
+        if ($radarrId > 0) {
             $this->movieIndexer->forget($radarrId, $webhookEvent->serviceConnection);
         }
 
@@ -219,7 +215,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Radarr deleted "%s".', $movieTitle))
-                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
+                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection->name)),
             webhookEvent: $webhookEvent,
         );
     }
@@ -271,9 +267,7 @@ class RadarrWebhookHandler extends AbstractArrWebhookHandler
             subjectId: $payload['movie']['id'] ?? null,
         );
 
-        if ($webhookEvent->serviceConnection !== null) {
-            $this->mediaReplacementTracker->recordManualIntervention($webhookEvent->serviceConnection, $payload);
-        }
+        $this->mediaReplacementTracker->recordManualIntervention($webhookEvent->serviceConnection, $payload);
 
         // The library activity badge needs to reflect the new stuck import
         // immediately — without this it would only update on the next

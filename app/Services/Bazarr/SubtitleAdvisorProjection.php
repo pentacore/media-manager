@@ -101,10 +101,10 @@ final readonly class SubtitleAdvisorProjection
             limit: self::MAX_CANDIDATES,
             serviceConnection: $mappedConnection,
         );
-        $candidates = array_values(array_map(
+        $candidates = array_map(
             $this->sanitizeCandidate(...),
             array_slice($replacement['candidates'], 0, self::MAX_CANDIDATES),
-        ));
+        );
         $automaticFingerprint = is_array($replacement['automatic_candidate'] ?? null)
             ? ($replacement['automatic_candidate']['fingerprint'] ?? null)
             : null;
@@ -198,9 +198,8 @@ final readonly class SubtitleAdvisorProjection
                 'The subtitle case episode target is invalid.',
             );
 
-            $episode = collect($this->arrConnections->sonarr($serviceConnection)->getEpisodesBySeries($seriesId))
-                ->first(fn (mixed $candidate): bool => is_array($candidate)
-                    && $this->positiveInteger($candidate['id'] ?? null) === $episodeId);
+            $episode = collect(array_filter($this->arrConnections->sonarr($serviceConnection)->getEpisodesBySeries($seriesId), is_array(...)))
+                ->first(fn (array $candidate): bool => $this->positiveInteger($candidate['id'] ?? null) === $episodeId);
             throw_unless(is_array($episode), InvalidArgumentException::class, 'The subtitle case episode no longer exists.');
 
             $target = $this->mediaFileInspector->inspect(
@@ -253,11 +252,14 @@ final readonly class SubtitleAdvisorProjection
      */
     private function requiredLanguages(SubtitleCase $subtitleCase): array
     {
+        // Stored requirements are either bare codes or `{code: ...}` objects.
+        /** @var list<mixed> $requirements */
+        $requirements = $subtitleCase->required_languages;
         $languages = array_map(
             static fn (mixed $requirement): mixed => is_array($requirement)
                 ? ($requirement['code'] ?? null)
                 : $requirement,
-            $subtitleCase->required_languages,
+            $requirements,
         );
 
         return $this->languageNormalizer->normalizeMany($languages);

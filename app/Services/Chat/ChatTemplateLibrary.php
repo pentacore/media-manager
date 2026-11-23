@@ -43,7 +43,7 @@ final class ChatTemplateLibrary
         $pattern = sprintf('%%%s%%', addcslashes($term, '%_\\'));
 
         if ($chatTemplateVariableType === ChatTemplateVariableType::Series) {
-            return IndexedSeries::query()
+            return array_values(IndexedSeries::query()
                 ->where('service_connection_id', $serviceConnection->id)
                 ->whereLike('title', $pattern)
                 ->orderBy('title')
@@ -55,11 +55,10 @@ final class ChatTemplateLibrary
                     'year' => $indexedSeries->year,
                     'poster_url' => $indexedSeries->poster_url,
                 ])
-                ->values()
-                ->all();
+                ->all());
         }
 
-        return IndexedMovie::query()
+        return array_values(IndexedMovie::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->whereLike('title', $pattern)
             ->orderBy('title')
@@ -71,8 +70,7 @@ final class ChatTemplateLibrary
                 'year' => $indexedMovie->year,
                 'poster_url' => $indexedMovie->poster_url,
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     public function find(ChatTemplateVariableType $chatTemplateVariableType, int $id): ?ChatTemplateLibraryTitle

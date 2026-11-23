@@ -125,7 +125,7 @@ class StatisticsRepository
         $period = $this->periodFor($timeWindow);
         $since = $this->windowStart($timeWindow, $period);
 
-        return DB::table('stat_rollups')
+        return array_values(DB::table('stat_rollups')
             ->where('metric', $metric)
             ->where('period', $period)
             ->where('bucket', '>=', $since)
@@ -139,7 +139,7 @@ class StatisticsRepository
                 'count' => (int) $row->count,
                 'sum' => (float) $row->sum,
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -153,7 +153,7 @@ class StatisticsRepository
     {
         $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
 
-        return DB::table('emby_activities')
+        return array_values(DB::table('emby_activities')
             ->where('action', 'played')
             ->where('created_at', '>=', $since)
             ->selectRaw('COALESCE(series_title, media_title) AS title, media_type, COUNT(*) AS plays')
@@ -166,7 +166,7 @@ class StatisticsRepository
                 'media_type' => (string) $row->media_type,
                 'plays' => (int) $row->plays,
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -197,7 +197,7 @@ class StatisticsRepository
             ->get()
             ->keyBy(fn (EmbyUserLink $embyUserLink): string => (string) $embyUserLink->id);
 
-        return $linkIds
+        return array_values($linkIds
             ->map(function (string $id) use ($plays, $seconds, $links): array {
                 $link = $links->get($id);
                 $displayName = $link?->user?->name ?: $link?->emby_username;
@@ -209,8 +209,7 @@ class StatisticsRepository
                 ];
             })
             ->sortByDesc('plays')
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**
