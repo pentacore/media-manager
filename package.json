@@ -18,7 +18,7 @@
         "@pentacore/vite-plugin-laravel-typefinder": "^8.2.4",
         "@semantic-release/changelog": "^7.0.0",
         "@semantic-release/git": "^11.0.1",
-        "@stylistic/eslint-plugin": "^5.10.0",
+        "@stylistic/eslint-plugin": "^6.0.1",
         "@tailwindcss/vite": "^4.3.5",
         "@types/node": "^26.6.6",
         "@vitejs/plugin-vue": "^6.0.11",
