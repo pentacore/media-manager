@@ -198,10 +198,14 @@ function browserQueueFake(string ...$jobs): void
 
 /**
  * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
- * so script() returns only once an async UI change has landed.
+ * so script() returns only once an async UI change has landed. It throws when
+ * the condition never holds: a wait that returned silently would let the test
+ * carry on against a page that never reached the state it waits for.
  */
 function confirmDialogWaitUntilScript(string $condition): string
 {
+    $message = json_encode('confirmDialogWaitUntilScript timed out waiting for: '.$condition, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
     return <<<JS
         (async () => {
             for (let attempt = 0; attempt < 250; attempt++) {
@@ -210,6 +214,7 @@ function confirmDialogWaitUntilScript(string $condition): string
                 }
                 await new Promise((resolve) => setTimeout(resolve, 20));
             }
+            throw new Error({$message});
         })()
     JS;
 }
