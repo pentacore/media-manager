@@ -2,9 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\LimitWebhookPayloadSize;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Queue;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function (): void {
     Queue::fake();
@@ -33,6 +37,24 @@ test('an oversized payload with a valid token is rejected and not stored', funct
 
     expect(WebhookEvent::query()->count())->toBe(0);
 });
+
+test('a chunked body without a Content-Length header is refused by its measured length', function (): void {
+    config()->set('mediamanager.webhooks.max_payload_kb', 1);
+
+    $oversized = Request::create('/webhook', 'POST', content: str_repeat('a', 2048));
+    $oversized->headers->remove('Content-Length');
+
+    $small = Request::create('/webhook', 'POST', content: str_repeat('a', 200));
+    $small->headers->remove('Content-Length');
+
+    $middleware = new LimitWebhookPayloadSize;
+    $next = fn (): Response => response('ok');
+
+    expect($oversized->headers->has('Content-Length'))->toBeFalse()
+        ->and($middleware->handle($small, $next)->getContent())->toBe('ok');
+
+    $middleware->handle($oversized, $next);
+})->throws(HttpException::class);
 
 test('a payload under the limit is accepted', function (): void {
     config()->set('mediamanager.webhooks.max_payload_kb', 1);

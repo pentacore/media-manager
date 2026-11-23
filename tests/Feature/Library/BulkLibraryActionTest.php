@@ -99,6 +99,24 @@ test('approval rules apply per title and queued requests are worded as such', fu
     expect(ActionRequest::query()->where('status', ActionRequestStatus::Pending)->count())->toBe(3);
 });
 
+test('a bulk action is gated by the action type config alone, so an admin and a member get the same outcome', function (string $role, bool $requiresApproval, string $startedKey, string $queuedKey): void {
+    ActionTypeConfig::query()->where('type', 'monitor_series')->update(['requires_approval' => $requiresApproval]);
+
+    $this->actingAs(User::factory()->{$role}()->create())
+        ->postJson(route('media.library.actions.bulk'), bulkLibraryPayload($this->sonarr))
+        ->assertOk()
+        ->assertJsonPath($startedKey, 3)
+        ->assertJsonPath($queuedKey, 0);
+
+    expect(ActionRequest::query()->where('type', 'monitor_series')->pluck('status')->unique()->values()->all())
+        ->toBe([$requiresApproval ? ActionRequestStatus::Pending : ActionRequestStatus::Approved]);
+})->with([
+    'admin, auto-start' => ['admin', false, 'started', 'queued'],
+    'member, auto-start' => ['member', false, 'started', 'queued'],
+    'admin, approval required' => ['admin', true, 'queued', 'started'],
+    'member, approval required' => ['member', true, 'queued', 'started'],
+]);
+
 test('a title with a replacement in flight fails with the single action reason while the rest proceed', function (): void {
     ActionRequest::factory()->create([
         'type' => 'replace_media_file',

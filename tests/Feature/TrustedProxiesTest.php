@@ -53,12 +53,18 @@ it('ignores forwarded headers when the proxy is outside every trusted CIDR', fun
 });
 
 it('trusts every upstream when configured with a wildcard', function (): void {
+    Cache::flush();
     config()->set('mediamanager.trusted_proxies', '*');
+    Log::spy();
 
     $payload = requestThroughProxy();
 
     expect($payload['ip'])->toBe('203.0.113.7')
         ->and($payload['secure'])->toBeTrue();
+    Log::shouldHaveReceived('warning')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => str_contains($message, 'TRUSTED_PROXIES')
+            && $context['broad_entries'] === ['*']);
 });
 
 test('a broad trusted proxy range logs a warning at most once a day', function (): void {

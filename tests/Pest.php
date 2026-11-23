@@ -69,7 +69,7 @@ pest()->extend(TestCase::class)
         // connection with subtitle-check tags it would inspect the arr and sweep
         // every indexer. Its own test calls handle() directly and the handler
         // tests re-fake the queue, so neither is affected.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class, AuditImportedSubtitles::class]);
+        featureQueueFake();
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged
@@ -179,6 +179,19 @@ function fakeServiceHttp(Closure $handler): void
 
         return $handler($request, $options);
     });
+}
+
+/**
+ * Fakes the jobs every Feature test keeps off the sync queue (see the global
+ * beforeEach above), plus $jobs. A later Queue::fake() replaces the earlier
+ * fake instead of adding to it, so a test that fakes another job calls this
+ * rather than repeating the default list.
+ *
+ * @param  class-string  ...$jobs
+ */
+function featureQueueFake(string ...$jobs): void
+{
+    Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class, AuditImportedSubtitles::class, ...$jobs]);
 }
 
 /**
