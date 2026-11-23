@@ -9,6 +9,7 @@ use App\Http\Requests\Media\DestroyArrMediaRequest;
 use App\Http\Requests\Media\StoreSeriesRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ManualActionOutcome;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
@@ -158,6 +159,12 @@ class SeriesController extends BaseArrController
 
         try {
             $this->buildClient($connection)->addSeries($storeSeriesRequest->validated());
+        } catch (ArrWriteUnconfirmed) {
+            // A 200 that is not API data (usually a proxy login page): the
+            // series may already have been added, so this must read as unknown.
+            Inertia::flash('toast', ['type' => 'error', 'message' => __(':service did not confirm adding the series — check it there before trying again.', ['service' => 'Sonarr'])]);
+
+            return back();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to add series.')]);
 
