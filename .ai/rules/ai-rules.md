@@ -16,3 +16,6 @@ When a rule records a decision the owner made, end it with "(owner's rule, YYYY-
 
 ## Rules are constraints, procedures are skills
 Keep each rule a short constraint. Put a multi-step procedure in a skill under `.ai/skills/` and let the rule point at it.
+
+## Capture reusable workflows as skills
+When a multi-step workflow is needed a second time (running a tool a particular way, a setup or release procedure), write it as a skill under `.ai/skills/<name>/SKILL.blade.php` instead of re-deriving it or leaving it in a rule.
