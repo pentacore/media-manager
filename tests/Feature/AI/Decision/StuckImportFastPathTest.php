@@ -252,6 +252,24 @@ test('a fully unmapped download is recorded as needing a human', function (): vo
         ->outcome_at->not->toBeNull();
 });
 
+test('an unmapped download leaves an older open row for the same download alone', function (): void {
+    fakeStuckImportApis([[
+        'path' => '/dl/unknown.mkv', 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'series' => [], 'episodes' => [], 'rejections' => [['reason' => 'Unknown Series']],
+    ]]);
+    Classification::fake([fastPathAnswers('import', 0.95)]);
+    $older = ClassificationOutcome::factory()->create([
+        'gate' => ClassificationGate::StuckImport,
+        'subject_key' => ClassificationOutcome::subjectKey('download', 'sonarr:dl-1'),
+        'verdict' => ClassificationVerdict::ResolvedByClassifier,
+        'predicted' => 'import',
+    ]);
+
+    runStuckImportJob();
+
+    expect($older->refresh()->outcome_at)->toBeNull()
+        ->and(ClassificationOutcome::query()->whereNotNull('outcome_at')->count())->toBe(1);
+});
+
 test('a confident import queued for auto-run notifies per the settings', function (): void {
     Notification::fake();
     $admin = User::factory()->admin()->create();

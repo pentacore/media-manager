@@ -86,6 +86,25 @@ test('resolveAgainst compares each open row prediction with the actual result', 
     expect($row->refresh())->outcome_positive->toBeFalse()->outcome_detail->toBe('actual: remove');
 });
 
+test('resolveAgainst marks matching, differing and unpredicted rows in one pass', function (): void {
+    $rows = collect(['import', 'remove', null])->map(fn (?string $predicted): ClassificationOutcome => ClassificationOutcome::factory()->create(['gate' => ClassificationGate::StuckImport, 'subject_key' => 'download:sonarr:dl-2', 'verdict' => ClassificationVerdict::Fallback, 'predicted' => $predicted]));
+
+    resolve(ClassificationOutcomeRecorder::class)->resolveAgainst(ClassificationGate::StuckImport, 'download:sonarr:dl-2', 'import', [ClassificationVerdict::Fallback]);
+
+    expect($rows[0]->refresh())->outcome_positive->toBeTrue()->outcome_detail->toBe('actual: import')->outcome_at->not->toBeNull()
+        ->and($rows[1]->refresh())->outcome_positive->toBeFalse()->outcome_at->not->toBeNull()
+        ->and($rows[2]->refresh())->outcome_positive->toBeFalse()->outcome_at->not->toBeNull();
+});
+
+test('recordResolved stores a row with its outcome already filled', function (): void {
+    resolve(ClassificationOutcomeRecorder::class)->recordResolved(ClassificationGate::StuckImport, 'download:sonarr:dl-3', 'choice', 0.9, ClassificationVerdict::ResolvedByClassifier, 0.85, 'import', false, 'nothing_importable');
+
+    expect(ClassificationOutcome::sole())
+        ->outcome_positive->toBeFalse()
+        ->outcome_detail->toBe('nothing_importable')
+        ->outcome_at->not->toBeNull();
+});
+
 test('a failing write never reaches the caller', function (): void {
     Schema::drop('classification_outcomes');
 
