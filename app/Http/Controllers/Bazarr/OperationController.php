@@ -116,8 +116,10 @@ final class OperationController extends Controller
             }
         }
 
+        $subtitleTracks = $item['subtitle_tracks'] ?? [];
+
         if (in_array($operation, ['delete_subtitle', 'sync_subtitle', 'translate_subtitle', 'modify_subtitle'], true)
-            && collect($item['subtitle_tracks'] ?? [])->doesntContain('fingerprint', $validated['subtitle_fingerprint'])) {
+            && collect(is_array($subtitleTracks) ? $subtitleTracks : [])->doesntContain('fingerprint', $validated['subtitle_fingerprint'])) {
             throw ValidationException::withMessages([
                 'subtitle_fingerprint' => 'The selected subtitle track is no longer available.',
             ]);

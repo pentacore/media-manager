@@ -71,7 +71,6 @@ final readonly class UpdateSubtitleCaseFromReplacementAttempt
                 $subtitleCase,
                 'replacement_needs_attention',
             ),
-            default => null,
         };
     }
 }

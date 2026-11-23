@@ -22,7 +22,7 @@ class BenchmarkScheduleFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => Str::ucfirst(fake()->unique()->words(3, true)),
+            'name' => Str::ucfirst(implode(' ', (array) fake()->unique()->words(3, true))),
             'task' => AiTask::Decision,
             'case_tags' => [],
             'judge' => ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => 'provider_default'],

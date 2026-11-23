@@ -14,7 +14,10 @@ use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\RerankingResponse;
 use Laravel\Scout\EngineManager;
+use Laravel\Scout\Engines\TypesenseEngine;
+use RuntimeException;
 use Throwable;
+use Typesense\MultiSearch;
 
 /**
  * k-NN semantic search over the Typesense library collections using the
@@ -88,7 +91,13 @@ class SemanticLibrarySearch
     {
         $engine = resolve(EngineManager::class)->engine('typesense');
 
-        $response = $engine->getMultiSearch()->perform([
+        throw_unless($engine instanceof TypesenseEngine, RuntimeException::class, 'The typesense Scout engine is not a TypesenseEngine.');
+
+        // The Scout engine proxies unknown methods to the Typesense client through __call.
+        /** @var MultiSearch $multiSearch */
+        $multiSearch = $engine->__call('getMultiSearch', []);
+
+        $response = $multiSearch->perform([
             'searches' => [[
                 'collection' => $collection,
                 'q' => '*',

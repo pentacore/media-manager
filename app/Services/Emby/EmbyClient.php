@@ -74,6 +74,7 @@ class EmbyClient
     }
 
     /**
+     * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException

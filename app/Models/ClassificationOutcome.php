@@ -31,9 +31,9 @@ use Override;
  * @property CarbonImmutable|null $updated_at
  *
  * @method static ClassificationOutcomeFactory factory($count = null, $state = [])
- * @method static Builder<static>|ClassificationOutcome newModelQuery()
- * @method static Builder<static>|ClassificationOutcome newQuery()
- * @method static Builder<static>|ClassificationOutcome query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  *
  * @mixin \Eloquent
  */

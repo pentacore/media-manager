@@ -1,3 +1,13 @@
+# [1.62.0](https://github.com/pentacore/media-manager/compare/v1.61.2...v1.62.0) (2026-11-23)
+
+
+### Features
+
+* **connections:** edit subtitle repair search slots on Sonarr connections ([edce11e](https://github.com/pentacore/media-manager/commit/edce11e06b8d4ec4759c293130c79ba16d2b8f1e))
+* **connections:** per-connection subtitle audit search slots ([c744fcc](https://github.com/pentacore/media-manager/commit/c744fccf41c8e49366e01f72e5b3852299b475cc))
+* **settings:** edit subtitle repair limits on the media replacement page ([a04f37e](https://github.com/pentacore/media-manager/commit/a04f37eac118648f2faaf10d274d5b6051023bbd))
+* **settings:** make subtitle audit tunables admin settings ([2c5c852](https://github.com/pentacore/media-manager/commit/2c5c852f2575b8cd1fd07e1973d395f8bf983b0e))
+
 ## [1.61.2](https://github.com/pentacore/media-manager/compare/v1.61.1...v1.61.2) (2026-11-22)
 
 

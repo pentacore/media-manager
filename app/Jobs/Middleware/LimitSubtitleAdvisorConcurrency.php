@@ -23,7 +23,9 @@ final readonly class LimitSubtitleAdvisorConcurrency
             ->block(0)
             ->then(
                 fn (): mixed => $next($runSubtitleAdvisor),
-                fn (): mixed => $runSubtitleAdvisor->release(self::RETRY_AFTER_SECONDS),
+                function () use ($runSubtitleAdvisor): void {
+                    $runSubtitleAdvisor->release(self::RETRY_AFTER_SECONDS);
+                },
             );
     }
 }

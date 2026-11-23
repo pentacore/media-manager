@@ -15,6 +15,7 @@ use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
@@ -109,6 +110,7 @@ class GetMediaTool extends BaseTool
 
         $limit = max(1, min(self::MAX_LIMIT, (int) ($args['limit'] ?? self::DEFAULT_LIMIT)));
         $total = (clone $builder)->count();
+        /** @var Collection<int, IndexedSeries|IndexedMovie> $rows */
         $rows = $builder->orderBy('title')->limit($limit)->get();
 
         return [

@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Override;
@@ -28,6 +29,7 @@ use Override;
 #[WithoutIncrementing]
 class AppSetting extends Model
 {
+    /** @use HasFactory<Factory<static>> */
     use HasFactory;
 
     #[Override]

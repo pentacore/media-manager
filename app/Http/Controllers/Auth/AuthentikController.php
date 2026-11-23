@@ -10,11 +10,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
+use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 use Throwable;
 
 class AuthentikController extends Controller
 {
-    public function redirect(): RedirectResponse
+    public function redirect(): SymfonyRedirectResponse
     {
         return Socialite::driver('authentik')->redirect();
     }

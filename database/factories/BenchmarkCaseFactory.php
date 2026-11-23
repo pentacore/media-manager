@@ -22,7 +22,7 @@ class BenchmarkCaseFactory extends Factory
     {
         return [
             'task' => AiTask::Decision,
-            'name' => Str::ucfirst(fake()->unique()->words(3, true)),
+            'name' => Str::ucfirst(implode(' ', (array) fake()->unique()->words(3, true))),
             'tags' => [],
             'notes' => null,
             'input' => ['prompt' => 'Download stuck at 99% for two days'],

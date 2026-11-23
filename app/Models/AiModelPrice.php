@@ -8,6 +8,7 @@ use App\Enums\AiReasoningLevel;
 use App\Enums\PricingSource;
 use App\Observers\AiModelPriceObserver;
 use Carbon\CarbonImmutable;
+use Database\Factories\AiModelPriceFactory;
 use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -88,6 +89,7 @@ use Override;
 #[ObservedBy(AiModelPriceObserver::class)]
 class AiModelPrice extends Model
 {
+    /** @use HasFactory<AiModelPriceFactory> */
     use HasFactory;
 
     /**

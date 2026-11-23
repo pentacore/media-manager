@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
 use Carbon\CarbonImmutable;
+use Database\Factories\AiModelRateLimitFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,6 +39,7 @@ use Override;
 ])]
 class AiModelRateLimit extends Model
 {
+    /** @use HasFactory<AiModelRateLimitFactory> */
     use HasFactory;
 
     /**

@@ -19,7 +19,7 @@ class AppSettings
         return Cache::remember(
             self::CACHE_PREFIX.$key,
             self::CACHE_TTL,
-            fn (): mixed => AppSetting::find($key)?->value ?? $default,
+            fn (): mixed => AppSetting::find($key)->value ?? $default,
         );
     }
 

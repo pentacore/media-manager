@@ -161,7 +161,8 @@ class ToolGroupCatalogue
 
         if ($tool instanceof CanActAsTool && $tool instanceof HasTools) {
             foreach ($tool->tools() as $inner) {
-                $text .= ' '.$this->nameAndDescription($inner, (string) $inner->description());
+                $innerDescription = $inner instanceof Tool || $inner instanceof CanActAsTool ? (string) $inner->description() : '';
+                $text .= ' '.$this->nameAndDescription($inner, $innerDescription);
             }
         }
 
@@ -208,7 +209,7 @@ class ToolGroupCatalogue
 
     private function summary(string $description): string
     {
-        $sentence = preg_split('/(?<=[.!?])\s/', trim($description), 2)[0];
+        $sentence = preg_split('/(?<=[.!?])\s/', trim($description), 2)[0] ?? $description;
 
         return Str::limit($sentence, self::SUMMARY_LENGTH);
     }

@@ -43,8 +43,8 @@ class WebhookLogController extends Controller
             'events' => [
                 'data' => $lengthAwarePaginator->getCollection()->map(fn (WebhookEvent $webhookEvent): array => [
                     'id' => $webhookEvent->id,
-                    'service_name' => $webhookEvent->serviceConnection?->name,
-                    'service_type' => $webhookEvent->serviceConnection?->type->value,
+                    'service_name' => $webhookEvent->serviceConnection->name,
+                    'service_type' => $webhookEvent->serviceConnection->type->value,
                     'event_type' => $webhookEvent->event_type,
                     'created_at' => $webhookEvent->created_at?->toIso8601String(),
                     'processed_at' => $webhookEvent->processed_at?->toIso8601String(),
@@ -138,8 +138,8 @@ class WebhookLogController extends Controller
         return Inertia::render('Admin/WebhookLog/Show', [
             'event' => [
                 'id' => $webhookEvent->id,
-                'service_name' => $webhookEvent->serviceConnection?->name,
-                'service_type' => $webhookEvent->serviceConnection?->type->value,
+                'service_name' => $webhookEvent->serviceConnection->name,
+                'service_type' => $webhookEvent->serviceConnection->type->value,
                 'event_type' => $webhookEvent->event_type,
                 'created_at' => $webhookEvent->created_at?->toIso8601String(),
                 'processed_at' => $webhookEvent->processed_at?->toIso8601String(),

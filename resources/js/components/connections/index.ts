@@ -6,6 +6,7 @@ export { default as SabnzbdHiddenCategories } from './SabnzbdHiddenCategories.vu
 export { default as SabnzbdNotificationScript } from './SabnzbdNotificationScript.vue';
 export { default as ServiceTypeSelect } from './ServiceTypeSelect.vue';
 export { default as SonarrLibraryTypes } from './SonarrLibraryTypes.vue';
+export { default as SubtitleAuditSearchSlots } from './SubtitleAuditSearchSlots.vue';
 export { default as SubtitleCheckTags } from './SubtitleCheckTags.vue';
 export { default as WebhookTokenField } from './WebhookTokenField.vue';
 export { default as WebhookUrlField } from './WebhookUrlField.vue';

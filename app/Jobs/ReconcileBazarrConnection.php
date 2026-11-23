@@ -120,7 +120,10 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
 
             $total = $candidates['total'];
 
-            foreach ($candidates['data'] as $candidate) {
+            /** @var array<int, mixed> $rows Decoded HTTP body: entries are not guaranteed to be objects. */
+            $rows = $candidates['data'];
+
+            foreach ($rows as $candidate) {
                 if (! is_array($candidate) || $processed >= $maximumCases) {
                     break;
                 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Collection;
@@ -94,6 +96,7 @@ return new class extends AiMigration
         foreach ($rows as $row) {
             $meta = $this->decoded($row->meta);
 
+            /** @var list<array<string, mixed>> $calls */
             $calls = collect($this->decoded($row->tool_calls))
                 ->filter(fn (array $call) => $results->has($call['id'] ?? ''))
                 ->map(fn (array $call): array => [

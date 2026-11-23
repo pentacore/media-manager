@@ -163,3 +163,53 @@ test('the job runs when a search slot for the connection is free', function (): 
     expect($ran)->toBeTrue();
     $searchSubtitleAuditEpisode->assertNotReleased();
 });
+
+/**
+ * Run $inside while $held of the connection's search slots are taken, the way
+ * the middleware takes them with $limit slots.
+ */
+function holdSubtitleAuditSearchSlots(int $serviceConnectionId, int $held, int $limit, Closure $inside): mixed
+{
+    if ($held === 0) {
+        return $inside();
+    }
+
+    return Cache::funnel(sprintf('subtitle-audit-search:%d', $serviceConnectionId))
+        ->limit($limit)
+        ->releaseAfter(LimitSubtitleAuditSearchConcurrency::RELEASE_AFTER_SECONDS)
+        ->block(0)
+        ->then(fn (): mixed => holdSubtitleAuditSearchSlots($serviceConnectionId, $held - 1, $limit, $inside));
+}
+
+test('the search slots follow the connection setting', function (?int $slots, int $held, bool $runs): void {
+    $settings = $this->connection->settings;
+
+    if ($slots !== null) {
+        $settings['subtitle_audit'] = ['search_slots' => $slots];
+    }
+
+    $this->connection->update(['settings' => $settings]);
+
+    $searchSubtitleAuditEpisode = new SearchSubtitleAuditEpisode($this->episode->id, now()->addMinutes(30))->withFakeQueueInteractions();
+    $ran = false;
+
+    holdSubtitleAuditSearchSlots($this->connection->id, $held, $slots ?? 2, function () use ($searchSubtitleAuditEpisode, &$ran): void {
+        new LimitSubtitleAuditSearchConcurrency()->handle($searchSubtitleAuditEpisode, function () use (&$ran): void {
+            $ran = true;
+        });
+    });
+
+    expect($ran)->toBe($runs);
+
+    if ($runs) {
+        $searchSubtitleAuditEpisode->assertNotReleased();
+    } else {
+        $searchSubtitleAuditEpisode->assertReleased(delay: 10);
+    }
+})->with([
+    'one slot, taken' => [1, 1, false],
+    'three slots, two taken' => [3, 2, true],
+    'three slots, all taken' => [3, 3, false],
+    'unset defaults to two, one taken' => [null, 1, true],
+    'unset defaults to two, both taken' => [null, 2, false],
+]);

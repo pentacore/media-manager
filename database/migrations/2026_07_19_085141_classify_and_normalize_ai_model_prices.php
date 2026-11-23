@@ -173,7 +173,7 @@ return new class extends Migration
      * policy — differing free pools, or rate limits on both rows — so the caller
      * treats the pair as an unresolved collision and preserves both.
      */
-    private function mergeEqualCollision(object $googleRow, object $geminiRow): bool
+    private function mergeEqualCollision(stdClass $googleRow, stdClass $geminiRow): bool
     {
         $googlePoolId = $googleRow->free_usage_pool_id === null
             ? null
@@ -203,7 +203,9 @@ return new class extends Migration
             ]);
         }
 
-        if ($googleHasRateLimits && ! $geminiHasRateLimits) {
+        // Both-rows-have-limits returned above, so a google row with limits
+        // here means the gemini row has none.
+        if ($googleHasRateLimits) {
             DB::table('ai_model_rate_limits')
                 ->where('ai_model_price_id', $googleRow->id)
                 ->update(['ai_model_price_id' => $geminiRow->id]);
@@ -219,7 +221,7 @@ return new class extends Migration
      *
      * @param  array<string, string|null>  $frozen
      */
-    private function matchesFrozenPrices(object $row, array $frozen): bool
+    private function matchesFrozenPrices(stdClass $row, array $frozen): bool
     {
         return array_all(self::PRICE_COLUMNS, fn (string $column): bool => $this->normalize($row->{$column}) === $frozen[$column]);
     }
@@ -227,7 +229,7 @@ return new class extends Migration
     /**
      * Whether two stored rows carry identical prices across all rate columns.
      */
-    private function pricesEqual(object $left, object $right): bool
+    private function pricesEqual(stdClass $left, stdClass $right): bool
     {
         return array_all(self::PRICE_COLUMNS, fn (string $column): bool => $this->normalize($left->{$column}) === $this->normalize($right->{$column}));
     }

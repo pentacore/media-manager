@@ -212,11 +212,9 @@ class EmbyLinkController extends Controller
      */
     private function fetchEmbyUsers(ServiceConnection $serviceConnection): array
     {
-        $apiKey = $serviceConnection->api_key;
-
         return Http::baseUrl(rtrim($serviceConnection->url, '/'))
             ->withHeaders([
-                'X-Emby-Token' => $apiKey ?? '',
+                'X-Emby-Token' => $serviceConnection->api_key,
             ])
             ->timeout(10)
             ->connectTimeout(3)

@@ -83,6 +83,7 @@ class TypesenseSeedCommand extends Command
                 continue;
             }
 
+            /** @var array<int, mixed> $items Decoded HTTP body: entries are not guaranteed to be objects. */
             foreach ($items as $item) {
                 if (! is_array($item)) {
                     continue;
@@ -119,6 +120,7 @@ class TypesenseSeedCommand extends Command
                 continue;
             }
 
+            /** @var array<int, mixed> $items Decoded HTTP body: entries are not guaranteed to be objects. */
             foreach ($items as $item) {
                 if (! is_array($item)) {
                     continue;

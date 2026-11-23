@@ -22,6 +22,14 @@ final readonly class MediaReplacementSettings
      *         max_attempts_per_target: int<1, max>,
      *         cooldown_hours: int<1, max>
      *     },
+     *     subtitle_audit: array{
+     *         search_minutes_per_episode: int,
+     *         min_search_minutes: int,
+     *         max_search_minutes: int,
+     *         in_chat_wait_seconds: int,
+     *         watchdog_delay_seconds: int,
+     *         sweep_grace_minutes: int
+     *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
      *         root_folder_id: int,
@@ -50,6 +58,14 @@ final readonly class MediaReplacementSettings
             'max_attempts_per_target' => 1,
             'cooldown_hours' => 24,
         ],
+        'subtitle_audit' => [
+            'search_minutes_per_episode' => 3,
+            'min_search_minutes' => 30,
+            'max_search_minutes' => 720,
+            'in_chat_wait_seconds' => 60,
+            'watchdog_delay_seconds' => 180,
+            'sweep_grace_minutes' => 5,
+        ],
         'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
@@ -66,6 +82,39 @@ final readonly class MediaReplacementSettings
             ],
         ],
     ];
+
+    /**
+     * SearchSubtitleAuditEpisode's #[Timeout(270)] must stay below this grace
+     * (300 s), so a live search never looks expired to the sweeper.
+     */
+    public const int MIN_SUBTITLE_AUDIT_SWEEP_GRACE_MINUTES = 5;
+
+    /**
+     * The accepted range of every subtitle audit tunable. The update request
+     * validates against the same bounds (the watchdog delay additionally must
+     * outlast the request ceiling); normalization falls back to the default
+     * for a stored value outside them.
+     *
+     * @var array{
+     *     search_minutes_per_episode: array{int, int},
+     *     min_search_minutes: array{int, int},
+     *     max_search_minutes: array{int, int},
+     *     in_chat_wait_seconds: array{int, int},
+     *     watchdog_delay_seconds: array{int, int},
+     *     sweep_grace_minutes: array{int, int}
+     * }
+     */
+    public const array SUBTITLE_AUDIT_BOUNDS = [
+        'search_minutes_per_episode' => [1, 30],
+        'min_search_minutes' => [5, 720],
+        'max_search_minutes' => [30, 1440],
+        'in_chat_wait_seconds' => [0, 120],
+        'watchdog_delay_seconds' => [1, 3600],
+        'sweep_grace_minutes' => [self::MIN_SUBTITLE_AUDIT_SWEEP_GRACE_MINUTES, 120],
+    ];
+
+    /** How far past the request ceiling a watchdog delay inside it is moved. */
+    private const int WATCHDOG_CEILING_MARGIN_SECONDS = 30;
 
     private const string SETTINGS_KEY = 'ai.media_replacement';
 
@@ -89,6 +138,14 @@ final readonly class MediaReplacementSettings
      *         enabled: bool,
      *         max_attempts_per_target: int<1, max>,
      *         cooldown_hours: int<1, max>
+     *     },
+     *     subtitle_audit: array{
+     *         search_minutes_per_episode: int,
+     *         min_search_minutes: int,
+     *         max_search_minutes: int,
+     *         in_chat_wait_seconds: int,
+     *         watchdog_delay_seconds: int,
+     *         sweep_grace_minutes: int
      *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
@@ -147,6 +204,91 @@ final readonly class MediaReplacementSettings
     public function subtitleCheckCooldownHours(): int
     {
         return $this->configuration()['subtitle_check']['cooldown_hours'];
+    }
+
+    /**
+     * The search window of a subtitle audit batch is this many minutes per
+     * missing episode (the searches run one after another on a single worker),
+     * held between the minimum and maximum below. A searching batch blocks a
+     * new repair of its series until the window passes.
+     */
+    public function subtitleAuditSearchMinutesPerEpisode(): int
+    {
+        return $this->configuration()['subtitle_audit']['search_minutes_per_episode'];
+    }
+
+    /**
+     * Never above the maximum, so a stored minimum past it cannot widen the
+     * window beyond the cap.
+     */
+    public function subtitleAuditMinSearchMinutes(): int
+    {
+        $subtitleAudit = $this->configuration()['subtitle_audit'];
+
+        return min($subtitleAudit['min_search_minutes'], $subtitleAudit['max_search_minutes']);
+    }
+
+    public function subtitleAuditMaxSearchMinutes(): int
+    {
+        return $this->configuration()['subtitle_audit']['max_search_minutes'];
+    }
+
+    /**
+     * How long the chat turn waits for the release searches before handing the
+     * batch off; 0 hands it off at once. RepairSeriesSubtitlesTool still caps
+     * the wait at what is left of the request.
+     */
+    public function subtitleAuditInChatWaitSeconds(): int
+    {
+        return $this->configuration()['subtitle_audit']['in_chat_wait_seconds'];
+    }
+
+    /**
+     * The delay of the batch watchdog. The chat turn that started the batch
+     * runs inside the HTTP request, so the watchdog must outlast the Octane
+     * request ceiling before it adopts a batch nobody claimed; a delay at or
+     * inside the ceiling is moved 30 s past it. Without a ceiling the saved
+     * value applies as is.
+     */
+    public function subtitleAuditWatchdogDelaySeconds(): int
+    {
+        $delay = $this->configuredSubtitleAuditWatchdogDelaySeconds();
+        $ceiling = self::requestCeilingSeconds();
+
+        return $ceiling > 0 && $delay <= $ceiling
+            ? $ceiling + self::WATCHDOG_CEILING_MARGIN_SECONDS
+            : $delay;
+    }
+
+    /**
+     * The saved watchdog delay, unclamped, for the admin form.
+     */
+    public function configuredSubtitleAuditWatchdogDelaySeconds(): int
+    {
+        return $this->configuration()['subtitle_audit']['watchdog_delay_seconds'];
+    }
+
+    /**
+     * How long past its search deadline the sweeper waits before it fails a
+     * batch's searches. Safe only while SearchSubtitleAuditEpisode's
+     * #[Timeout(270)] stays below the 5 minute floor: a live search never looks
+     * expired. The searcher's guarded outcome write makes any overlap harmless.
+     */
+    public function subtitleAuditSweepGraceMinutes(): int
+    {
+        return max(
+            self::MIN_SUBTITLE_AUDIT_SWEEP_GRACE_MINUTES,
+            $this->configuration()['subtitle_audit']['sweep_grace_minutes'],
+        );
+    }
+
+    /**
+     * Octane's request ceiling in seconds (`octane.max_execution_time`); 0
+     * means no ceiling.
+     */
+    public static function requestCeilingSeconds(): int
+    {
+        return max(0, (int) config('octane.max_execution_time', 0));
     }
 
     public function seasonPackPolicy(): SeasonPackPolicy
@@ -212,6 +354,14 @@ final readonly class MediaReplacementSettings
      *         max_attempts_per_target: int<1, max>,
      *         cooldown_hours: int<1, max>
      *     },
+     *     subtitle_audit: array{
+     *         search_minutes_per_episode: int,
+     *         min_search_minutes: int,
+     *         max_search_minutes: int,
+     *         in_chat_wait_seconds: int,
+     *         watchdog_delay_seconds: int,
+     *         sweep_grace_minutes: int
+     *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
      *         root_folder_id: int,
@@ -245,7 +395,7 @@ final readonly class MediaReplacementSettings
                 ? $automaticSelectionThreshold
                 : self::DEFAULT_CONFIGURATION['automatic_selection_threshold'];
         $normalizedConfiguration['season_pack_policy'] = is_string($seasonPackPolicy)
-            ? (SeasonPackPolicy::tryFrom($seasonPackPolicy)?->value ?? self::DEFAULT_CONFIGURATION['season_pack_policy'])
+            ? (SeasonPackPolicy::tryFrom($seasonPackPolicy)->value ?? self::DEFAULT_CONFIGURATION['season_pack_policy'])
             : self::DEFAULT_CONFIGURATION['season_pack_policy'];
         $normalizedConfiguration['global_languages'] = is_array($globalLanguages)
             ? $this->normalizeLanguageList($globalLanguages)
@@ -272,6 +422,18 @@ final readonly class MediaReplacementSettings
                 ? $subtitleCheckCooldownHours
                 : self::DEFAULT_CONFIGURATION['subtitle_check']['cooldown_hours'],
         ];
+
+        $subtitleAudit = is_array($configuration['subtitle_audit'] ?? null)
+            ? $configuration['subtitle_audit']
+            : [];
+
+        foreach (self::SUBTITLE_AUDIT_BOUNDS as $key => [$minimum, $maximum]) {
+            $value = $subtitleAudit[$key] ?? null;
+
+            $normalizedConfiguration['subtitle_audit'][$key] = is_int($value) && $value >= $minimum && $value <= $maximum
+                ? $value
+                : self::DEFAULT_CONFIGURATION['subtitle_audit'][$key];
+        }
 
         foreach (MediaReplacementScope::cases() as $scope) {
             $languages = is_array($scopedLanguages)

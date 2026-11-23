@@ -29,6 +29,17 @@ enum AnthropicReasoningFamily
 
     private const int MIN_BUDGET = 1024;
 
+    /**
+     * Widened from the literal shape: the level is an enum value, so the key
+     * may be one the table has no budget for.
+     *
+     * @return array<string, int>
+     */
+    private static function budgets(): array
+    {
+        return self::BUDGETS;
+    }
+
     public static function for(?string $model, ?string $style): self
     {
         $model = (string) $model;
@@ -53,7 +64,7 @@ enum AnthropicReasoningFamily
                 return [];
             }
 
-            $budget = min(self::BUDGETS[$aiReasoningLevel->value], ($maxTokens ?? self::SDK_MAX_TOKENS) - self::MIN_BUDGET);
+            $budget = min(self::budgets()[$aiReasoningLevel->value], ($maxTokens ?? self::SDK_MAX_TOKENS) - self::MIN_BUDGET);
 
             return $budget < self::MIN_BUDGET ? [] : ['thinking' => ['type' => 'enabled', 'budget_tokens' => $budget]];
         }

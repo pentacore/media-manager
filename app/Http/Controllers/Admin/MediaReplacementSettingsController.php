@@ -38,6 +38,8 @@ class MediaReplacementSettingsController extends Controller
                 ['value' => 'custom_format', 'label' => 'Custom format'],
             ],
             'attentionCount' => MediaReplacementAttempt::unacknowledgedAttentionCount(),
+            'requestCeilingSeconds' => MediaReplacementSettings::requestCeilingSeconds(),
+            'effectiveWatchdogDelaySeconds' => $mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds(),
         ]);
     }
 

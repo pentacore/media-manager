@@ -124,7 +124,7 @@ final readonly class ReplacementCandidateFinder
         $ranked = $this->releaseCandidateRanker->rank(
             releases: $releases,
             requiredLanguages: $effectiveLanguages,
-            rules: is_array($guidance['rules']) ? $guidance['rules'] : [],
+            rules: $guidance['rules'],
             target: $target,
             seasonPackPolicy: $seasonPackPolicy,
             limit: $limit,
@@ -154,8 +154,8 @@ final readonly class ReplacementCandidateFinder
      */
     private function matchingRelease(string $service, array $releases, string $fingerprint): ?array
     {
-        foreach ($releases as $release) {
-            if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
+        foreach (array_filter($releases, is_array(...)) as $release) {
+            if ($this->releaseFingerprint->make($service, $release) === $fingerprint) {
                 return $release;
             }
         }

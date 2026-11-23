@@ -66,6 +66,7 @@ return new class extends Migration
             ->exists();
 
         DB::transaction(function () use ($existingInstall): void {
+            /** @var array<string, array{string|null, string|null, string|null}> $saved */
             $saved = [];
 
             foreach (self::MAP as $task => [$providerKey, $modelKey, $reasoningKey]) {

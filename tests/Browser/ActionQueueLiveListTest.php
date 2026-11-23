@@ -173,7 +173,7 @@ test('a live status change renders on a listed row under the batch filter', func
         'updated_at' => $actionRequest->updated_at->addSeconds(60)->toISOString(),
         'status_version' => $actionRequest->status_version + 1,
     ], 3));
-    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('[data-action-row=\"%d\"]')?.innerText.includes('executing')", $actionRequest->id)));
+    $webpage->script(actionQueueLiveWaitScript(sprintf("document.querySelector('[data-action-row=\"%d\"]')?.innerText.includes('Executing')", $actionRequest->id)));
 
     $webpage->assertSeeIn(sprintf('[data-action-row="%d"]', $actionRequest->id), 'executing')
         ->assertNoSmoke();
@@ -192,7 +192,7 @@ test('a new request elsewhere does not raise the stale banner in a batch view', 
 
     $unrelated = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Example unrelated request']);
     $webpage->script(echoEmitScript('members.actions', 'ActionRequestCreated', new ActionRequestCreated($unrelated)->broadcastWith(), 4));
-    $webpage->script('new Promise((resolve) => setTimeout(resolve, 1000))');
+    $webpage->wait(1);
 
     $webpage->assertMissing('[data-action-stale]')
         ->assertMissing(sprintf('[data-action-row="%d"]', $unrelated->id))

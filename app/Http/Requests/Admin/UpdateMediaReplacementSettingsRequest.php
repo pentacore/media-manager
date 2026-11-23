@@ -38,6 +38,19 @@ class UpdateMediaReplacementSettingsRequest extends FormRequest
             'media_replacement.subtitle_check.enabled' => ['required', 'boolean'],
             'media_replacement.subtitle_check.max_attempts_per_target' => ['required', 'integer', 'min:1', 'max:10'],
             'media_replacement.subtitle_check.cooldown_hours' => ['required', 'integer', 'min:1', 'max:720'],
+            'media_replacement.subtitle_audit' => ['required', 'array:'.implode(',', array_keys(MediaReplacementSettings::SUBTITLE_AUDIT_BOUNDS))],
+            'media_replacement.subtitle_audit.search_minutes_per_episode' => ['required', 'integer', ...$this->subtitleAuditBounds('search_minutes_per_episode')],
+            'media_replacement.subtitle_audit.min_search_minutes' => ['required', 'integer', ...$this->subtitleAuditBounds('min_search_minutes'), 'lte:media_replacement.subtitle_audit.max_search_minutes'],
+            'media_replacement.subtitle_audit.max_search_minutes' => ['required', 'integer', ...$this->subtitleAuditBounds('max_search_minutes'), 'gte:media_replacement.subtitle_audit.min_search_minutes'],
+            'media_replacement.subtitle_audit.in_chat_wait_seconds' => ['required', 'integer', ...$this->subtitleAuditBounds('in_chat_wait_seconds')],
+            // The watchdog must outlast the request that started the batch.
+            'media_replacement.subtitle_audit.watchdog_delay_seconds' => [
+                'required',
+                'integer',
+                'min:'.max(MediaReplacementSettings::SUBTITLE_AUDIT_BOUNDS['watchdog_delay_seconds'][0], MediaReplacementSettings::requestCeilingSeconds() + 1),
+                'max:'.MediaReplacementSettings::SUBTITLE_AUDIT_BOUNDS['watchdog_delay_seconds'][1],
+            ],
+            'media_replacement.subtitle_audit.sweep_grace_minutes' => ['required', 'integer', ...$this->subtitleAuditBounds('sweep_grace_minutes')],
             'media_replacement.guidance' => ['required', 'array:anime,tv,movie'],
             'media_replacement.guidance.*.notes' => ['present', 'string', 'max:4000'],
             'media_replacement.guidance.*.rules' => ['present', 'array', 'max:50'],
@@ -51,6 +64,17 @@ class UpdateMediaReplacementSettingsRequest extends FormRequest
             'media_replacement.guidance.*.rules.*.conditions.*.value' => ['required', 'string', 'max:150'],
             'media_replacement.guidance.*.rules.*.explanation' => ['nullable', 'string', 'max:500'],
         ];
+    }
+
+    /**
+     * @param  key-of<MediaReplacementSettings::SUBTITLE_AUDIT_BOUNDS>  $key
+     * @return array{string, string}
+     */
+    private function subtitleAuditBounds(string $key): array
+    {
+        [$minimum, $maximum] = MediaReplacementSettings::SUBTITLE_AUDIT_BOUNDS[$key];
+
+        return ['min:'.$minimum, 'max:'.$maximum];
     }
 
     /**

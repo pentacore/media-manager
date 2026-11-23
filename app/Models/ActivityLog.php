@@ -40,9 +40,9 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property-read User|null $user
  *
  * @method static ActivityLogFactory factory($count = null, $state = [])
- * @method static Builder<static>|ActivityLog newModelQuery()
- * @method static Builder<static>|ActivityLog newQuery()
- * @method static Builder<static>|ActivityLog query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  * @method static Builder<static>|ActivityLog visibleTo(?User $user)
  * @method static Builder<static>|ActivityLog whereAction($value)
  * @method static Builder<static>|ActivityLog whereCategory($value)
@@ -119,6 +119,9 @@ class ActivityLog extends Model
         return $this->belongsTo(WebhookEvent::class);
     }
 
+    /**
+     * @return MorphTo<Model, $this>
+     */
     public function subject(): MorphTo
     {
         return $this->morphTo();
@@ -159,6 +162,8 @@ class ActivityLog extends Model
     /**
      * Activity and audit rows age out on separate windows from
      * mediamanager.retention (0 keeps that category forever).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

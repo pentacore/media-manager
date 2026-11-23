@@ -36,13 +36,12 @@ abstract class BazarrController extends Controller
         }
 
         return [
-            'connections' => $connections
+            'connections' => array_values($connections
                 ->map(static fn (ServiceConnection $serviceConnection): array => [
                     'id' => $serviceConnection->id,
                     'name' => $serviceConnection->name,
                 ])
-                ->values()
-                ->all(),
+                ->all()),
             'selected_connection_id' => $selectedConnection?->id,
             'requires_connection_selection' => $requestedConnectionId === null && $connections->count() > 1,
         ];

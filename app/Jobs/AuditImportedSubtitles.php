@@ -64,10 +64,13 @@ class AuditImportedSubtitles implements ShouldQueue
 
     public static function queueFor(WebhookEvent $webhookEvent): void
     {
+        /** @var mixed $payload A JSON column can decode to a scalar. */
+        $payload = $webhookEvent->payload;
+
         dispatch(new self(
             $webhookEvent->id,
             $webhookEvent->service_connection_id,
-            is_array($webhookEvent->payload) ? $webhookEvent->payload : [],
+            is_array($payload) ? $payload : [],
         ))->delay(now()->addSeconds(self::DELAY_SECONDS));
     }
 

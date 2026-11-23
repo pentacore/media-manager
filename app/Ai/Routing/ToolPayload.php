@@ -25,8 +25,10 @@ final readonly class ToolPayload
      * Core tools stay first-class; every other tool is deferred behind one
      * ToolSearch when the chain supports it. Otherwise the tools pass through.
      *
-     * @param  array<int, object>  $tools
-     * @return array<int, object>
+     * @template TTool of object
+     *
+     * @param  array<int, TTool>  $tools
+     * @return array<int, TTool|ToolSearch>
      */
     public function build(array $tools): array
     {
@@ -37,6 +39,12 @@ final readonly class ToolPayload
         $core = array_values(array_filter($tools, static fn (object $tool): bool => in_array($tool::class, ToolGroup::core(), true)));
         $deferred = array_values(array_filter($tools, static fn (object $tool): bool => ! in_array($tool::class, ToolGroup::core(), true)));
 
-        return $deferred === [] ? $core : [...$core, new ToolSearch($deferred)];
+        if ($deferred === []) {
+            return $core;
+        }
+
+        // The SDK documents array<Tool>, but sub-agents (CanActAsTool) are deferred here too and ToolSearch handles them.
+        // @phpstan-ignore argument.type
+        return [...$core, new ToolSearch($deferred)];
     }
 }

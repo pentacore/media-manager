@@ -143,7 +143,7 @@ class WebFetchTool extends BaseTool
             $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
         }
 
-        if ($response === null || $response->redirect()) {
+        if ($response->redirect()) {
             return [
                 'error' => 'too_many_redirects',
                 'message' => 'Gave up after '.self::MAX_REDIRECTS.' redirects.',

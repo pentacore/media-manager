@@ -91,8 +91,10 @@ class PricingFeedPhase
                 // nothing usable, so the provider is incomplete and escalates
                 // like a missing provider rather than counting as succeeded.
                 $priceRefreshLedger->recordRejectionCodes($provider, $result->rejections);
-                $priceRefreshLedger->providerStates[$provider]['rejected'] += count($result->rejections);
-                $priceRefreshLedger->providerStates[$provider]['conflicts'] += count($result->conflicts);
+                $incompleteState = $priceRefreshLedger->providerStates[$provider];
+                $incompleteState['rejected'] += count($result->rejections);
+                $incompleteState['conflicts'] += count($result->conflicts);
+                $priceRefreshLedger->providerStates[$provider] = $incompleteState;
                 $this->priceRefreshFallbackQueue->resolveProviderFailure($priceRefreshLedger, $provider, $refreshScope, PriceRefreshLedger::PROVIDER_INCOMPLETE, $source === AiPriceRefreshCoordinator::SOURCE_HYBRID);
 
                 continue;

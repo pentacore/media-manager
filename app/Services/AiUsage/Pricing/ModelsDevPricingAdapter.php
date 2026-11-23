@@ -379,7 +379,7 @@ final class ModelsDevPricingAdapter
      * Detect context-tier pricing signals without flattening them into the base
      * rate. Returns a comma-separated list of detected signals, or null.
      *
-     * @param  array<string, mixed>  $cost
+     * @param  array<array-key, mixed>  $cost
      */
     private function tierSignal(array $cost): ?string
     {

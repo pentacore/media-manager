@@ -52,7 +52,8 @@ final readonly class BenchmarkMatrix
                 $candidates[] = self::candidateRow($benchmarkRun, $index, $candidate, $taskResults->where('candidate_index', $index), $judged, $verdict ? ($verdictErrors[$index] ?? ['missed' => 0, 'false_alarms' => 0]) : null);
             }
 
-            $maxScored = $candidates === [] ? 0 : (int) max(array_column($candidates, 'scored'));
+            $scoredCounts = array_column($candidates, 'scored');
+            $maxScored = $scoredCounts === [] ? 0 : (int) max($scoredCounts);
             $fullyScored = array_values(array_filter($candidates, static fn (array $candidate): bool => $candidate['scored'] === $maxScored));
 
             $matrix[] = [
@@ -164,14 +165,14 @@ final readonly class BenchmarkMatrix
      */
     private static function caseRows(Collection $results): array
     {
-        return $results
+        return array_values($results
             ->groupBy(fn (BenchmarkResult $benchmarkResult): string => $benchmarkResult->benchmark_case_id === null
                 ? 'name:'.$benchmarkResult->case_name
                 : 'id:'.$benchmarkResult->benchmark_case_id)
             ->map(fn (Collection $caseResults): array => [
                 'case_id' => $caseResults->first()->benchmark_case_id,
                 'case_name' => $caseResults->first()->case_name,
-                'cells' => $caseResults->sortBy('candidate_index')->map(fn (BenchmarkResult $benchmarkResult): array => [
+                'cells' => array_values($caseResults->sortBy('candidate_index')->map(fn (BenchmarkResult $benchmarkResult): array => [
                     'candidate_index' => $benchmarkResult->candidate_index,
                     'result_id' => $benchmarkResult->id,
                     'status' => $benchmarkResult->status->value,
@@ -180,10 +181,9 @@ final readonly class BenchmarkMatrix
                     'judge_status' => $benchmarkResult->judge_status->value,
                     'judge_stale' => $benchmarkResult->isJudgeStale(),
                     'stale' => $benchmarkResult->isRunStale(),
-                ])->values()->all(),
+                ])->all()),
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     private static function taskOrder(string $task): int

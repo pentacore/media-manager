@@ -27,7 +27,7 @@ class RecordEmbeddingsFailure
             'model' => $event->model,
             'prompt_tokens' => 0,
             'completion_tokens' => 0,
-            'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
             'status' => 'failed',
             'error_message' => UpstreamErrorText::sanitize($event->exception->getMessage(), 2000, UpstreamErrorText::UPSTREAM_EMPTY_FALLBACK),
         ]);

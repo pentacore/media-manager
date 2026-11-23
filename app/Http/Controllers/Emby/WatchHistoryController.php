@@ -24,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class WatchHistoryController extends Controller
@@ -140,7 +141,7 @@ class WatchHistoryController extends Controller
         $filename = sprintf('watch-history-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($builder): void {
-            $handle = fopen('php://output', 'wb');
+            $handle = fopen('php://output', 'wb') ?: throw new RuntimeException('Unable to open the output stream.');
 
             fputcsv($handle, [
                 'id', 'started_at', 'emby_user', 'media_type', 'media_title',
@@ -157,7 +158,7 @@ class WatchHistoryController extends Controller
                 fputcsv($handle, [
                     $embyActivity->id,
                     $embyActivity->created_at?->toIso8601String(),
-                    $embyActivity->embyUserLink?->emby_username,
+                    $embyActivity->embyUserLink->emby_username,
                     $embyActivity->media_type,
                     $embyActivity->media_title,
                     $embyActivity->series_title,
@@ -242,16 +243,16 @@ class WatchHistoryController extends Controller
             if ($link !== null) {
                 $topUser = [
                     'name' => $link->emby_username,
-                    'ticks' => (int) $topGroup->ticks,
-                    'sessions' => (int) $topGroup->sessions,
+                    'ticks' => (int) $topGroup->getAttribute('ticks'),
+                    'sessions' => (int) $topGroup->getAttribute('sessions'),
                 ];
             }
         }
 
         return [
-            'total_ticks' => (int) ($aggregate?->total_ticks ?? 0),
-            'sessions' => (int) ($aggregate?->sessions ?? 0),
-            'completed_sessions' => (int) ($aggregate?->completed_sessions ?? 0),
+            'total_ticks' => (int) ($aggregate?->getAttribute('total_ticks') ?? 0),
+            'sessions' => (int) ($aggregate?->getAttribute('sessions') ?? 0),
+            'completed_sessions' => (int) ($aggregate?->getAttribute('completed_sessions') ?? 0),
             'top_user' => $topUser,
         ];
     }

@@ -18,10 +18,13 @@ use App\Services\Arr\ArrConnections;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
 use App\Services\Bazarr\SubtitleCaseSupersession;
+use App\Services\Emby\EmbyClient;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Sabnzbd\SabnzbdClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
 use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\Builder;
@@ -119,8 +122,8 @@ class ServiceConnectionController extends Controller
                 'name' => $serviceConnection->name,
                 'url' => $serviceConnection->url,
                 'external_url' => $serviceConnection->external_url,
-                'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
-                'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
+                'api_key_set' => $serviceConnection->api_key !== '',
+                'webhook_token_set' => $serviceConnection->webhook_token !== '',
                 'webhook_url' => $this->webhookUrlFor($serviceConnection),
                 'supports_webhook_configuration' => $serviceConnection->type->supportsWebhookConfiguration(),
                 'is_active' => $serviceConnection->is_active,
@@ -140,7 +143,9 @@ class ServiceConnectionController extends Controller
                 'whisparr_version' => $serviceConnection->whisparrVersion()->value,
                 'sonarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Sonarr->value],
                 'radarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Radarr->value],
+                'subtitle_audit_search_slots' => $this->storedSubtitleAuditSearchSlots($serviceConnection),
             ],
+            'defaultSubtitleAuditSearchSlots' => ServiceConnection::DEFAULT_SUBTITLE_AUDIT_SEARCH_SLOTS,
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'arrConnections' => $this->arrConnections(
                 $serviceConnection,
@@ -234,7 +239,7 @@ class ServiceConnectionController extends Controller
             $builder->whereKeyNot($editingConnection->getKey());
         }
 
-        return $builder
+        return array_values($builder
             ->where(function (Builder $builder) use ($selectedConnectionIds): void {
                 $builder->where('is_active', true);
 
@@ -249,7 +254,7 @@ class ServiceConnectionController extends Controller
                 'type' => $serviceConnection->type->value,
                 'name' => $serviceConnection->name.($serviceConnection->is_active ? '' : ' (inactive)'),
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -268,7 +273,7 @@ class ServiceConnectionController extends Controller
             return $validated;
         }
 
-        $existingSettings = $validated['settings'] ?? $serviceConnection?->settings ?? [];
+        $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
         $existingSettings['whisparr_version'] = $version;
         $validated['settings'] = $existingSettings;
 
@@ -344,7 +349,7 @@ class ServiceConnectionController extends Controller
 
         $token = $serviceConnection->webhook_token;
 
-        return is_string($token) && $token !== ''
+        return $token !== ''
             ? $base.'?token='.urlencode($token)
             : $base;
     }
@@ -445,6 +450,8 @@ class ServiceConnectionController extends Controller
         $hiddenCategories = $validated['hidden_categories'] ?? null;
         $sonarrRootFolders = $validated['sonarr_root_folders'] ?? null;
         $subtitleCheckTags = $validated['subtitle_check_tags'] ?? null;
+        $hasSubtitleAuditSearchSlots = array_key_exists('subtitle_audit_search_slots', $validated);
+        $subtitleAuditSearchSlots = $validated['subtitle_audit_search_slots'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
@@ -452,6 +459,7 @@ class ServiceConnectionController extends Controller
             $validated['hidden_categories'],
             $validated['sonarr_root_folders'],
             $validated['subtitle_check_tags'],
+            $validated['subtitle_audit_search_slots'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
@@ -484,6 +492,14 @@ class ServiceConnectionController extends Controller
         if (is_array($subtitleCheckTags) && in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
             $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $validated['settings'] = $subtitleCheckTagSettings->mergeInto($existingSettings, $subtitleCheckTags);
+        }
+
+        if ($hasSubtitleAuditSearchSlots && $serviceConnection->type === ServiceType::Sonarr) {
+            $validated['settings'] = $this->mergeSubtitleAuditSearchSlots(
+                $validated['settings'] ?? $serviceConnection->settings ?? [],
+                // A browser posts the validated integer as a string.
+                is_numeric($subtitleAuditSearchSlots) ? (int) $subtitleAuditSearchSlots : null,
+            );
         }
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
@@ -684,10 +700,10 @@ class ServiceConnectionController extends Controller
         try {
             $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
 
-            $result = match ($serviceConnection->type) {
-                ServiceType::Emby => $client->getSystemInfo(),
-                ServiceType::Seerr => $client->getStatus(),
-                ServiceType::SABnzbd => $client->getVersion(),
+            $result = match (true) {
+                $client instanceof EmbyClient => $client->getSystemInfo(),
+                $client instanceof SeerrClient => $client->getStatus(),
+                $client instanceof SabnzbdClient => $client->getVersion(),
                 default => $client->getSystemStatus(),
             };
 
@@ -751,6 +767,49 @@ class ServiceConnectionController extends Controller
         ]);
 
         return back()->with('success', true);
+    }
+
+    /**
+     * The saved search slots of a Sonarr connection, or null when unset (the
+     * form then shows the default as a placeholder).
+     */
+    private function storedSubtitleAuditSearchSlots(ServiceConnection $serviceConnection): ?int
+    {
+        if ($serviceConnection->type !== ServiceType::Sonarr) {
+            return null;
+        }
+
+        $subtitleAudit = $serviceConnection->settings['subtitle_audit'] ?? null;
+
+        return is_array($subtitleAudit) && is_int($subtitleAudit['search_slots'] ?? null)
+            ? $serviceConnection->subtitleAuditSearchSlots()
+            : null;
+    }
+
+    /**
+     * Store the subtitle audit search slots in the connection settings, or
+     * drop them (back to the default) when cleared.
+     *
+     * @param  array<array-key, mixed>  $settings
+     * @return array<array-key, mixed>
+     */
+    private function mergeSubtitleAuditSearchSlots(array $settings, ?int $slots): array
+    {
+        $subtitleAudit = is_array($settings['subtitle_audit'] ?? null) ? $settings['subtitle_audit'] : [];
+
+        if ($slots === null) {
+            unset($subtitleAudit['search_slots']);
+        } else {
+            $subtitleAudit['search_slots'] = $slots;
+        }
+
+        if ($subtitleAudit === []) {
+            unset($settings['subtitle_audit']);
+        } else {
+            $settings['subtitle_audit'] = $subtitleAudit;
+        }
+
+        return $settings;
     }
 
     /**

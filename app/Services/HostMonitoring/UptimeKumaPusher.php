@@ -31,6 +31,12 @@ final readonly class UptimeKumaPusher
             return false;
         }
 
+        $pushUrl = strtok($url, '?');
+
+        if ($pushUrl === false) {
+            return false;
+        }
+
         [$status, $message] = $this->health();
 
         try {
@@ -38,7 +44,7 @@ final readonly class UptimeKumaPusher
                 ->connectTimeout(3)
                 ->withoutRedirecting()
                 ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
-                ->get(strtok($url, '?'), ['status' => $status, 'msg' => $message]);
+                ->get($pushUrl, ['status' => $status, 'msg' => $message]);
         } catch (Throwable) {
             // The exception chain carries the URL (and its token): log nothing from it.
             Log::warning('UptimeKumaPusher: push failed', ['status' => 'failed']);

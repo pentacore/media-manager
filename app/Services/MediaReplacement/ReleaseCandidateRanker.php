@@ -458,7 +458,7 @@ final readonly class ReleaseCandidateRanker
 
         sort($normalizedIds, SORT_NUMERIC);
 
-        return array_values($normalizedIds);
+        return $normalizedIds;
     }
 
     /**

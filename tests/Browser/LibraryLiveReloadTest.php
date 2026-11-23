@@ -32,14 +32,6 @@ function libraryLiveReloadCountScript(string $only): string
 }
 
 /**
- * Rests inside the page past useRealtimeReload's 1500 ms debounce.
- */
-function libraryLiveRestScript(): string
-{
-    return '(async () => { await new Promise((resolve) => setTimeout(resolve, 2000)); })()';
-}
-
-/**
  * @return array<string, mixed>
  */
 function libraryLiveProcessed(string $serviceType, int $serviceConnectionId): array
@@ -81,7 +73,7 @@ test('the series list reloads only after a Sonarr webhook was processed', functi
     ], 0));
     // Processed, but for another service (a Radarr connection that is not on this page).
     $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', 2)));
-    $webpage->script(libraryLiveRestScript());
+    $webpage->wait(2);
 
     expect($webpage->script(libraryLiveReloadCountScript('series')))->toBe(0);
 
@@ -182,7 +174,7 @@ test('a series page reloads only after its own Sonarr connection processed a web
     // Another Sonarr connection, then another service: neither is this page's.
     $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id + 1000)));
     $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', libraryLiveProcessed('radarr', $sonarr->id)));
-    $webpage->script(libraryLiveRestScript());
+    $webpage->wait(2);
 
     expect($webpage->script(libraryLiveReloadCountScript('series,episodes')))->toBe(0);
 

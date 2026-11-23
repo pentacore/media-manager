@@ -260,6 +260,14 @@ test('it emits only the canonical known configuration schema', function (): void
             'max_attempts_per_target' => 1,
             'cooldown_hours' => 6,
         ],
+        'subtitle_audit' => [
+            'search_minutes_per_episode' => 3,
+            'min_search_minutes' => 30,
+            'max_search_minutes' => 720,
+            'in_chat_wait_seconds' => 60,
+            'watchdog_delay_seconds' => 180,
+            'sweep_grace_minutes' => 5,
+        ],
         'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
@@ -407,4 +415,115 @@ test('it safely filters mixed configured and request language lists', function (
             null,
             'FI',
         ]))->toBe(['swe', 'fin']);
+});
+
+test('subtitle audit tunables default to the previous constants', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleAuditSearchMinutesPerEpisode())->toBe(3)
+        ->and($mediaReplacementSettings->subtitleAuditMinSearchMinutes())->toBe(30)
+        ->and($mediaReplacementSettings->subtitleAuditMaxSearchMinutes())->toBe(720)
+        ->and($mediaReplacementSettings->subtitleAuditInChatWaitSeconds())->toBe(60)
+        ->and($mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds())->toBe(180)
+        ->and($mediaReplacementSettings->configuredSubtitleAuditWatchdogDelaySeconds())->toBe(180)
+        ->and($mediaReplacementSettings->subtitleAuditSweepGraceMinutes())->toBe(5);
+});
+
+test('subtitle audit values round-trip', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    $mediaReplacementSettings->setConfiguration([
+        'subtitle_audit' => [
+            'search_minutes_per_episode' => 5,
+            'min_search_minutes' => 60,
+            'max_search_minutes' => 240,
+            'in_chat_wait_seconds' => 0,
+            'watchdog_delay_seconds' => 600,
+            'sweep_grace_minutes' => 15,
+        ],
+    ]);
+
+    expect($mediaReplacementSettings->subtitleAuditSearchMinutesPerEpisode())->toBe(5)
+        ->and($mediaReplacementSettings->subtitleAuditMinSearchMinutes())->toBe(60)
+        ->and($mediaReplacementSettings->subtitleAuditMaxSearchMinutes())->toBe(240)
+        ->and($mediaReplacementSettings->subtitleAuditInChatWaitSeconds())->toBe(0)
+        ->and($mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds())->toBe(600)
+        ->and($mediaReplacementSettings->subtitleAuditSweepGraceMinutes())->toBe(15)
+        ->and(AppSetting::find('ai.media_replacement')?->value['subtitle_audit'])->toBe([
+            'search_minutes_per_episode' => 5,
+            'min_search_minutes' => 60,
+            'max_search_minutes' => 240,
+            'in_chat_wait_seconds' => 0,
+            'watchdog_delay_seconds' => 600,
+            'sweep_grace_minutes' => 15,
+        ]);
+});
+
+test('invalid stored subtitle audit values fall back to defaults', function (mixed $invalidSubtitleAudit): void {
+    resolve(AppSettings::class)->set('ai.media_replacement', [
+        'subtitle_audit' => $invalidSubtitleAudit,
+    ]);
+
+    expect(resolve(MediaReplacementSettings::class)->configuration()['subtitle_audit'])->toBe([
+        'search_minutes_per_episode' => 3,
+        'min_search_minutes' => 30,
+        'max_search_minutes' => 720,
+        'in_chat_wait_seconds' => 60,
+        'watchdog_delay_seconds' => 180,
+        'sweep_grace_minutes' => 5,
+    ]);
+})->with([
+    'malformed container' => ['invalid'],
+    'string values' => [[
+        'search_minutes_per_episode' => '5',
+        'min_search_minutes' => '60',
+        'max_search_minutes' => '240',
+        'in_chat_wait_seconds' => '10',
+        'watchdog_delay_seconds' => '600',
+        'sweep_grace_minutes' => '15',
+    ]],
+    'below the accepted range' => [[
+        'search_minutes_per_episode' => 0,
+        'min_search_minutes' => 4,
+        'max_search_minutes' => 29,
+        'in_chat_wait_seconds' => -1,
+        'watchdog_delay_seconds' => 0,
+        'sweep_grace_minutes' => 4,
+    ]],
+    'above the accepted range' => [[
+        'search_minutes_per_episode' => 31,
+        'min_search_minutes' => 721,
+        'max_search_minutes' => 1441,
+        'in_chat_wait_seconds' => 121,
+        'watchdog_delay_seconds' => 3601,
+        'sweep_grace_minutes' => 121,
+    ]],
+    'missing keys' => [[]],
+]);
+
+test('the watchdog delay never falls inside the request ceiling', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    resolve(AppSettings::class)->set('ai.media_replacement', [
+        'subtitle_audit' => ['watchdog_delay_seconds' => 120],
+    ]);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->configuredSubtitleAuditWatchdogDelaySeconds())->toBe(120)
+        ->and($mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds())->toBe(180);
+
+    config()->set('octane.max_execution_time', 0);
+
+    expect($mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds())->toBe(120);
+});
+
+test('a search window minimum above the maximum is capped at the maximum', function (): void {
+    resolve(AppSettings::class)->set('ai.media_replacement', [
+        'subtitle_audit' => ['min_search_minutes' => 600, 'max_search_minutes' => 120],
+    ]);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleAuditMinSearchMinutes())->toBe(120)
+        ->and($mediaReplacementSettings->subtitleAuditMaxSearchMinutes())->toBe(120);
 });

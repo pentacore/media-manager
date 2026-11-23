@@ -26,9 +26,7 @@ function actionQueueFailureWaitForToastScript(int $actionRequestId, string $stat
 
 test('an admin sees why an action failed, and a plain failure retries in one click', function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    // Faked after the factories: a later Queue::fake replaces the Browser
-    // beforeEach fake, and the WebhookEvent factory creates a connection.
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('actions.requests.index', absolute: false))
@@ -49,7 +47,7 @@ test('an admin sees why an action failed, and a plain failure retries in one cli
 
 test('retrying an action with an unknown outcome asks first and repeats the reason', function (): void {
     $actionRequest = ActionRequest::factory()->described()->needsReconciliation()->create();
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -84,7 +82,7 @@ test('a request that never started is not treated as an unknown outcome', functi
         'indeterminate' => false,
         'never_started' => true,
     ]]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('actions.requests.index', absolute: false))
@@ -233,7 +231,7 @@ test('a broadcast for an unlisted request, or without a result, changes nothing'
 
 test('a live failure after missed events replaces the old outcome with the new one', function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -385,7 +383,7 @@ test('a reload read before a live failure does not roll the row back', function 
     $webpage->script(actionQueueFailureEmitThenReleaseScript(actionQueueFailureLiveStatus($actionRequest, 'failed', $secondsAfterRow)));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
     $webpage->script(actionQueueFailureWaitForReloadScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(1);
 
@@ -428,7 +426,7 @@ test('an older live event arriving late does not undo a newer one', function ():
     $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureLiveStatus($actionRequest, 'executing', 30), 3));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'executing'));
     $webpage->assertSee(sprintf('Request #%d is now %s', $actionRequest->id, 'executing'));
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     $webpage->assertVisible(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id))
         ->assertNoSmoke();
@@ -454,7 +452,7 @@ test('a status for an unlisted request is not remembered for a later reload', fu
     $webpage->script(actionQueueFailureEmitThenReleaseScript(actionQueueFailureLiveStatus($listed, 'failed', 60)));
     $webpage->script(actionQueueFailureWaitForToastScript($listed->id, 'failed'));
     $webpage->script(actionQueueFailureWaitForReloadScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(1);
 
@@ -466,9 +464,7 @@ test('a status for an unlisted request is not remembered for a later reload', fu
 
 test("an admin's retry is not undone by a failure remembered from a live event", function (): void {
     $actionRequest = ActionRequest::factory()->described()->failed()->create();
-    // Faked after the factories: a later Queue::fake replaces the Browser
-    // beforeEach fake, and the WebhookEvent factory creates a connection.
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -498,7 +494,7 @@ test("an admin's retry is not undone by a failure remembered from a live event",
 
 test("an admin's review of a pending row is not undone by a status remembered from a live event", function (string $button, string $toast, ActionRequestStatus $status): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -526,7 +522,7 @@ test("an admin's review of a pending row is not undone by a status remembered fr
 
 test("an admin's bulk review is not undone by a status remembered from a live event", function (): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Pending, 'requires_approval' => true]);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('actions.requests.index', absolute: false))
@@ -593,14 +589,6 @@ function actionQueueFailureVersionedStatus(ActionRequest $actionRequest, string 
     ];
 }
 
-/**
- * Rests inside the page well past the Action Queue's 500 ms reload debounce.
- */
-function actionQueueFailureRestScript(): string
-{
-    return '(async () => { await new Promise((resolve) => setTimeout(resolve, 1200)); })()';
-}
-
 test('a same-second change by someone else is ordered by its status version, not its lifecycle step', function (): void {
     $actionRequest = ActionRequest::factory()->described()->create(['status' => ActionRequestStatus::Executing]);
     $this->actingAs(User::factory()->admin()->create());
@@ -657,7 +645,7 @@ test('a live status older than the listed row is ignored, whatever its timestamp
 
     $webpage->script(echoEmitScript('members.actions', 'ActionRequestStatusChanged', actionQueueFailureVersionedStatus($actionRequest, 'failed', -1, 3600), 3));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     // Ignored, not applied and then undone: an applied admin failure always
     // schedules a `requests` reload.
@@ -682,7 +670,7 @@ test("a reload read before a live failure keeps it even when the worker's clock 
     $webpage->script(actionQueueFailureEmitThenReleaseScript(actionQueueFailureVersionedStatus($actionRequest, 'failed', 1, -3600)));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
     $webpage->script(actionQueueFailureWaitForReloadScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(1);
 
@@ -721,7 +709,7 @@ test('after a reload keeps a live failure, one more reload brings the admin its 
     $webpage->assertSeeIn('[data-action-failure-message]', 'HTTP 404: Sonarr could not find the item — it may already have been removed.');
 
     // Once per live change: no third reload.
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(2);
     $webpage->assertNoSmoke();
@@ -741,7 +729,7 @@ test('a member whose reload keeps a live failure gets no follow-up reload', func
     $webpage->script(actionQueueFailureEmitThenReleaseScript(actionQueueFailureVersionedStatus($actionRequest, 'failed', 1)));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
     $webpage->script(actionQueueFailureWaitForReloadScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
 
     // The held reload only: a member never gets the admin's message.
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(1);
@@ -766,8 +754,8 @@ test('a kept live failure without a version brings an admin one more reload, not
     $webpage->script(actionQueueFailureEmitThenReleaseScript(actionQueueFailureLiveStatus($actionRequest, 'failed', 60)));
     $webpage->script(actionQueueFailureWaitForToastScript($actionRequest->id, 'failed'));
     $webpage->script(confirmDialogWaitUntilScript('window.__mmRequestsReloads >= 2'));
-    $webpage->script(actionQueueFailureRestScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
+    $webpage->wait(1.2);
 
     expect($webpage->script('window.__mmRequestsReloads'))->toBe(2);
     $webpage->assertNoSmoke();
@@ -789,7 +777,7 @@ test('a remembered status the server cannot reach yields to a later reload, and 
 
     // The admin's reload was sent after it arrived: the server's row wins.
     $webpage->script(actionQueueFailureWaitForReloadScript());
-    $webpage->script(actionQueueFailureRestScript());
+    $webpage->wait(1.2);
     $webpage->assertMissing(sprintf('[data-action-failure-badge="%d"]', $actionRequest->id));
 
     // And a real change is no longer judged against the bogus version.

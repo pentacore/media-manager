@@ -35,7 +35,7 @@ class BenchmarkComparisonController extends Controller
     public function show(ShowBenchmarkComparisonRequest $showBenchmarkComparisonRequest, BenchmarkComparison $benchmarkComparison, TaskModelResolver $taskModelResolver, ModelCatalog $modelCatalog): Response
     {
         $validated = $showBenchmarkComparisonRequest->validated();
-        $runIds = array_map(intval(...), $validated['run_ids']);
+        $runIds = array_values(array_map(intval(...), $validated['run_ids']));
         $comparison = $benchmarkComparison->build(
             $runIds,
             isset($validated['baseline']) ? (int) $validated['baseline'] : null,
@@ -76,7 +76,7 @@ class BenchmarkComparisonController extends Controller
         $judge = $this->judgeFrom($validated['judge']);
 
         return response()->json($benchmarkNeutralRejudgeLauncher->estimate(
-            $benchmarkNeutralRejudgeLauncher->scope(array_map(intval(...), $validated['run_ids']), BenchmarkNeutralJudgement::keyFor($judge)),
+            $benchmarkNeutralRejudgeLauncher->scope(array_values(array_map(intval(...), $validated['run_ids'])), BenchmarkNeutralJudgement::keyFor($judge)),
             $judge,
         ));
     }
@@ -84,7 +84,7 @@ class BenchmarkComparisonController extends Controller
     public function start(StartNeutralRejudgeRequest $startNeutralRejudgeRequest, BenchmarkNeutralRejudgeLauncher $benchmarkNeutralRejudgeLauncher, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $startNeutralRejudgeRequest->validated();
-        $runIds = array_map(intval(...), $validated['run_ids']);
+        $runIds = array_values(array_map(intval(...), $validated['run_ids']));
         $judge = $this->judgeFrom($validated['judge']);
         $costCap = (float) $validated['cost_cap_usd'];
         $scope = $benchmarkNeutralRejudgeLauncher->scope($runIds, BenchmarkNeutralJudgement::keyFor($judge));
@@ -188,15 +188,14 @@ class BenchmarkComparisonController extends Controller
             ->get(['benchmark_run_id', 'case_task'])
             ->groupBy('benchmark_run_id');
 
-        return $runs->map(static fn (BenchmarkRun $benchmarkRun): array => [
+        return array_values($runs->map(static fn (BenchmarkRun $benchmarkRun): array => [
             'id' => $benchmarkRun->id,
             'name' => $benchmarkRun->name,
             'created_at' => $benchmarkRun->created_at?->toIso8601String(),
-            'task_labels' => $tasks->get($benchmarkRun->id, collect())
+            'task_labels' => array_values($tasks->get($benchmarkRun->id, collect())
                 ->map(static fn (BenchmarkResult $benchmarkResult): string => AiTask::tryFrom($benchmarkResult->case_task)?->label() ?? $benchmarkResult->case_task)
                 ->sort()
-                ->values()
-                ->all(),
-        ])->values()->all();
+                ->all()),
+        ])->all());
     }
 }

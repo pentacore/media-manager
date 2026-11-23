@@ -27,7 +27,7 @@ class StatisticsController extends Controller
             'headline' => [
                 'plays' => $plays['count'],
                 'finishes' => $finishes['count'],
-                'watchHours' => round(($seconds['sum'] ?? 0) / 3600, 1),
+                'watchHours' => round($seconds['sum'] / 3600, 1),
                 'downloads' => $downloads['count'],
             ],
             'watchSeries' => $statisticsRepository->series('watch.plays', $timeWindow),

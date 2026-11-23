@@ -75,6 +75,10 @@ test('a settings save whose audit row cannot be written keeps every earlier sett
         'scoped_languages' => ['anime' => ['Japanese'], 'tv' => null, 'movie' => null],
         'season_pack_policy' => 'approval_required',
         'subtitle_check' => ['enabled' => false, 'max_attempts_per_target' => 1, 'cooldown_hours' => 24],
+        'subtitle_audit' => [
+            'search_minutes_per_episode' => 3, 'min_search_minutes' => 30, 'max_search_minutes' => 720,
+            'in_chat_wait_seconds' => 60, 'watchdog_delay_seconds' => 180, 'sweep_grace_minutes' => 5,
+        ],
         'guidance' => [
             'anime' => ['notes' => 'No special guidance.', 'rules' => []],
             'tv' => ['notes' => 'No special guidance.', 'rules' => []],

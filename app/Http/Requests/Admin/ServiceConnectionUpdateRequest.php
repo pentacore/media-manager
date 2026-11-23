@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Concerns\BazarrServiceMappingValidationRules;
 use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -73,6 +74,15 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // then drops it because it is not a string, leaving an empty list.
             'subtitle_check_tags' => ['nullable', 'array', 'max:50'],
             'subtitle_check_tags.*' => ['nullable', 'string', 'max:100'],
+            // Sonarr-only: how many subtitle audit release searches may run
+            // against this connection at once. Blank clears it back to the
+            // default; absent keeps the stored value.
+            'subtitle_audit_search_slots' => [
+                'nullable',
+                'integer',
+                'min:'.ServiceConnection::MIN_SUBTITLE_AUDIT_SEARCH_SLOTS,
+                'max:'.ServiceConnection::MAX_SUBTITLE_AUDIT_SEARCH_SLOTS,
+            ],
             // Whisparr-only: which API generation this connection speaks.
             'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];

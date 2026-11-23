@@ -68,11 +68,13 @@ final class QueueAutomaticReplacementTool extends BaseTool
         );
 
         $subtitleCase = SubtitleCase::query()->findOrFail($caseId);
+        /** @var list<mixed> $requirements JSON column: entries are untrusted. */
+        $requirements = $subtitleCase->required_languages;
         $requiredLanguages = array_map(
             static fn (mixed $requirement): mixed => is_array($requirement)
                 ? ($requirement['code'] ?? null)
                 : $requirement,
-            $subtitleCase->required_languages,
+            $requirements,
         );
         $freshRequirementsFingerprint = resolve(SubtitleCaseFingerprint::class)
             ->requirements($subtitleCase->scope, $requiredLanguages);

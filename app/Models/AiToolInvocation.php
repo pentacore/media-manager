@@ -28,9 +28,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
- * @method static Builder<static>|AiToolInvocation newModelQuery()
- * @method static Builder<static>|AiToolInvocation newQuery()
- * @method static Builder<static>|AiToolInvocation query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  *
  * @mixin \Eloquent
  */
@@ -69,6 +69,8 @@ class AiToolInvocation extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

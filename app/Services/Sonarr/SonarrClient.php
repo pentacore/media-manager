@@ -76,6 +76,7 @@ class SonarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
      * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
@@ -87,6 +88,7 @@ class SonarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
      * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
@@ -274,7 +276,7 @@ class SonarrClient extends ArrClient implements Warmable
         }
 
         sort($episodeIds, SORT_NUMERIC);
-        $release['episodeIds'] = array_values($episodeIds);
+        $release['episodeIds'] = $episodeIds;
 
         return $release;
     }

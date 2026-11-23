@@ -467,16 +467,15 @@ abstract class ArrClient
      * response is the raw ReleaseResource[] from upstream, including mapping,
      * rejections, custom-format scores, and the fields required for a later grab.
      *
-     * @param  array<string, mixed>  $params
-     * @return array<int, array<string, mixed>>
-     *
-     * @throws RequestException|ConnectionException
-     */
-    /**
      * Interactive release search sweeps every configured indexer and
      * routinely takes 30-60+ seconds — far past the generic 10s timeout,
      * whose 3 transparent retries then multiplied into repeated full indexer
      * sweeps per attempt. Dedicated long timeout, no transparent retry.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
      */
     public function getReleases(array $params): array
     {
