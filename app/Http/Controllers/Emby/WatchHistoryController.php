@@ -15,6 +15,7 @@ use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
+use App\Services\Emby\EmbyWriteUnconfirmed;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Client\ConnectionException;
@@ -104,6 +105,10 @@ class WatchHistoryController extends Controller
             $played
                 ? $embyClient->markItemPlayed($embyUserId, $embyItemId)
                 : $embyClient->markItemUnplayed($embyUserId, $embyItemId);
+        } catch (EmbyWriteUnconfirmed) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __(EmbyWriteUnconfirmed::MESSAGE)]);
+
+            return back();
         } catch (ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Emby is unreachable right now.')]);
 

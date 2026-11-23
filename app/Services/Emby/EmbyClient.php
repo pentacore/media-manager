@@ -96,6 +96,28 @@ class EmbyClient
     }
 
     /**
+     * The decoded body of a write. A blank body is a success; a body that is
+     * not JSON data (a proxy login page) throws, so it never reads as a change
+     * that happened. Callers must not retry it: whether it landed is unknown.
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws EmbyWriteUnconfirmed
+     */
+    private function confirmedWrite(Response $response): array
+    {
+        if (trim($response->body()) === '') {
+            return [];
+        }
+
+        $body = $response->json();
+
+        throw_unless(is_array($body), EmbyWriteUnconfirmed::class, $response);
+
+        return $body;
+    }
+
+    /**
      * The decoded body of a read. A 200 that is not JSON data (an SSO or
      * reverse-proxy login page, an HTML error page) is a failed request,
      * never an empty result.
@@ -124,26 +146,24 @@ class EmbyClient
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyWriteUnconfirmed|RequestException|ConnectionException
      */
     public function markItemPlayed(string $userId, string $itemId): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->post(sprintf('/Users/%s/PlayedItems/%s', $userId, $itemId))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws EmbyWriteUnconfirmed|RequestException|ConnectionException
      */
     public function markItemUnplayed(string $userId, string $itemId): array
     {
-        return $this->buildClient()
+        return $this->confirmedWrite($this->buildClient()
             ->delete(sprintf('/Users/%s/PlayedItems/%s', $userId, $itemId))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 }
