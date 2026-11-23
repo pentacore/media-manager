@@ -6,9 +6,11 @@ import SubtitleAuditBatchController from '@/actions/App/Http/Controllers/AI/Subt
 import {
     inferChosenLabels,
     toolRequestAnswer,
+    toolRequestPick,
 } from '@/components/ai/chatCards';
 import type {
     ActionRequestCard,
+    ChoicesCard,
     ToolRequestCard,
     AnsweredBy,
     ChatCard,
@@ -68,7 +70,7 @@ export type UseChatTurnsReturn = {
     /** Declines a proposed workflow as a blocking continuation turn. */
     declineWorkflow: (message: ChatMessage) => void;
     /** Sends a choices card's picked labels as the user's answer. */
-    choose: (message: ChatMessage, labels: string[]) => void;
+    choose: (message: ChatMessage, card: ChoicesCard, labels: string[]) => void;
     /** Answers the assistant's tool request: load the groups or decline. */
     answerToolRequest: (
         message: ChatMessage,
@@ -245,6 +247,7 @@ export function useChatTurns({
         bodyMessage: string,
         files: File[],
         loadToolGroups?: ToolGroupValue[],
+        answeredCard?: string,
     ): Promise<void> {
         // Read the element back out of the reactive array so mutations to `.text`
         // during streaming go through Vue's proxy and re-render the bubble.
@@ -277,6 +280,7 @@ export function useChatTurns({
             override: override.value,
             pinnedToolGroups: pinnedToolGroups?.value,
             loadToolGroups,
+            answeredCard,
             signal: streamAbortController.signal,
             onText: (accumulated) => {
                 assistantMessage.text = accumulated;
@@ -449,6 +453,7 @@ export function useChatTurns({
             text: submission.text,
             ts: Date.now(),
             uid: messageUid(),
+            answered_card: submission.answeredCard ?? null,
             attachments: submission.pendingFiles.map((p) => ({
                 id: 0,
                 name: p.file.name,
@@ -462,6 +467,7 @@ export function useChatTurns({
                 submission.text,
                 submission.pendingFiles.map((p) => p.file),
                 submission.loadToolGroups,
+                submission.answeredCard,
             ),
         );
     }
@@ -496,8 +502,9 @@ export function useChatTurns({
     }
 
     /**
-     * A loaded reply's choices card does not remember its pick: read it back
-     * from the user message that answered it.
+     * A loaded reply's cards do not remember their pick: read it back from the
+     * user message that answered it. That message names the card it answered;
+     * one sent before it did is matched to the first card its text answers.
      */
     function inferChoices(): void {
         messages.value.forEach((message, index) => {
@@ -507,32 +514,47 @@ export function useChatTurns({
                 return;
             }
 
-            const toolRequest = message.cards?.find(
-                (card) => card.type === 'tool_request',
+            message.chosen = {};
+
+            const answerable = (message.cards ?? []).filter(
+                (card) =>
+                    card.type === 'choices' || card.type === 'tool_request',
+            );
+            const named = answerable.filter(
+                (card) => card.id === next.answered_card,
             );
 
-            if (toolRequest) {
-                if (next.text === toolRequestAnswer(toolRequest, true)) {
-                    message.chosen = ['load'];
-                } else if (
-                    next.text === toolRequestAnswer(toolRequest, false)
-                ) {
-                    message.chosen = ['decline'];
+            for (const card of next.answered_card ? named : answerable) {
+                const labels =
+                    card.type === 'tool_request'
+                        ? toolRequestPick(card, next.text)
+                        : inferChosenLabels([card], next.text);
+
+                if (labels.length > 0) {
+                    message.chosen = { [card.id]: labels };
+
+                    return;
                 }
-            } else if (message.cards?.some((card) => card.type === 'choices')) {
-                message.chosen = inferChosenLabels(message.cards, next.text);
             }
         });
     }
 
-    /** Send the picked option labels as the user's answer. */
-    function choose(message: ChatMessage, labels: string[]): void {
+    /** Send the picked option labels as the user's answer to that card. */
+    function choose(
+        message: ChatMessage,
+        card: ChoicesCard,
+        labels: string[],
+    ): void {
         if (sending.value || labels.length === 0) {
             return;
         }
 
-        message.chosen = labels;
-        void sendUserMessage({ text: labels.join(', '), pendingFiles: [] });
+        message.chosen = { ...message.chosen, [card.id]: labels };
+        void sendUserMessage({
+            text: labels.join(', '),
+            pendingFiles: [],
+            answeredCard: card.id,
+        });
     }
 
     /**
@@ -549,10 +571,14 @@ export function useChatTurns({
             return;
         }
 
-        message.chosen = [load ? 'load' : 'decline'];
+        message.chosen = {
+            ...message.chosen,
+            [card.id]: [load ? 'load' : 'decline'],
+        };
         void sendUserMessage({
             text: toolRequestAnswer(card, load),
             pendingFiles: [],
+            answeredCard: card.id,
             ...(load
                 ? { loadToolGroups: card.groups.map((group) => group.group) }
                 : {}),

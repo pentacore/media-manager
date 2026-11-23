@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
-use App\Ai\Routing\ChatToolRouter;
 use App\Enums\ClassificationGate;
 use App\Enums\ClassificationVerdict;
-use App\Jobs\RunDecisionAgent;
 use App\Models\ClassificationOutcome;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
@@ -86,10 +84,10 @@ final readonly class ClassificationGateReporting
     {
         return match ($classificationGate) {
             ClassificationGate::DecisionGate => $this->aiSettings->decisionGateThreshold(),
-            ClassificationGate::ActionKind => RunDecisionAgent::SCOPE_AT,
+            ClassificationGate::ActionKind => $this->aiSettings->actionKindThreshold(),
             ClassificationGate::StuckImport => $this->aiSettings->stuckImportThreshold(),
             ClassificationGate::SubtitleTriage => $this->aiSettings->subtitleTriageThreshold(),
-            ClassificationGate::ChatRouting => ChatToolRouter::INCLUDE_AT,
+            ClassificationGate::ChatRouting => $this->aiSettings->chatRoutingThreshold(),
             ClassificationGate::SecondOpinion => $this->decisionAgentSettings->secondOpinionJevThreshold(),
         };
     }

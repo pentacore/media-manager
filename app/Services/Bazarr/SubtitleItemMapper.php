@@ -9,6 +9,7 @@ use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\LanguageNormalizer;
 use App\Services\MediaReplacement\SonarrMediaScopeResolver;
 use App\Settings\MediaReplacementSettings;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use JsonException;
@@ -129,7 +130,7 @@ final readonly class SubtitleItemMapper
             'provider' => $this->safeProvider($history['provider'] ?? null),
             'action' => is_int($history['action'] ?? null) ? $history['action'] : null,
             'score' => $this->safeText($history['score'] ?? null, ''),
-            'occurred_at' => $this->safeText($history['parsed_timestamp'] ?? $history['timestamp'] ?? null, ''),
+            'occurred_at' => $this->historyTimestamp($history),
         ];
     }
 
@@ -235,6 +236,30 @@ final readonly class SubtitleItemMapper
         $episodeTitle = $this->safeText($episode['title'] ?? $episode['episodeTitle'] ?? null, 'Episode');
 
         return $seriesTitle.' — '.$episodeTitle;
+    }
+
+    /**
+     * Bazarr's history feeds send `parsed_timestamp` as the server's naive
+     * local time in Python's C-locale `%x %X` ("07/15/26 18:00:00") and
+     * `timestamp` as relative prose ("yesterday"). The stack shares one host
+     * clock, so the parsed time is read in the app timezone and returned as
+     * ISO 8601 for the page to format; anything unparseable stays text.
+     *
+     * @param  array<string, mixed>  $history
+     */
+    private function historyTimestamp(array $history): string
+    {
+        $parsed = $history['parsed_timestamp'] ?? null;
+
+        if (is_string($parsed) && preg_match('#^\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}$#', $parsed) === 1) {
+            $date = CarbonImmutable::createFromFormat('!m/d/y H:i:s', $parsed, config()->string('app.timezone'));
+
+            if ($date instanceof CarbonImmutable && $date->format('m/d/y H:i:s') === $parsed) {
+                return $date->toIso8601String();
+            }
+        }
+
+        return $this->safeText($parsed ?? $history['timestamp'] ?? null, '');
     }
 
     private function safeText(mixed $value, string $fallback): string

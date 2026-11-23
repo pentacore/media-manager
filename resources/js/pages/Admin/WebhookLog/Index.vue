@@ -4,6 +4,7 @@ import { Webhook } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { PageHeader, Pill, SvcChip, Toggle } from '@/components/mm';
+import type { PillVariant } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -12,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { agentDecisionVariant } from '@/lib/agentDecision';
 import { dashboard } from '@/routes';
 
 interface WebhookEvent {
@@ -183,8 +185,6 @@ function setHandlingStatus(value: string) {
     applyFilters({ handling_status: value === 'all' ? '' : value });
 }
 
-type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
-
 function handlingVariant(status: string | null): PillVariant {
     switch (status) {
         case 'handled':
@@ -207,19 +207,6 @@ function handlingLabel(
     }
 
     return processedAt ? 'unknown' : 'pending';
-}
-
-function decisionVariant(status: string): PillVariant {
-    switch (status) {
-        case 'completed':
-            return 'ok';
-        case 'failed':
-            return 'danger';
-        case 'resolved_by_classifier':
-            return 'info';
-        default:
-            return 'default';
-    }
 }
 </script>
 
@@ -421,7 +408,7 @@ function decisionVariant(status: string): PillVariant {
                                 <Pill
                                     v-if="event.agent_decision"
                                     :variant="
-                                        decisionVariant(
+                                        agentDecisionVariant(
                                             event.agent_decision.status,
                                         )
                                     "

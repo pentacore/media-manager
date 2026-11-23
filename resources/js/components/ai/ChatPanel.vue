@@ -647,7 +647,7 @@ function newConversation(): void {
                 :reviewing-action-ids="reviewingActionIds"
                 @approve="approveWorkflow(m)"
                 @decline="declineWorkflow(m)"
-                @choose="(labels) => choose(m, labels)"
+                @choose="(card, labels) => choose(m, card, labels)"
                 @answer-tool-request="
                     (card, load) => answerToolRequest(m, card, load)
                 "

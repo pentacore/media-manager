@@ -149,7 +149,10 @@ const styleVars = computed(() => ({
             <span class="absolute top-2 right-2 left-2 truncate opacity-60">{{
                 hint
             }}</span>
-            <span class="font-serif text-[14px] text-foreground italic"
+            <!-- The word is wider than a small poster's 18 px content box. -->
+            <span
+                v-if="size !== 'sm'"
+                class="font-serif text-[14px] text-foreground italic"
                 >poster</span
             >
         </template>

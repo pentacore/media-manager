@@ -11,8 +11,11 @@ use Illuminate\Support\Facades\Cache;
 test('the Action Queue badge renders the pending action count', function (): void {
     $member = User::factory()->member()->create();
 
+    // No webhook event: its factory builds a connection of a random type, and an
+    // Emby one makes the dashboard's now-playing card call the factory host.
     ActionRequest::factory()->count(3)->create([
         'status' => ActionRequestStatus::Pending,
+        'webhook_event_id' => null,
     ]);
 
     $this->actingAs($member);

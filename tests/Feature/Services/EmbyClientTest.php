@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
 use App\Services\Emby\EmbyUnexpectedResponse;
+use App\Services\Emby\EmbyWriteUnconfirmed;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -168,3 +169,34 @@ test('a 200 system info that is not JSON data is a RequestException with a fixed
         expect($embyUnexpectedResponse->getMessage())->toBe('Emby answered with a body that is not JSON data.');
     });
 });
+
+test('a 200 item list or session list that is not JSON data is a failed request, never an empty result', function (string $path, Closure $read, string $message): void {
+    Http::fake(['emby.local:8096/'.$path.'*' => Http::response('<html>Sign in at /sso/login?token=abc</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => $read($this->client))->toThrow(function (EmbyUnexpectedResponse $embyUnexpectedResponse) use ($message): void {
+        expect($embyUnexpectedResponse->response->status())->toBe(200)
+            ->and($embyUnexpectedResponse->getMessage())->toBe($message);
+    });
+})->with([
+    'user items' => ['Users/user1/Items', fn (EmbyClient $embyClient): array => $embyClient->getUserItems('user1'), 'Emby answered with a body that is not a JSON item list.'],
+    'sessions' => ['Sessions', fn (EmbyClient $embyClient): array => $embyClient->getActiveSessions(), 'Emby answered with a body that is not a JSON session list.'],
+]);
+
+test('a played-state write answered with a login page throws instead of reading as success, and a blank body passes', function (Closure $write): void {
+    Http::fake(['emby.local:8096/Users/user1/PlayedItems/item1*' => Http::sequence()
+        ->push('<html>Sign in at /sso/login?token=abc</html>', 200, ['Content-Type' => 'text/html'])
+        ->push('', 204)]);
+
+    expect(fn (): array => $write($this->client))->toThrow(function (EmbyWriteUnconfirmed $embyWriteUnconfirmed): void {
+        expect($embyWriteUnconfirmed)->toBeInstanceOf(RequestException::class)
+            ->and($embyWriteUnconfirmed->getMessage())->toBe(EmbyWriteUnconfirmed::MESSAGE);
+
+        $embyWriteUnconfirmed->report();
+
+        expect($embyWriteUnconfirmed->getMessage())->toBe(EmbyWriteUnconfirmed::MESSAGE);
+    })
+        ->and($write($this->client))->toBe([]);
+})->with([
+    'played' => [fn (EmbyClient $embyClient): array => $embyClient->markItemPlayed('user1', 'item1')],
+    'unplayed' => [fn (EmbyClient $embyClient): array => $embyClient->markItemUnplayed('user1', 'item1')],
+]);

@@ -62,8 +62,9 @@ beforeEach(function (): void {
     $this->travelTo(CarbonImmutable::parse('2026-09-15T12:00:00Z'));
     $this->seed(ActionTypeConfigSeeder::class);
     phoneJobsTouchFakes();
-    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
-    ActionRequest::factory()->described()->failed()->create();
+    // No webhook events: their factory builds connections of random types on factory hosts.
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending, 'webhook_event_id' => null]);
+    ActionRequest::factory()->described()->failed()->create(['webhook_event_id' => null]);
     EmbyActivity::factory()->count(2)->create();
     $this->actingAs(User::factory()->admin()->create(['email' => 'someone@example.com']));
 });

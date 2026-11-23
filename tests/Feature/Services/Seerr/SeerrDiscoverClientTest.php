@@ -37,6 +37,25 @@ test('discoverUpcoming routes movies and tv to their own upcoming endpoints', fu
     'tv' => ['tv', '/api/v1/discover/tv/upcoming'],
 ]);
 
+test('discoverUpcoming caches each media type and page separately', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/discover/movies/upcoming*' => Http::response(['results' => [['id' => 1, 'mediaType' => 'movie', 'title' => 'Dune']]]),
+        'seerr.local:5055/api/v1/discover/tv/upcoming*' => Http::response(['results' => [['id' => 2, 'mediaType' => 'tv', 'name' => 'Andor']]]),
+    ]);
+
+    $first = $this->seerr->discoverUpcoming('movie');
+    $second = $this->seerr->discoverUpcoming('movie');
+
+    expect($second)->toBe($first)
+        ->and($first['results'][0]['title'])->toBe('Dune');
+    Http::assertSentCount(1);
+
+    expect($this->seerr->discoverUpcoming('tv')['results'][0]['name'])->toBe('Andor');
+    $this->seerr->discoverUpcoming('movie', page: 2);
+
+    Http::assertSentCount(3);
+});
+
 test('discoverUpcoming rejects an unknown media type', function (): void {
     expect(fn (): array => $this->seerr->discoverUpcoming('person'))->toThrow(InvalidArgumentException::class);
 });

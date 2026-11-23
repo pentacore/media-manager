@@ -9,6 +9,7 @@ use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionPrompt;
 use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\FastPathResolution;
 use App\Ai\Decision\StuckImportDecider;
 use App\Ai\Decision\StuckImportDecision;
 use App\Ai\Decision\StuckImportResolver;
@@ -99,7 +100,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     private const string ACTION_KIND_QUESTION = 'If this media-server webhook event needs an operator action, which kind of action is it?';
 
     /** Probability at or above which a classified action kind scopes the run. */
-    public const float SCOPE_AT = 0.5;
+    public const float SCOPE_AT = AiSettings::ACTION_KIND_SCOPE_AT;
 
     /**
      * $payload and $serviceConnectionId snapshot the triggering event so the
@@ -201,14 +202,14 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
-        $fastPathOutcome = null;
+        $fastPathResolution = FastPathResolution::unresolved();
         $summary = '';
         $invocationId = null;
 
         try {
-            $fastPathOutcome = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
+            $fastPathResolution = $this->resolvedByFastPath($webhookEventId, $decisionRunContext, $aiSettings, $decisionAgentSettings, $stuckImportDecider, $stuckImportResolver, $classificationOutcomeRecorder);
 
-            if ($fastPathOutcome === null) {
+            if (! $fastPathResolution->resolved) {
                 $decisionAgent = new DecisionAgent;
                 $response = $decisionAgent->prompt(DecisionPrompt::build($this->service, $this->eventType, $this->payload), timeout: $this->agentCallTimeout($decisionAgent, $decisionRunContext));
                 $invocationId = $response->invocationId;
@@ -232,9 +233,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         // The fast path already recorded its own AgentDecision and
         // classification outcomes above; only the notification — which can
         // itself fail — is sent out here, safely past the try/finally.
-        if ($fastPathOutcome !== null) {
-            if ($fastPathOutcome !== '') {
-                $this->notify($decisionRunContext, $fastPathOutcome, $decisionAgentSettings);
+        if ($fastPathResolution->resolved) {
+            if ($fastPathResolution->notification !== null) {
+                $this->notify($decisionRunContext, $fastPathResolution->notification, $decisionAgentSettings);
             }
 
             return;
@@ -517,7 +518,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         StuckImportDecider $stuckImportDecider,
         StuckImportResolver $stuckImportResolver,
         ClassificationOutcomeRecorder $classificationOutcomeRecorder,
-    ): ?string {
+    ): FastPathResolution {
         $service = mb_strtolower($this->service);
         $downloadId = $decisionRunContext->eventDownloadId();
 
@@ -525,13 +526,13 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             || ! $aiSettings->stuckImportFastPathEnabled()
             || $downloadId === null
             || ! in_array($service, ['sonarr', 'radarr'], true)) {
-            return null;
+            return FastPathResolution::unresolved();
         }
 
         if (! $decisionAgentSettings->allowManualImport()) {
             $this->record($webhookEventId, AgentDecisionStatus::NoAction, 'Manual-import resolution is disabled in Decision Agent settings, so the stuck download was left for a human.', $decisionRunContext);
 
-            return '';
+            return FastPathResolution::resolvedQuietly();
         }
 
         try {
@@ -544,13 +545,13 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 'message' => $throwable->getMessage(),
             ]);
 
-            return null;
+            return FastPathResolution::unresolved();
         }
 
         $stuckImportDecision = $stuckImportDecider->decide($connection, $service, $downloadId);
 
         if (! $stuckImportDecision instanceof StuckImportDecision) {
-            return null;
+            return FastPathResolution::unresolved();
         }
 
         $subjectKey = ClassificationOutcome::subjectKey('download', sprintf('%s:%s', $service, $downloadId));
@@ -559,7 +560,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if (! $stuckImportDecision->isConfident) {
             $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
 
-            return null;
+            return FastPathResolution::unresolved();
         }
 
         $result = match ($stuckImportDecision->choice) {
@@ -573,7 +574,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if (in_array($reason, ['lookup_failed', 'dispatch_failed'], true)) {
             $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::Fallback, $threshold, $stuckImportDecision->choice->value);
 
-            return null;
+            return FastPathResolution::unresolved();
         }
 
         $verdictLine = sprintf(
@@ -586,32 +587,25 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         if ($reason === 'no_action_type_config') {
             $this->record($webhookEventId, AgentDecisionStatus::NoAction, sprintf('%s %s', $verdictLine, (string) ($result['message'] ?? '')), $decisionRunContext);
 
-            return '';
+            return FastPathResolution::resolvedQuietly();
         }
 
-        $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
+        // "nothing_importable" is recorded already resolved negative: nothing
+        // downstream ever learns this row's eventual outcome (there is no
+        // action request or human decision to watch), so it would otherwise
+        // stay open forever. Resolving the row it just created, rather than
+        // every open row for the download, leaves an older open row alone.
+        if ($reason === 'nothing_importable') {
+            $classificationOutcomeRecorder->recordResolved(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value, false, 'nothing_importable');
+        } else {
+            $classificationOutcomeRecorder->record(ClassificationGate::StuckImport, $subjectKey, 'choice', $stuckImportDecision->probability, ClassificationVerdict::ResolvedByClassifier, $threshold, $stuckImportDecision->choice->value);
+        }
 
         if ($reason === 'second_opinion_rejected') {
             $summary = sprintf('%s The second opinion rejected it, so nothing will run.', $verdictLine);
             $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
 
-            return $summary;
-        }
-
-        // "nothing_importable" is resolved negative right away: nothing
-        // downstream ever learns this row's eventual outcome (there is no
-        // action request or human decision to watch), so it would otherwise
-        // stay open forever.
-        if ($reason === 'nothing_importable') {
-            $classificationOutcomeRecorder->resolve(
-                ClassificationGate::StuckImport,
-                $subjectKey,
-                false,
-                'nothing_importable',
-                [ClassificationVerdict::ResolvedByClassifier],
-                null,
-                $stuckImportDecision->choice->value,
-            );
+            return FastPathResolution::resolvedWithSummary($summary);
         }
 
         $summary = ($result['queued'] ?? false) === true
@@ -620,7 +614,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
 
-        return $summary;
+        return FastPathResolution::resolvedWithSummary($summary);
     }
 
     /**

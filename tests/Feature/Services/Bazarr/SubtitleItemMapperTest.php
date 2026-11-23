@@ -95,6 +95,21 @@ test('a history row drops URL providers and unusable languages and keeps fixed f
         ->and($subtitleItemMapper->historyItem(['radarrId' => 0, 'language' => 'eng'], 'movie'))->toBeNull();
 });
 
+test("a history row reads Bazarr's parsed timestamp in the app timezone and keeps other text", function (array $history, string $expected): void {
+    config(['app.timezone' => 'Europe/Stockholm']);
+
+    expect(resolve(SubtitleItemMapper::class)->historyItem([
+        'radarrId' => 801,
+        'language' => 'eng',
+        ...$history,
+    ], 'movie')['occurred_at'] ?? null)->toBe($expected);
+})->with([
+    'parsed timestamp' => [['parsed_timestamp' => '07/15/26 18:00:00', 'timestamp' => 'yesterday'], '2026-07-15T18:00:00+02:00'],
+    'impossible date' => [['parsed_timestamp' => '13/45/26 18:00:00'], '13/45/26 18:00:00'],
+    'other locale' => [['parsed_timestamp' => '15.07.2026 18:00:00'], '15.07.2026 18:00:00'],
+    'relative text only' => [['timestamp' => 'yesterday'], 'yesterday'],
+]);
+
 test('current subtitle languages normalise the language of every track-shaped entry', function (): void {
     $subtitleItemMapper = resolve(SubtitleItemMapper::class);
 

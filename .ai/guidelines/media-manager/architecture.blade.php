@@ -1,0 +1,10 @@
+# Media Manager Architecture
+
+Media Manager is one Laravel app with an Inertia (Vue, SSR) frontend. It sits in front of a home media stack: Sonarr, Radarr, Whisparr, Prowlarr, SABnzbd, Bazarr, Emby and Seerr. Each external service is a `ServiceConnection` row, and code talks to it through a typed `{Service}Client` under `app/Services/{Service}/`. The README's "Architecture" section has the full data flow and directory table. The main paths are:
+
+- **Webhooks → actions.** `POST /api/webhooks/{service}/{connection}` is stored as a `WebhookEvent` and handled on the queue by a `{Service}WebhookHandler`. The handler writes `ActivityLog` and asks `ActionOrchestrator` for `ActionRequest`s. An approved request runs through `ExecuteActionRequest` → `ActionExecutor` → a `{Service}Actions` class. Library-changing writes go through an `ActionRequest`, so they are audited and can be approved.
+- **Media replacement and subtitles** (`app/Services/MediaReplacement/`, `app/Services/Bazarr/`). Bad files are inspected, replacement candidates are ranked and grabbed, and subtitle cases are reconciled from Bazarr notifications and sweeps.
+- **AI** (`app/Ai/`). laravel/ai agents (chat, decision, classification, subtitle advisor) call tools under `app/Ai/Tools/`. Tools that change the library file `ActionRequest`s; read and search tools call the service clients directly. Model choice, routing tiers, budgets and usage accounting live in `app/Ai/` and `app/Services/{AiBudget,AiUsage}/`.
+- **Settings.** Runtime settings are typed objects in `app/Settings/`, backed by the `app_settings` table and edited on the admin pages. Prefer a setting over a hard-coded limit.
+- **Real time.** Reverb broadcasts on private channels (`routes/channels.php`). Pages subscribe through composables in `resources/js/composables/`.
+- **Frontend.** Pages live in `resources/js/pages/` and mirror the controller namespaces. TypeScript types come from Typefinder (`resources/js/typefinder/`, committed and checked for drift). Route helpers come from Wayfinder (`resources/js/{actions,routes}/`, generated and gitignored).

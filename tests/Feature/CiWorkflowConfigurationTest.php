@@ -61,3 +61,12 @@ test('ci runs larastan at level 7 with no baseline', function (): void {
         ->toMatch('/level: 7\b/')
         ->and(base_path('phpstan-baseline.neon'))->not->toBeFile();
 });
+
+test('ci reports unit and feature coverage without gating on it', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    expect($ci)->toContain("coverage: \${{ matrix.suite == 'unit-feature' && 'pcov' || 'none' }}")
+        ->toContain('--exclude-testsuite=Browser --coverage-clover=build/coverage/clover.xml')
+        ->toContain('run: php .github/scripts/coverage-summary.php build/coverage/clover.xml >> "$GITHUB_STEP_SUMMARY"')
+        ->not->toContain('--min=');
+});

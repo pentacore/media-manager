@@ -9,6 +9,7 @@ use App\Http\Requests\Media\DestroyArrMediaRequest;
 use App\Http\Requests\Media\StoreMovieRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ManualActionOutcome;
+use App\Services\Arr\ArrWriteUnconfirmed;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\Radarr\RadarrClient;
 use App\Support\Abilities;
@@ -143,6 +144,12 @@ class MovieController extends BaseArrController
 
         try {
             $this->buildClient($connection)->addMovie($storeMovieRequest->validated());
+        } catch (ArrWriteUnconfirmed) {
+            // A 200 that is not API data (usually a proxy login page): the
+            // movie may already have been added, so this must read as unknown.
+            Inertia::flash('toast', ['type' => 'error', 'message' => __(':service did not confirm adding the movie — check it there before trying again.', ['service' => 'Radarr'])]);
+
+            return back();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to add movie.')]);
 

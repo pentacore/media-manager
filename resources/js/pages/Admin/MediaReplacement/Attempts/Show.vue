@@ -6,6 +6,7 @@ import ActionRequestController from '@/actions/App/Http/Controllers/Actions/Acti
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
 import { Field, Pill, SvcChip, TimeStamp } from '@/components/mm';
+import type { PillVariant } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -78,8 +79,6 @@ defineOptions({
         ],
     },
 });
-
-type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
 
 const STATUS_VARIANTS: Record<string, PillVariant> = {
     requested: 'info',

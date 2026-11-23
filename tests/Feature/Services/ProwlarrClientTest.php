@@ -74,6 +74,27 @@ test('testIndexer POSTs to the indexer test endpoint', function (): void {
         && str_contains($request->url(), '/api/v1/indexer/42/test'));
 });
 
+test('testIndexer treats an empty 200 body as a pass', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/indexer/42/test' => Http::response('', 200)]);
+
+    expect($this->client->testIndexer(42))->toBe(['success' => true, 'errors' => []]);
+});
+
+test('testIndexer does not read a 200 login page as a pass', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/indexer/42/test' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $result = $this->client->testIndexer(42);
+
+    expect($result['success'])->toBeFalse()
+        ->and($result['errors'][0]['errorMessage'])->toContain('something other than its API data');
+});
+
+test('testIndexer reports a non-JSON failure page as a failure with no field errors', function (): void {
+    Http::fake(['prowlarr.local:9696/api/v1/indexer/42/test' => Http::response('<html>Bad gateway</html>', 502)]);
+
+    expect($this->client->testIndexer(42))->toBe(['success' => false, 'errors' => []]);
+});
+
 test('testIndexer surfaces validation failures from Prowlarr', function (): void {
     Http::fake([
         'prowlarr.local:9696/api/v1/indexer/42/test' => Http::response([

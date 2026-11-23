@@ -300,6 +300,21 @@ test('members can store a new series', function (): void {
     );
 });
 
+test('a series add answered with a login page is worded as not confirmed, not as failed', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->post(route('media.series.store'), [
+            'title' => 'New Show',
+            'tvdbId' => 12345,
+            'qualityProfileId' => 1,
+            'rootFolderPath' => '/tv',
+            'monitored' => true,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Sonarr did not confirm adding the series — check it there before trying again.');
+});
+
 test('store validates required fields', function (): void {
     $member = User::factory()->member()->create();
 

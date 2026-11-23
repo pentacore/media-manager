@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Notifications\ServiceUpdateAvailable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\Attributes\Timeout;
 use Symfony\Component\Finder\Finder;
@@ -35,23 +36,32 @@ function jobTimeoutArchDeclaredTimeout(ReflectionClass $reflectionClass): ?int
     return is_int($default) ? $default : null;
 }
 
-test('every queued job declares a timeout below the worker --timeout', function (): void {
+test('every queued job and queued notification declares a timeout below the worker --timeout', function (): void {
     $root = dirname(__DIR__, 3);
     $offenders = [];
+    $scanned = [];
 
-    foreach (Finder::create()->files()->in($root.'/app/Jobs')->name('*.php') as $finder) {
-        $class = 'App\\Jobs\\'.str_replace(['/', '.php'], ['\\', ''], $finder->getRelativePathname());
+    // A queued notification runs as a SendQueuedNotifications job that copies
+    // the notification's #[Timeout]/$timeout, so it inherits the worker's
+    // 300 s when it declares none.
+    foreach (['Jobs', 'Notifications'] as $directory) {
+        foreach (Finder::create()->files()->in($root.'/app/'.$directory)->name('*.php') as $finder) {
+            $class = 'App\\'.$directory.'\\'.str_replace(['/', '.php'], ['\\', ''], $finder->getRelativePathname());
 
-        if (! is_subclass_of($class, ShouldQueue::class)) {
-            continue;
-        }
+            if (! is_subclass_of($class, ShouldQueue::class)) {
+                continue;
+            }
 
-        $timeout = jobTimeoutArchDeclaredTimeout(new ReflectionClass($class));
+            $scanned[] = $class;
+            $timeout = jobTimeoutArchDeclaredTimeout(new ReflectionClass($class));
 
-        if ($timeout === null || $timeout >= JOB_TIMEOUT_ARCH_WORKER_TIMEOUT) {
-            $offenders[$class] = $timeout;
+            if ($timeout === null || $timeout >= JOB_TIMEOUT_ARCH_WORKER_TIMEOUT) {
+                $offenders[$class] = $timeout;
+            }
         }
     }
 
-    expect($offenders)->toBe([]);
+    // The scanner must actually reach queued notifications, or it proves nothing.
+    expect($scanned)->toContain(ServiceUpdateAvailable::class)
+        ->and($offenders)->toBe([]);
 });

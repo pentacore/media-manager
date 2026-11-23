@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
+    // Every case seeds ages relative to now() and the command truncates its cutoff to the
+    // second, so a clock that ticks mid-test (a slow parallel worker) can move a row across it.
+    $this->freezeTime();
     Cache::flush();
     Notification::fake();
     User::factory()->create(['role' => UserRole::Admin]);

@@ -23,6 +23,8 @@ use Throwable;
  * A turn the user stopped ends with a cancelled stream (MediaAgent's
  * `Stop::when()`), which the SDK stores as a completed reply; it is flagged
  * `stopped` here (StoppedByUser::response()).
+ * A user message that answered a choices or tool request card keeps that
+ * card's id in `meta.answered_card` (ChatAnsweredCard).
  * Stateless, so the SDK's singleton binding stays Octane-safe.
  */
 class ConversationStore extends DatabaseConversationStore
@@ -45,5 +47,23 @@ class ConversationStore extends DatabaseConversationStore
             ...($resolvedSelection->tier instanceof TierOutcome ? ['tier' => $resolvedSelection->tier->toArray()] : []),
             ...($toolGroups === null ? [] : ['tool_groups' => $toolGroups]),
         ];
+    }
+
+    /**
+     * The SDK writes a user message with empty meta; one that answered a card names it.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    #[Override]
+    protected function messageAttributes(string $messageId, string $conversationId, ?string $participantType, string|int|null $participantId, mixed $now, array $attributes): array
+    {
+        $answeredCard = resolve(ChatAnsweredCard::class)->id;
+
+        if (($attributes['role'] ?? null) === 'user' && $answeredCard !== null) {
+            $attributes['meta'] = json_encode(['answered_card' => $answeredCard], JSON_THROW_ON_ERROR);
+        }
+
+        return parent::messageAttributes($messageId, $conversationId, $participantType, $participantId, $now, $attributes);
     }
 }

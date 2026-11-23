@@ -97,8 +97,11 @@ const bars = computed(() => {
                 :data-bar-placeholder="bar.placeholder ? 'true' : 'false'"
                 :class="
                     bar.placeholder
-                        ? 'fill-none stroke-muted-foreground/50 stroke-[1.5] [stroke-dasharray:2,1.5]'
+                        ? 'fill-none stroke-muted-foreground/50 stroke-[1.5] [stroke-dasharray:3,2]'
                         : 'fill-accent/70 transition-colors hover:fill-accent'
+                "
+                :vector-effect="
+                    bar.placeholder ? 'non-scaling-stroke' : undefined
                 "
             >
                 <title>{{ bar.tooltip }}</title>
@@ -125,13 +128,19 @@ const bars = computed(() => {
 
         <div
             v-if="bars.length"
-            class="mt-1 flex justify-between text-xs text-muted-foreground"
+            :class="[
+                'mt-1 flex text-xs text-muted-foreground',
+                !showLabels && 'justify-between',
+            ]"
+            data-bar-chart-labels
         >
+            <!-- One equal slot per bar, centred like the bar above it, so a
+                 caller's own per-bar row (the gate counts) lines up too. -->
             <template v-if="showLabels">
                 <span
                     v-for="bar in bars"
                     :key="`lbl-${bar.key}`"
-                    class="truncate"
+                    class="min-w-0 flex-1 truncate text-center"
                 >
                     {{ bar.label }}
                 </span>

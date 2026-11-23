@@ -82,16 +82,26 @@ class ConversationController extends Controller
             cursor: $request->string('cursor')->value() ?: null,
         );
 
-        $messages = collect($cursorPaginator->items())
+        $entries = collect($cursorPaginator->items())
             ->reverse()
+            ->filter(fn (StoredMessage $storedMessage): bool => in_array($storedMessage->role, ['user', 'assistant'], true))
             ->map(fn (StoredMessage $storedMessage): array => [
                 'stored' => $storedMessage,
                 'cards' => $storedMessage->role === 'assistant'
                     ? $chatCardExtractor->fromToolResults(collect($storedMessage->steps)->pluck('tool_calls')->filter()->flatten(1)->all())
                     : [],
             ])
-            ->filter(fn (array $entry): bool => in_array($entry['stored']->role, ['user', 'assistant'], true)
-                && (trim($entry['stored']->content) !== '' || $entry['stored']->status === MessageStatus::Failed || ($entry['stored']->meta['stopped'] ?? false) === true || $entry['stored']->attachments !== [] || $entry['cards'] !== []))
+            ->values();
+
+        // Hydrate before deciding what to show: a reply whose only card was an
+        // action request that has since been deleted has nothing left to show.
+        $cardGroups = $chatCardExtractor->hydrateGroups(array_values($entries
+            ->map(fn (array $entry): array => $entry['cards'])
+            ->all()));
+
+        $messages = $entries
+            ->map(fn (array $entry, int $index): array => [...$entry, 'cards' => $cardGroups[$index]])
+            ->filter(fn (array $entry): bool => trim($entry['stored']->content) !== '' || $entry['stored']->status === MessageStatus::Failed || ($entry['stored']->meta['stopped'] ?? false) === true || $entry['stored']->attachments !== [] || $entry['cards'] !== [])
             ->map(function (array $entry) use ($chatAttachmentStore): array {
                 $storedMessage = $entry['stored'];
 
@@ -105,6 +115,7 @@ class ConversationController extends Controller
                     'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
                     'failed' => $storedMessage->status === MessageStatus::Failed,
                     'stopped' => ($storedMessage->meta['stopped'] ?? false) === true,
+                    'answered_card' => $storedMessage->role === 'user' && is_string($storedMessage->meta['answered_card'] ?? null) ? $storedMessage->meta['answered_card'] : null,
                     'cards' => $entry['cards'],
                     'tool_groups' => $storedMessage->role === 'assistant' ? RoutedToolGroups::wireValue($storedMessage->meta['tool_groups'] ?? null) : null,
                     'answered_by' => $storedMessage->role === 'assistant' ? [
@@ -115,13 +126,7 @@ class ConversationController extends Controller
                     ] : null,
                 ];
             })
-            ->values();
-
-        $cardGroups = $chatCardExtractor->hydrateGroups(array_values($messages
-            ->map(fn (array $message): array => $message['cards'])
-            ->all()));
-        $messages = $messages
-            ->map(fn (array $message, int $index): array => [...$message, 'cards' => $cardGroups[$index]])
+            ->values()
             ->all();
 
         return response()->json([

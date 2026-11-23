@@ -167,10 +167,12 @@ export interface ChatMessage extends ConversationMessage {
     workflow?: WorkflowProposal | null;
     workflowResolved?: 'approved' | 'declined' | null;
     /**
-     * The option labels picked on this reply's choices card: set on a click,
-     * or inferred from the next user message when the conversation loads.
+     * The answers picked on this reply's choices and tool request cards, keyed
+     * by card id (option labels, or 'load' / 'decline'): set on a click, or
+     * read back from the next user message when the conversation loads.
+     * Per card, so a reply with two cards locks only the one that was answered.
      */
-    chosen?: string[] | null;
+    chosen?: Record<string, string[]>;
     /**
      * Client-local monotonic key. Backend timestamps have second resolution
      * (a user message and its reply routinely collide) and Date.now() can
@@ -192,4 +194,6 @@ export interface ComposerSubmission {
     pendingFiles: PendingFile[];
     /** Tool groups to load for just this turn (the assistant's request). */
     loadToolGroups?: ToolGroupValue[];
+    /** The id of the choices or tool request card this message answers. */
+    answeredCard?: string;
 }

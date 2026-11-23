@@ -1,3 +1,28 @@
+<script lang="ts">
+/**
+ * The measured border-box height of every bar that is open right now, by
+ * instance. `--bulk-bar-height` is the tallest of them, so two bars on one
+ * page never leave the spacer at the height the last one to resize happened to
+ * report, and a bar that closes lets it fall back to the one still open.
+ */
+const openBarHeights = new Map<symbol, number>();
+
+function publishBarHeight(): void {
+    const body = document.body;
+
+    if (openBarHeights.size === 0) {
+        body.style.removeProperty('--bulk-bar-height');
+
+        return;
+    }
+
+    body.style.setProperty(
+        '--bulk-bar-height',
+        `${Math.max(...openBarHeights.values())}px`,
+    );
+}
+</script>
+
 <script setup lang="ts">
 import { MoreHorizontal, X } from '@lucide/vue';
 import { useResizeObserver } from '@vueuse/core';
@@ -63,6 +88,7 @@ function isCompact(): boolean {
 
 /** Whether this bar currently counts towards `<body data-bulk-bar-open>`. */
 let padsPage = false;
+const barKey = Symbol('bulk-bar');
 
 const bar = useTemplateRef<HTMLElement>('bar');
 
@@ -70,8 +96,9 @@ const bar = useTemplateRef<HTMLElement>('bar');
  * Tells the page that a bar is on screen, so on a phone it ends with room for
  * the fixed bar (app.css): whatever follows the bar in the DOM (pagination,
  * the SABnzbd history) must scroll clear of it too. A count, so two bars on
- * one page do not clear each other's flag; the last one out also drops the
- * measured `--bulk-bar-height`. Client-only.
+ * one page do not clear each other's flag; a bar that leaves also drops its
+ * own measured height (`--bulk-bar-height` is the tallest still open, and goes
+ * with the last one out). Client-only.
  */
 function setPagePadding(on: boolean): void {
     if (on === padsPage) {
@@ -86,7 +113,11 @@ function setPagePadding(on: boolean): void {
         body.dataset.bulkBarOpen = String(open);
     } else {
         delete body.dataset.bulkBarOpen;
-        body.style.removeProperty('--bulk-bar-height');
+    }
+
+    if (!on) {
+        openBarHeights.delete(barKey);
+        publishBarHeight();
     }
 }
 
@@ -99,10 +130,8 @@ useResizeObserver(bar, ([entry]) => {
         return;
     }
 
-    document.body.style.setProperty(
-        '--bulk-bar-height',
-        `${Math.round(entry.borderBoxSize[0].blockSize)}px`,
-    );
+    openBarHeights.set(barKey, Math.round(entry.borderBoxSize[0].blockSize));
+    publishBarHeight();
 });
 
 onMounted(() => {
@@ -117,11 +146,13 @@ onUnmounted(() => setPagePadding(false));
 <template>
     <!-- Stays mounted while a run is in flight, so the action component that
          owns the request can't be unmounted (and re-mounted idle) mid-run.
-         Below sm a bar is fixed to the screen's bottom edge (sticky
-         cannot stick there: the layout's overflow-x-hidden content box is the
-         sticky container while the window scrolls); `data-bulk-bar-open` on
-         <body> and its measured `--bulk-bar-height` make the page end with
-         room for it (app.css). -->
+         From sm up it is sticky to the window's bottom, which needs every
+         ancestor to leave overflow visible or `clip` (the layout's content
+         box is overflow-x-clip: `hidden` would make it the sticky container
+         and park the bar at the page end). Below sm it is fixed to the
+         screen's bottom edge; `data-bulk-bar-open` on <body> and its
+         measured `--bulk-bar-height` make the page end with room for it
+         (app.css). -->
     <div
         v-if="count > 0 || busy"
         ref="bar"

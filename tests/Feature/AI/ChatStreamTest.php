@@ -756,6 +756,48 @@ test('a stopped routed turn leaves its chat-routing outcomes open', function ():
         ->and($outcomes->whereNotNull('outcome_positive'))->toBeEmpty();
 });
 
+test('a completed streamed routed turn resolves its chat-routing outcomes by the tools it called', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(true);
+    Classification::fake([collect(ToolGroup::cases())
+        ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer(in_array($toolGroup, [ToolGroup::Playback, ToolGroup::Downloads], true) ? 0.9 : 0.05)])
+        ->all()]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'NowPlayingTool', arguments: []),
+        'Nothing is playing.',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'What is playing?'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $outcomes = ClassificationOutcome::query()->where('gate', ClassificationGate::ChatRouting)->get()->keyBy('question');
+
+    expect($outcomes)->toHaveCount(count(ToolGroup::cases()))
+        ->and($outcomes['playback']->outcome_positive)->toBeTrue()
+        ->and($outcomes['downloads']->outcome_positive)->toBeFalse()
+        ->and($outcomes['indexers']->outcome_at)->toBeNull();
+});
+
+test('a streamed turn with routing off writes and updates no outcome rows', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    resolve(AiSettings::class)->setChatRoutingEnabled(false);
+    MediaAgent::fake(['Hi.']);
+    $outcomeQueries = [];
+    DB::listen(function ($query) use (&$outcomeQueries): void {
+        if (str_contains($query->sql, 'classification_outcomes')) {
+            $outcomeQueries[] = $query->sql;
+        }
+    });
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    Classification::assertNothingClassified();
+    expect($outcomeQueries)->toBe([]);
+});
+
 test('a client that leaves after the final step still gets a successful run', function (): void {
     Bus::fake([GenerateConversationTitle::class]);
     chatStreamClientLeavingAfter(1);
@@ -817,4 +859,38 @@ test('RUN_FINISHED has no tool groups when routing is off', function (): void {
     $frame = json_decode(substr(chatStreamFrame($body, 'RUN_FINISHED'), strlen('data: ')), true);
 
     expect($frame['toolGroups'])->toBeNull();
+});
+
+test('a streamed turn that answers a card stores the card id on the user message', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Grabbing subtitles too.']);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Yes', 'answered_card' => 'call_2'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $user = DB::table('agent_conversation_messages')->where('role', 'user')->sole();
+    $assistant = DB::table('agent_conversation_messages')->where('role', 'assistant')->sole();
+
+    expect(json_decode((string) $user->meta, true))->toBe(['answered_card' => 'call_2'])
+        ->and(json_decode((string) $assistant->meta, true))->not->toHaveKey('answered_card');
+});
+
+test('a streamed turn that answers no card leaves the user message meta empty', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Hi.']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hello'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect(json_decode((string) DB::table('agent_conversation_messages')->where('role', 'user')->value('meta'), true))->toBe([]);
+});
+
+test('streaming refuses an answered card id that is too long', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.stream'), ['message' => 'Yes', 'answered_card' => str_repeat('a', 256)])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('answered_card');
 });

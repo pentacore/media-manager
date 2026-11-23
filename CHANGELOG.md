@@ -1,3 +1,20 @@
+## [1.62.2](https://github.com/pentacore/media-manager/compare/v1.62.1...v1.62.2) (2026-11-23)
+
+### Bug Fixes
+
+* **ai:** align the gate calibration counts and share the decision pill variant ([73fbff4](https://github.com/pentacore/media-manager/commit/73fbff48d2058d2d1cfa17b0aff048189ae1d7d0))
+* **ai:** lock pricing rows in id order during the feed write ([234bc78](https://github.com/pentacore/media-manager/commit/234bc78add9392399c840fbb35c0d7295f03ce76))
+* **bazarr:** name history actions and format their time ([b119004](https://github.com/pentacore/media-manager/commit/b119004c5a5faf0f409ac45395c35ce0822d5d82))
+* **bulk:** publish the tallest open bulk bar's height, and hit-test the dialog reach check ([be307a7](https://github.com/pentacore/media-manager/commit/be307a738a66f0897cd3f33d4e8cb916ad0ca66f))
+* **chat:** keep each choice card's pick on its own card ([500f96a](https://github.com/pentacore/media-manager/commit/500f96a9401a58f9aa7ab0422363e886a8843f43))
+* **emby:** fail item and session reads that answer with something other than JSON data ([767db78](https://github.com/pentacore/media-manager/commit/767db78e81161deced92c27ed379e7d2759e9ea3))
+* **emby:** never read a non-JSON 200 as success on played-state writes or the user list ([a1aab4d](https://github.com/pentacore/media-manager/commit/a1aab4dda57f7da22630f9dedccea603ee3f1ea6))
+* **layout:** keep the content box shrinkable after the clip change ([58df07b](https://github.com/pentacore/media-manager/commit/58df07be3ac42c91fbd39bd869b51011f34e31bb))
+* **layout:** let bulk bars stick to the window bottom on desktop ([a308d4c](https://github.com/pentacore/media-manager/commit/a308d4c5ba68f4f5e059337ecf29e28ea8dc25ce))
+* **library:** word an unconfirmed arr write as not confirmed, not as a failure ([e7b383a](https://github.com/pentacore/media-manager/commit/e7b383a7273e95cf739a2521ba214884778a8e4c))
+* **prowlarr:** require JSON data from an indexer test before reporting a pass ([20e7361](https://github.com/pentacore/media-manager/commit/20e73610949a0dc33b512e3e7e4934d4287fa948))
+* **ui:** end a cut select value in an ellipsis and drop the small poster word ([0831704](https://github.com/pentacore/media-manager/commit/083170467a96b2de9dfa9d518d38989467aa0868))
+
 ## [1.62.1](https://github.com/pentacore/media-manager/compare/v1.62.0...v1.62.1) (2026-11-23)
 
 ### Bug Fixes

@@ -305,3 +305,60 @@ test('getManualImports stops after a batch that failed entirely to connect', fun
     expect($this->client->getManualImports($ids))->toBe(array_fill_keys($ids, null))
         ->and($attempts)->toBe(10);
 });
+
+test('getManualImports stops after the first ten when eleven ids all fail to connect', function (): void {
+    $attempts = [];
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => function (Request $request) use (&$attempts) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $attempts[] = $query['downloadId'];
+
+            return Http::failedConnection()($request);
+        },
+    ]);
+
+    $ids = array_map(static fn (int $n): string => 'dl-'.$n, range(1, 11));
+
+    expect($this->client->getManualImports($ids))->toBe(array_fill_keys($ids, null))
+        ->and($attempts)->toBe(array_slice($ids, 0, 10));
+});
+
+test('getManualImports reads the eleventh id in a second batch after a healthy first batch', function (): void {
+    $attempts = 0;
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => function (Request $request) use (&$attempts) {
+            $attempts++;
+
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $query['downloadId'] === 'dl-11'
+                ? Http::failedConnection()($request)
+                : Http::response([['path' => '/dl/'.$query['downloadId'].'.mkv']]);
+        },
+    ]);
+
+    $ids = array_map(static fn (int $n): string => 'dl-'.$n, range(1, 11));
+    $result = $this->client->getManualImports($ids);
+
+    expect($attempts)->toBe(11)
+        ->and($result['dl-10'])->toBe([['path' => '/dl/dl-10.mkv']])
+        ->and($result['dl-11'])->toBeNull();
+});
+
+test('getManualImports reads numeric-string download ids and sends them unchanged', function (): void {
+    $sent = [];
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => function (Request $request) use (&$sent) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $sent[] = $query['downloadId'];
+
+            return Http::response([['path' => '/dl/'.$query['downloadId'].'.mkv']]);
+        },
+    ]);
+
+    $result = $this->client->getManualImports(['1234', '0042', '1234']);
+
+    expect($sent)->toBe(['1234', '0042'])
+        ->and($result['1234'])->toBe([['path' => '/dl/1234.mkv']])
+        ->and($result['0042'])->toBe([['path' => '/dl/0042.mkv']]);
+});
