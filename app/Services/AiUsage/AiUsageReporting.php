@@ -164,13 +164,13 @@ class AiUsageReporting
     /**
      * @param  bool|null  $benchmark  null: every row; true: only benchmark runs; false: leave benchmark runs out
      * @param  bool|null  $fellThrough  null: every row; false: runs that used their task's first tier; true: runs that fell through to a lower tier
-     * @return Collection<int, object>
+     * @return Collection<int, object{id: int, created_at: string, provider: string|null, model: string|null, prompt_tokens: int, completion_tokens: int, tool_calls_count: int, conversation_id: string|null, status: string, kind: string, error_message: string|null, tier_position: int|null, tier_via: string|null, benchmark_run_id: int|null, is_benchmark: bool, user_name: string|null, total_tokens: int|string, cost: float|int|string}>
      */
     public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null, ?bool $fellThrough = null, ?bool $benchmark = null): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        /** @var Collection<int, object> $rows */
+        /** @var Collection<int, object{id: int, created_at: string, provider: string|null, model: string|null, prompt_tokens: int, completion_tokens: int, tool_calls_count: int, conversation_id: string|null, status: string, kind: string, error_message: string|null, tier_position: int|null, tier_via: string|null, benchmark_run_id: int|null, is_benchmark: bool, user_name: string|null, total_tokens: int|string, cost: float|int|string}> $rows */
         $rows = $this->query($since, $scenario, $kind, $benchmark)
             ->leftJoin('users', 'ai_usage_records.user_id', '=', 'users.id')
             ->selectRaw('

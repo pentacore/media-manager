@@ -79,7 +79,7 @@ class PreferenceResolver
     }
 
     /**
-     * @return array<int, string>
+     * @return list<string>
      */
     public function channelsFor(User|NotificationDestination $notifiable, string $notificationClass, string $severity): array
     {
