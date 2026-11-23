@@ -110,14 +110,14 @@ final readonly class ChatAttachmentStore
             return [];
         }
 
-        return ChatAttachment::query()
+        return array_values(ChatAttachment::query()
             ->where(function (Builder $builder) use ($paths, $providerFileIds): void {
                 $builder->whereIn('path', $paths);
 
-                if ($providerFileIds !== []) {
+                foreach ($providerFileIds as $providerFileId) {
                     $builder->orWhereRaw(
-                        sprintf('exists (select 1 from json_each_text(provider_file_ids) where value in (%s))', implode(', ', array_fill(0, count($providerFileIds), '?'))),
-                        $providerFileIds,
+                        'exists (select 1 from json_each_text(provider_file_ids) where value = ?)',
+                        [$providerFileId],
                     );
                 }
             })
@@ -128,7 +128,7 @@ final readonly class ChatAttachmentStore
                 'name' => $chatAttachment->original_name,
                 'mime' => $chatAttachment->mime_type,
                 'url' => route('ai.chat.attachments.show', $chatAttachment),
-            ])->values()->all();
+            ])->all());
     }
 
     /**

@@ -143,7 +143,7 @@ final readonly class MediaReplacementTracker
             $this->bustConnectionCache($serviceConnection);
 
             $snapshot = $this->mediaFileInspector->inspectFromSnapshot(
-                is_array($attempt->target) ? $attempt->target : [],
+                $attempt->target,
                 $serviceConnection,
             );
 
@@ -220,9 +220,9 @@ final readonly class MediaReplacementTracker
             // arrives minutes after cleanup, by which time that search has run and
             // been rejected against the unmonitored target.
             $restored = ! $needsRestore
-                || ($cleanupDone && $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []));
+                || $this->remonitorTarget($serviceConnection, $attempt->target);
 
-            if ($restored && $needsRestore && $cleanupDone) {
+            if ($restored && $needsRestore) {
                 $attempt->forceFill(['monitoring_suspended' => false])->save();
             }
 
@@ -588,7 +588,7 @@ final readonly class MediaReplacementTracker
      */
     private function attemptTargetId(MediaReplacementAttempt $mediaReplacementAttempt): ?int
     {
-        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
+        $target = $mediaReplacementAttempt->target;
         $id = mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr'
             ? ($target['movie_id'] ?? null)
             : ($target['series_id'] ?? null);
@@ -686,7 +686,7 @@ final readonly class MediaReplacementTracker
 
         $restored = $this->remonitorTarget(
             $serviceConnection,
-            is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [],
+            $mediaReplacementAttempt->target,
         );
 
         if ($restored) {

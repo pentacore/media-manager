@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\HealthStatus;
-use App\Enums\ServiceType;
 use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
 use App\Services\Arr\ArrUnexpectedResponse;
+use App\Services\Bazarr\BazarrClient;
+use App\Services\Emby\EmbyClient;
 use App\Services\Emby\EmbyUnexpectedResponse;
+use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\Sabnzbd\SabnzbdRefused;
+use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
 use App\Support\UpstreamErrorText;
 use Illuminate\Bus\Batchable;
@@ -138,11 +141,11 @@ class PingServiceHealth implements ShouldQueue
     {
         $client = resolve(ServiceClientFactory::class)->make($this->serviceConnection);
 
-        return match ($this->serviceConnection->type) {
-            ServiceType::Bazarr => $client->getFreshSystemStatus(),
-            ServiceType::Emby => $client->getSystemInfo(),
-            ServiceType::Seerr => $client->getStatus(),
-            ServiceType::SABnzbd => $client->getVersion(),
+        return match (true) {
+            $client instanceof BazarrClient => $client->getFreshSystemStatus(),
+            $client instanceof EmbyClient => $client->getSystemInfo(),
+            $client instanceof SeerrClient => $client->getStatus(),
+            $client instanceof SabnzbdClient => $client->getVersion(),
             default => $client->getSystemStatus(),
         };
     }

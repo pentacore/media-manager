@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\QueueLane;
 use App\Enums\ServiceType;
 use App\Enums\WebhookHandlingStatus;
+use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
 use App\Services\Prowlarr\ProwlarrWebhookHandler;
@@ -60,6 +61,8 @@ class ProcessWebhookEvent implements ShouldQueue
         }
 
         $this->webhookEvent->loadMissing('serviceConnection');
+        // The connection can be deleted between dispatch and handling, so the relation may be null despite the FK.
+        /** @var ServiceConnection|null $connection */
         $connection = $this->webhookEvent->serviceConnection;
 
         if ($connection === null) {

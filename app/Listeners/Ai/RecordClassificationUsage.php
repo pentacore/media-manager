@@ -30,7 +30,7 @@ class RecordClassificationUsage
             ...UsageColumns::fromText($classified->response->usage),
             'prompt_text' => UsageText::classificationInput($classified->prompt),
             'response_text' => UsageText::classificationOutput($classified->response),
-            'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
         ]);
     }
 }

@@ -34,13 +34,17 @@ class SeerrTitleResolver
             return [];
         }
 
+        /** @var array<string, array{title: string, poster_path: string|null}> $media */
         $media = [];
         $missing = [];
 
         foreach ($pairs as $key => [$mediaType, $tmdbId]) {
             $cached = Cache::get($this->cacheKey($serviceConnection, $mediaType, $tmdbId));
             if (is_array($cached) && isset($cached['title'])) {
-                $media[$key] = $cached;
+                $media[$key] = [
+                    'title' => (string) $cached['title'],
+                    'poster_path' => is_string($cached['poster_path'] ?? null) ? $cached['poster_path'] : null,
+                ];
 
                 continue;
             }

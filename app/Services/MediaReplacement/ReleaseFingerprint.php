@@ -46,7 +46,7 @@ final class ReleaseFingerprint
 
         sort($mappedIds, SORT_NUMERIC);
 
-        return array_values($mappedIds);
+        return $mappedIds;
     }
 
     private function integer(mixed $value): ?int

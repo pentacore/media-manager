@@ -48,9 +48,19 @@ class FetchLatestServiceVersion implements ShouldQueue
 
     public function __construct(public ServiceConnection $serviceConnection) {}
 
+    /**
+     * Widened from the literal shape: a service type without an entry has no repo to poll.
+     *
+     * @return array<string, string>
+     */
+    private function repoMap(): array
+    {
+        return self::REPO_MAP;
+    }
+
     public function handle(GitHubReleaseClient $gitHubReleaseClient): void
     {
-        $repo = self::REPO_MAP[$this->serviceConnection->type->value] ?? null;
+        $repo = $this->repoMap()[$this->serviceConnection->type->value] ?? null;
 
         if ($repo === null) {
             return;

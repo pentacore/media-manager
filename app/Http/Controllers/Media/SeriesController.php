@@ -19,6 +19,9 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * @extends BaseArrController<SonarrClient>
+ */
 class SeriesController extends BaseArrController
 {
     public function index(Request $request): Response|RedirectResponse

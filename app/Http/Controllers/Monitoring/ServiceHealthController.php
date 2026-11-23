@@ -16,8 +16,6 @@ use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\ServiceCheckBatch;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -137,7 +135,7 @@ class ServiceHealthController extends Controller
 
         try {
             $entries = $client->getDiskSpace();
-        } catch (RequestException|ConnectionException|Throwable) {
+        } catch (Throwable) {
             return null;
         }
 

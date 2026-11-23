@@ -175,7 +175,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         }
 
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
-            return $this->resumeAcceptedGrab($actionRequest, $payload, $serviceType, $serviceConnection, $client, $storedTarget, $existing);
+            return $this->resumeAcceptedGrab($actionRequest, $payload, $serviceType, $serviceConnection, $client, $existing);
         }
 
         $freshTarget = $this->verifiedFreshTarget($serviceType, $serviceConnection, $storedTarget);
@@ -239,7 +239,6 @@ final readonly class MediaReplacementActions implements ActionExecutor
      * finished; otherwise resume the remaining destructive steps.
      *
      * @param  array<string, mixed>  $payload
-     * @param  array<string, mixed>  $storedTarget
      * @return array<string, mixed>
      */
     private function resumeAcceptedGrab(
@@ -248,7 +247,6 @@ final readonly class MediaReplacementActions implements ActionExecutor
         ServiceType $serviceType,
         ServiceConnection $serviceConnection,
         SonarrClient|RadarrClient $client,
-        array $storedTarget,
         MediaReplacementAttempt $mediaReplacementAttempt,
     ): array {
         // `cleanup_completed_at` is the durable evidence of whether the
@@ -317,7 +315,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $mediaReplacementAttempt = $refreshed;
 
-        $resumeTarget = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : $storedTarget;
+        $resumeTarget = $mediaReplacementAttempt->target;
 
         // RE-ASSERT the suspension instead of trusting the persisted flag for the
         // BLOCKLIST DECISION. This row has been sitting in the database since the

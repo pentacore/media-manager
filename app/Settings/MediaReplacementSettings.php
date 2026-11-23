@@ -245,7 +245,7 @@ final readonly class MediaReplacementSettings
                 ? $automaticSelectionThreshold
                 : self::DEFAULT_CONFIGURATION['automatic_selection_threshold'];
         $normalizedConfiguration['season_pack_policy'] = is_string($seasonPackPolicy)
-            ? (SeasonPackPolicy::tryFrom($seasonPackPolicy)?->value ?? self::DEFAULT_CONFIGURATION['season_pack_policy'])
+            ? (SeasonPackPolicy::tryFrom($seasonPackPolicy)->value ?? self::DEFAULT_CONFIGURATION['season_pack_policy'])
             : self::DEFAULT_CONFIGURATION['season_pack_policy'];
         $normalizedConfiguration['global_languages'] = is_array($globalLanguages)
             ? $this->normalizeLanguageList($globalLanguages)

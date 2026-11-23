@@ -175,10 +175,10 @@ final readonly class MediaFileInspector
             'series_id' => $seriesId,
             'display_name' => $this->sonarrDisplayName($series, $episode),
             'season_number' => $this->wholeNumber($episode['seasonNumber'] ?? null),
-            'episode_numbers' => array_values(array_filter(
+            'episode_numbers' => array_filter(
                 [$this->integer($episode['episodeNumber'] ?? null)],
                 static fn (?int $number): bool => $number !== null,
-            )),
+            ),
             'episode_ids' => $episodeId === null ? [] : [$episodeId],
             'episode_file_ids' => [$fileId],
             'monitored' => ($episode['monitored'] ?? null) === true,
@@ -368,7 +368,7 @@ final readonly class MediaFileInspector
 
         if ($downloadId !== null) {
             foreach ($matching as $record) {
-                if (($record['eventType'] ?? null) === 'grabbed' && $this->recordDownloadId($record) === $downloadId) {
+                if ($record['eventType'] === 'grabbed' && $this->recordDownloadId($record) === $downloadId) {
                     $id = $this->integer($record['id'] ?? null);
 
                     if ($id !== null) {
@@ -382,7 +382,7 @@ final readonly class MediaFileInspector
         $grabIds = [];
 
         foreach ($matching as $record) {
-            if (($record['eventType'] ?? null) === 'grabbed') {
+            if ($record['eventType'] === 'grabbed') {
                 $id = $this->integer($record['id'] ?? null);
 
                 if ($id !== null) {
@@ -451,7 +451,7 @@ final readonly class MediaFileInspector
 
         sort($normalized, SORT_NUMERIC);
 
-        return array_values($normalized);
+        return $normalized;
     }
 
     private function quality(mixed $quality): ?string

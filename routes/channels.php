@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Support\Abilities;
 use Illuminate\Support\Facades\Broadcast;
 use Laravel\Ai\Contracts\ConversationStore;
-use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 
 // The owner only: their notifications, plus their own non-audit activity rows
 // (ActivityLogCreated), which a viewer's dashboard feed listens for here.
@@ -66,7 +65,6 @@ Broadcast::channel(
 
         $conversationStore = resolve(ConversationStore::class);
 
-        return $conversationStore instanceof VerifiesConversationOwnership
-            && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id);
+        return $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id);
     },
 );

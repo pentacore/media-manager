@@ -263,7 +263,7 @@ class ServerController extends Controller
             ->limit(20)
             ->get();
 
-        return $open->concat($resolved)->map(static fn (ServerIncident $serverIncident): array => [
+        return array_values($open->concat($resolved)->map(static fn (ServerIncident $serverIncident): array => [
             'id' => $serverIncident->id,
             'key' => $serverIncident->key,
             'severity' => $serverIncident->severity->value,
@@ -274,7 +274,7 @@ class ServerController extends Controller
             'last_seen_at' => $serverIncident->last_seen_at->toIso8601String(),
             'escalated_at' => $serverIncident->escalated_at?->toIso8601String(),
             'resolved_at' => $serverIncident->resolved_at?->toIso8601String(),
-        ])->values()->all();
+        ])->all());
     }
 
     /**

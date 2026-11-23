@@ -131,7 +131,7 @@ final class BazarrSettingsAdapter
     {
         $url = route('webhooks.bazarr', ['serviceConnection' => $serviceConnection]);
         $token = $serviceConnection->webhook_token;
-        $token = is_string($token) && $token !== '' ? $token : null;
+        $token = $token !== '' ? $token : null;
 
         return [
             'automatic_configuration_supported' => false,
@@ -168,7 +168,7 @@ final class BazarrSettingsAdapter
      */
     private function languageProfiles(array $profiles): array
     {
-        return array_values(array_map(static function (array $profile): array {
+        return array_map(static function (array $profile): array {
             $items = is_array($profile['items'] ?? null) ? $profile['items'] : [];
 
             return [
@@ -186,7 +186,7 @@ final class BazarrSettingsAdapter
                     $items,
                 )), 0, 50)),
             ];
-        }, array_slice($profiles, 0, 100)));
+        }, array_slice($profiles, 0, 100));
     }
 
     /**
@@ -218,11 +218,11 @@ final class BazarrSettingsAdapter
      */
     private function tasks(array $tasks): array
     {
-        return array_values(array_map(static fn (array $task): array => [
+        return array_map(static fn (array $task): array => [
             'id' => is_string($task['taskid'] ?? null) ? mb_substr($task['taskid'], 0, 150) : '',
             'name' => is_string($task['name'] ?? null) ? mb_substr($task['name'], 0, 150) : 'Unnamed task',
             'status' => is_string($task['status'] ?? null) ? mb_substr($task['status'], 0, 50) : 'unknown',
-        ], array_slice($tasks, 0, 100)));
+        ], array_slice($tasks, 0, 100));
     }
 
     /**
@@ -231,13 +231,13 @@ final class BazarrSettingsAdapter
      */
     private function providers(array $providers): array
     {
-        return array_values(array_map(static fn (array $provider): array => [
+        return array_map(static fn (array $provider): array => [
             'name' => is_string($provider['name'] ?? null) ? mb_substr($provider['name'], 0, 100) : 'Unknown provider',
             'status' => is_string($provider['status'] ?? null) ? mb_substr($provider['status'], 0, 50) : 'unknown',
             'throttled_until' => is_string($provider['throttled_until'] ?? null)
                 ? mb_substr($provider['throttled_until'], 0, 50)
                 : null,
-        ], array_slice($providers, 0, 100)));
+        ], array_slice($providers, 0, 100));
     }
 
     /**
@@ -246,13 +246,13 @@ final class BazarrSettingsAdapter
      */
     private function notifications(array $notifications): array
     {
-        return array_values(array_map(static fn (array $notification): array => [
+        return array_map(static fn (array $notification): array => [
             'id' => is_int($notification['id'] ?? null) || is_string($notification['id'] ?? null)
                 ? $notification['id']
                 : 0,
             'name' => is_string($notification['name'] ?? null) ? mb_substr($notification['name'], 0, 100) : 'Unnamed notification',
             'enabled' => ($notification['enabled'] ?? false) === true,
-        ], array_slice($notifications, 0, 100)));
+        ], array_slice($notifications, 0, 100));
     }
 
     private function validateWriteValue(string $key, mixed $value): bool|int

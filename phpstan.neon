@@ -1,13 +1,12 @@
 includes:
     - vendor/larastan/larastan/extension.neon
-    - phpstan-baseline.neon
+    - vendor/nesbot/carbon/extension.neon
 
 parameters:
-    # Level 6 adds missing parameter/iterable value types, matching the
-    # typed-PHPDoc convention. Existing errors live in the baseline; new code
-    # must be clean. Regenerate the baseline only to REMOVE fixed errors or
-    # after a rebase: composer analyse -- --generate-baseline
-    level: 6
+    # Level 7 adds union-type checks (every member of a union must support
+    # the call, argument or return) on top of level 6's iterable and
+    # parameter types. There is no baseline: new code must be clean.
+    level: 7
     # On the bind mount, not the container's /tmp: a run as root (sail exec)
     # left root-owned cache files there that the sail user cannot overwrite.
     tmpDir: storage/framework/cache/phpstan

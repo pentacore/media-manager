@@ -78,6 +78,7 @@ class DashboardMetricsRepository
      * `hours` window and return a fixed-length array (oldest first).
      * Empty hours come back as 0 so the sparkline path stays continuous.
      *
+     * @param  literal-string  $timestampColumn
      * @return array<int, int>
      */
     private function hourlyCounts(
@@ -91,7 +92,7 @@ class DashboardMetricsRepository
 
         $rows = (clone $queryBuilder)
             ->where($timestampColumn, '>=', $startOfBucket)
-            ->selectRaw(sprintf("date_trunc('hour', %s) AS hour, COUNT(*) AS count", $timestampColumn))
+            ->selectRaw("date_trunc('hour', ".$timestampColumn.') AS hour, COUNT(*) AS count')
             ->groupBy('hour')
             ->get()
             ->keyBy(fn (object $row): string => CarbonImmutable::parse((string) $row->hour, 'UTC')->format('Y-m-d H:00'));

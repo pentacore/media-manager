@@ -212,8 +212,8 @@ final readonly class SubtitleLibraryReader
                 $sonarrClient = $this->serviceClientFactory->make($sonarr);
                 throw_unless($sonarrClient instanceof SonarrClient, InvalidArgumentException::class, 'The mapped Sonarr connection is invalid.');
 
-                $seriesById = collect($sonarrClient->getSeries())
-                    ->filter(fn (mixed $series): bool => is_array($series) && $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
+                $seriesById = collect(array_filter($sonarrClient->getSeries(), is_array(...)))
+                    ->filter(fn (array $series): bool => $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
                     ->keyBy(fn (array $series): int => (int) $series['id']);
 
                 foreach ($this->wantedEpisodePages($bazarrClient, $paginateLocally ? null : $offset, $perPage, $episodeTotal) as $episode) {
@@ -402,8 +402,8 @@ final readonly class SubtitleLibraryReader
 
         throw_unless($sonarrClient instanceof SonarrClient, InvalidArgumentException::class, 'The mapped Sonarr connection is invalid.');
 
-        $seriesById = collect($sonarrClient->getSeries())
-            ->filter(fn (mixed $series): bool => is_array($series) && $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
+        $seriesById = collect(array_filter($sonarrClient->getSeries(), is_array(...)))
+            ->filter(fn (array $series): bool => $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
             ->keyBy(fn (array $series): int => (int) $series['id']);
         $items = [];
 

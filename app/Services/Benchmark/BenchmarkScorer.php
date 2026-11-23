@@ -337,7 +337,7 @@ final readonly class BenchmarkScorer
      */
     private function attachmentLines(BenchmarkCase $benchmarkCase): array
     {
-        return $benchmarkCase->attachments
+        return array_values($benchmarkCase->attachments
             ->sortBy([
                 static fn (BenchmarkCaseAttachment $left, BenchmarkCaseAttachment $right): int => ($left->turn ?? PHP_INT_MAX) <=> ($right->turn ?? PHP_INT_MAX),
                 ['id', 'asc'],
@@ -347,8 +347,7 @@ final readonly class BenchmarkScorer
                 'name' => $benchmarkCaseAttachment->original_name,
                 'mime_type' => $benchmarkCaseAttachment->mime_type,
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**
@@ -358,11 +357,10 @@ final readonly class BenchmarkScorer
      */
     private function judgeImages(BenchmarkCase $benchmarkCase): array
     {
-        return $benchmarkCase->attachmentsFor(null)
+        return array_values($benchmarkCase->attachmentsFor(null)
             ->filter(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): bool => $benchmarkCaseAttachment->isImage())
             ->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): File => $benchmarkCaseAttachment->toSdkFile())
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**

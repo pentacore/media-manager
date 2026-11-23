@@ -117,7 +117,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
     public function forScope(RefreshScope $scope, array $providers, array $modelChecklists = [], ?PriceVerificationRun $run = null, bool $dryRun = false): static
     {
         $this->scope = $scope;
-        $this->scopedProviders = array_values($providers);
+        $this->scopedProviders = $providers;
         $this->modelChecklists = $modelChecklists;
         $this->run = $run;
         $this->dryRun = $dryRun;

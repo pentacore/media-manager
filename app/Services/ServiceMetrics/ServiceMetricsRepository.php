@@ -31,6 +31,7 @@ class ServiceMetricsRepository
             ->oldest('recorded_at')
             ->get(['status', 'latency_ms', 'recorded_at']);
 
+        /** @var array<int, array{minute: int, status: string, latency_ms: int|null}> $buckets */
         $buckets = [];
 
         for ($i = 0; $i < 60; $i++) {
@@ -71,7 +72,10 @@ class ServiceMetricsRepository
             $buckets[$idx]['latency_ms'] = (int) round(array_sum($samples) / count($samples));
         }
 
-        return $buckets;
+        /** @var array<int, array{minute: int, status: string, latency_ms: int|null}> $filled */
+        $filled = $buckets;
+
+        return $filled;
     }
 
     /**
@@ -178,6 +182,7 @@ class ServiceMetricsRepository
      */
     private function bucketize(Collection $rows, CarbonImmutable $cutoff): array
     {
+        /** @var array<int, array{minute: int, status: string, latency_ms: int|null}> $buckets */
         $buckets = [];
 
         for ($i = 0; $i < 60; $i++) {
@@ -216,7 +221,10 @@ class ServiceMetricsRepository
             $buckets[$idx]['latency_ms'] = (int) round(array_sum($samples) / count($samples));
         }
 
-        return $buckets;
+        /** @var array<int, array{minute: int, status: string, latency_ms: int|null}> $filled */
+        $filled = $buckets;
+
+        return $filled;
     }
 
     /**

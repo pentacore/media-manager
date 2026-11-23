@@ -43,9 +43,6 @@ class BackfillEmbyHistory extends Command
         $userOption = is_string($userOption) && $userOption !== '' ? $userOption : null;
 
         $links = $this->resolveLinks($userOption);
-        if (! $links instanceof Collection) {
-            return self::FAILURE;
-        }
 
         if ($links->isEmpty()) {
             $this->error($userOption !== null
@@ -113,9 +110,9 @@ class BackfillEmbyHistory extends Command
     }
 
     /**
-     * @return Collection<int, EmbyUserLink>|null null indicates a hard failure (already reported).
+     * @return Collection<int, EmbyUserLink>
      */
-    private function resolveLinks(?string $userOption): ?Collection
+    private function resolveLinks(?string $userOption): Collection
     {
         if ($userOption === null) {
             return EmbyUserLink::query()->get();

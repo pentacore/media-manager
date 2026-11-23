@@ -75,6 +75,7 @@ class RadarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
      * @throws ArrWriteUnconfirmed|RequestException|ConnectionException
@@ -86,6 +87,7 @@ class RadarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
      * @throws ArrWriteUnconfirmed|RequestException|ConnectionException

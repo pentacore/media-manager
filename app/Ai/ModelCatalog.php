@@ -66,7 +66,8 @@ final readonly class ModelCatalog
             return [];
         }
 
-        return AiModelPrice::query()
+        /** @var array<string, list<string>> $models */
+        $models = AiModelPrice::query()
             ->whereIn('provider', $providers)
             ->orderBy('provider')
             ->orderBy('model')
@@ -74,6 +75,8 @@ final readonly class ModelCatalog
             ->groupBy('provider')
             ->map(fn ($rows): array => $rows->pluck('model')->values()->all())
             ->all();
+
+        return $models;
     }
 
     /**
@@ -114,10 +117,9 @@ final readonly class ModelCatalog
         /** @var array<string, array<string, mixed>> $providers */
         $providers = config('ai.providers', []);
 
-        return collect($providers)
+        return array_values(collect($providers)
             ->filter(fn (array $cfg, string $name): bool => $name === 'ollama' || filled($cfg['key'] ?? null))
             ->keys()
-            ->values()
-            ->all();
+            ->all());
     }
 }

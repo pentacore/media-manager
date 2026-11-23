@@ -33,7 +33,7 @@ final readonly class AgentConfigResponse
      */
     private function checks(Server $server): array
     {
-        return $server->checks()
+        return array_values($server->checks()
             ->where('is_enabled', true)
             ->orderBy('id')
             ->get()
@@ -42,7 +42,6 @@ final readonly class AgentConfigResponse
                 'type' => $serverCheck->type->value,
                 'params' => (object) $serverCheck->params,
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 }

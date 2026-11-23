@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
+use App\Models\NotificationDestination;
+use App\Models\User;
 use App\Services\Notifications\PreferenceResolver;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Bus\Queueable;
@@ -22,9 +24,9 @@ final class SubtitleCaseNeedsReview extends Notification
     ) {}
 
     /**
-     * @return list<string>
+     * @return array<int, string>
      */
-    public function via(object $notifiable): array
+    public function via(NotificationDestination|User $notifiable): array
     {
         return resolve(PreferenceResolver::class)
             ->channelsFor($notifiable, self::class, 'warning');

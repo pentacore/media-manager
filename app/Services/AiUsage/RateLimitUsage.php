@@ -85,10 +85,12 @@ class RateLimitUsage
      */
     public function byPeriod(iterable $periods, ?string $provider = null, ?string $baseModel = null): array
     {
+        /** @var array<string, Collection<string, object{requests: int|string, tokens: int|string}>> $usageByPeriod */
         $usageByPeriod = [];
 
         foreach ($periods as $period) {
-            $usageByPeriod[$period->value] = DB::table('ai_usage_records')
+            /** @var Collection<string, object{requests: int|string, tokens: int|string}> $usage */
+            $usage = DB::table('ai_usage_records')
                 ->where('created_at', '>=', $period->windowStart())
                 ->whereNotNull('provider')
                 ->whereNotNull('model')
@@ -106,6 +108,7 @@ class RateLimitUsage
                 ->groupByRaw('provider, base_model')
                 ->get()
                 ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
+            $usageByPeriod[$period->value] = $usage;
         }
 
         return $usageByPeriod;

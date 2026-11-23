@@ -45,7 +45,7 @@ class UpdateActionTypeConfigRequest extends FormRequest
         $actionTypeConfig = $this->route('actionTypeConfig');
 
         return $actionTypeConfig instanceof ActionTypeConfig && SecondOpinionVerifier::supportsActionType($actionTypeConfig->type)
-            ? SecondOpinionMode::values()
+            ? array_map(static fn (SecondOpinionMode $mode): string => $mode->value, SecondOpinionMode::cases())
             : [SecondOpinionMode::Off->value];
     }
 }

@@ -63,7 +63,7 @@ final readonly class CompetingGrabSweeper
 
     private function run(ServiceConnection $serviceConnection, MediaReplacementAttempt $mediaReplacementAttempt): int
     {
-        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
+        $target = $mediaReplacementAttempt->target;
         $vettedTitle = $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? ''));
         $ourDownloadId = $this->downloadId($mediaReplacementAttempt);
 
@@ -113,11 +113,7 @@ final readonly class CompetingGrabSweeper
         // quiet enough that a real removal failure still stands out.
         $removedDownloadIds = [];
 
-        foreach ($records as $record) {
-            if (! is_array($record)) {
-                continue;
-            }
-
+        foreach (array_filter($records, is_array(...)) as $record) {
             $queueItemId = $this->positiveInt($record['id'] ?? null);
 
             if ($queueItemId === null) {

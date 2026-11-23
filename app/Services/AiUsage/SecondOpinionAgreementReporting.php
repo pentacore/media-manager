@@ -177,6 +177,7 @@ final readonly class SecondOpinionAgreementReporting
 
     /**
      * @param  array<string, mixed>  $secondOpinion
+     * @return 'failed'|'agreed_approved'|'agreed_rejected'|'disagreed_approved'|'disagreed_rejected'|'awaiting_review'|'rejected_by_verifier'|'auto_run'|'unattributed'
      */
     private function bucket(array $secondOpinion, ActionRequestStatus $status, ?int $approvedBy, bool $requiresApproval): string
     {

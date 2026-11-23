@@ -47,7 +47,7 @@ class BroadcastAgentStep
             return null;
         }
 
-        $userId = is_object($participant) && property_exists($participant, 'id')
+        $userId = property_exists($participant, 'id')
             ? (int) $participant->id
             : null;
 

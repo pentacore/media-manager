@@ -118,11 +118,14 @@ class PriceRefreshFallbackQueue
      */
     public function storedModels(string $provider): array
     {
-        return AiModelPrice::query()
+        /** @var list<string> $models */
+        $models = AiModelPrice::query()
             ->where('provider', $provider)
             ->orderBy('model')
             ->pluck('model')
             ->all();
+
+        return $models;
     }
 
     /**

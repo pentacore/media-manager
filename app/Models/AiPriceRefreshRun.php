@@ -43,9 +43,9 @@ use Override;
  * @property-read User|null $triggeredBy
  *
  * @method static AiPriceRefreshRunFactory factory($count = null, $state = [])
- * @method static Builder<static>|AiPriceRefreshRun newModelQuery()
- * @method static Builder<static>|AiPriceRefreshRun newQuery()
- * @method static Builder<static>|AiPriceRefreshRun query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  *
  * @mixin \Eloquent
  */
@@ -116,7 +116,7 @@ class AiPriceRefreshRun extends Model
     }
 
     /**
-     * @return Builder<self>
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

@@ -40,13 +40,13 @@ class NowPlayingController extends Controller
                     'user_name' => $s['UserName'] ?? null,
                     'client' => $s['Client'] ?? null,
                     'device_name' => $s['DeviceName'] ?? null,
-                    'now_playing' => isset($s['NowPlayingItem']) ? [
+                    'now_playing' => [
                         'id' => $s['NowPlayingItem']['Id'] ?? null,
                         'name' => $s['NowPlayingItem']['Name'] ?? null,
                         'type' => $s['NowPlayingItem']['Type'] ?? null,
                         'series_name' => $s['NowPlayingItem']['SeriesName'] ?? null,
                         'run_time_ticks' => $s['NowPlayingItem']['RunTimeTicks'] ?? null,
-                    ] : null,
+                    ],
                     'play_state' => isset($s['PlayState']) ? [
                         'position_ticks' => $s['PlayState']['PositionTicks'] ?? null,
                         'is_paused' => $s['PlayState']['IsPaused'] ?? false,

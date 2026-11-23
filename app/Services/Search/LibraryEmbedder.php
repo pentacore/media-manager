@@ -61,7 +61,7 @@ class LibraryEmbedder
     }
 
     /**
-     * @param  Collection<int, IndexedMovie|IndexedSeries>  $items
+     * @param  Collection<int, covariant IndexedMovie|IndexedSeries>  $items
      * @return array<int, array<int, float>|null>
      */
     public function embedMany(Collection $items): array
@@ -70,7 +70,7 @@ class LibraryEmbedder
             return $items->map(static fn (): ?array => null)->all();
         }
 
-        $texts = $items->map(fn (IndexedMovie|IndexedSeries $item): string => $this->embeddingText($item))->all();
+        $texts = array_values($items->map(fn (IndexedMovie|IndexedSeries $item): string => $this->embeddingText($item))->all());
 
         try {
             $response = resolve(AiUsageCaller::class)->during(self::class, fn (): EmbeddingsResponse => $this->pendingEmbeddings($texts)->generate(

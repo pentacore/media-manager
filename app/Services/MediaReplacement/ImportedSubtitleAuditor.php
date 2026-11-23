@@ -369,11 +369,7 @@ final readonly class ImportedSubtitleAuditor
         // presence and format vary by arr version, and both calls here are cached.
         $labelsById = [];
 
-        foreach ($client->getTags() as $tag) {
-            if (! is_array($tag)) {
-                continue;
-            }
-
+        foreach (array_filter($client->getTags(), is_array(...)) as $tag) {
             $id = $this->positiveInt($tag['id'] ?? null);
             $label = $tag['label'] ?? null;
 

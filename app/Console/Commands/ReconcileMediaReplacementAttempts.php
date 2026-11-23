@@ -345,8 +345,7 @@ class ReconcileMediaReplacementAttempts extends Command
         $fileState = match (true) {
             $mediaReplacementAttempt->grab_accepted_at === null => 'no grab was confirmed, so the old file was not removed',
             $mediaReplacementAttempt->cleanup_completed_at !== null => 'the old file was removed',
-            $mediaReplacementAttempt->grab_accepted_at !== null => 'the replacement was grabbed but the old file may still be present',
-            default => 'the old file removal state is unknown',
+            default => 'the replacement was grabbed but the old file may still be present',
         };
 
         $monitoring = $monitoringRestored ? '' : ' Monitoring could not be restored and is still disabled on the target.';

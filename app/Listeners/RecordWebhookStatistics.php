@@ -6,6 +6,7 @@ namespace App\Listeners;
 
 use App\Enums\ServiceType;
 use App\Events\WebhookEventProcessed;
+use App\Models\ServiceConnection;
 use App\Services\Statistics\StatsRecorder;
 use Carbon\CarbonImmutable;
 
@@ -24,7 +25,11 @@ class RecordWebhookStatistics
         $webhookEvent = $webhookEventProcessed->webhookEvent;
         $webhookEvent->loadMissing('serviceConnection');
 
-        $service = $webhookEvent->serviceConnection?->type;
+        // The connection can be deleted after the event was queued, so the relation may be null despite the FK.
+        /** @var ServiceConnection|null $connection */
+        $connection = $webhookEvent->serviceConnection;
+
+        $service = $connection?->type;
 
         if (! $service instanceof ServiceType) {
             return;

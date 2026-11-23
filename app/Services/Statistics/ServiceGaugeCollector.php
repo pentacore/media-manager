@@ -8,10 +8,16 @@ use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Services\Arr\ArrClient;
+use App\Services\Emby\EmbyClient;
+use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Sabnzbd\SabnzbdClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use LogicException;
 use Throwable;
 
 /**
@@ -88,19 +94,35 @@ class ServiceGaugeCollector
                 'sessions.active',
                 $dims,
                 $at,
-                (float) collect($client->getActiveSessions())->filter(fn (array $session): bool => isset($session['NowPlayingItem']))->count(),
+                (float) collect($this->clientAs($client, EmbyClient::class)->getActiveSessions())->filter(fn (array $session): bool => isset($session['NowPlayingItem']))->count(),
             ),
             ServiceType::Seerr => $this->statsRecorder->sample(
                 'requests.pending_gauge',
                 $dims,
                 $at,
-                (float) ($client->getRequestCount()['pending'] ?? 0),
+                (float) ($this->clientAs($client, SeerrClient::class)->getRequestCount()['pending'] ?? 0),
             ),
-            ServiceType::SABnzbd => $this->collectSabnzbd($client, $serviceConnection, $at),
-            ServiceType::Prowlarr => $this->collectDiskSpace($client->getDiskSpace(), $serviceConnection, $at),
+            ServiceType::SABnzbd => $this->collectSabnzbd($this->clientAs($client, SabnzbdClient::class), $serviceConnection, $at),
+            ServiceType::Prowlarr => $this->collectDiskSpace($this->clientAs($client, ProwlarrClient::class)->getDiskSpace(), $serviceConnection, $at),
             ServiceType::Bazarr => $this->collectBazarr($serviceConnection, $at),
-            default => $this->collectArr($client, $serviceConnection, $at), // Sonarr / Radarr / Whisparr
+            default => $this->collectArr($this->clientAs($client, ArrClient::class), $serviceConnection, $at), // Sonarr / Radarr / Whisparr
         };
+    }
+
+    /**
+     * The factory returns a union of clients; the connection type decides which
+     * one a branch gets, so a mismatch is a programming error.
+     *
+     * @template TClient of object
+     *
+     * @param  class-string<TClient>  $class
+     * @return TClient
+     */
+    private function clientAs(object $client, string $class): object
+    {
+        throw_unless($client instanceof $class, LogicException::class, sprintf('Expected a %s for this connection, got %s.', $class, $client::class));
+
+        return $client;
     }
 
     private function collectBazarr(ServiceConnection $serviceConnection, CarbonImmutable $at): void
@@ -152,7 +174,7 @@ class ServiceGaugeCollector
     /**
      * Sonarr / Radarr / Whisparr: disk space + queue depth from totalRecords.
      */
-    private function collectArr(object $client, ServiceConnection $serviceConnection, CarbonImmutable $at): void
+    private function collectArr(ArrClient $client, ServiceConnection $serviceConnection, CarbonImmutable $at): void
     {
         $this->collectDiskSpace($client->getDiskSpace(), $serviceConnection, $at);
 
@@ -167,7 +189,7 @@ class ServiceGaugeCollector
     /**
      * SABnzbd: disk space rows + queue depth from noofslots.
      */
-    private function collectSabnzbd(object $client, ServiceConnection $serviceConnection, CarbonImmutable $at): void
+    private function collectSabnzbd(SabnzbdClient $client, ServiceConnection $serviceConnection, CarbonImmutable $at): void
     {
         $this->collectDiskSpace($client->getDiskSpace(), $serviceConnection, $at);
 
@@ -207,7 +229,7 @@ class ServiceGaugeCollector
 
     private function snapshotIndexerStats(ServiceConnection $serviceConnection, CarbonImmutable $bucket): void
     {
-        $client = $this->serviceClientFactory->make($serviceConnection);
+        $client = $this->clientAs($this->serviceClientFactory->make($serviceConnection), ProwlarrClient::class);
         $indexers = $client->getIndexerStats(sinceHours: 24)['indexers'] ?? [];
 
         foreach ($indexers as $indexer) {

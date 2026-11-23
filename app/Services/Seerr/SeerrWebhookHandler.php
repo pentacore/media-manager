@@ -61,7 +61,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $notificationType),
         };
 
-        if ($webhookEvent->serviceConnection !== null && in_array($notificationType, self::CACHE_CLEARING_EVENTS, true)) {
+        if (in_array($notificationType, self::CACHE_CLEARING_EVENTS, true)) {
             new SeerrCache($webhookEvent->serviceConnection)->bustAll();
         }
 
@@ -127,7 +127,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Seerr reported %s is now available.', $subject))
-                ->withDetail('Triggered by', sprintf('Seerr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
+                ->withDetail('Triggered by', sprintf('Seerr › %s', $webhookEvent->serviceConnection->name)),
             webhookEvent: $webhookEvent,
         );
     }

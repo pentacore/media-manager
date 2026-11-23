@@ -47,8 +47,8 @@ final readonly class SubtitleCandidateEligibility
             return 'wrong_language';
         }
 
-        if (($candidate['forced'] ?? null) !== ($requirement['forced'] ?? false)
-            || ($candidate['hearing_impaired'] ?? null) !== ($requirement['hearing_impaired'] ?? false)) {
+        if ($candidate['forced'] !== ($requirement['forced'] ?? false)
+            || $candidate['hearing_impaired'] !== ($requirement['hearing_impaired'] ?? false)) {
             return 'wrong_qualifier';
         }
 

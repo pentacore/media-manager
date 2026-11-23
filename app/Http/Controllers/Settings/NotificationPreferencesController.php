@@ -113,7 +113,7 @@ class NotificationPreferencesController extends Controller
                 $row = $rows[$class.'|'.$severity] ?? null;
                 $flags = [];
                 foreach (PreferenceResolver::CHANNELS as $channel) {
-                    $flags[$channel] = $row?->{$channel} ?? $defaults[$channel];
+                    $flags[$channel] = $row->{$channel} ?? $defaults[$channel];
                 }
 
                 $perSeverity[$severity] = $flags;

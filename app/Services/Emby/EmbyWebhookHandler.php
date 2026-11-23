@@ -156,7 +156,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
         $itemName = is_string($payload['Item']['Name'] ?? null) && $payload['Item']['Name'] !== ''
             ? $payload['Item']['Name']
             : null;
-        $triggeredBy = sprintf('Emby › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection');
+        $triggeredBy = sprintf('Emby › %s', $webhookEvent->serviceConnection->name);
 
         if ($itemType === 'Series') {
             $sonarrId = isset($providerIds['SonarrSeriesId']) ? (int) $providerIds['SonarrSeriesId'] : null;

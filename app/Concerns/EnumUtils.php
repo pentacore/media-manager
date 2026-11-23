@@ -74,15 +74,17 @@ trait EnumUtils
      * Returns an array of enum values and their corresponding names for use in a select dropdown.
      * If $withNull is true, the array will include a null value at index 0.
      *
-     * @return array<int, array{name: string, value: int|string}>
+     * @return list<array<string, int|string|null>>
      */
     public static function mapForSelect(bool $withNull = false, string $labelKey = 'name'): array
     {
+        /** @var list<array<string, int|string|null>> $arr */
         $arr = [];
         if ($withNull) {
             $arr[] = [$labelKey => 'None', 'value' => null];
         }
 
+        /** @var list<array<string, int|string|null>> $values */
         $values = array_map(
             static fn ($case): array => [
                 $labelKey => method_exists($case, 'label')

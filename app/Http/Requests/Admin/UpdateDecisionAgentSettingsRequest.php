@@ -61,7 +61,7 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
     private function allowedSecondOpinionEngines(): array
     {
         if (resolve(Classifier::class)->isConfigured()) {
-            return SecondOpinionEngine::values();
+            return array_map(static fn (SecondOpinionEngine $engine): string => $engine->value, SecondOpinionEngine::cases());
         }
 
         return array_values(array_unique([
@@ -105,7 +105,7 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
     private function allowedEventOverrideEngines(?string $eventKey): array
     {
         if (resolve(Classifier::class)->isConfigured()) {
-            return SecondOpinionEngine::values();
+            return array_map(static fn (SecondOpinionEngine $engine): string => $engine->value, SecondOpinionEngine::cases());
         }
 
         $stored = $eventKey === null

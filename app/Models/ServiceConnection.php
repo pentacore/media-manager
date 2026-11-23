@@ -52,9 +52,9 @@ use Override;
  * @property-read int|null $managed_subtitle_cases_count
  *
  * @method static ServiceConnectionFactory factory($count = null, $state = [])
- * @method static Builder<static>|ServiceConnection newModelQuery()
- * @method static Builder<static>|ServiceConnection newQuery()
- * @method static Builder<static>|ServiceConnection query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  * @method static Builder<static>|ServiceConnection whereApiKey($value)
  * @method static Builder<static>|ServiceConnection whereCreatedAt($value)
  * @method static Builder<static>|ServiceConnection whereHealthStatus($value)

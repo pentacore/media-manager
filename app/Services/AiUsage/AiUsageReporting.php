@@ -146,7 +146,8 @@ class AiUsageReporting
 
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario, $kind, $benchmark)
+        /** @var Collection<int, object{key: string|null, invocations: int, total_tokens: int, total_cost: string}> $rows */
+        $rows = $this->query($since, $scenario, $kind, $benchmark)
             ->selectRaw("
                 ai_usage_records.{$column} AS key,
                 COUNT(*) AS invocations,
@@ -156,6 +157,8 @@ class AiUsageReporting
             ->groupBy('ai_usage_records.'.$column)
             ->orderByDesc('total_cost')
             ->get();
+
+        return $rows;
     }
 
     /**
@@ -167,7 +170,8 @@ class AiUsageReporting
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario, $kind, $benchmark)
+        /** @var Collection<int, object> $rows */
+        $rows = $this->query($since, $scenario, $kind, $benchmark)
             ->leftJoin('users', 'ai_usage_records.user_id', '=', 'users.id')
             ->selectRaw('
                 ai_usage_records.id,
@@ -206,6 +210,8 @@ class AiUsageReporting
 
                 return $row;
             });
+
+        return $rows;
     }
 
     /**
@@ -218,7 +224,8 @@ class AiUsageReporting
      */
     public function toolStats(?CarbonImmutable $since): Collection
     {
-        return DB::table('ai_tool_invocations')
+        /** @var Collection<int, object{tool_class: string, calls: int, failures: int, p50_ms: int|null, p95_ms: int|null}> $rows */
+        $rows = DB::table('ai_tool_invocations')
             ->whereNotExists(fn (Builder $builder) => $builder->from('ai_usage_records')
                 ->whereColumn('ai_usage_records.invocation_id', 'ai_tool_invocations.invocation_id')
                 ->where('ai_usage_records.is_benchmark', true))
@@ -241,6 +248,8 @@ class AiUsageReporting
                 'p50_ms' => $row->p50_ms === null ? null : (int) round((float) $row->p50_ms),
                 'p95_ms' => $row->p95_ms === null ? null : (int) round((float) $row->p95_ms),
             ]);
+
+        return $rows;
     }
 
     /**
@@ -253,7 +262,7 @@ class AiUsageReporting
      *   rows, ignoring both snapshot and catalog. Scenarios model token
      *   rates only, so reranking search units keep their snapshot rate.
      *
-     * @return array{0: string, 1: array<int, float>}
+     * @return array{0: literal-string, 1: array<int, float>}
      */
     private function costExpression(?Scenario $scenario): array
     {

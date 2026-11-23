@@ -32,9 +32,9 @@ use Override;
  * @property-read Server $server
  *
  * @method static ServerMetricSampleFactory factory($count = null, $state = [])
- * @method static Builder<static>|ServerMetricSample newModelQuery()
- * @method static Builder<static>|ServerMetricSample newQuery()
- * @method static Builder<static>|ServerMetricSample query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  */
 #[Fillable([
     'server_id',

@@ -42,7 +42,7 @@ class RecordFailedOverAttemptUsage
                 'model' => $model,
                 ...UsageColumns::fromText($textUsage),
                 'parent_invocation_id' => ParentInvocation::current()[0] ?? null,
-                'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+                'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
                 'status' => 'failed',
                 'error_message' => UpstreamErrorText::sanitize($agentFailedOver->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
             ]);
