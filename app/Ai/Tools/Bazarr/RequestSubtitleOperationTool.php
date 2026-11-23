@@ -134,8 +134,11 @@ final class RequestSubtitleOperationTool extends BaseTool
         if (in_array($operation, ['delete_subtitle', 'sync_subtitle', 'translate_subtitle'], true)) {
             $fingerprint = (string) ($arguments['subtitle_fingerprint'] ?? '');
 
+            /** @var array<int, array<string, mixed>> $tracks */
+            $tracks = $item['subtitle_tracks'] ?? [];
+
             throw_unless(
-                collect($item['subtitle_tracks'] ?? [])->contains('fingerprint', $fingerprint),
+                collect($tracks)->contains('fingerprint', $fingerprint),
                 InvalidArgumentException::class,
                 'The selected subtitle track is no longer available.',
             );

@@ -90,7 +90,7 @@ final class AdminController extends BazarrController
         $connection = ServiceConnection::query()
             ->where('type', ServiceType::Bazarr)
             ->where('is_active', true)
-            ->findOrFail($validated['connection']);
+            ->findOrFail((int) $validated['connection']);
         $changedKeys = $bazarrSettingsAdapter->update($connection, $validated['settings']);
 
         ActivityLog::create([
@@ -111,7 +111,7 @@ final class AdminController extends BazarrController
      */
     private function mappings(ServiceConnection $serviceConnection): array
     {
-        return BazarrServiceLink::query()
+        return array_values(BazarrServiceLink::query()
             ->where('bazarr_connection_id', $serviceConnection->id)
             ->with('relatedConnection:id,name')
             ->orderBy('role')
@@ -121,7 +121,6 @@ final class AdminController extends BazarrController
                 'connection_id' => $bazarrServiceLink->related_connection_id,
                 'connection_name' => $bazarrServiceLink->relatedConnection->name,
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 }

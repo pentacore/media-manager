@@ -7,6 +7,8 @@ namespace App\Notifications;
 use App\Enums\AiReasoningLevel;
 use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
+use App\Models\NotificationDestination;
+use App\Models\User;
 use App\Services\Notifications\PreferenceResolver;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Bus\Queueable;
@@ -47,7 +49,7 @@ class ScheduledBenchmarkAlert extends Notification
     /**
      * @return array<int, string>
      */
-    public function via(object $notifiable): array
+    public function via(NotificationDestination|User $notifiable): array
     {
         return resolve(PreferenceResolver::class)->channelsFor($notifiable, self::class, 'warning');
     }

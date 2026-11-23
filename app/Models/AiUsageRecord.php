@@ -51,9 +51,9 @@ use Override;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
- * @method static Builder<static>|AiUsageRecord newModelQuery()
- * @method static Builder<static>|AiUsageRecord newQuery()
- * @method static Builder<static>|AiUsageRecord query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  *
  * @mixin \Eloquent
  */
@@ -137,6 +137,8 @@ class AiUsageRecord extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

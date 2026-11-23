@@ -96,7 +96,7 @@ class MediaReplacementAttemptFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'acknowledged_at' => now(),
-            'acknowledged_by' => $user?->id ?? User::factory()->admin(),
+            'acknowledged_by' => $user->id ?? User::factory()->admin(),
         ]);
     }
 

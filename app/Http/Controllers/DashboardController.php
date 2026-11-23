@@ -55,7 +55,7 @@ class DashboardController extends Controller
                 'id' => $serviceConnection->id,
                 'type' => $serviceConnection->type->value,
                 'name' => $serviceConnection->name,
-                'health' => $serviceConnection->health_status?->value ?? 'unknown',
+                'health' => $serviceConnection->health_status->value ?? 'unknown',
                 'version' => $canManageLibrary ? $serviceConnection->version : null,
                 'latest_version' => $canManageLibrary ? $serviceConnection->latest_version : null,
                 'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
@@ -90,20 +90,19 @@ class DashboardController extends Controller
      */
     private function recentWebhookEvents(): array
     {
-        return WebhookEvent::with('serviceConnection:id,name,type')
+        return array_values(WebhookEvent::with('serviceConnection:id,name,type')
             ->latest()
             ->take(5)
             ->get()
             ->map(fn (WebhookEvent $webhookEvent): array => [
                 'id' => $webhookEvent->id,
                 'event_type' => $webhookEvent->event_type,
-                'service_name' => $webhookEvent->serviceConnection?->name,
-                'service_type' => $webhookEvent->serviceConnection?->type->value,
+                'service_name' => $webhookEvent->serviceConnection->name,
+                'service_type' => $webhookEvent->serviceConnection->type->value,
                 'processed' => $webhookEvent->processed_at !== null,
                 'created_at' => $webhookEvent->created_at?->toISOString(),
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**
@@ -114,7 +113,7 @@ class DashboardController extends Controller
      */
     private function pendingApprovals(): array
     {
-        return ActionRequest::with([
+        return array_values(ActionRequest::with([
             'webhookEvent.serviceConnection:id,name,type',
             'approvedByUser:id,name',
         ])
@@ -131,15 +130,14 @@ class DashboardController extends Controller
                         ? $actionRequest->payload['title']
                         : ($actionRequest->payload['name'] ?? '—')),
                 'description' => $actionRequest->description,
-                'requested_by' => $actionRequest->approvedByUser?->name
-                    ?? $actionRequest->webhookEvent?->serviceConnection?->name
+                'requested_by' => $actionRequest->approvedByUser->name
+                    ?? $actionRequest->webhookEvent?->serviceConnection->name
                     ?? 'system',
-                'trigger' => $actionRequest->webhookEvent?->event_type
+                'trigger' => $actionRequest->webhookEvent->event_type
                     ?? 'manual',
                 'created_at' => $actionRequest->created_at?->toISOString(),
             ])
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**

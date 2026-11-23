@@ -12,7 +12,6 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 
 /**
  * @return list<array{coverType: string, remoteUrl: string}>
@@ -86,7 +85,7 @@ function bulkBrowserWaitUntil(string $condition): string
 
 beforeEach(function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $this->sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
 
     // Ticking a card's checkbox rests the pointer on the card link, whose

@@ -103,8 +103,7 @@ function runRepairTool(): array
 }
 
 test('the repair tool is a safe write tool', function (): void {
-    expect(new RepairSeriesSubtitlesTool()->risk())->toBe(Risk::SafeWrite)
-        ->and(RepairSeriesSubtitlesTool::IN_CHAT_WAIT_SECONDS)->toBe(60);
+    expect(new RepairSeriesSubtitlesTool()->risk())->toBe(Risk::SafeWrite);
 });
 
 test('the repair tool returns a batch card when the searches finish in time', function (): void {
@@ -220,6 +219,27 @@ test('the in-chat wait fits inside what is left of the request', function (int $
     'a request past the margin does not wait' => [150, 130.0, 0],
     'no ceiling waits the full minute' => [0, 140.0, 60],
     'an unknown request start waits the full minute' => [150, null, 60],
+]);
+
+test('the in-chat wait follows the setting', function (int $configured, int $ceiling, float $elapsedSeconds, int $expectedSleeps): void {
+    fakeRepairToolSonarr();
+    Queue::fake();
+    Sleep::fake();
+    $this->actingAs($this->user);
+    config()->set('octane.max_execution_time', $ceiling);
+    request()->server->set('REQUEST_TIME_FLOAT', microtime(true) - $elapsedSeconds);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+    $configuration = $mediaReplacementSettings->configuration();
+    $configuration['subtitle_audit']['in_chat_wait_seconds'] = $configured;
+    $mediaReplacementSettings->setConfiguration($configuration);
+
+    expect(runRepairTool()['handed_off'])->toBeTrue();
+    Sleep::assertSleptTimes($expectedSleeps);
+})->with([
+    'zero hands the batch off at once' => [0, 150, 1.0, 0],
+    'a shorter wait' => [10, 150, 1.0, 10],
+    'a longer wait without a ceiling' => [90, 0, 1.0, 90],
+    'a longer wait is still clamped to the request' => [120, 150, 10.5, 109],
 ]);
 
 test('the repair tool explains an unconfigured root folder like the audit tool', function (): void {

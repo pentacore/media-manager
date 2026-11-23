@@ -383,7 +383,7 @@ class RequestController extends Controller
      * `available`, `failed`) are passed straight to Seerr; statuses Seerr
      * doesn't filter on (`declined` → status code 3) are matched locally.
      *
-     * @return array<int, int>
+     * @return list<int>
      *
      * @throws RequestException|ConnectionException
      */

@@ -35,11 +35,11 @@ class EmbyUserLinkResource extends JsonResource
             'emby_user_id' => $this->emby_user_id,
             'emby_username' => $this->emby_username,
             'created_at' => $this->created_at?->toISOString(),
-            'user' => $this->whenLoaded('user', fn (): ?array => $this->user ? [
+            'user' => $this->whenLoaded('user', fn (): array => [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
                 'email' => $this->user->email,
-            ] : null),
+            ]),
         ];
     }
 }

@@ -56,8 +56,11 @@ test('admin can edit and save media replacement configuration without browser er
         ->check('Enable automatic candidate selection')
         ->fill('input[placeholder="English, Swedish"]', 'English, Swedish')
         ->check('Check tagged imports for missing subtitles')
-        ->fill('input[max="10"]', '3')
-        ->fill('input[max="720"]', '6')
+        ->fill('#media-replacement-attempts-per-item', '3')
+        ->fill('#media-replacement-cooldown-hours', '6')
+        ->assertSee('Series subtitle repair')
+        ->fill('#media-replacement-subtitle-audit-in_chat_wait_seconds', '0')
+        ->fill('#media-replacement-subtitle-audit-max_search_minutes', '240')
         ->assertScript(
             'JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).automatic_selection_enabled === true',
         )
@@ -66,6 +69,9 @@ test('admin can edit and save media replacement configuration without browser er
         )
         ->assertScript(
             'JSON.stringify(JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).subtitle_check) === \'{"enabled":true,"max_attempts_per_target":3,"cooldown_hours":6}\'',
+        )
+        ->assertScript(
+            'JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).subtitle_audit.in_chat_wait_seconds === 0',
         )
         ->click('Save settings')
         ->assertSee('Media replacement settings updated.');
@@ -77,6 +83,14 @@ test('admin can edit and save media replacement configuration without browser er
             'enabled' => true,
             'max_attempts_per_target' => 3,
             'cooldown_hours' => 6,
+        ])
+        ->subtitle_audit->toBe([
+            'search_minutes_per_episode' => 3,
+            'min_search_minutes' => 30,
+            'max_search_minutes' => 240,
+            'in_chat_wait_seconds' => 0,
+            'watchdog_delay_seconds' => 180,
+            'sweep_grace_minutes' => 5,
         ]);
 
     $webpage->assertNoSmoke();
@@ -155,6 +169,8 @@ test('admin can classify imported Sonarr root folders without browser errors', f
             ['id' => 1, 'path' => '/tv'],
             ['id' => 2, 'path' => '/anime'],
         ]),
+        'sonarr.local:8989/api/v3/tag' => Http::response([]),
+        'sonarr.local:8989/api/v3/diskspace' => Http::response([]),
     ]);
 
     $this->actingAs(User::factory()->admin()->create());
@@ -303,6 +319,7 @@ test('admin edit page for a Prowlarr connection renders without console errors',
         'url' => 'http://prowlarr.local:9696',
         'api_key' => 'test',
     ]);
+    Http::fake(['prowlarr.local:9696/api/v1/indexer' => Http::response([])]);
 
     $this->actingAs($admin);
 

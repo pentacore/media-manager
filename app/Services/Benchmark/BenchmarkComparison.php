@@ -80,8 +80,8 @@ final readonly class BenchmarkComparison
     {
         $columns = $this->columns($runIds, $baselineId);
         [$lines, $appliedPairs] = $this->lines($columns, $pairs);
-        $scope = BenchmarkComparisonScope::commonCases($columns->pluck('id')->all());
-        $commonIds = collect($scope)->flatMap(static fn (array $task): array => $task['common'])->unique()->values()->all();
+        $scope = BenchmarkComparisonScope::commonCases(array_values($columns->map(static fn (BenchmarkRun $benchmarkRun): int => $benchmarkRun->id)->all()));
+        $commonIds = array_values(collect($scope)->flatMap(static fn (array $task): array => $task['common'])->unique()->all());
 
         $results = BenchmarkResult::query()
             ->whereIn('benchmark_run_id', $columns->pluck('id'))
@@ -166,7 +166,7 @@ final readonly class BenchmarkComparison
             ->get()
             ->keyBy('benchmark_result_id');
 
-        return $results->map(function (BenchmarkResult $benchmarkResult) use ($scoreSource, $neutral): array {
+        return array_values($results->map(function (BenchmarkResult $benchmarkResult) use ($scoreSource, $neutral): array {
             $useNeutral = $scoreSource !== self::ORIGINAL
                 && $benchmarkResult->status === BenchmarkResultStatus::Ok
                 && $benchmarkResult->benchmarkCase?->isJudged() === true;
@@ -189,7 +189,7 @@ final readonly class BenchmarkComparison
                 'rationale' => is_string($detail['rationale'] ?? null) ? $detail['rationale'] : null,
                 'judge_label' => is_array($judge) ? self::candidateLabel($judge) : null,
             ];
-        })->all();
+        })->all());
     }
 
     /**
@@ -211,6 +211,7 @@ final readonly class BenchmarkComparison
      */
     private function lines(Collection $columns, array $pairs): array
     {
+        /** @var list<array{auto_key: string, members: array<int, int>, paired: bool}> $lines */
         $lines = [];
 
         foreach ($columns as $column) {
@@ -243,6 +244,7 @@ final readonly class BenchmarkComparison
             $lines[$leftLine]['members'] += $lines[$rightLine]['members'];
             $lines[$leftLine]['paired'] = true;
             unset($lines[$rightLine]);
+            /** @var list<array{auto_key: string, members: array<int, int>, paired: bool}> $lines */
             $lines = array_values($lines);
             $applied[] = sprintf('%d.%d~%d.%d', $left[0], $left[1], $right[0], $right[1]);
         }
@@ -313,7 +315,7 @@ final readonly class BenchmarkComparison
         $cases = [];
 
         foreach ($lines as $line) {
-            $figures = $columns->map(function (BenchmarkRun $benchmarkRun) use ($line, $byMember, $neutralJudge): ?array {
+            $figures = array_values($columns->map(function (BenchmarkRun $benchmarkRun) use ($line, $byMember, $neutralJudge): ?array {
                 $index = $line['members'][$benchmarkRun->id] ?? null;
                 $memberResults = $index === null ? collect() : $byMember->get(sprintf('%d.%d', $benchmarkRun->id, $index), collect());
 
@@ -329,7 +331,7 @@ final readonly class BenchmarkComparison
                     'error_rate' => $finished === 0 ? null : round($stats['failed'] / $finished, 4),
                     'self_judged' => $this->sameModel((array) ($benchmarkRun->candidates[$index] ?? []), $neutralJudge ?? $benchmarkRun->judge),
                 ];
-            })->all();
+            })->all());
 
             if (array_filter($figures) === []) {
                 continue;
@@ -338,7 +340,7 @@ final readonly class BenchmarkComparison
             $rows[] = ['line_key' => $line['key'], 'figures' => $figures, 'deltas' => $this->deltas($figures)];
 
             foreach ($caseNames as $caseId => $caseName) {
-                $cells = $columns->map(function (BenchmarkRun $benchmarkRun) use ($line, $byCell, $caseId): ?array {
+                $cells = array_values($columns->map(function (BenchmarkRun $benchmarkRun) use ($line, $byCell, $caseId): ?array {
                     $index = $line['members'][$benchmarkRun->id] ?? null;
                     $benchmarkResult = $index === null ? null : $byCell->get(sprintf('%d.%d.%d', $benchmarkRun->id, $index, $caseId));
 
@@ -349,7 +351,7 @@ final readonly class BenchmarkComparison
                         'passed' => $benchmarkResult->passed,
                         'judge_status' => $benchmarkResult->judge_status->value,
                     ] : null;
-                })->all();
+                })->all());
 
                 if (array_filter($cells) === []) {
                     continue;
@@ -478,7 +480,7 @@ final readonly class BenchmarkComparison
      */
     private function scoreOptions(Collection $judgements, int $judgedTotal): array
     {
-        return $judgements
+        return array_values($judgements
             ->groupBy('judge_key')
             ->map(static fn (Collection $group, string $key): array => [
                 'key' => $key,
@@ -486,8 +488,7 @@ final readonly class BenchmarkComparison
                 'coverage' => $judgedTotal === 0 ? 0.0 : round($group->count() / $judgedTotal, 4),
             ])
             ->sortByDesc('coverage')
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**

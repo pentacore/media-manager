@@ -54,7 +54,7 @@ class WhisparrWebhookHandler extends AbstractArrWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        if ($webhookEvent->serviceConnection !== null && in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
+        if (in_array($eventType, self::CACHE_CLEARING_EVENTS, true)) {
             new WhisparrCache($webhookEvent->serviceConnection)->bustAll();
         }
 

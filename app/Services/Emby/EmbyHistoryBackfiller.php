@@ -70,6 +70,7 @@ final readonly class EmbyHistoryBackfiller
 
     /**
      * @param  array<string, mixed>  $item
+     * @return 'created'|'updated'|'skipped'
      */
     private function processItem(EmbyUserLink $embyUserLink, array $item, bool $dryRun): string
     {

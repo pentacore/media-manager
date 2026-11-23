@@ -19,12 +19,18 @@ use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use InvalidArgumentException;
 
+/**
+ * @template TClient of SonarrClient|RadarrClient
+ */
 abstract class BaseArrController extends Controller
 {
     public function __construct(protected readonly ArrConnections $arrConnections) {}
 
     abstract protected function serviceType(): ServiceType;
 
+    /**
+     * @return TClient
+     */
     abstract protected function buildClient(ServiceConnection $serviceConnection): SonarrClient|RadarrClient;
 
     abstract protected function connectionFailedMessage(): string;
@@ -79,7 +85,7 @@ abstract class BaseArrController extends Controller
      *
      * @template TRow
      *
-     * @param  callable(SonarrClient|RadarrClient): array<int, array<string, mixed>>  $fetch
+     * @param  callable(TClient): array<int, array<string, mixed>>  $fetch
      * @param  callable(array<string, mixed>): TRow  $map
      * @return array{items: list<TRow>, error: string|null}
      */

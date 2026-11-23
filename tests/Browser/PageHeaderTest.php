@@ -272,7 +272,7 @@ test("an admin's phone requests header keeps the user filter and puts Sync, the 
 });
 
 test('a bulk delete from the phone menu asks first; Cancel queues nothing and the confirm queues the clear', function (): void {
-    Queue::fake([ClearSeerrRequests::class]);
+    browserQueueFake(ClearSeerrRequests::class);
     pageHeaderFakeSeerr(new class
     {
         public int $countCalls = 0;

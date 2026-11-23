@@ -27,7 +27,7 @@ class RecordEmbeddingsUsage
             'model' => $embeddingsGenerated->model,
             'prompt_tokens' => $embeddingsGenerated->response->usage->inputTokens,
             'completion_tokens' => 0,
-            'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
         ]);
     }
 }

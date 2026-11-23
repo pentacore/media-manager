@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseStatus;

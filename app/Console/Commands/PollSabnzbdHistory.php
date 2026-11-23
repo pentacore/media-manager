@@ -14,8 +14,6 @@ use App\Support\UrlQueryRedactor;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -51,7 +49,7 @@ class PollSabnzbdHistory extends Command
 
         try {
             $payload = $client->getHistory(0, 100, sinceUnix: $cursor);
-        } catch (RequestException|ConnectionException|Throwable $throwable) {
+        } catch (Throwable $throwable) {
             $this->warn(sprintf('Failed to poll %s: %s', $serviceConnection->name, UrlQueryRedactor::redact($throwable->getMessage())));
 
             return;

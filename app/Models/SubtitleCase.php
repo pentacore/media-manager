@@ -153,6 +153,11 @@ class SubtitleCase extends Model
         return $this->hasMany(SubtitleUpload::class);
     }
 
+    /**
+     * Set-only: the `array` cast decodes reads, this bounds and encodes writes.
+     *
+     * @return Attribute<array<string, mixed>|null, mixed>
+     */
     protected function evidence(): Attribute
     {
         return Attribute::make(

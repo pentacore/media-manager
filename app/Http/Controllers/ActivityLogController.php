@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ActivityLogController extends Controller
@@ -100,7 +101,7 @@ class ActivityLogController extends Controller
         $filename = sprintf('activity-log-%s.ndjson', now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($builder): void {
-            $handle = fopen('php://output', 'wb');
+            $handle = fopen('php://output', 'wb') ?: throw new RuntimeException('Unable to open the output stream.');
 
             $builder->lazyById(500)->each(function (ActivityLog $activityLog) use ($handle): void {
                 fwrite($handle, json_encode([
@@ -188,6 +189,6 @@ class ActivityLogController extends Controller
     {
         return $since === self::TODAY
             ? CarbonImmutable::today()
-            : CarbonImmutable::now()->subHours($since);
+            : CarbonImmutable::now()->subHours((int) $since);
     }
 }

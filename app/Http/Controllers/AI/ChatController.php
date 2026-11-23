@@ -251,10 +251,9 @@ class ChatController extends Controller
      */
     private function calledToolNames(TextResponse $textResponse): array
     {
-        return $textResponse->toolCalls
+        return array_values($textResponse->toolCalls
             ->map(fn (ToolCall $toolCall): string => $toolCall->name)
-            ->values()
-            ->all();
+            ->all());
     }
 
     /**

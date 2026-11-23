@@ -31,11 +31,8 @@ final class BazarrMediaFingerprint
                 'scene_name' => $this->text($media['sceneName'] ?? null),
             ];
 
-        $requiredFields = $mediaType === 'episode'
-            ? ['media_id', 'series_id']
-            : ['media_id'];
         throw_if(
-            array_any($requiredFields, static fn (string $field): bool => $identity[$field] === null),
+            $identity['media_id'] === null || ($identity['media_type'] === 'episode' && $identity['series_id'] === null),
             InvalidArgumentException::class,
             'Bazarr media fingerprint fields are incomplete.',
         );

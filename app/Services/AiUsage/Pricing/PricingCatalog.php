@@ -208,13 +208,13 @@ final readonly class PricingCatalog
         $candidates = $xai->candidates;
         $conflicts = [];
 
-        foreach ($reconciled?->candidates ?? [] as $candidate) {
+        foreach ($reconciled instanceof ProviderPricingResult ? $reconciled->candidates : [] as $candidate) {
             if (! isset($covered[$candidate->model])) {
                 $candidates[] = $candidate;
             }
         }
 
-        foreach ($reconciled?->conflicts ?? [] as $conflict) {
+        foreach ($reconciled instanceof ProviderPricingResult ? $reconciled->conflicts : [] as $conflict) {
             if (! isset($covered[$conflict])) {
                 $conflicts[] = $conflict;
             }
@@ -227,12 +227,12 @@ final readonly class PricingCatalog
         }
 
         $rejections = array_values(array_filter(
-            [...$xai->rejections, ...($reconciled?->rejections ?? [])],
+            [...$xai->rejections, ...($reconciled instanceof ProviderPricingResult ? $reconciled->rejections : [])],
             static fn (PricingRejection $pricingRejection): bool => ! isset($settled[$pricingRejection->model]),
         ));
 
         $warnings = array_values(array_filter(
-            [...$xai->warnings, ...($reconciled?->warnings ?? [])],
+            [...$xai->warnings, ...($reconciled instanceof ProviderPricingResult ? $reconciled->warnings : [])],
             static fn (PricingWarning $pricingWarning): bool => isset($settled[$pricingWarning->model]),
         ));
 
@@ -241,7 +241,7 @@ final readonly class PricingCatalog
             candidates: $candidates,
             rejections: $rejections,
             warnings: $warnings,
-            createSuppressed: $xai->createSuppressed || ($reconciled?->createSuppressed ?? false),
+            createSuppressed: $xai->createSuppressed || ($reconciled instanceof ProviderPricingResult && $reconciled->createSuppressed),
             conflicts: $conflicts,
         );
     }

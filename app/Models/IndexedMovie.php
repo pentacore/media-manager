@@ -122,7 +122,7 @@ class IndexedMovie extends Model
             'genres' => $this->genres ?? [],
             'overview' => (string) ($this->overview ?? ''),
             'poster_url' => (string) ($this->poster_url ?? ''),
-            'created_at' => (int) ($this->created_at?->timestamp ?? 0),
+            'created_at' => (int) ($this->created_at->timestamp ?? 0),
         ];
 
         if (is_array($this->embedding) && $this->embedding !== []) {

@@ -29,6 +29,8 @@ class RecordAgentUsage
         $meta = $response->meta;
         $benchmarkRunContext = resolve(BenchmarkRunContext::class);
         $benchmarkRunId = $benchmarkRunContext->billedRunId();
+        // The participant is an arbitrary object (an Eloquent model in chat), so read its id through magic-aware access.
+        $conversationUserId = data_get($response->conversationUser, 'id');
 
         resolve(UsageRecordWriter::class)->record([
             'invocation_id' => $agentPrompted->invocationId,
@@ -47,8 +49,8 @@ class RecordAgentUsage
             // Non-conversational agents (e.g. PriceFetcherAgent) don't, so we
             // attribute usage to the run's AiRunAttribution user (set by
             // queued callers), then whoever is authenticated in the request.
-            'user_id' => $response->conversationUser?->id
-                ?? resolve(AiRunAttribution::class)->user()?->id
+            'user_id' => $conversationUserId
+                ?? resolve(AiRunAttribution::class)->user()->id
                 ?? Auth::id(),
             'conversation_id' => $response->conversationId,
             // Set when this run is a sub-agent invoked as a tool; its usage is

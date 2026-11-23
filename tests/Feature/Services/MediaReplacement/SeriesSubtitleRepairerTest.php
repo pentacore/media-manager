@@ -15,6 +15,7 @@ use App\Services\MediaReplacement\SeriesSubtitleAudit;
 use App\Services\MediaReplacement\SeriesSubtitleAuditEpisode;
 use App\Services\MediaReplacement\SeriesSubtitleRepairer;
 use App\Services\MediaReplacement\SeriesSubtitleRepairRefused;
+use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
@@ -207,6 +208,30 @@ test('the search deadline scales with the missing episode count', function (int 
     'a huge batch is capped at 12 hours' => [1000, 720],
 ]);
 
+test('the search deadline follows the configured search window', function (int $missingCount, int $expectedMinutes): void {
+    $this->freezeSecond();
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'subtitle_audit' => [
+            'search_minutes_per_episode' => 5,
+            'min_search_minutes' => 10,
+            'max_search_minutes' => 60,
+        ],
+    ]);
+
+    $episodes = array_map(
+        static fn (int $number): SeriesSubtitleAuditEpisode => new SeriesSubtitleAuditEpisode(1000 + $number, 1, $number, SeriesSubtitleAuditEpisode::STATUS_MISSING, ['eng']),
+        range(1, $missingCount),
+    );
+
+    $subtitleAuditBatch = resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, $episodes), $this->user);
+
+    expect($subtitleAuditBatch->fresh()->search_deadline_at->getTimestamp())->toBe(now()->addMinutes($expectedMinutes)->getTimestamp());
+})->with([
+    'the configured floor' => [1, 10],
+    'the configured minutes per episode' => [4, 20],
+    'the configured cap' => [20, 60],
+]);
+
 test('every queued search retries until the batch deadline', function (): void {
     $this->freezeSecond();
 
@@ -235,6 +260,21 @@ test('a repair schedules the batch watchdog three minutes out', function (): voi
         fn (WatchSubtitleAuditBatch $watchSubtitleAuditBatch): bool => $watchSubtitleAuditBatch->subtitleAuditBatchId === $subtitleAuditBatch->id
             && $watchSubtitleAuditBatch->delay instanceof DateTimeInterface
             && $watchSubtitleAuditBatch->delay->getTimestamp() === now()->addSeconds(180)->getTimestamp(),
+    );
+});
+
+test('a repair schedules the batch watchdog after the configured delay', function (): void {
+    $this->freezeSecond();
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'subtitle_audit' => ['watchdog_delay_seconds' => 600],
+    ]);
+
+    resolve(SeriesSubtitleRepairer::class)->start(repairAudit($this->connection, repairEpisodes()), $this->user);
+
+    Queue::assertPushed(
+        WatchSubtitleAuditBatch::class,
+        fn (WatchSubtitleAuditBatch $watchSubtitleAuditBatch): bool => $watchSubtitleAuditBatch->delay instanceof DateTimeInterface
+            && $watchSubtitleAuditBatch->delay->getTimestamp() === now()->addSeconds(600)->getTimestamp(),
     );
 });
 

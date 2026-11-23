@@ -50,13 +50,14 @@ test('ci fails on rector drift', function (): void {
         ->toContain('run: vendor/bin/rector process --dry-run --no-progress-bar');
 });
 
-test('ci runs larastan at level 6 against the committed baseline', function (): void {
+test('ci runs larastan at level 7 with no baseline', function (): void {
     $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
     $config = (string) file_get_contents(base_path('phpstan.neon'));
 
     expect($ci)->toContain('run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress')
         ->and($config)->toContain('vendor/larastan/larastan/extension.neon')
-        ->toContain('phpstan-baseline.neon')
-        ->toMatch('/level: 6\b/')
-        ->and(base_path('phpstan-baseline.neon'))->toBeFile();
+        ->toContain('vendor/nesbot/carbon/extension.neon')
+        ->not->toContain('phpstan-baseline.neon')
+        ->toMatch('/level: 7\b/')
+        ->and(base_path('phpstan-baseline.neon'))->not->toBeFile();
 });

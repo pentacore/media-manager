@@ -33,14 +33,6 @@ function aiUsageDetailDelayScript(string $path, int $milliseconds): string
     JS;
 }
 
-/**
- * Rests inside the page past the held-back answer.
- */
-function aiUsageDetailRestScript(): string
-{
-    return '(async () => { await new Promise((resolve) => setTimeout(resolve, 2000)); })()';
-}
-
 test('closing the drill-down while it loads closes it, and the late answer does not reopen it', function (): void {
     $record = AiUsageRecord::factory()->create(['prompt_text' => 'Find the example series.']);
     $this->actingAs(User::factory()->admin()->create());
@@ -53,7 +45,7 @@ test('closing the drill-down while it loads closes it, and the late answer does 
         ->assertSeeIn('[data-usage-detail]', 'Loading…')
         ->click('[data-usage-detail] [data-slot="dialog-close"]');
     $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[data-usage-detail]')"));
-    $webpage->script(aiUsageDetailRestScript());
+    $webpage->wait(2);
 
     $webpage->assertMissing('[data-usage-detail]')
         ->assertNoSmoke();
@@ -74,7 +66,7 @@ test('a run opened after closing a slow one shows only its own detail', function
     $webpage->script(confirmDialogWaitUntilScript("!document.querySelector('[data-usage-detail]')"));
     $webpage->click(sprintf('[data-usage-row="%d"]', $fast->id))
         ->assertSeeIn('[data-usage-io="input"]', 'The fast example question.');
-    $webpage->script(aiUsageDetailRestScript());
+    $webpage->wait(2);
 
     $webpage->assertSeeIn('[data-usage-io="input"]', 'The fast example question.')
         ->assertDontSeeIn('[data-usage-io="input"]', 'The slow example question.')

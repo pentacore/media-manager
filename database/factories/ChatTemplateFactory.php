@@ -22,7 +22,7 @@ class ChatTemplateFactory extends Factory
     {
         return [
             'user_id' => User::factory()->admin(),
-            'name' => Str::ucfirst(fake()->unique()->words(3, true)),
+            'name' => Str::ucfirst(implode(' ', (array) fake()->unique()->words(3, true))),
             'body' => 'Check Sonarr and Radarr for stuck downloads',
             'variables' => [],
             'auto_send' => false,

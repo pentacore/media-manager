@@ -840,7 +840,7 @@ test('an answered choices card on an older reply stays locked and shows the pick
 });
 
 test('a queued action card approves the pending request inline', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
     $conversationId = (string) Str::uuid7();
@@ -881,7 +881,7 @@ test('a queued action card approves the pending request inline', function (): vo
 });
 
 test('a queued action card rejects the pending request inline', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
     $conversationId = (string) Str::uuid7();
@@ -911,7 +911,7 @@ test('a queued action card rejects the pending request inline', function (): voi
 });
 
 test('a queued action card reviewed elsewhere first shows it changed and leaves the request alone', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Delete series "Severance"']);
     $conversationId = (string) Str::uuid7();
@@ -1036,7 +1036,7 @@ test('a handed off repair shows a searching batch card with nothing to approve y
 });
 
 test('approving a batch larger than one bulk request approves it in chunks', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Severance']);
 
@@ -1069,7 +1069,7 @@ test('approving a batch larger than one bulk request approves it in chunks', fun
 });
 
 test('a subtitle audit batch card approves every pending replacement at once', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
     $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
@@ -1118,7 +1118,7 @@ test('a manual pick row links to the series page with the replace dialog target'
 });
 
 test('declining the batch asks first and rejects every pending replacement', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
     $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
@@ -1210,7 +1210,7 @@ test('a streamed repair result renders the subtitle audit batch card under the r
 });
 
 test('a batch review that loses a race shows every replacement status from the server', function (): void {
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
     $admin = User::factory()->admin()->create();
     ['batch' => $batch, 'requests' => $requests] = aiChatSubtitleAuditBatch();
     $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);

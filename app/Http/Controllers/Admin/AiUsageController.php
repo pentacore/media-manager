@@ -21,9 +21,11 @@ use App\Settings\AiSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
@@ -199,12 +201,13 @@ class AiUsageController extends Controller
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
         $kind = AiUsageKind::tryFrom($request->string('kind')->value());
 
+        /** @var Collection<int, object{id: mixed, created_at: mixed, user_name: mixed, provider: mixed, model: mixed, prompt_tokens: mixed, completion_tokens: mixed, tool_calls_count: mixed, total_tokens: mixed, cost: mixed, status: mixed, tier_position: mixed, tier_via: mixed}> $rows */
         $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind, $this->fellThrough($request), $this->benchmark($request));
 
         $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($rows): void {
-            $handle = fopen('php://output', 'wb');
+            $handle = fopen('php://output', 'wb') ?: throw new RuntimeException('Unable to open the output stream.');
 
             fputcsv($handle, [
                 'id', 'created_at', 'user', 'provider', 'model',

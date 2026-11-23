@@ -27,6 +27,8 @@ use Throwable;
 /**
  * Pre-fills a benchmark case from a recorded AI usage row and the tool calls
  * it made. Capture is an admin convenience: the draft is edited before saving.
+ *
+ * @phpstan-type MessageRow object{role: string, content: string, attachments: string|null, meta: string|null, created_at: string}
  */
 final readonly class CaseDraftFromUsage
 {
@@ -231,7 +233,7 @@ final readonly class CaseDraftFromUsage
      * recorded prompt (it was truncated), the captured turn cannot be located,
      * so only messages from strictly before the record's second are kept.
      *
-     * @return array{history: list<array{role: string, content: string}>, historyRows: list<object>, captured: object|null, reply: object|null}
+     * @return array{history: list<array{role: string, content: string}>, historyRows: list<MessageRow>, captured: MessageRow|null, reply: MessageRow|null}
      */
     private function conversation(AiUsageRecord $aiUsageRecord, string $prompt): array
     {
@@ -243,6 +245,7 @@ final readonly class CaseDraftFromUsage
 
         $secondStart = $aiUsageRecord->created_at->startOfSecond();
 
+        /** @var list<MessageRow> $messages */
         $messages = DB::table('agent_conversation_messages')
             ->where('conversation_id', $aiUsageRecord->conversation_id)
             ->whereIn('role', ['user', 'assistant'])
@@ -286,6 +289,7 @@ final readonly class CaseDraftFromUsage
     /**
      * The chat attachments of one stored message that still have a file.
      *
+     * @param  MessageRow  $message
      * @return list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int}>
      */
     private function attachmentsOf(object $message, ?int $turn, int &$missing): array

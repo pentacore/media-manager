@@ -86,7 +86,7 @@ class MediaReplacementAttemptController extends Controller
     {
         $mediaReplacementAttempt->load(['serviceConnection:id,name,type', 'actionRequest:id,status', 'acknowledgedBy:id,name']);
 
-        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
+        $target = $this->arrayOrEmpty($mediaReplacementAttempt->target);
         $serviceConnection = $mediaReplacementAttempt->serviceConnection;
         $downloadId = $this->stringOrNull($mediaReplacementAttempt->download_id);
 
@@ -115,7 +115,7 @@ class MediaReplacementAttemptController extends Controller
                 ],
                 'download_id' => $downloadId,
                 'target' => $target,
-                'candidate' => is_array($mediaReplacementAttempt->candidate) ? $mediaReplacementAttempt->candidate : [],
+                'candidate' => $this->arrayOrEmpty($mediaReplacementAttempt->candidate),
                 'verification' => $mediaReplacementAttempt->verification,
                 'required_languages' => $this->stringList($mediaReplacementAttempt->required_languages),
                 'monitoring' => [
@@ -128,7 +128,7 @@ class MediaReplacementAttemptController extends Controller
                 ],
                 'action_request' => [
                     'id' => $mediaReplacementAttempt->action_request_id,
-                    'status' => $mediaReplacementAttempt->actionRequest?->status->value,
+                    'status' => $mediaReplacementAttempt->actionRequest->status->value,
                 ],
                 'links' => [
                     'media' => $this->mediaLink($target, $serviceConnection),
@@ -190,7 +190,7 @@ class MediaReplacementAttemptController extends Controller
     {
         return [
             'retry' => $mediaReplacementAttempt->status === MediaReplacementStatus::Failed
-                && $mediaReplacementAttempt->actionRequest?->status === ActionRequestStatus::Failed,
+                && $mediaReplacementAttempt->actionRequest->status === ActionRequestStatus::Failed,
             'restore_monitoring' => $mediaReplacementAttempt->status->isTerminal()
                 && $mediaReplacementAttempt->monitoring_suspended === true,
             'acknowledge' => $mediaReplacementAttempt->status === MediaReplacementStatus::NeedsAttention
@@ -283,14 +283,14 @@ class MediaReplacementAttemptController extends Controller
      */
     private function row(MediaReplacementAttempt $mediaReplacementAttempt): array
     {
-        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
-        $candidate = is_array($mediaReplacementAttempt->candidate) ? $mediaReplacementAttempt->candidate : [];
+        $target = $this->arrayOrEmpty($mediaReplacementAttempt->target);
+        $candidate = $this->arrayOrEmpty($mediaReplacementAttempt->candidate);
         $verification = is_array($mediaReplacementAttempt->verification) ? $mediaReplacementAttempt->verification : null;
 
         return [
             'id' => $mediaReplacementAttempt->id,
             'action_request_id' => $mediaReplacementAttempt->action_request_id,
-            'action_request_status' => $mediaReplacementAttempt->actionRequest?->status->value,
+            'action_request_status' => $mediaReplacementAttempt->actionRequest->status->value,
             'status' => $mediaReplacementAttempt->status->value,
             'failure_reason' => $mediaReplacementAttempt->failure_reason,
             'scope' => $mediaReplacementAttempt->scope,
@@ -314,6 +314,17 @@ class MediaReplacementAttemptController extends Controller
             'completed_at' => $mediaReplacementAttempt->completed_at?->toIso8601String(),
             'created_at' => $mediaReplacementAttempt->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * A JSON column read back as an array, or an empty one when the stored
+     * value is not an array.
+     *
+     * @return array<mixed>
+     */
+    private function arrayOrEmpty(mixed $value): array
+    {
+        return is_array($value) ? $value : [];
     }
 
     private function stringOrNull(mixed $value): ?string

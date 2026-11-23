@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\WhisparrVersion;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;

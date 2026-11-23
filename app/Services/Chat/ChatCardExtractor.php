@@ -109,13 +109,15 @@ class ChatCardExtractor
             ? collect()
             : ActionRequest::query()->whereIn('id', $ids)->get(['id', 'title', 'status'])->keyBy('id');
 
-        $batches = SubtitleAuditBatchCard::presentMany($cards->where('type', SubtitleAuditBatchCard::TYPE)
+        /** @var list<int> $batchIds */
+        $batchIds = $cards->where('type', SubtitleAuditBatchCard::TYPE)
             ->pluck('id')
             ->unique()
             ->values()
-            ->all());
+            ->all();
+        $batches = SubtitleAuditBatchCard::presentMany($batchIds);
 
-        return array_map(fn (array $cards): array => collect($cards)
+        return array_map(fn (array $cards): array => array_values(collect($cards)
             ->map(function (array $card) use ($rows, $batches): ?array {
                 if ($card['type'] === SubtitleAuditBatchCard::TYPE) {
                     return $batches[$card['id']] ?? null;
@@ -134,8 +136,7 @@ class ChatCardExtractor
                 ];
             })
             ->filter()
-            ->values()
-            ->all(), $groups);
+            ->all()), $groups);
     }
 
     /**

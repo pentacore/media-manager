@@ -73,8 +73,9 @@ final class ReconcileSubtitleCase implements ShouldQueue
      *
      * Read through reservationIdentity(): a payload queued before this property
      * existed is restored without the constructor and leaves it uninitialized.
+     * Not readonly because reservationIdentity() backfills it for such payloads.
      */
-    public readonly string $reservationId;
+    public string $reservationId;
 
     /**
      * @param  array<string, mixed>  $candidate
@@ -593,11 +594,17 @@ final class ReconcileSubtitleCase implements ShouldQueue
             ? $subtitleCase->evidence['missing_languages']
             : [];
 
-        return array_values(array_filter(
-            $subtitleCase->required_languages,
+        /** @var list<mixed> $requirements JSON column: entries are untrusted. */
+        $requirements = $subtitleCase->required_languages;
+
+        /** @var list<array{code: string, forced: bool, hearing_impaired: bool}> $missing */
+        $missing = array_values(array_filter(
+            $requirements,
             static fn (mixed $requirement): bool => is_array($requirement)
                 && in_array($requirement['code'] ?? null, $missingLanguages, true),
         ));
+
+        return $missing;
     }
 
     /**

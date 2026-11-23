@@ -36,12 +36,15 @@ final readonly class BenchmarkContextStarter
 
         $judge = $judgeOverride ?? $benchmarkRun->judge;
 
+        /** @var list<array{tool: string, arguments: array<string, mixed>, result: string}> $fixtures */
+        $fixtures = $benchmarkCase->fixtures;
+
         $benchmarkRunContext->start(
             $benchmarkRun->id,
             $benchmarkCase->task,
             self::selection($candidate),
             is_array($judge) ? self::selection($judge) : null,
-            new FixtureBook($benchmarkCase->fixtures),
+            new FixtureBook($fixtures),
             $this->history($benchmarkCase),
             AiMode::tryFrom((string) ($benchmarkCase->input['mode'] ?? '')),
             $billsRun,

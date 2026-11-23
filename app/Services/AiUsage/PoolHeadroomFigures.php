@@ -42,7 +42,7 @@ final readonly class PoolHeadroomFigures
             $percents[] = $cap > 0 ? round($left / $cap * 100, 2) : 0.0;
         }
 
-        if ($remaining === []) {
+        if ($remaining === [] || $percents === []) {
             return null;
         }
 

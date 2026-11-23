@@ -489,8 +489,10 @@ function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpa
     $loading = json_encode('main [data-slot="skeleton"], main .animate-pulse:not(header *), [role="dialog"] [data-slot="skeleton"], [role="dialog"] .animate-pulse', JSON_THROW_ON_ERROR);
     $deferredSelector = json_encode($deferred, JSON_THROW_ON_ERROR);
 
-    $webpage->script(<<<JS
-        (async () => {
+    // The check returns at once and PHP polls: a script() that runs past a
+    // second is retried until the browser timeout (.ai/rules/browser.md).
+    $check = <<<JS
+        (() => {
             const pending = () => {
                 const placeholder = document.querySelector({$loading});
                 if (placeholder) {
@@ -504,15 +506,16 @@ function mobileLayoutSettle(AwaitableWebpage|PendingAwaitablePage|Webpage $webpa
                 }
                 return null;
             };
-            for (let attempt = 0; attempt < 500; attempt++) {
-                if (pending() === null) {
-                    return;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }
-            throw new Error(`The page never settled: \${pending()}`);
+            return pending();
         })()
-    JS);
+    JS;
+    $deadline = microtime(true) + 10;
+
+    while (($pending = $webpage->script($check)) !== null) {
+        throw_if(microtime(true) >= $deadline, RuntimeException::class, 'The page never settled: '.$pending);
+
+        $webpage->wait(0.05);
+    }
 }
 
 /**

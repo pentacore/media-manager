@@ -16,7 +16,9 @@ use Illuminate\Queue\Attributes\Tries;
  * The watchdog of a subtitle audit batch. The chat turn that started the batch
  * runs inside the HTTP request, so the request can die (the Octane ceiling, a
  * crash) before the tool showed the card or handed the batch off. Dispatched
- * delayed past any request that could still be running, it adopts a batch
+ * delayed past any request that could still be running (the delay is
+ * MediaReplacementSettings::subtitleAuditWatchdogDelaySeconds(), always longer
+ * than the Octane request ceiling), it adopts a batch
  * neither path claimed, so admins are still notified. Instant, so it stays on
  * the default lane.
  */
@@ -26,9 +28,6 @@ use Illuminate\Queue\Attributes\Tries;
 final class WatchSubtitleAuditBatch implements ShouldQueue
 {
     use Queueable;
-
-    /** Longer than the Octane request ceiling (150 s), so the chat turn is over. */
-    public const int DELAY_SECONDS = 180;
 
     public function __construct(public readonly int $subtitleAuditBatchId) {}
 

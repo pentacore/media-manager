@@ -24,8 +24,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Contracts\ConversationStore;
-use Laravel\Ai\Contracts\PaginatesConversations;
-use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 use Laravel\Ai\Enums\MessageStatus;
 use Laravel\Ai\Storage\StoredMessage;
 
@@ -77,7 +75,6 @@ class ConversationController extends Controller
         }
 
         $conversationStore = resolve(ConversationStore::class);
-        abort_unless($conversationStore instanceof PaginatesConversations, 500);
 
         $cursorPaginator = $conversationStore->paginateConversationMessages(
             $conversation,
@@ -120,9 +117,9 @@ class ConversationController extends Controller
             })
             ->values();
 
-        $cardGroups = $chatCardExtractor->hydrateGroups($messages
+        $cardGroups = $chatCardExtractor->hydrateGroups(array_values($messages
             ->map(fn (array $message): array => $message['cards'])
-            ->all());
+            ->all()));
         $messages = $messages
             ->map(fn (array $message, int $index): array => [...$message, 'cards' => $cardGroups[$index]])
             ->all();
@@ -248,7 +245,7 @@ class ConversationController extends Controller
 
         $validated = $updateConversationToolGroupsRequest->validated();
 
-        $conversationToolPins->persist($conversation, array_map(ToolGroup::from(...), $validated['groups']));
+        $conversationToolPins->persist($conversation, array_values(array_map(ToolGroup::from(...), $validated['groups'])));
 
         return response()->json([
             'pinned_tool_groups' => array_map(
@@ -284,7 +281,6 @@ class ConversationController extends Controller
         $conversationStore = resolve(ConversationStore::class);
 
         return $user instanceof User
-            && $conversationStore instanceof VerifiesConversationOwnership
             && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id);
     }
 }

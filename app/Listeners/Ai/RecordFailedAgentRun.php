@@ -17,6 +17,7 @@ use App\Support\UpstreamErrorText;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Responses\Data\TextUsage;
+use ReflectionProperty;
 
 /**
  * AgentFailed fires once, after failover is exhausted. Bill the steps that
@@ -41,18 +42,27 @@ class RecordFailedAgentRun
             'agent_class' => $agentPrompt->agent::class,
             'tier_position' => TierOutcome::positionFor($agentPrompt->agent),
             'tier_via' => TierOutcome::viaFor($agentPrompt->agent),
-            'provider' => $runUsageAccumulator->provider($invocationId) ?? (isset($agentPrompt->provider) ? $agentPrompt->provider->name() : null),
-            'model' => $runUsageAccumulator->model($invocationId) ?? ($agentPrompt->model ?? null),
+            'provider' => $runUsageAccumulator->provider($invocationId) ?? ($this->initialized($agentPrompt, 'provider') ? $agentPrompt->provider->name() : null),
+            'model' => $runUsageAccumulator->model($invocationId) ?? ($this->initialized($agentPrompt, 'model') ? $agentPrompt->model : null),
             ...UsageColumns::fromText($runUsageAccumulator->usage($invocationId) ?? new TextUsage),
             'prompt_text' => UsageText::agentInput($agentPrompt),
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
             'benchmark_run_id' => $benchmarkRunId,
             'is_benchmark' => $benchmarkRunContext->active(),
-            'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
+            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
             'status' => $stopped ? 'stopped' : 'failed',
             'error_message' => $stopped ? null : UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
         ]);
 
         $runUsageAccumulator->forget($invocationId);
+    }
+
+    /**
+     * A run can fail before the SDK resolved its provider, leaving these typed
+     * Prompt properties uninitialized; isset() would be flagged as always true.
+     */
+    private function initialized(object $prompt, string $property): bool
+    {
+        return new ReflectionProperty($prompt, $property)->isInitialized($prompt);
     }
 }

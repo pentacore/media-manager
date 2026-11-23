@@ -154,7 +154,7 @@ class DecisionRunContext
         return sprintf(
             'Proposed by the decision agent in response to a "%s" event from %s.',
             $webhookEvent->event_type,
-            $webhookEvent->serviceConnection?->name ?? $this->sourceService,
+            $webhookEvent->serviceConnection->name,
         );
     }
 
@@ -296,8 +296,10 @@ class DecisionRunContext
      * The declared tools this run may use: the core plus the action kind's
      * tools when scoped, every declared tool otherwise.
      *
-     * @param  array<int, object>  $tools
-     * @return array<int, object>
+     * @template TTool of object
+     *
+     * @param  array<int, TTool>  $tools
+     * @return array<int, TTool>
      */
     public function scopeTools(array $tools): array
     {

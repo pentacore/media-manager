@@ -18,8 +18,11 @@ use App\Services\AiUsage\AiRateLimitGuard;
 use App\Settings\AiSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
+use Laravel\Ai\Providers\Tools\ProviderTool;
 
 /**
  * The checks every chat turn passes before its agent runs, and that agent.
@@ -81,7 +84,10 @@ final readonly class ChatTurnGuard
         $chatToolRunContext->routingActive = $this->aiSettings->chatRoutingEnabled();
 
         return (new MediaAgent)->continueOrStart($conversationId, as: $user)
-            ->withTools(fn (array $declared): array => $this->toolPayload->build($routed instanceof RoutedToolGroups ? $this->chatToolRouter->filter($declared, $routed->groups()) : $declared));
+            ->withTools(
+                /** @param array<int, Agent|Tool|ProviderTool> $declared */
+                fn (array $declared): array => $this->toolPayload->build($routed instanceof RoutedToolGroups ? $this->chatToolRouter->filter($declared, $routed->groups()) : $declared),
+            );
     }
 
     /**

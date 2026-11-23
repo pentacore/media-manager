@@ -127,6 +127,7 @@ class FreePoolAccounting
                 continue;
             }
 
+            /** @var Collection<array-key, Collection<int, object{provider: string, base_model: string, bucket: string, used_input: int|string, used_output: int|string, window_input: int|string, window_cache_read: int|string, window_cache_write: int|string, window_output: int|string}>> $buckets */
             $buckets = $this->poolUsageRows($pool, $since, bucketed: true, kind: $kind, benchmark: $benchmark)
                 ->groupBy('bucket');
 
@@ -226,7 +227,7 @@ class FreePoolAccounting
         $groupBy = ['provider', 'base_model'];
 
         if ($bucketed) {
-            $selects[] = sprintf("date_trunc('%s', ai_usage_records.created_at) AS bucket", $aiFreeUsagePool->period->sqlDateTrunc());
+            $selects[] = "date_trunc('".$aiFreeUsagePool->period->sqlDateTrunc()."', ai_usage_records.created_at) AS bucket";
             $groupBy[] = 'bucket';
 
             $windowConditions = [];
@@ -249,14 +250,14 @@ class FreePoolAccounting
 
             $windowFilter = $windowConditions === []
                 ? ''
-                : sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
+                : ' FILTER (WHERE '.implode(' AND ', $windowConditions).')';
 
-            $selects[] = sprintf('
-                COALESCE(SUM(ai_usage_records.prompt_tokens)%1$s, 0) AS window_input,
-                COALESCE(SUM(ai_usage_records.cache_read_input_tokens)%1$s, 0) AS window_cache_read,
-                COALESCE(SUM(ai_usage_records.cache_write_input_tokens)%1$s, 0) AS window_cache_write,
-                COALESCE(SUM(ai_usage_records.completion_tokens)%1$s, 0) AS window_output
-            ', $windowFilter);
+            $selects[] = '
+                COALESCE(SUM(ai_usage_records.prompt_tokens)'.$windowFilter.', 0) AS window_input,
+                COALESCE(SUM(ai_usage_records.cache_read_input_tokens)'.$windowFilter.', 0) AS window_cache_read,
+                COALESCE(SUM(ai_usage_records.cache_write_input_tokens)'.$windowFilter.', 0) AS window_cache_write,
+                COALESCE(SUM(ai_usage_records.completion_tokens)'.$windowFilter.', 0) AS window_output
+            ';
             $bindings = [...$windowBindings, ...$windowBindings, ...$windowBindings, ...$windowBindings];
         }
 
@@ -264,7 +265,8 @@ class FreePoolAccounting
             ? $aiFreeUsagePool->period->periodStartAt($since)
             : $since;
 
-        return DB::table('ai_usage_records')
+        /** @var Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_cache_read?: int|string, window_cache_write?: int|string, window_output?: int|string}> $rows */
+        $rows = DB::table('ai_usage_records')
             ->when($fetchStart instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $fetchStart))
             ->whereIn('ai_usage_records.provider', $memberProviders)
             ->whereNotNull('ai_usage_records.model')
@@ -273,6 +275,8 @@ class FreePoolAccounting
             ->get()
             ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
             ->values();
+
+        return $rows;
     }
 
     /**
@@ -284,7 +288,7 @@ class FreePoolAccounting
      * requests — matching the split branch's treatment of null caps. A $kind
      * limits which fitting requests convert to USD, not the replay itself.
      *
-     * @param  array<string, array{input: float, output: float}>  $rates
+     * @param  array<string, array{input: float, output: float, cache_read: float, cache_write: float}>  $rates
      */
     private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since, ?AiUsageKind $kind = null, ?bool $benchmark = null): float
     {
@@ -343,6 +347,7 @@ class FreePoolAccounting
      */
     private function fitOrPaidUsageRows(AiFreeUsagePool $aiFreeUsagePool): Collection
     {
+        /** @var array<string, array{provider: string, base_model: string, used_input: int, used_output: int}> $totals */
         $totals = [];
 
         foreach ($this->replayFitOrPaid($aiFreeUsagePool, $aiFreeUsagePool->period->currentPeriodStart()) as $row) {
@@ -351,17 +356,20 @@ class FreePoolAccounting
             }
 
             $key = $row->provider.'|'.$row->base_model;
-            $totals[$key] ??= (object) [
+            $totals[$key] ??= [
                 'provider' => $row->provider,
                 'base_model' => $row->base_model,
                 'used_input' => 0,
                 'used_output' => 0,
             ];
-            $totals[$key]->used_input += (int) $row->prompt_tokens + (int) $row->cache_read_input_tokens + (int) $row->cache_write_input_tokens;
-            $totals[$key]->used_output += (int) $row->completion_tokens;
+            $totals[$key]['used_input'] += (int) $row->prompt_tokens + (int) $row->cache_read_input_tokens + (int) $row->cache_write_input_tokens;
+            $totals[$key]['used_output'] += (int) $row->completion_tokens;
         }
 
-        return new Collection(array_values($totals));
+        /** @var Collection<int, object{provider: string, base_model: string, used_input: int, used_output: int}> $rows */
+        $rows = new Collection(array_map(static fn (array $total): object => (object) $total, array_values($totals)));
+
+        return $rows;
     }
 
     /**
@@ -379,7 +387,8 @@ class FreePoolAccounting
     {
         $remaining = [];
 
-        return $this->poolUsageRecords($aiFreeUsagePool, $since)->map(function (object $row) use ($aiFreeUsagePool, &$remaining): object {
+        /** @var Collection<int, object{provider: string, base_model: string, kind: string, is_benchmark: bool, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}> $rows */
+        $rows = $this->poolUsageRecords($aiFreeUsagePool, $since)->map(function (object $row) use ($aiFreeUsagePool, &$remaining): object {
             $bucket = $aiFreeUsagePool->period
                 ->periodStartAt(CarbonImmutable::parse((string) $row->created_at, 'UTC'))
                 ->toIso8601String();
@@ -396,25 +405,29 @@ class FreePoolAccounting
             $output = (int) $row->completion_tokens;
 
             if ($aiFreeUsagePool->unified) {
-                $row->fits = $remaining[$bucket]['total'] >= $input + $output;
+                $fits = $remaining[$bucket]['total'] >= $input + $output;
 
-                if ($row->fits) {
+                if ($fits) {
                     $remaining[$bucket]['total'] -= $input + $output;
                 }
 
-                return $row;
+                return (object) [...(array) $row, 'fits' => $fits];
             }
 
-            $row->fits = ($remaining[$bucket]['input'] === null || $remaining[$bucket]['input'] >= $input)
-                && ($remaining[$bucket]['output'] === null || $remaining[$bucket]['output'] >= $output);
+            $remainingInput = $remaining[$bucket]['input'];
+            $remainingOutput = $remaining[$bucket]['output'];
+            $fits = ($remainingInput === null || $remainingInput >= $input)
+                && ($remainingOutput === null || $remainingOutput >= $output);
 
-            if ($row->fits) {
-                $remaining[$bucket]['input'] = $remaining[$bucket]['input'] === null ? null : $remaining[$bucket]['input'] - $input;
-                $remaining[$bucket]['output'] = $remaining[$bucket]['output'] === null ? null : $remaining[$bucket]['output'] - $output;
+            if ($fits) {
+                $remaining[$bucket]['input'] = $remainingInput === null ? null : $remainingInput - $input;
+                $remaining[$bucket]['output'] = $remainingOutput === null ? null : $remainingOutput - $output;
             }
 
-            return $row;
+            return (object) [...(array) $row, 'fits' => $fits];
         });
+
+        return $rows;
     }
 
     /**
@@ -443,7 +456,8 @@ class FreePoolAccounting
             ? $aiFreeUsagePool->period->periodStartAt($since)
             : null;
 
-        return DB::table('ai_usage_records')
+        /** @var Collection<int, object{provider: string, base_model: string, kind: string, is_benchmark: bool, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}> $rows */
+        $rows = DB::table('ai_usage_records')
             ->when($fetchStart instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $fetchStart))
             ->whereIn('ai_usage_records.provider', $memberProviders)
             ->whereNotNull('ai_usage_records.model')
@@ -463,5 +477,7 @@ class FreePoolAccounting
             ->get()
             ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
             ->values();
+
+        return $rows;
     }
 }

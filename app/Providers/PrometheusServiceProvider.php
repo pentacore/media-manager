@@ -136,7 +136,7 @@ class PrometheusServiceProvider extends ServiceProvider
      * connections go absent — a frozen last value would read as healthy.
      *
      * @param  list<string>  $labelKeys
-     * @return list<array{0: float, 1: list<string>}>
+     * @return array<int, array{0: float, 1: list<string>}>
      */
     private function latestSamples(string $metric, array $labelKeys): array
     {
@@ -265,6 +265,8 @@ class PrometheusServiceProvider extends ServiceProvider
      * its own around these closures. On failure the gauge exports no series
      * for this scrape (an empty array is a no-op for both scalar and
      * labelled gauges, see Gauge::handleValueAndLabels()).
+     *
+     * @return array<array-key, mixed>|float
      */
     private function safely(string $gauge, Closure $callback): array|float
     {

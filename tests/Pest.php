@@ -93,7 +93,7 @@ pest()->extend(TestCase::class)
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
+        browserQueueFake();
 
         // The browser plugin serves every page request from this test's own
         // container, so scoped instances would outlive the request that made
@@ -179,6 +179,21 @@ function fakeServiceHttp(Closure $handler): void
 
         return $handler($request, $options);
     });
+}
+
+/**
+ * Fakes the jobs every browser test keeps off the sync queue, plus $jobs.
+ * A later Queue::fake() replaces the earlier fake instead of adding to it, so
+ * a browser test that fakes another job calls this rather than Queue::fake():
+ * otherwise every connection a factory creates runs PingServiceHealth and
+ * FetchLatestServiceVersion inline, real HTTP with retries to unreachable
+ * hosts (~1.5 s per call).
+ *
+ * @param  class-string  ...$jobs
+ */
+function browserQueueFake(string ...$jobs): void
+{
+    Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ...$jobs]);
 }
 
 /**

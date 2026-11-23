@@ -30,9 +30,9 @@ use Override;
  * @property-read WebhookEvent|null $webhookEvent
  *
  * @method static AgentDecisionFactory factory($count = null, $state = [])
- * @method static Builder<static>|AgentDecision newModelQuery()
- * @method static Builder<static>|AgentDecision newQuery()
- * @method static Builder<static>|AgentDecision query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  *
  * @mixin \Eloquent
  */
@@ -67,6 +67,8 @@ class AgentDecision extends Model
 
     /**
      * Retention window from mediamanager.retention (0 disables pruning).
+     *
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

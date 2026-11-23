@@ -54,7 +54,7 @@ class ServiceConnectionResource extends JsonResource
                 && $this->latest_version !== $this->version,
             'last_seen_at' => $this->last_seen_at?->toISOString(),
             'last_seen_human' => $this->last_seen_at?->diffForHumans(),
-            'api_key_set' => $this->api_key !== '' && $this->api_key !== null,
+            'api_key_set' => $this->api_key !== '',
         ];
     }
 }

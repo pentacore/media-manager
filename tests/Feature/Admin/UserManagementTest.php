@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Enums\UserRole;
 use App\Mail\UserInvitation;
 use App\Models\ActivityLog;

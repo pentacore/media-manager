@@ -85,12 +85,11 @@ class PriceVerifierPhase
             // verifier's usage to whoever triggered the run.
             $agentResponse = resolve(AiRunAttribution::class)->during($user, fn (): AgentResponse => $agent->prompt($prompt));
 
-            $priceRefreshLedger->sourceCitations = $agentResponse->meta->citations
+            $priceRefreshLedger->sourceCitations = array_values($agentResponse->meta->citations
                 ->filter(fn (Citation $citation): bool => $citation instanceof UrlCitation)
                 ->map(fn (UrlCitation $urlCitation): array => ['url' => $urlCitation->url, 'title' => $urlCitation->title])
                 ->unique('url')
-                ->values()
-                ->all();
+                ->all());
 
             // Fold the real per-provider tool outcomes into the audit counters
             // (created/updated/unchanged/locked/rejected), for every provider
@@ -234,22 +233,24 @@ class PriceVerifierPhase
             return;
         }
 
-        $priceRefreshLedger->providerState($provider, PriceRefreshLedger::PROVIDER_OK);
+        $state = $priceRefreshLedger->providerState($provider, PriceRefreshLedger::PROVIDER_OK);
 
-        $priceRefreshLedger->providerStates[$provider]['created'] += ($counts[WriteOutcome::Created->value] ?? 0) + ($counts[WriteOutcome::WouldCreate->value] ?? 0);
-        $priceRefreshLedger->providerStates[$provider]['updated'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0)
+        $state['created'] += ($counts[WriteOutcome::Created->value] ?? 0) + ($counts[WriteOutcome::WouldCreate->value] ?? 0);
+        $state['updated'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0)
             + ($counts[WriteOutcome::CapabilitiesUpdated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdateCapabilities->value] ?? 0);
-        $priceRefreshLedger->providerStates[$provider]['unchanged'] += $counts[WriteOutcome::Unchanged->value] ?? 0;
-        $priceRefreshLedger->providerStates[$provider]['locked'] += $counts[WriteOutcome::Locked->value] ?? 0;
-        $priceRefreshLedger->providerStates[$provider]['rejected'] += ($counts[WriteOutcome::Rejected->value] ?? 0) + ($counts[WriteOutcome::RejectedAnomalous->value] ?? 0);
-        $priceRefreshLedger->providerStates[$provider]['create_disabled'] += $counts[WriteOutcome::CreateDisabled->value] ?? 0;
+        $state['unchanged'] += $counts[WriteOutcome::Unchanged->value] ?? 0;
+        $state['locked'] += $counts[WriteOutcome::Locked->value] ?? 0;
+        $state['rejected'] += ($counts[WriteOutcome::Rejected->value] ?? 0) + ($counts[WriteOutcome::RejectedAnomalous->value] ?? 0);
+        $state['create_disabled'] += $counts[WriteOutcome::CreateDisabled->value] ?? 0;
 
         // In verify mode an agent Update means the first-party page disagreed
         // with the value the feed just synced: that is a discrepancy the run
         // records per provider. A capability-only update is not one.
         if ($priceRefreshLedger->verifyMode) {
-            $priceRefreshLedger->providerStates[$provider]['discrepancies'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0);
+            $state['discrepancies'] += ($counts[WriteOutcome::Updated->value] ?? 0) + ($counts[WriteOutcome::WouldUpdate->value] ?? 0);
         }
+
+        $priceRefreshLedger->providerStates[$provider] = $state;
     }
 
     /**

@@ -120,7 +120,9 @@ final readonly class BenchmarkCaseRunner
             $transcript[] = [
                 'role' => 'user',
                 'content' => $content,
-                'attachments' => $benchmarkCase->attachmentsFor($userTurn['turn'])->pluck('original_name')->all(),
+                'attachments' => array_values($benchmarkCase->attachmentsFor($userTurn['turn'])
+                    ->map(static fn (BenchmarkCaseAttachment $attachment): string => $attachment->original_name)
+                    ->all()),
             ];
             $this->benchmarkRunContext->setHistory($messages);
 
@@ -193,9 +195,9 @@ final readonly class BenchmarkCaseRunner
      */
     private function sdkFiles(BenchmarkCase $benchmarkCase, ?int $turn): array
     {
-        return $benchmarkCase->attachmentsFor($turn)
+        return array_values($benchmarkCase->attachmentsFor($turn)
             ->map(static fn (BenchmarkCaseAttachment $attachment): File => $attachment->toSdkFile())
-            ->all();
+            ->all());
     }
 
     /**

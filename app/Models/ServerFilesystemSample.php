@@ -30,9 +30,9 @@ use Override;
  * @property-read Server $server
  *
  * @method static ServerFilesystemSampleFactory factory($count = null, $state = [])
- * @method static Builder<static>|ServerFilesystemSample newModelQuery()
- * @method static Builder<static>|ServerFilesystemSample newQuery()
- * @method static Builder<static>|ServerFilesystemSample query()
+ * @method static Builder<static> newModelQuery()
+ * @method static Builder<static> newQuery()
+ * @method static Builder<static> query()
  */
 #[Fillable([
     'server_id',

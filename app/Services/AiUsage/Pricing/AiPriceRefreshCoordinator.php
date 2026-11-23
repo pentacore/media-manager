@@ -226,7 +226,7 @@ final readonly class AiPriceRefreshCoordinator
 
             $providerResults[$provider] = array_filter(
                 ['status' => $state['status'], ...array_diff_key($state, ['status' => true, 'rejections' => true])],
-                fn (int|string $value): bool => $value !== 0,
+                fn (mixed $value): bool => $value !== 0,
             ) + ($state['rejections'] !== [] ? ['rejections' => $state['rejections']] : []);
         }
 

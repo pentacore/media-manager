@@ -8,7 +8,6 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Pest\Browser\Api\AwaitableWebpage;
 use Pest\Browser\Api\PendingAwaitablePage;
 use Pest\Browser\Api\Webpage;
@@ -118,7 +117,7 @@ beforeEach(function (): void {
     // The quality-profile pick sends a real bulk request: queue the actions
     // without running them, so no upstream write is attempted.
     $this->seed(ActionTypeConfigSeeder::class);
-    Queue::fake([ExecuteActionRequest::class]);
+    browserQueueFake(ExecuteActionRequest::class);
 });
 
 test('the library bar is fixed to the bottom of a phone screen as soon as a card is picked', function (string $routeName, int $id, string $role): void {

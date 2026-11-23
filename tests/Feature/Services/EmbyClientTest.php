@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
 use App\Services\Emby\EmbyUnexpectedResponse;

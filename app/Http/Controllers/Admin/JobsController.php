@@ -149,7 +149,7 @@ class JobsController extends Controller
         $events = resolve(Schedule::class)->events();
 
         return array_values(array_map(static function (Event $event): array {
-            $expression = (string) ($event->expression ?? '');
+            $expression = $event->expression;
             $command = (string) ($event->command ?? $event->description ?? 'unknown');
 
             // Strip the PHP binary prefix Laravel prepends to artisan
@@ -169,7 +169,7 @@ class JobsController extends Controller
                 'command' => trim($command),
                 'expression' => $expression,
                 'description' => (string) ($event->description ?? ''),
-                'without_overlapping' => (bool) ($event->withoutOverlapping ?? false),
+                'without_overlapping' => $event->withoutOverlapping,
                 'next_run' => $nextRunDate,
             ];
         }, $events));
