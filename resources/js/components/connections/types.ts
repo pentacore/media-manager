@@ -32,6 +32,7 @@ export interface EditableConnection {
     whisparr_version?: string;
     sonarr_connection_id: number | null;
     radarr_connection_id: number | null;
+    subtitle_audit_search_slots?: number | null;
 }
 
 export interface ProwlarrIndexer {

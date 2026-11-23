@@ -12,6 +12,7 @@ import {
     SabnzbdNotificationScript,
     ServiceTypeSelect,
     SonarrLibraryTypes,
+    SubtitleAuditSearchSlots,
     SubtitleCheckTags,
     WebhookTokenField,
     WebhookUrlField,
@@ -48,6 +49,7 @@ const props = defineProps<{
     sonarrRootFolders?: SonarrRootFolder[];
     arrTags?: ArrTag[] | null;
     subtitleCheckTags?: string[];
+    defaultSubtitleAuditSearchSlots: number;
 }>();
 
 defineOptions({
@@ -254,6 +256,13 @@ const supportsSubtitleCheckTags = computed(
                         v-if="supportsSubtitleCheckTags"
                         :arr-tags="arrTags"
                         :selected-tags="subtitleCheckTags"
+                    />
+
+                    <SubtitleAuditSearchSlots
+                        v-if="supportsSonarrLibraryTypes"
+                        :slots="connection.subtitle_audit_search_slots ?? null"
+                        :default-slots="defaultSubtitleAuditSearchSlots"
+                        :error="errors.subtitle_audit_search_slots"
                     />
 
                     <SabnzbdHiddenCategories

@@ -79,6 +79,12 @@ class ServiceConnection extends Model
     /** @use HasFactory<ServiceConnectionFactory> */
     use HasFactory;
 
+    public const int DEFAULT_SUBTITLE_AUDIT_SEARCH_SLOTS = 2;
+
+    public const int MIN_SUBTITLE_AUDIT_SEARCH_SLOTS = 1;
+
+    public const int MAX_SUBTITLE_AUDIT_SEARCH_SLOTS = 10;
+
     /**
      * @return array<string, string>
      */
@@ -296,6 +302,21 @@ class ServiceConnection extends Model
         return is_string($value)
             ? (WhisparrVersion::tryFrom($value) ?? WhisparrVersion::V3)
             : WhisparrVersion::V3;
+    }
+
+    /**
+     * How many subtitle audit release searches may run against this Sonarr
+     * connection at once (settings.subtitle_audit.search_slots), clamped to
+     * 1..10; 2 when unset or not an integer.
+     */
+    public function subtitleAuditSearchSlots(): int
+    {
+        $subtitleAudit = $this->settings['subtitle_audit'] ?? null;
+        $slots = is_array($subtitleAudit) ? ($subtitleAudit['search_slots'] ?? null) : null;
+
+        return is_int($slots)
+            ? max(self::MIN_SUBTITLE_AUDIT_SEARCH_SLOTS, min(self::MAX_SUBTITLE_AUDIT_SEARCH_SLOTS, $slots))
+            : self::DEFAULT_SUBTITLE_AUDIT_SEARCH_SLOTS;
     }
 
     /**

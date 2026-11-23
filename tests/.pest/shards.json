@@ -9,6 +9,7 @@
         "Tests\\Browser\\ActivityStatisticsPhoneTest": 21.7725,
         "Tests\\Browser\\AdminTablePhoneTest": 11.8234,
         "Tests\\Browser\\Admin\\ConnectionFormTest": 27.2516,
+        "Tests\\Browser\\Admin\\ConnectionSubtitleAuditSearchSlotsTest": 6.5,
         "Tests\\Browser\\Admin\\ConnectionSubtitleCheckTagsTest": 6.9149,
         "Tests\\Browser\\Admin\\MediaReplacementAttemptsTest": 7.027,
         "Tests\\Browser\\Admin\\WebhookLogDecisionStatusTest": 5.8278,

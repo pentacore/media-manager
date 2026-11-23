@@ -143,7 +143,9 @@ class ServiceConnectionController extends Controller
                 'whisparr_version' => $serviceConnection->whisparrVersion()->value,
                 'sonarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Sonarr->value],
                 'radarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Radarr->value],
+                'subtitle_audit_search_slots' => $this->storedSubtitleAuditSearchSlots($serviceConnection),
             ],
+            'defaultSubtitleAuditSearchSlots' => ServiceConnection::DEFAULT_SUBTITLE_AUDIT_SEARCH_SLOTS,
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'arrConnections' => $this->arrConnections(
                 $serviceConnection,
@@ -448,6 +450,8 @@ class ServiceConnectionController extends Controller
         $hiddenCategories = $validated['hidden_categories'] ?? null;
         $sonarrRootFolders = $validated['sonarr_root_folders'] ?? null;
         $subtitleCheckTags = $validated['subtitle_check_tags'] ?? null;
+        $hasSubtitleAuditSearchSlots = array_key_exists('subtitle_audit_search_slots', $validated);
+        $subtitleAuditSearchSlots = $validated['subtitle_audit_search_slots'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
@@ -455,6 +459,7 @@ class ServiceConnectionController extends Controller
             $validated['hidden_categories'],
             $validated['sonarr_root_folders'],
             $validated['subtitle_check_tags'],
+            $validated['subtitle_audit_search_slots'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
@@ -487,6 +492,14 @@ class ServiceConnectionController extends Controller
         if (is_array($subtitleCheckTags) && in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
             $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $validated['settings'] = $subtitleCheckTagSettings->mergeInto($existingSettings, $subtitleCheckTags);
+        }
+
+        if ($hasSubtitleAuditSearchSlots && $serviceConnection->type === ServiceType::Sonarr) {
+            $validated['settings'] = $this->mergeSubtitleAuditSearchSlots(
+                $validated['settings'] ?? $serviceConnection->settings ?? [],
+                // A browser posts the validated integer as a string.
+                is_numeric($subtitleAuditSearchSlots) ? (int) $subtitleAuditSearchSlots : null,
+            );
         }
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
@@ -754,6 +767,49 @@ class ServiceConnectionController extends Controller
         ]);
 
         return back()->with('success', true);
+    }
+
+    /**
+     * The saved search slots of a Sonarr connection, or null when unset (the
+     * form then shows the default as a placeholder).
+     */
+    private function storedSubtitleAuditSearchSlots(ServiceConnection $serviceConnection): ?int
+    {
+        if ($serviceConnection->type !== ServiceType::Sonarr) {
+            return null;
+        }
+
+        $subtitleAudit = $serviceConnection->settings['subtitle_audit'] ?? null;
+
+        return is_array($subtitleAudit) && is_int($subtitleAudit['search_slots'] ?? null)
+            ? $serviceConnection->subtitleAuditSearchSlots()
+            : null;
+    }
+
+    /**
+     * Store the subtitle audit search slots in the connection settings, or
+     * drop them (back to the default) when cleared.
+     *
+     * @param  array<array-key, mixed>  $settings
+     * @return array<array-key, mixed>
+     */
+    private function mergeSubtitleAuditSearchSlots(array $settings, ?int $slots): array
+    {
+        $subtitleAudit = is_array($settings['subtitle_audit'] ?? null) ? $settings['subtitle_audit'] : [];
+
+        if ($slots === null) {
+            unset($subtitleAudit['search_slots']);
+        } else {
+            $subtitleAudit['search_slots'] = $slots;
+        }
+
+        if ($subtitleAudit === []) {
+            unset($settings['subtitle_audit']);
+        } else {
+            $settings['subtitle_audit'] = $subtitleAudit;
+        }
+
+        return $settings;
     }
 
     /**

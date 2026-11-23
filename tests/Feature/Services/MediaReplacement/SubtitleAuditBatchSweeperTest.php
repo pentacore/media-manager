@@ -9,6 +9,7 @@ use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\SubtitleAuditBatchSweeper;
+use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -42,6 +43,18 @@ test('a batch inside the grace period is left alone', function (): void {
     expect(resolve(SubtitleAuditBatchSweeper::class)->sweep())->toBe(0)
         ->and($batch->refresh()->status)->toBe(SubtitleAuditBatchStatus::Searching)
         ->and($episode->refresh()->outcome)->toBe(SubtitleAuditEpisodeOutcome::Searching);
+});
+
+test('the grace period follows the setting', function (): void {
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'subtitle_audit' => ['sweep_grace_minutes' => 15],
+    ]);
+    $inside = SubtitleAuditBatch::factory()->create(['search_deadline_at' => now()->subMinutes(10)]);
+    $past = SubtitleAuditBatch::factory()->create(['search_deadline_at' => now()->subMinutes(20)]);
+
+    expect(resolve(SubtitleAuditBatchSweeper::class)->sweep())->toBe(1)
+        ->and($inside->refresh()->status)->toBe(SubtitleAuditBatchStatus::Searching)
+        ->and($past->refresh()->status)->toBe(SubtitleAuditBatchStatus::Ready);
 });
 
 test('a ready batch is left alone', function (): void {
