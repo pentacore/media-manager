@@ -9,7 +9,13 @@ use App\Models\ChatTemplate;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
+/**
+ * Typefinder skips it: the rules depend on the bound template, so there is
+ * no static request type.
+ */
+#[TypefinderIgnore]
 class UpdateChatTemplateRequest extends FormRequest
 {
     use ChatTemplateValidationRules;
