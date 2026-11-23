@@ -34,6 +34,7 @@ function validMediaReplacementConfiguration(array $overrides = []): array
             'max_attempts_per_target' => 1,
             'cooldown_hours' => 24,
         ],
+        'subtitle_audit' => mediaReplacementSubtitleAudit(),
         'guidance' => [
             'anime' => [
                 'notes' => 'CR-tagged releases are trusted.',
@@ -54,6 +55,24 @@ function validMediaReplacementConfiguration(array $overrides = []): array
             'movie' => ['notes' => 'No special guidance.', 'rules' => []],
         ],
     ], $overrides);
+}
+
+/**
+ * A complete, valid subtitle audit block with the given keys changed.
+ *
+ * @param  array<string, mixed>  $changes
+ * @return array<string, mixed>
+ */
+function mediaReplacementSubtitleAudit(array $changes = []): array
+{
+    return array_replace([
+        'search_minutes_per_episode' => 3,
+        'min_search_minutes' => 30,
+        'max_search_minutes' => 720,
+        'in_chat_wait_seconds' => 60,
+        'watchdog_delay_seconds' => 180,
+        'sweep_grace_minutes' => 5,
+    ], $changes);
 }
 
 /**
@@ -104,6 +123,9 @@ test('index exposes media replacement configuration and enum options', function 
                 'max_attempts_per_target' => 1,
                 'cooldown_hours' => 24,
             ])
+            ->where('settings.media_replacement.subtitle_audit', mediaReplacementSubtitleAudit())
+            ->where('requestCeilingSeconds', 0)
+            ->where('effectiveWatchdogDelaySeconds', 180)
             ->has('seasonPackPolicies')
             ->has('subtitleRuleStrengths')
             ->has('conditionFields')
@@ -333,7 +355,130 @@ test('update rejects invalid media replacement configuration', function (array $
         ]],
         'media_replacement.subtitle_check.cooldown_hours',
     ],
+    'missing subtitle audit block' => [
+        ['subtitle_audit' => null],
+        'media_replacement.subtitle_audit',
+    ],
+    'unknown subtitle audit key' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['slots' => 2])],
+        'media_replacement.subtitle_audit',
+    ],
+    'search minutes per episode below one' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['search_minutes_per_episode' => 0])],
+        'media_replacement.subtitle_audit.search_minutes_per_episode',
+    ],
+    'search minutes per episode above 30' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['search_minutes_per_episode' => 31])],
+        'media_replacement.subtitle_audit.search_minutes_per_episode',
+    ],
+    'minimum search window below five minutes' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['min_search_minutes' => 4])],
+        'media_replacement.subtitle_audit.min_search_minutes',
+    ],
+    'minimum search window above the maximum' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['min_search_minutes' => 120, 'max_search_minutes' => 60])],
+        'media_replacement.subtitle_audit.min_search_minutes',
+    ],
+    'maximum search window below the minimum' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['min_search_minutes' => 120, 'max_search_minutes' => 60])],
+        'media_replacement.subtitle_audit.max_search_minutes',
+    ],
+    'maximum search window below 30 minutes' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['min_search_minutes' => 5, 'max_search_minutes' => 29])],
+        'media_replacement.subtitle_audit.max_search_minutes',
+    ],
+    'maximum search window above 24 hours' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['max_search_minutes' => 1441])],
+        'media_replacement.subtitle_audit.max_search_minutes',
+    ],
+    'negative in-chat wait' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['in_chat_wait_seconds' => -1])],
+        'media_replacement.subtitle_audit.in_chat_wait_seconds',
+    ],
+    'in-chat wait above two minutes' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['in_chat_wait_seconds' => 121])],
+        'media_replacement.subtitle_audit.in_chat_wait_seconds',
+    ],
+    'watchdog delay above an hour' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['watchdog_delay_seconds' => 3601])],
+        'media_replacement.subtitle_audit.watchdog_delay_seconds',
+    ],
+    'sweep grace below five minutes' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['sweep_grace_minutes' => 4])],
+        'media_replacement.subtitle_audit.sweep_grace_minutes',
+    ],
+    'sweep grace above two hours' => [
+        ['subtitle_audit' => mediaReplacementSubtitleAudit(['sweep_grace_minutes' => 121])],
+        'media_replacement.subtitle_audit.sweep_grace_minutes',
+    ],
 ]);
+
+test('the watchdog delay must outlast the request ceiling', function (int $delay, bool $accepted): void {
+    config()->set('octane.max_execution_time', 150);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->put(route('admin.media-replacement.update'), [
+            'media_replacement' => json_encode(validMediaReplacementConfiguration([
+                'subtitle_audit' => mediaReplacementSubtitleAudit(['watchdog_delay_seconds' => $delay]),
+            ]), JSON_THROW_ON_ERROR),
+        ]);
+
+    if ($accepted) {
+        $response->assertSessionHasNoErrors();
+    } else {
+        $response->assertSessionHasErrors('media_replacement.subtitle_audit.watchdog_delay_seconds');
+    }
+})->with([
+    'at the ceiling' => [150, false],
+    'one second past the ceiling' => [151, true],
+]);
+
+test('the subtitle audit settings round-trip through the media replacement form', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.media-replacement.update'), [
+            'media_replacement' => json_encode(validMediaReplacementConfiguration([
+                'subtitle_audit' => [
+                    'search_minutes_per_episode' => 4,
+                    'min_search_minutes' => 45,
+                    'max_search_minutes' => 300,
+                    'in_chat_wait_seconds' => 0,
+                    'watchdog_delay_seconds' => 240,
+                    'sweep_grace_minutes' => 10,
+                ],
+            ]), JSON_THROW_ON_ERROR),
+        ])
+        ->assertRedirect(route('admin.media-replacement.index'))
+        ->assertSessionHasNoErrors();
+
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleAuditSearchMinutesPerEpisode())->toBe(4)
+        ->and($mediaReplacementSettings->subtitleAuditMinSearchMinutes())->toBe(45)
+        ->and($mediaReplacementSettings->subtitleAuditMaxSearchMinutes())->toBe(300)
+        ->and($mediaReplacementSettings->subtitleAuditInChatWaitSeconds())->toBe(0)
+        ->and($mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds())->toBe(240)
+        ->and($mediaReplacementSettings->subtitleAuditSweepGraceMinutes())->toBe(10);
+});
+
+test('index exposes the request ceiling and the effective watchdog delay', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'subtitle_audit' => mediaReplacementSubtitleAudit(['watchdog_delay_seconds' => 120]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.media-replacement.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('settings.media_replacement.subtitle_audit.watchdog_delay_seconds', 120)
+            ->where('requestCeilingSeconds', 150)
+            ->where('effectiveWatchdogDelaySeconds', 180)
+        );
+});
 
 test('the subtitle check settings round-trip through the media replacement form', function (): void {
     $admin = User::factory()->admin()->create();

@@ -18,6 +18,7 @@ use App\Services\MediaReplacement\SeriesSubtitleRepairRefused;
 use App\Services\MediaReplacement\SubtitleAuditBatchSettler;
 use App\Services\MediaReplacement\SubtitleAuditBatchWaiter;
 use App\Settings\AiSettings;
+use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
@@ -25,9 +26,6 @@ use Stringable;
 
 class RepairSeriesSubtitlesTool extends BaseTool
 {
-    /** How long the chat turn waits for the release searches before handing the batch off. */
-    public const int IN_CHAT_WAIT_SECONDS = 60;
-
     /** Time the turn keeps after the wait to answer before the request ceiling. */
     private const int REQUEST_MARGIN_SECONDS = 30;
 
@@ -112,21 +110,23 @@ class RepairSeriesSubtitlesTool extends BaseTool
     /**
      * The chat turn runs inside the HTTP request, which Octane kills at its
      * ceiling: wait at most what is left of it, less a 30 second margin for the
-     * rest of the turn, and never longer than IN_CHAT_WAIT_SECONDS. Without a
-     * ceiling or a known request start, wait the full time.
+     * rest of the turn, and never longer than the configured in-chat wait
+     * (MediaReplacementSettings::subtitleAuditInChatWaitSeconds()). Without a
+     * ceiling or a known request start, wait the configured time.
      */
     private function inChatWaitSeconds(): int
     {
-        $ceiling = (int) config('octane.max_execution_time', 0);
+        $configuredWait = resolve(MediaReplacementSettings::class)->subtitleAuditInChatWaitSeconds();
+        $ceiling = MediaReplacementSettings::requestCeilingSeconds();
         $requestStartedAt = request()->server('REQUEST_TIME_FLOAT');
 
         if ($ceiling <= 0 || ! is_numeric($requestStartedAt)) {
-            return self::IN_CHAT_WAIT_SECONDS;
+            return $configuredWait;
         }
 
         $remaining = (int) floor($ceiling - (microtime(true) - (float) $requestStartedAt) - self::REQUEST_MARGIN_SECONDS);
 
-        return min(self::IN_CHAT_WAIT_SECONDS, max(0, $remaining));
+        return min($configuredWait, max(0, $remaining));
     }
 
     private function refusalMessage(string $reason): string

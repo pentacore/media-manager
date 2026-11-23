@@ -11,6 +11,7 @@ use App\Jobs\WatchSubtitleAuditBatch;
 use App\Models\ActionTypeConfig;
 use App\Models\SubtitleAuditBatch;
 use App\Models\User;
+use App\Settings\MediaReplacementSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
@@ -22,20 +23,11 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class SeriesSubtitleRepairer
 {
-    /**
-     * The search window: three minutes per missing episode (the searches run
-     * one after another on a single worker), at least 30 minutes and at most
-     * 12 hours. A searching batch blocks a new repair until it passes.
-     */
-    public const int SEARCH_MINUTES_PER_EPISODE = 3;
-
-    public const int MIN_SEARCH_MINUTES = 30;
-
-    public const int MAX_SEARCH_MINUTES = 720;
-
     private const int LOCK_SECONDS = 10;
 
     private const int LOCK_WAIT_SECONDS = 5;
+
+    public function __construct(private MediaReplacementSettings $mediaReplacementSettings) {}
 
     /**
      * @throws SeriesSubtitleRepairRefused when nothing is missing, the replacement
@@ -113,18 +105,25 @@ final readonly class SeriesSubtitleRepairer
             // Adopts the batch if the chat turn dies before it shows the card
             // or hands the batch off.
             dispatch(new WatchSubtitleAuditBatch($subtitleAuditBatch->id))
-                ->delay(now()->addSeconds(WatchSubtitleAuditBatch::DELAY_SECONDS))
+                ->delay(now()->addSeconds($this->mediaReplacementSettings->subtitleAuditWatchdogDelaySeconds()))
                 ->afterCommit();
 
             return $subtitleAuditBatch;
         });
     }
 
+    /**
+     * The configured minutes per missing episode, held inside the configured
+     * search window (see MediaReplacementSettings).
+     */
     private function searchDeadline(int $missingCount): CarbonImmutable
     {
         return now()->addMinutes(min(
-            self::MAX_SEARCH_MINUTES,
-            max(self::MIN_SEARCH_MINUTES, $missingCount * self::SEARCH_MINUTES_PER_EPISODE),
+            $this->mediaReplacementSettings->subtitleAuditMaxSearchMinutes(),
+            max(
+                $this->mediaReplacementSettings->subtitleAuditMinSearchMinutes(),
+                $missingCount * $this->mediaReplacementSettings->subtitleAuditSearchMinutesPerEpisode(),
+            ),
         ));
     }
 }

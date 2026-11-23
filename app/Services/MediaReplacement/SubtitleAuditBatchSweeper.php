@@ -7,22 +7,21 @@ namespace App\Services\MediaReplacement;
 use App\Enums\SubtitleAuditBatchStatus;
 use App\Enums\SubtitleAuditEpisodeOutcome;
 use App\Models\SubtitleAuditBatch;
+use App\Settings\MediaReplacementSettings;
 
 /**
  * Settles audit batches whose release searches never finished, for example
  * because a queue worker died. Episodes still searching past the deadline plus
  * a grace period are failed, so the batch becomes ready and admins are notified.
+ * The grace is MediaReplacementSettings::subtitleAuditSweepGraceMinutes(), never
+ * below the 5 minutes that keep a live search from looking expired.
  */
 class SubtitleAuditBatchSweeper
 {
-    /**
-     * Safe only while SearchSubtitleAuditEpisode's #[Timeout(270)] stays below
-     * 300 s (the 5 minute grace past the deadline): a live search never looks
-     * expired. The searcher's guarded outcome write makes any overlap harmless.
-     */
-    private const int GRACE_MINUTES = 5;
-
-    public function __construct(private readonly SubtitleAuditBatchSettler $subtitleAuditBatchSettler) {}
+    public function __construct(
+        private readonly SubtitleAuditBatchSettler $subtitleAuditBatchSettler,
+        private readonly MediaReplacementSettings $mediaReplacementSettings,
+    ) {}
 
     /**
      * @return int The number of batches settled.
@@ -31,7 +30,7 @@ class SubtitleAuditBatchSweeper
     {
         $expired = SubtitleAuditBatch::query()
             ->where('status', SubtitleAuditBatchStatus::Searching)
-            ->where('search_deadline_at', '<', now()->subMinutes(self::GRACE_MINUTES))
+            ->where('search_deadline_at', '<', now()->subMinutes($this->mediaReplacementSettings->subtitleAuditSweepGraceMinutes()))
             ->get();
 
         foreach ($expired as $subtitleAuditBatch) {
