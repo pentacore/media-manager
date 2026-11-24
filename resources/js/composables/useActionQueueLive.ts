@@ -344,7 +344,8 @@ export function useActionQueueLive(
             requestsVisitStartedAt.delete(visitId);
 
             const requests = event.detail.page.props.requests as
-                ActionQueueRequests | undefined;
+                | ActionQueueRequests
+                | undefined;
 
             if (requests !== undefined) {
                 settleRequestsVisit(requests.data, startedAt);

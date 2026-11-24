@@ -2,11 +2,6 @@
 import { Deferred, Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
-import ClassificationGatesPanel from '@/components/ai/ClassificationGatesPanel.vue';
-import type { GateSummary } from '@/components/ai/ClassificationGatesPanel.vue';
-import type { SecondOpinionAgreement } from '@/components/ai/secondOpinionAgreement';
-import SecondOpinionAgreementPanel from '@/components/ai/SecondOpinionAgreementPanel.vue';
-import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import {
     FreePoolUsage,
     InvocationDetailDialog,
@@ -33,6 +28,11 @@ import type {
     WindowKey,
     WindowOption,
 } from '@/components/ai-usage';
+import ClassificationGatesPanel from '@/components/ai/ClassificationGatesPanel.vue';
+import type { GateSummary } from '@/components/ai/ClassificationGatesPanel.vue';
+import type { SecondOpinionAgreement } from '@/components/ai/secondOpinionAgreement';
+import SecondOpinionAgreementPanel from '@/components/ai/SecondOpinionAgreementPanel.vue';
+import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import { useAiUsageNavigation } from '@/composables/useAiUsageNavigation';
 import { useInvocationDetail } from '@/composables/useInvocationDetail';
 import { dashboard } from '@/routes';

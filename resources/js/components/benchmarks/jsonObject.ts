@@ -1,7 +1,8 @@
 import type { JsonObject } from './types';
 
 export type ParsedJsonObject =
-    { value: JsonObject; error: null } | { value: null; error: string };
+    | { value: JsonObject; error: null }
+    | { value: null; error: string };
 
 /** Turns a JSON object into editable text; PHP encodes an empty object as `[]`. */
 export function formatJsonObject(value: unknown): string {

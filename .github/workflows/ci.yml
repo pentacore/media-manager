@@ -18,7 +18,7 @@ permissions:
 
 env:
   PHP_VERSION: '8.5'
-  NODE_VERSION: '25'
+  NODE_VERSION: '26'
 
 jobs:
   php-lint:
@@ -106,6 +106,9 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -116,8 +119,8 @@ jobs:
       - name: Composer audit (runtime)
         run: composer audit --locked --no-dev --abandoned=report
 
-      - name: npm audit (runtime, high and above)
-        run: npm audit --omit=dev --audit-level=high --package-lock-only
+      - name: pnpm audit (runtime, high and above)
+        run: pnpm audit --prod --audit-level high
 
       # Dev tooling (Pest, Rector, semantic-release, Vite plugins) never
       # ships. Report its advisories without failing every PR on upstream
@@ -126,9 +129,9 @@ jobs:
         continue-on-error: true
         run: composer audit --locked --abandoned=report
 
-      - name: npm audit (all, report only)
+      - name: pnpm audit (all, report only)
         continue-on-error: true
-        run: npm audit --audit-level=high --package-lock-only
+        run: pnpm audit --audit-level high
 
   js-lint:
     name: JS lint, format & types
@@ -145,11 +148,14 @@ jobs:
           tools: composer:v2
           coverage: none
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - name: Cache composer
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -161,8 +167,8 @@ jobs:
       - name: Install composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
 
       # Typefinder types are committed (resources/js/typefinder) and gated by
       # tests/Feature/GeneratedTypesTest.php on postgres, so type-check those.
@@ -174,14 +180,12 @@ jobs:
           TELESCOPE_ENABLED: 'false'
         run: php artisan wayfinder:generate --with-form
 
-      - name: Prettier
-        run: npm run format:check
-
-      - name: ESLint
-        run: npm run lint:check
+      # Vite+ check: Oxfmt format check, then Oxlint.
+      - name: Format and lint (Vite+)
+        run: pnpm run check
 
       - name: TypeScript types
-        run: npm run types:check
+        run: pnpm run types:check
 
   # Works out how many browser shards the suite needs from the per-class
   # timings in tests/.pest/shards.json (.github/scripts/browser-shard-matrix.sh):
@@ -294,11 +298,14 @@ jobs:
           # PCOV only where coverage is collected: the browser shards gain nothing from it.
           coverage: ${{ matrix.suite == 'unit-feature' && 'pcov' || 'none' }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - name: Cache composer
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -310,12 +317,12 @@ jobs:
       - name: Install composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress --optimize-autoloader
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         if: matrix.suite == 'browser'
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Prepare environment
         run: |
@@ -323,7 +330,7 @@ jobs:
           php artisan key:generate
 
       - name: Build frontend assets
-        run: npm run build
+        run: pnpm run build
 
       - name: Run Pest (unit & feature)
         if: matrix.suite == 'unit-feature'

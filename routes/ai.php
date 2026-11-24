@@ -50,6 +50,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
 
         Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
         Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');
+        Route::post('templates/create', [ChatTemplateController::class, 'draft'])->name('templates.draft');
         Route::post('templates', [ChatTemplateController::class, 'store'])->name('templates.store');
         Route::get('templates/options', ChatTemplateOptionsController::class)->name('templates.options');
         Route::get('templates/library', ChatTemplateLibraryController::class)->name('templates.library');

@@ -18,7 +18,12 @@ import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewCo
 import { useCan } from '@/composables/useCan';
 
 type TabName =
-    'overview' | 'missing' | 'library' | 'history' | 'escalations' | 'admin';
+    | 'overview'
+    | 'missing'
+    | 'library'
+    | 'history'
+    | 'escalations'
+    | 'admin';
 
 const props = defineProps<{
     active: TabName;

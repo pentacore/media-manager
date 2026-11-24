@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Classification\ClassificationOutcomeRecorder;
 use App\Enums\ClassificationGate;
+use App\Enums\ClassificationOutcomeSource;
 use App\Enums\ClassificationVerdict;
 use App\Models\ClassificationOutcome;
 use App\Settings\AiSettings;
@@ -51,6 +52,36 @@ test('resolve fills only open rows with a matching verdict', function (): void {
     expect($passed->refresh())->outcome_positive->toBeTrue()->outcome_detail->toBe('1 action(s) proposed')->outcome_at->not->toBeNull()
         ->and($skipped->refresh()->outcome_at)->toBeNull()
         ->and($other->refresh()->outcome_at)->toBeNull();
+});
+
+test('resolve records its source and replaces only rows settled by an overridable source', function (): void {
+    $open = ClassificationOutcome::factory()->create(['gate' => ClassificationGate::SecondOpinion, 'subject_key' => 'action_request:7', 'verdict' => ClassificationVerdict::Fallback]);
+    $byLlm = ClassificationOutcome::factory()->resolved(false)->create(['gate' => ClassificationGate::SecondOpinion, 'subject_key' => 'action_request:7', 'verdict' => ClassificationVerdict::AuditRun, 'outcome_source' => ClassificationOutcomeSource::Llm]);
+    $byReviewer = ClassificationOutcome::factory()->resolved(false)->create(['gate' => ClassificationGate::SecondOpinion, 'subject_key' => 'action_request:7', 'verdict' => ClassificationVerdict::Passed, 'outcome_source' => ClassificationOutcomeSource::Reviewer]);
+
+    resolve(ClassificationOutcomeRecorder::class)->resolve(
+        ClassificationGate::SecondOpinion,
+        'action_request:7',
+        true,
+        'approved by a reviewer',
+        [ClassificationVerdict::Passed, ClassificationVerdict::AuditRun, ClassificationVerdict::Fallback],
+        classificationOutcomeSource: ClassificationOutcomeSource::Reviewer,
+        overriding: [ClassificationOutcomeSource::Llm],
+    );
+
+    expect($open->refresh())->outcome_positive->toBeTrue()->outcome_source->toBe(ClassificationOutcomeSource::Reviewer)
+        ->and($byLlm->refresh())->outcome_positive->toBeTrue()->outcome_source->toBe(ClassificationOutcomeSource::Reviewer)
+        ->and($byReviewer->refresh())->outcome_positive->toBeFalse()->outcome_detail->toBe('negative');
+});
+
+test('resolve without overriding sources leaves settled rows alone and marks the event as source', function (): void {
+    $open = ClassificationOutcome::factory()->create(['gate' => ClassificationGate::DecisionGate, 'subject_key' => 'decision:9', 'verdict' => ClassificationVerdict::Passed]);
+    $byLlm = ClassificationOutcome::factory()->resolved(false)->create(['gate' => ClassificationGate::DecisionGate, 'subject_key' => 'decision:9', 'verdict' => ClassificationVerdict::Passed, 'outcome_source' => ClassificationOutcomeSource::Llm]);
+
+    resolve(ClassificationOutcomeRecorder::class)->resolve(ClassificationGate::DecisionGate, 'decision:9', true, 'done', [ClassificationVerdict::Passed]);
+
+    expect($open->refresh()->outcome_source)->toBe(ClassificationOutcomeSource::Event)
+        ->and($byLlm->refresh())->outcome_positive->toBeFalse()->outcome_source->toBe(ClassificationOutcomeSource::Llm);
 });
 
 test('resolve with a predicted filter leaves a row with a different prediction open', function (): void {

@@ -62,8 +62,8 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
             "@php artisan migrate --force",
-            "npm install",
-            "npm run build"
+            "pnpm install",
+            "pnpm run build"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
@@ -87,9 +87,8 @@
             "@lint:check",
             "@refactor:check",
             "@analyse",
-            "npm run lint:check",
-            "npm run format:check",
-            "npm run types:check",
+            "pnpm run check",
+            "pnpm run types:check",
             "@php artisan test --compact --parallel --cache-directory=storage/framework/cache/phpunit --exclude-testsuite=Browser"
         ],
         "test:browser": [

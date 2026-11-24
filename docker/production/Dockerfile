@@ -15,7 +15,7 @@ RUN apk add --no-cache \
         git \
         unzip \
         libzip \
-        nodejs \
+        nodejs-current \
         npm
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -31,9 +31,11 @@ RUN composer install \
         --prefer-dist \
         --no-progress
 
-# Cache npm layer
-COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund --prefer-offline
+# Cache the pnpm layer, installing the pnpm version that package.json's
+# packageManager field pins.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install -g "$(node -p "require('./package.json').packageManager")" \
+    && pnpm install --frozen-lockfile
 
 # Copy app source — caller must have run `php artisan wayfinder:generate --with-form`
 # and `php artisan typefinder:generate` so the generated .d.ts files are in the context.
@@ -41,7 +43,7 @@ COPY . .
 
 ENV SKIP_TYPE_GENERATION=1
 RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
-    && npm run build \
+    && pnpm run build \
     && rm -rf node_modules
 
 # ---------- runtime ----------
@@ -71,7 +73,7 @@ RUN apk add --no-cache --upgrade \
         libjpeg-turbo \
         freetype \
         postgresql-libs \
-        nodejs \
+        nodejs-current \
     && install-php-extensions \
         bcmath \
         gd \

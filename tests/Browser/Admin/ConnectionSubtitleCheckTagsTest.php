@@ -93,7 +93,7 @@ test('an admin can untick every tag and have the cleared selection persist', fun
  * `artisan inertia:start-ssr`.
  *
  * Its oracle is the BUILT SSR bundle, not this repository's source, and a running
- * SSR process holds that bundle in memory — `npm run build` does not reach it. So
+ * SSR process holds that bundle in memory — `pnpm run build` does not reach it. So
  * after any frontend change this test is only meaningful once SSR has been
  * RESTARTED, not merely rebuilt. That is not a footnote: a stale bundle produced a
  * false green on this very test during development, which is why the

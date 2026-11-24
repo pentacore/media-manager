@@ -15,6 +15,8 @@ test('the statistics time window is one sideways strip on a phone and its last w
     $webpage->script(appHydratedScript());
     $webpage->assertScript('(() => { const strip = document.querySelector("[data-filter-strip]"); const rect = strip.getBoundingClientRect(); return strip.scrollWidth > strip.clientWidth && rect.right <= window.innerWidth && new Set([...strip.querySelectorAll("button")].map((button) => Math.round(button.getBoundingClientRect().top))).size === 1; })()', true)
         ->assertScript('getComputedStyle(document.querySelector("[data-filter-strip]")).scrollbarWidth', 'none')
+        ->assertAttribute('[data-filter-strip]', 'role', 'group')
+        ->assertAttribute('[data-filter-strip]', 'aria-label', 'Time window')
         ->click('[data-filter-strip] button:last-child')
         ->assertAttribute('[data-filter-strip] button:last-child', 'aria-pressed', 'true')
         ->assertScript(phoneOverflowScript('main'), '');

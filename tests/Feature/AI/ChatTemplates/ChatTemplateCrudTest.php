@@ -46,19 +46,48 @@ test("the index lists only the current user's templates, pinned first", function
             ->where('templates.1.name', 'Alpha'));
 });
 
-test('the create page pre-fills the body from the query, capped at 4000 characters', function (): void {
+test('the create page starts empty and ignores a body in the query', function (): void {
     $this->actingAs(User::factory()->admin()->create())
-        ->get(route('ai.templates.create', ['body' => str_repeat('a', 4100)]))
+        ->get(route('ai.templates.create', ['body' => 'Not a prefill']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('AI/Templates/Edit')
             ->where('template', null)
-            ->where('prefillBody', str_repeat('a', 4000))
+            ->where('prefillBody', '')
             ->has('variableTypes', 5)
             ->where('previewModes', [
                 ['value' => 'example', 'label' => 'Example values'],
                 ['value' => 'names', 'label' => 'Placeholder names'],
             ]));
 });
+
+test('saving a message as a template posts its body and pre-fills the editor', function (): void {
+    // Far past what a query string survives behind a small proxy buffer.
+    $body = rtrim(str_repeat('Check the anime queue for stuck downloads. ', 93));
+
+    expect(mb_strlen($body))->toBeLessThanOrEqual(4000)->toBeGreaterThan(3900);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.templates.draft'), ['body' => $body])
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('AI/Templates/Edit')
+            ->where('template', null)
+            ->where('prefillBody', $body)
+            ->has('variableTypes', 5));
+});
+
+test('the draft route shares the create URL so a reload is a plain GET', function (): void {
+    expect(route('ai.templates.draft'))->toBe(route('ai.templates.create'));
+});
+
+test('a draft body must be present and at most 4000 characters', function (mixed $body): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.templates.draft'), ['body' => $body])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('body');
+})->with([
+    'missing' => [null],
+    'too long' => [str_repeat('a', 4001)],
+]);
 
 test('storing a template normalises its variables and redirects with a toast', function (): void {
     $admin = User::factory()->admin()->create();

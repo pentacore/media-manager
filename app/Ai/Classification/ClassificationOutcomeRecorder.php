@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Classification;
 
 use App\Enums\ClassificationGate;
+use App\Enums\ClassificationOutcomeSource;
 use App\Enums\ClassificationVerdict;
 use App\Models\ClassificationOutcome;
 use App\Settings\AiSettings;
@@ -53,6 +54,7 @@ final readonly class ClassificationOutcomeRecorder
         $this->create($classificationGate, $subjectKey, $question, $probability, $classificationVerdict, $threshold, $predicted, [
             'outcome_positive' => $positive,
             'outcome_detail' => Str::limit($detail, 255, ''),
+            'outcome_source' => ClassificationOutcomeSource::Event,
             'outcome_at' => now(),
         ]);
     }
@@ -77,9 +79,11 @@ final readonly class ClassificationOutcomeRecorder
 
     /**
      * Fill the outcome of the subject's open rows that carry one of the given
-     * verdicts (and the given question and/or prediction, when passed).
+     * verdicts (and the given question and/or prediction, when passed), and
+     * replace the outcome of its rows already settled by one of $overriding.
      *
      * @param  list<ClassificationVerdict>  $verdicts
+     * @param  list<ClassificationOutcomeSource>  $overriding
      */
     public function resolve(
         ClassificationGate $classificationGate,
@@ -89,14 +93,21 @@ final readonly class ClassificationOutcomeRecorder
         array $verdicts,
         ?string $question = null,
         ?string $predicted = null,
+        ClassificationOutcomeSource $classificationOutcomeSource = ClassificationOutcomeSource::Event,
+        array $overriding = [],
     ): void {
         try {
-            $this->openRows($classificationGate, $subjectKey, $verdicts, $question, $predicted)->update([
-                'outcome_positive' => $positive,
-                'outcome_detail' => Str::limit($detail, 255, ''),
-                'outcome_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $this->subjectRows($classificationGate, $subjectKey, $verdicts, $question, $predicted)
+                ->where(fn (Builder $builder): Builder => $builder
+                    ->whereNull('outcome_at')
+                    ->when($overriding !== [], fn (Builder $builder): Builder => $builder->orWhereIn('outcome_source', $overriding)))
+                ->update([
+                    'outcome_positive' => $positive,
+                    'outcome_detail' => Str::limit($detail, 255, ''),
+                    'outcome_source' => $classificationOutcomeSource,
+                    'outcome_at' => now(),
+                    'updated_at' => now(),
+                ]);
         } catch (Throwable $throwable) {
             $this->logFailure('resolve', $classificationGate, $subjectKey, $throwable);
         }
@@ -117,11 +128,11 @@ final readonly class ClassificationOutcomeRecorder
 
             $this->openRows($classificationGate, $subjectKey, $verdicts, null, $predicted)
                 ->where('predicted', $actual)
-                ->update(['outcome_positive' => true, 'outcome_detail' => $detail, 'outcome_at' => now(), 'updated_at' => now()]);
+                ->update(['outcome_positive' => true, 'outcome_detail' => $detail, 'outcome_source' => ClassificationOutcomeSource::Event, 'outcome_at' => now(), 'updated_at' => now()]);
 
             $this->openRows($classificationGate, $subjectKey, $verdicts, null, $predicted)
                 ->where(fn (Builder $builder): Builder => $builder->whereNull('predicted')->orWhere('predicted', '!=', $actual))
-                ->update(['outcome_positive' => false, 'outcome_detail' => $detail, 'outcome_at' => now(), 'updated_at' => now()]);
+                ->update(['outcome_positive' => false, 'outcome_detail' => $detail, 'outcome_source' => ClassificationOutcomeSource::Event, 'outcome_at' => now(), 'updated_at' => now()]);
         } catch (Throwable $throwable) {
             $this->logFailure('resolveAgainst', $classificationGate, $subjectKey, $throwable);
         }
@@ -172,11 +183,19 @@ final readonly class ClassificationOutcomeRecorder
      */
     private function openRows(ClassificationGate $classificationGate, string $subjectKey, array $verdicts, ?string $question, ?string $predicted = null): Builder
     {
+        return $this->subjectRows($classificationGate, $subjectKey, $verdicts, $question, $predicted)->whereNull('outcome_at');
+    }
+
+    /**
+     * @param  list<ClassificationVerdict>  $verdicts
+     * @return Builder<ClassificationOutcome>
+     */
+    private function subjectRows(ClassificationGate $classificationGate, string $subjectKey, array $verdicts, ?string $question, ?string $predicted): Builder
+    {
         return ClassificationOutcome::query()
             ->where('gate', $classificationGate)
             ->where('subject_key', $subjectKey)
             ->whereIn('verdict', $verdicts)
-            ->whereNull('outcome_at')
             ->when($question !== null, fn (Builder $builder): Builder => $builder->where('question', $question))
             ->when($predicted !== null, fn (Builder $builder): Builder => $builder->where('predicted', $predicted));
     }

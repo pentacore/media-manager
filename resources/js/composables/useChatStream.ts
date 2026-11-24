@@ -147,8 +147,12 @@ function toolResultFailed(event: AgUiEvent): boolean {
         return true;
     }
 
+    if (typeof event.content !== 'string') {
+        return false;
+    }
+
     try {
-        const parsed = JSON.parse(String(event.content ?? '')) as Record<
+        const parsed = JSON.parse(event.content) as Record<
             string,
             unknown
         > | null;
@@ -307,7 +311,8 @@ export function useChatStream(): UseChatStreamReturn {
                     // the sub-agent's whole output so far — show its tail.
                     const call = calls.get(String(event.messageId));
                     const content = event.content as
-                        { output?: unknown } | undefined;
+                        | { output?: unknown }
+                        | undefined;
                     const output =
                         typeof content?.output === 'string'
                             ? content.output.trim()

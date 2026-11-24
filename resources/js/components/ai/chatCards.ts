@@ -16,6 +16,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
+/** A scalar as text, like PHP's `(string)` cast; anything else is ''. */
+function text(value: unknown): string {
+    return typeof value === 'string' || typeof value === 'number'
+        ? String(value)
+        : '';
+}
+
 function choicesCard(
     id: string,
     choices: Record<string, unknown>,
@@ -25,10 +32,10 @@ function choicesCard(
     return {
         type: 'choices',
         id,
-        question: String(choices.question ?? ''),
+        question: text(choices.question),
         multiple: Boolean(choices.multiple ?? false),
         options: options.filter(isRecord).map((option): ChoiceOption => ({
-            label: String(option.label ?? ''),
+            label: text(option.label),
             description:
                 typeof option.description === 'string'
                     ? option.description
@@ -60,7 +67,7 @@ function toolRequestCard(
         type: 'tool_request',
         id,
         groups,
-        reason: String(request.reason ?? ''),
+        reason: text(request.reason),
     };
 }
 
@@ -120,7 +127,7 @@ export function cardFromToolResult(
             type: 'action_request',
             id: result.action_request_id as number,
             title: typeof result.title === 'string' ? result.title : null,
-            status: String(result.status ?? ''),
+            status: text(result.status),
             requires_approval: Boolean(result.requires_approval ?? false),
         };
     }

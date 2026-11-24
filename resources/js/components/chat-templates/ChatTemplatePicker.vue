@@ -63,19 +63,32 @@ function pick(template: ChatTemplate): void {
                 size="sm"
                 class="size-7 p-0 text-muted-foreground"
                 title="Templates"
+                aria-label="Templates"
                 data-template-picker
             >
                 <BookText class="size-3.5" />
             </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" side="top" class="w-80 p-2">
+        <PopoverContent
+            align="start"
+            side="top"
+            class="w-80 p-2"
+            aria-label="Templates"
+            data-template-picker-panel
+        >
             <Input
                 v-model="filter"
                 class="mb-2 h-8 text-sm"
                 placeholder="Filter templates…"
+                aria-label="Filter templates"
                 data-template-filter
             />
-            <div class="max-h-64 overflow-y-auto">
+            <div
+                class="max-h-64 overflow-y-auto"
+                role="group"
+                aria-label="Saved templates"
+                data-template-options
+            >
                 <p
                     v-if="!loaded"
                     class="px-2 py-1.5 text-[12.5px] text-fg-subtle"
@@ -85,6 +98,7 @@ function pick(template: ChatTemplate): void {
                 <p
                     v-else-if="loadFailed"
                     class="px-2 py-1.5 text-[12.5px] text-destructive"
+                    data-template-load-failed
                 >
                     Templates could not be loaded.
                 </p>

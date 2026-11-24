@@ -57,8 +57,16 @@ const { render: renderMarkdown } = useMarkdown();
 
 const { closeChat } = useAiChat();
 
-/** Server cap for a template body. */
+/** Server cap for a template body, in characters. */
 const MAX_TEMPLATE_BODY = 4000;
+
+/**
+ * A message cut to the template body cap. Sliced by code point, so an emoji
+ * at the cut is never split into a lone surrogate the server would reject.
+ */
+function templateBody(text: string): string {
+    return Array.from(text).slice(0, MAX_TEMPLATE_BODY).join('');
+}
 
 /** The capture source the case form reads: the invocation when known, else the stored message. */
 function benchmarkCaseQuery(
@@ -187,15 +195,14 @@ const caseQuery = computed(() =>
                 class="mm-markdown text-[14px] leading-relaxed"
                 v-html="renderMarkdown(message.text)"
             />
+            <!-- POST, not a ?body= query: a long message would overflow a proxy's URI limit (414). -->
             <Link
                 v-if="message.role === 'user' && message.text"
-                :href="
-                    ChatTemplateController.create.url({
-                        query: {
-                            body: message.text.slice(0, MAX_TEMPLATE_BODY),
-                        },
-                    })
-                "
+                :href="ChatTemplateController.draft.url()"
+                method="post"
+                as="button"
+                type="button"
+                :data="{ body: templateBody(message.text) }"
                 class="mt-1 inline-block text-[11.5px] text-muted-foreground hover:text-foreground"
                 data-save-as-template
                 @click="closeChat()"

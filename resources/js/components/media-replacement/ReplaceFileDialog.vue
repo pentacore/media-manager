@@ -26,7 +26,12 @@ import type {
 
 // State machine: idle -> inspecting -> inspected -> searching -> picked -> submitting
 type Phase =
-    'idle' | 'inspecting' | 'inspected' | 'searching' | 'picked' | 'submitting';
+    | 'idle'
+    | 'inspecting'
+    | 'inspected'
+    | 'searching'
+    | 'picked'
+    | 'submitting';
 
 interface ReplacementSnapshot {
     service: 'sonarr' | 'radarr';
