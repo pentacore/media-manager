@@ -280,7 +280,7 @@ function submitAdd() {
                                     :disabled="rootFolders === undefined"
                                 >
                                     <SelectTrigger
-                                        class="max-sm:w-full"
+                                        class="max-w-full max-sm:w-full"
                                         data-add-root-folder
                                     >
                                         <SelectValue
