@@ -9,29 +9,7 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Decisions
 
-- **Browser shard target** (decision): the `BROWSER_SHARD_TARGET_SECONDS` repo
-  variable. 180 s today gives 8 shards; 240 s would give about 6 shards of about
-  6.5 minutes each.
-- **Jev cascade ruling** (decision): confirm that a human review does not
-  overwrite a cascade Jev row that the model already resolved.
-- **Chat template follow-ups** (decision, add or drop):
-    - `?body=` length (414).
-    - Per-route auth dataset.
-    - Duplicated `resolveActive`.
-    - Picker refresh races.
-    - Double insert on double-click.
-    - Raw "Failed to fetch" toast.
-    - Missing accessible labels: the template picker, and the `TimeWindowFilter`
-      group.
-
-- **Type-aware lint** (decision): `lint.options.typeAware` is off, because Oxlint
-  gets type information from tsrs, the Rust port of TypeScript 7 that Vite+
-  bundles. Turned on, it finds 13 warnings in `.ts` files
-  (`no-floating-promises` in `app.ts`, `ssr.ts` and `useInvocationDetail.ts`,
-  `no-base-to-string` in `chatCards.ts`, `priceTable.ts` and `useChatStream.ts`,
-  `restrict-template-expressions` in `useNotifications.ts`). It does not cover
-  `.vue` files. `typeCheck` stays off until the TypeScript 7 hold lifts: it
-  reports false TS2614 errors on type exports from `.vue` files.
+None open.
 
 ## Brainstorms
 
@@ -81,6 +59,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
+- **Unnamed segmented-control groups**: `NeutralJudgePanel`, `CompareTaskTable`,
+  `CaseInputFields` and `MetricsPanel` render a `SegmentedControl` whose
+  `role="group"` has no accessible name. Name each one as `TimeWindowFilter`
+  does.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
         - A deadline for the whole decision run.
