@@ -202,7 +202,8 @@ test('the only-benchmarks filter shows the tool replays and leaves out the gate 
         ->assertDontSeeIn('[data-tool-stats]', 'SearchMediaTool')
         ->assertVisible('[data-benchmark-only-panels-note]')
         ->assertMissing('[data-classification-gates]')
-        ->assertMissing('[data-second-opinion-agreement]');
+        ->assertMissing('[data-second-opinion-agreement]')
+        ->assertMissing('[data-usage-tier-filter-note]');
 });
 
 test('benchmark rows of a deleted run show a plain pill', function (): void {
