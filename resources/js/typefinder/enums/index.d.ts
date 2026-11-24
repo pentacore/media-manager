@@ -29,6 +29,7 @@ export type { BenchmarkScoringType } from './BenchmarkScoringType';
 export type { ChatTemplatePreviewMode } from './ChatTemplatePreviewMode';
 export type { ChatTemplateVariableType } from './ChatTemplateVariableType';
 export type { ClassificationGate } from './ClassificationGate';
+export type { ClassificationOutcomeSource } from './ClassificationOutcomeSource';
 export type { ClassificationVerdict } from './ClassificationVerdict';
 export type { DbPingEngine } from './DbPingEngine';
 export type { FreePoolOverflowBehavior } from './FreePoolOverflowBehavior';
