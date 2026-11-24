@@ -59,7 +59,7 @@ function removeEntry(index: number): void {
                 :href="entry.url"
                 target="_blank"
                 rel="noopener"
-                class="min-w-0 flex-1 truncate underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none"
+                class="min-w-0 flex-1 truncate underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"
                 :title="`Open ${entry.name}`"
                 data-benchmark-attachment-open
                 >{{ entry.name }}</a
