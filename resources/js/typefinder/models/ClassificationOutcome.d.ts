@@ -5,6 +5,7 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { ClassificationGate } from '../enums';
+import type { ClassificationOutcomeSource } from '../enums';
 import type { ClassificationVerdict } from '../enums';
 
 export type ClassificationOutcome = {
@@ -21,6 +22,7 @@ export type ClassificationOutcome = {
   outcome_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  outcome_source: ClassificationOutcomeSource | null;
 };
 
 export type ClassificationOutcomeCreate = {
@@ -34,6 +36,7 @@ export type ClassificationOutcomeCreate = {
   outcome_positive?: boolean | null;
   outcome_detail?: string | null;
   outcome_at?: string | null;
+  outcome_source?: ClassificationOutcomeSource | null;
 };
 
 export type ClassificationOutcomeUpdate = {
@@ -47,4 +50,5 @@ export type ClassificationOutcomeUpdate = {
   outcome_positive?: boolean | null;
   outcome_detail?: string | null;
   outcome_at?: string | null;
+  outcome_source?: ClassificationOutcomeSource | null;
 };
