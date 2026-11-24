@@ -8,6 +8,7 @@ use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkNeutralRejudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\QueueLane;
+use App\Jobs\Middleware\LimitNeutralJudgementConcurrency;
 use App\Jobs\RunNeutralJudgement;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
@@ -340,4 +341,116 @@ test('verdict-scored results are never in a neutral re-judge scope', function ()
     }
 
     expect(neutralLauncher()->scope($runs, BenchmarkNeutralJudgement::keyFor(neutralJudge())))->toBeEmpty();
+});
+
+test('a judge answer without a score fails the judgement but still bills its cost', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 5.0, 0.0058, User::factory()->admin()->create());
+    $judgementId = $rejudge->judgements()->orderBy('id')->value('id');
+    BenchmarkJudgeAgent::fake(fn (): StructuredTextResponse => new StructuredTextResponse(
+        ['rationale' => 'Cannot say'],
+        '{"rationale":"Cannot say"}',
+        new TextUsage(200_000, 50_000),
+        new Meta('openai', 'gpt-neutral'),
+    ));
+
+    runNeutralJudgement($judgementId);
+
+    $judgement = BenchmarkNeutralJudgement::query()->find($judgementId);
+
+    expect($judgement->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($judgement->score)->toBeNull()
+        ->and($judgement->detail)->toHaveKey('error')
+        ->and((float) $judgement->cost_usd)->toBe(0.4)
+        ->and((float) $rejudge->fresh()->cost_usd)->toBe(0.4)
+        ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Running);
+});
+
+test('a judge call that reaches the cap stops the re-judge before the next one', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 0.3, 0.0058, User::factory()->admin()->create());
+    [$first, $second] = $rejudge->judgements()->orderBy('id')->pluck('id')->all();
+    fakeNeutralJudge();
+
+    runNeutralJudgement($first);
+
+    expect(BenchmarkNeutralJudgement::query()->find($first)->status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and((float) $rejudge->fresh()->cost_usd)->toBe(0.4)
+        ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Running);
+
+    runNeutralJudgement($second);
+
+    expect($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::StoppedCostCap)
+        ->and(BenchmarkNeutralJudgement::query()->find($second)->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and(BenchmarkNeutralJudgement::query()->find($second)->detail)->toBe(['error' => BenchmarkNeutralRejudgeLauncher::COST_CAP_REACHED]);
+    BenchmarkJudgeAgent::assertPrompted(fn (): bool => true);
+    expect(AiUsageRecord::query()->where('is_benchmark', true)->count())->toBe(1);
+});
+
+test('a failed job fails its open judgement and settles the re-judge', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
+    [$pending, $queued] = $rejudge->judgements()->orderBy('id')->get()->all();
+    $pending->update(['status' => BenchmarkJudgeStatus::Pending]);
+
+    new RunNeutralJudgement($pending->id)->failed(new RuntimeException('Timed out'));
+
+    expect($pending->fresh()->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($pending->fresh()->detail)->toBe(['error' => BenchmarkNeutralRejudgeLauncher::JOB_FAILED])
+        ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Running);
+
+    new RunNeutralJudgement($queued->id)->failed(null);
+
+    expect($queued->fresh()->status)->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Completed);
+});
+
+test('a failed job leaves a finished judgement alone', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $judgement = BenchmarkNeutralJudgement::factory()->forResult($fixture['judged'][0], neutralJudge())->scored(0.7, true)->create();
+
+    new RunNeutralJudgement($judgement->id)->failed(new RuntimeException('Late'));
+
+    expect($judgement->fresh()->status)->toBe(BenchmarkJudgeStatus::Ok)
+        ->and($judgement->fresh()->score)->toBe(0.7);
+});
+
+test('a judgement waiting for a slot is released and kept fresh', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
+    $judgement = $rejudge->judgements()->orderBy('id')->first();
+    $judgement->forceFill(['updated_at' => now()->subHour()])->saveQuietly();
+    Cache::lock(sprintf('benchmark:neutral:%d:slot:0', $rejudge->id), 300)->get();
+    Cache::lock(sprintf('benchmark:neutral:%d:slot:1', $rejudge->id), 300)->get();
+    $runNeutralJudgement = new RunNeutralJudgement($judgement->id)->withFakeQueueInteractions();
+    $ran = false;
+
+    new LimitNeutralJudgementConcurrency($judgement->id)->handle($runNeutralJudgement, function () use (&$ran): void {
+        $ran = true;
+    });
+
+    expect($ran)->toBeFalse()
+        ->and($judgement->fresh()->status)->toBe(BenchmarkJudgeStatus::Queued)
+        ->and($judgement->fresh()->updated_at->greaterThan(now()->subMinute()))->toBeTrue();
+    $runNeutralJudgement->assertReleased(15);
+});
+
+test('a judgement runs on a free slot and frees it afterwards', function (): void {
+    Queue::fake();
+    $fixture = neutralFixture();
+    $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
+    $judgementId = $rejudge->judgements()->orderBy('id')->value('id');
+    Cache::lock(sprintf('benchmark:neutral:%d:slot:0', $rejudge->id), 300)->get();
+    $runNeutralJudgement = new RunNeutralJudgement($judgementId)->withFakeQueueInteractions();
+
+    $result = new LimitNeutralJudgementConcurrency($judgementId)->handle($runNeutralJudgement, fn (): string => 'ran');
+
+    expect($result)->toBe('ran')
+        ->and(Cache::lock(sprintf('benchmark:neutral:%d:slot:1', $rejudge->id), 300)->get())->toBeTrue();
+    $runNeutralJudgement->assertNotReleased();
 });

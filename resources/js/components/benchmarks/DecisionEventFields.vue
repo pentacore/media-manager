@@ -104,7 +104,7 @@ const textareaClass =
 <template>
     <div class="grid gap-3" data-benchmark-decision-event>
         <div class="grid gap-3 sm:grid-cols-2">
-            <label class="grid gap-1.5 text-[12.5px] font-medium">
+            <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
                 Service
                 <select
                     v-model="event.service"
@@ -121,7 +121,7 @@ const textareaClass =
                 </select>
                 <InputError :message="errors['input.event.service']" />
             </label>
-            <label class="grid gap-1.5 text-[12.5px] font-medium">
+            <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
                 Event type
                 <input
                     v-model="event.event_type"
@@ -137,7 +137,9 @@ const textareaClass =
                         :value="type"
                     />
                 </datalist>
-                <InputError :message="errors['input.event.event_type']" />
+                <span data-benchmark-event-type-error>
+                    <InputError :message="errors['input.event.event_type']" />
+                </span>
             </label>
         </div>
 
@@ -174,19 +176,26 @@ const textareaClass =
         </label>
 
         <div class="grid gap-1.5">
-            <span class="text-[12.5px] font-medium"
+            <span
+                id="benchmark-prompt-preview-label"
+                class="text-[12.5px] font-medium"
                 >Prompt the agent will see</span
             >
             <pre
+                aria-live="polite"
+                aria-labelledby="benchmark-prompt-preview-label"
                 class="max-h-80 min-h-16 overflow-auto rounded-md border border-border bg-card p-3 font-mono text-[12px] whitespace-pre-wrap text-foreground"
                 data-benchmark-prompt-preview
                 >{{ preview }}</pre>
+            <!-- The alert region stays mounted so a screen reader announces the error when it appears. -->
             <p
-                v-if="previewError"
+                role="alert"
                 class="text-xs text-destructive"
-                data-benchmark-prompt-preview-error
+                data-benchmark-prompt-preview-status
             >
-                {{ previewError }}
+                <span v-if="previewError" data-benchmark-prompt-preview-error>
+                    {{ previewError }}
+                </span>
             </p>
         </div>
     </div>

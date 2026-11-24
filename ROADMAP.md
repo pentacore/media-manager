@@ -67,22 +67,12 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   Neutralise it as `SecondOpinionCase` does, and keep `DecisionPrompt::parse()`
   (benchmark capture) reading the payload back.
 - **AI routing minors**, from the review of each AI routing pull request.
-    - Cross-run comparison:
-        - The drawer shows the original score in neutral mode.
-        - Duplicated task order, comparability rule, concurrency middleware and
-          candidate lookup.
-        - Test gaps.
     - Chat cases:
         - The 3-per-turn cap.
         - Draft id scoping.
         - Attachment storage, orphan files and preview.
         - Duplicated attachment mapping.
         - Re-judging a vanished image.
-    - Decision reproduction:
-        - Record the "payloads stored as JSON text" rule.
-        - Compact parsed-prompt payloads.
-        - Preview `aria-live`.
-        - Empty event type allowed on the client.
     - Verifier:
         - `judges_differ` for unjudged scopes.
         - Unindexed `invocation_id` lookup.

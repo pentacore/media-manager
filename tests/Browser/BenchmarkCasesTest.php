@@ -392,6 +392,36 @@ test('a payload that is not a JSON object shows an inline error and blocks the s
     expect(BenchmarkCase::query()->count())->toBe(0);
 });
 
+test('an empty event type shows an inline error and blocks the save', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->fill('[data-benchmark-event-type]', '   ')
+        ->fill('[data-benchmark-name]', 'No event type')
+        ->click('[data-benchmark-save]')
+        ->assertSeeIn('[data-benchmark-event-type-error]', 'The event type is required.')
+        ->assertVisible('[data-benchmark-blocked]')
+        ->fill('[data-benchmark-event-type]', 'Grab')
+        ->assertDontSeeIn('[data-benchmark-event-type-error]', 'The event type is required.')
+        ->assertMissing('[data-benchmark-blocked]');
+
+    expect(BenchmarkCase::query()->count())->toBe(0);
+});
+
+test('the prompt preview is announced and its error is an alert', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision')
+        ->assertAttribute('[data-benchmark-prompt-preview]', 'aria-live', 'polite')
+        ->assertAttribute('[data-benchmark-prompt-preview]', 'aria-labelledby', 'benchmark-prompt-preview-label')
+        ->assertSeeIn('#benchmark-prompt-preview-label', 'Prompt the agent will see')
+        ->assertAttribute('[data-benchmark-prompt-preview-status]', 'role', 'alert');
+});
+
 test('a fresh decision case shows no preview error until an event type is typed', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 

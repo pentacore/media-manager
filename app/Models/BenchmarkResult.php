@@ -54,6 +54,7 @@ use Override;
  * @method static Builder<static>|BenchmarkResult newQuery()
  * @method static Builder<static>|BenchmarkResult query()
  * @method static Builder<static>|BenchmarkResult claimable()
+ * @method static Builder<static>|BenchmarkResult finished()
  * @method static Builder<static>|BenchmarkResult inFlight()
  * @method static Builder<static>|BenchmarkResult runStale()
  * @method static Builder<static>|BenchmarkResult sweepable()
@@ -170,6 +171,17 @@ class BenchmarkResult extends Model
         return $query->where(fn (Builder $builder): Builder => $builder
             ->where('status', BenchmarkResultStatus::Pending)
             ->orWhere(fn (Builder $stale): Builder => $stale->runStale()));
+    }
+
+    /**
+     * Results the candidate finished: answered or failed, not skipped.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeFinished(Builder $query): Builder
+    {
+        return $query->whereIn('status', BenchmarkResultStatus::finished());
     }
 
     /**

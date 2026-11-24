@@ -310,3 +310,109 @@ test('the comparison fits a phone screen', function (): void {
         ->assertNoSmoke()
         ->assertScript(phoneOverflowScript('[data-compare-page]'), '');
 });
+
+test('in a neutral score mode the drawer shows the neutral judge scores', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+    $judge = ['provider' => 'openai', 'model' => 'gpt-neutral', 'reasoning' => null];
+    $afterResult = BenchmarkResult::query()->where('benchmark_run_id', $after->id)->where('output', 'Some movies')->sole();
+
+    foreach (BenchmarkResult::query()->get() as $benchmarkResult) {
+        BenchmarkNeutralJudgement::factory()->forResult($benchmarkResult, $judge)->scored(0.6, true)->create(['detail' => ['score_10' => 6, 'rationale' => 'Neutral take']]);
+    }
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-compare-cell="%d"]', $afterResult->id))
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-score]', '3.0 / 10')
+        ->assertMissing('[data-benchmark-drawer-neutral]')
+        ->keys('[data-benchmark-drawer]', 'Escape')
+        ->click('[data-compare-score-source="openai|gpt-neutral|provider_default"]')
+        ->click('[data-compare-case-grid="title"] [data-compare-show-all]')
+        ->click(sprintf('[data-compare-cell="%d"]', $afterResult->id))
+        ->assertSeeIn('[data-benchmark-drawer-neutral]', 'openai · gpt-neutral')
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-score]', '6.0 / 10')
+        ->assertSeeIn('[data-benchmark-drawer-candidate="0"] [data-benchmark-drawer-rationale]', 'Neutral take');
+});
+
+test('a neutral re-judge the server refuses shows its error in the dialog', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    [$before, $after] = compareBrowserRuns();
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->click('[data-compare-neutral-open]')
+        ->click('[data-compare-neutral-dialog] [data-benchmark-model-select] button')
+        ->click('[role="option"][aria-label="gpt-neutral"]')
+        ->click('[data-compare-neutral-estimate]')
+        ->assertSeeIn('[data-compare-neutral-estimate-total]', '8 results')
+        ->fill('[data-compare-neutral-cap]', '0.000001')
+        ->click('[data-compare-neutral-start]')
+        ->assertSeeIn('[data-compare-neutral-errors]', 'The cost cap is below the estimate.')
+        ->assertVisible('[data-compare-neutral-dialog]');
+
+    expect(BenchmarkNeutralRejudge::query()->count())->toBe(0);
+});
+
+test('cost, latency and error rate deltas are coloured with lower as better', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $alpha = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Alpha']);
+    $beta = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Beta']);
+    $candidates = [['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null]];
+    $before = compareBrowserRun('Before', $candidates);
+    $after = compareBrowserRun('After', $candidates);
+
+    foreach ([$alpha, $beta] as $benchmarkCase) {
+        BenchmarkResult::factory()->forCase($before, $benchmarkCase, 0)->scored(0.8, true)->create(['latency_ms' => 1000, 'cost_usd' => '0.010000', 'judge_cost_usd' => '0']);
+    }
+
+    BenchmarkResult::factory()->forCase($after, $alpha, 0)->scored(0.8, true)->create(['latency_ms' => 400, 'cost_usd' => '0.040000', 'judge_cost_usd' => '0']);
+    BenchmarkResult::factory()->forCase($after, $beta, 0)->failed('Boom')->create(['latency_ms' => null, 'cost_usd' => '0', 'judge_cost_usd' => '0']);
+    $delta = sprintf('[data-compare-figure="%d.0:%d"] [data-compare-delta]', $before->id, $after->id);
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->click('[data-compare-metric="error_rate"]')
+        ->assertSeeIn($delta, '▲50')
+        ->assertAttributeContains($delta, 'class', 'text-destructive')
+        ->click('[data-compare-metric="cost_per_case"]')
+        ->assertSeeIn($delta, '▲')
+        ->assertAttributeContains($delta, 'class', 'text-destructive')
+        ->click('[data-compare-metric="latency_p50"]')
+        ->assertSeeIn($delta, '▼')
+        ->assertAttributeContains($delta, 'class', 'text-success');
+});
+
+test('the case grid says when no case changed', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Steady']);
+    $candidates = [['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null]];
+    $before = compareBrowserRun('Before', $candidates);
+    $after = compareBrowserRun('After', $candidates);
+    compareBrowserResult($before, $benchmarkCase, 0, 0.7, true, 'Same');
+    compareBrowserResult($after, $benchmarkCase, 0, 0.7, true, 'Same');
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-compare-case-grid="title"] [data-compare-no-changes]', 'No case changed against the baseline.')
+        ->click('[data-compare-case-grid="title"] [data-compare-show-all]')
+        ->assertMissing('[data-compare-case-grid="title"] [data-compare-no-changes]')
+        ->assertVisible(sprintf('[data-compare-case-row="%d:%d.0"]', $benchmarkCase->id, $before->id));
+});
+
+test('a model the baseline did not run shows a dash in the baseline column', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['name' => 'Newcomer']);
+    $before = compareBrowserRun('Before', [['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null]]);
+    $after = compareBrowserRun('After', [['provider' => 'openai', 'model' => 'gpt-a', 'reasoning' => null], ['provider' => 'openai', 'model' => 'gpt-b', 'reasoning' => null]]);
+    compareBrowserResult($before, $benchmarkCase, 0, 0.7, true, 'Same');
+    compareBrowserResult($after, $benchmarkCase, 0, 0.7, true, 'Same');
+    $newcomer = compareBrowserResult($after, $benchmarkCase, 1, 0.9, true, 'New');
+    $row = sprintf('[data-compare-case-row="%d:%d.1"]', $benchmarkCase->id, $after->id);
+
+    visit(compareBrowserUrl($before, $after))
+        ->assertNoSmoke()
+        ->assertSeeIn($row, '—')
+        ->assertSeeIn(sprintf('%s [data-compare-cell="%d"]', $row, $newcomer->id), '9.0')
+        ->assertMissing(sprintf('%s [data-compare-vs-baseline]', $row));
+});
