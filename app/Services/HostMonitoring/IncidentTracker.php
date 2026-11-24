@@ -144,7 +144,8 @@ final readonly class IncidentTracker
 
     /**
      * Sends the held "resolved" push of every incident that stayed resolved for the notify delay. Each one is
-     * re-read under the server and incident locks, so an incident that reopened meanwhile is skipped.
+     * re-read under the server and incident locks, so an incident that reopened meanwhile is skipped. An incident
+     * that throws is reported and left for the next run; it does not hold up the others.
      *
      * @return int pushes sent
      */
@@ -156,7 +157,11 @@ final readonly class IncidentTracker
             ->orderBy('id')
             ->pluck('server_id', 'id')
             ->each(function (int $serverId, int $incidentId) use (&$sent): void {
-                $sent += $this->notifyHeldResolution($serverId, $incidentId) ? 1 : 0;
+                try {
+                    $sent += $this->notifyHeldResolution($serverId, $incidentId) ? 1 : 0;
+                } catch (Throwable $throwable) {
+                    report($throwable);
+                }
             });
 
         return $sent;

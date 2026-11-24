@@ -217,6 +217,49 @@ test('a problem flapping within the notify delay pushes one opened and nothing e
     Notification::assertNotSentTo($this->admin, HostIncidentEscalated::class);
 });
 
+test('a problem that flaps and then stays resolved pushes one opened and one resolved', function (): void {
+    $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
+
+    foreach (range(1, 2) as $flap) {
+        $this->tracker->clear($this->server, 'disk:/', 1);
+        $this->travel(5)->minutes();
+        incidentTrackerSweep();
+        $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'Disk / is 86% full', null);
+    }
+
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->travel(10)->minutes();
+    incidentTrackerSweep();
+    $this->travel(10)->minutes();
+    incidentTrackerSweep();
+
+    expect(ServerIncident::query()->sole())
+        ->status->toBe(IncidentStatus::Resolved)
+        ->resolve_notified_at->not->toBeNull();
+    Notification::assertSentToTimes($this->admin, HostIncidentOpened::class, 1);
+    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+});
+
+test('one incident that fails in the sweep is reported and the others still get their resolved push', function (): void {
+    Exceptions::fake();
+    $other = Server::factory()->enrolled()->create();
+    $broken = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    $this->tracker->observe($other, 'disk:/', IncidentSeverity::Warning, 'y', null);
+    $this->tracker->clear($this->server, 'disk:/', 1);
+    $this->tracker->clear($other, 'disk:/', 1);
+    $this->travel(10)->minutes();
+
+    ServerIncident::saving(function (ServerIncident $serverIncident) use ($broken): void {
+        throw_if($serverIncident->id === $broken->id, RuntimeException::class, 'bad row');
+    });
+
+    expect($this->tracker->notifyHeldResolutions())->toBe(1);
+
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'bad row');
+    Notification::assertSentToTimes($this->admin, HostIncidentResolved::class, 1);
+    expect($broken->fresh()->resolve_notified_at)->toBeNull();
+});
+
 test('a recurrence after the resolved push went out opens a fresh incident and pushes opened', function (): void {
     $first = $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
     $this->tracker->clear($this->server, 'disk:/', 1);
@@ -280,24 +323,32 @@ test('the held resolved push is scheduled every minute after the silent sweep', 
 });
 
 test('the tracker locks the server row before it reads the incident', function (string $operation): void {
-    if ($operation === 'clear') {
+    if ($operation !== 'observe') {
         $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    }
+
+    if ($operation === 'notify') {
+        $this->tracker->clear($this->server, 'disk:/', 1);
+        $this->travel(10)->minutes();
     }
 
     DB::enableQueryLog();
 
-    $operation === 'clear'
-        ? $this->tracker->clear($this->server, 'disk:/')
-        : $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null);
+    match ($operation) {
+        'clear' => $this->tracker->clear($this->server, 'disk:/'),
+        'notify' => expect($this->tracker->notifyHeldResolutions())->toBe(1),
+        default => $this->tracker->observe($this->server, 'disk:/', IncidentSeverity::Warning, 'x', null),
+    };
 
     $queries = array_column(DB::getQueryLog(), 'query');
     $serverLock = array_find_key($queries, static fn (string $query): bool => str_contains($query, 'from "servers"') && str_contains($query, 'for update'));
-    $incidentRead = array_find_key($queries, static fn (string $query): bool => str_contains($query, 'from "server_incidents"'));
+    // The sweep's unlocked candidate scan may come first; the order that matters is among the locking reads.
+    $incidentRead = array_find_key($queries, static fn (string $query): bool => str_contains($query, 'from "server_incidents"') && ($operation !== 'notify' || str_contains($query, 'for update')));
 
     expect($serverLock)->toBeInt()
         ->and($incidentRead)->toBeInt()
         ->and($serverLock)->toBeLessThan($incidentRead);
-})->with(['observe', 'clear']);
+})->with(['observe', 'clear', 'notify']);
 
 test('a notifier that throws is reported and neither the broadcast nor later incidents are lost', function (): void {
     Exceptions::fake();
