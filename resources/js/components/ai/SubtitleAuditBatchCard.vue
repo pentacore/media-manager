@@ -46,11 +46,15 @@ const ACTION_STATUS_VARIANTS: Record<
     failed: 'danger',
 };
 
-/** What a row without a queued release or a failure says instead of a release title. */
+/**
+ * What a row says for its outcome. A queued row shows its release title and
+ * falls back to this when the release had none; a failed row says why.
+ */
 const OUTCOME_COPY: Record<
-    Exclude<SubtitleAuditEpisodeOutcome, 'queued' | 'failed'>,
+    Exclude<SubtitleAuditEpisodeOutcome, 'failed'>,
     string
 > = {
+    queued: 'Release queued',
     searching: 'Still searching',
     manual_pick: 'No confident match',
     nothing_found: 'No usable release',
@@ -73,7 +77,7 @@ function outcomeLabel(episode: SubtitleAuditBatchEpisode): string {
         return failureLabel(episode.failure_reason);
     }
 
-    return episode.outcome === 'queued' ? '' : OUTCOME_COPY[episode.outcome];
+    return OUTCOME_COPY[episode.outcome];
 }
 
 /** Episodes whose release search has not finished yet. */
@@ -148,9 +152,11 @@ async function declineAll(): Promise<void> {
                     <span
                         v-if="episode.outcome === 'queued'"
                         class="truncate text-[11.5px] text-muted-foreground"
-                        :title="episode.release_title ?? undefined"
+                        :title="episode.release_title || undefined"
                         data-subtitle-audit-release
-                        >{{ episode.release_title }}</span
+                        >{{
+                            episode.release_title || outcomeLabel(episode)
+                        }}</span
                     >
                     <span
                         v-else

@@ -1479,6 +1479,100 @@ test('a batch review that loses a race shows every replacement status from the s
         ->and($requests[1]->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
 
+/**
+ * Holds the page's second bulk review POST until window.__mmReleaseHeldBulk()
+ * runs, so a test can look at the card between two chunks of one review.
+ */
+function aiChatHoldSecondBulkReviewScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmBulkPosts = 0;
+            window.__mmHeldBulk = [];
+            window.__mmReleaseHeldBulk = () => window.__mmHeldBulk.splice(0).forEach((send) => send());
+            const fetch = window.fetch;
+            window.fetch = function (input, init) {
+                const url = String(input instanceof Request ? input.url : input);
+                const method = String(init?.method ?? 'GET').toUpperCase();
+                if (method === 'POST' && url.includes('/bulk') && ++window.__mmBulkPosts === 2) {
+                    return new Promise((resolve, reject) => {
+                        window.__mmHeldBulk.push(() => fetch.call(window, input, init).then(resolve, reject));
+                    });
+                }
+                return fetch.call(window, input, init);
+            };
+        })()
+    JS;
+}
+
+test('a multi-chunk batch review shows the true statuses of a partial chunk before the next chunk answers', function (): void {
+    browserQueueFake(ExecuteActionRequest::class);
+    $admin = User::factory()->admin()->create();
+    $batch = SubtitleAuditBatch::factory()->ready()->create(['series_id' => 42, 'series_title' => 'Severance']);
+    $requests = [];
+
+    // No webhook event: a batch request has none, and creating one per row
+    // would build a connection per row.
+    foreach (range(1, 101) as $episodeNumber) {
+        $requests[] = $actionRequest = ActionRequest::factory()->create(['webhook_event_id' => null, 'type' => 'replace_media_file', 'status' => ActionRequestStatus::Pending]);
+        SubtitleAuditEpisode::factory()->queued()->create([
+            'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => $episodeNumber,
+            'action_request_id' => $actionRequest->id,
+        ]);
+    }
+
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-approve]', 'Approve all (101)');
+
+    // Rejected from the Action Queue after the chat loaded: the first chunk is partial.
+    $requests[0]->update(['status' => ActionRequestStatus::Rejected]);
+
+    $webpage->script(aiChatHoldSecondBulkReviewScript());
+    $webpage->click('[data-subtitle-audit-approve]');
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmHeldBulk.length === 1'));
+
+    $webpage->assertSeeIn('[data-subtitle-audit-episode]:nth-child(1) [data-subtitle-audit-action-status]', 'rejected')
+        ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(2) [data-subtitle-audit-action-status]', 'approved')
+        ->assertDontSeeIn('[data-subtitle-audit-card]', 'Changed elsewhere')
+        ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(101) [data-subtitle-audit-action-status]', 'pending');
+
+    $webpage->script('window.__mmReleaseHeldBulk()');
+
+    $webpage->assertSeeIn('[data-subtitle-audit-episode]:nth-child(101) [data-subtitle-audit-action-status]', 'approved')
+        ->assertMissing('[data-subtitle-audit-approve]')
+        ->assertDontSeeIn('[data-subtitle-audit-card]', 'Changed elsewhere')
+        ->assertNoJavaScriptErrors();
+
+    expect(ActionRequest::query()->where('status', ActionRequestStatus::Approved)->count())->toBe(100);
+});
+
+test('a queued batch row without a release title says the release is queued', function (): void {
+    $admin = User::factory()->admin()->create();
+    ['batch' => $batch] = aiChatSubtitleAuditBatch();
+    SubtitleAuditEpisode::factory()->queued()->create([
+        'subtitle_audit_batch_id' => $batch->id, 'season_number' => 1, 'episode_number' => 5,
+        'release_title' => '',
+    ]);
+    $conversationId = aiChatInsertSubtitleAuditConversation($admin, $batch);
+
+    $this->actingAs($admin);
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(5) [data-subtitle-audit-release]', 'Release queued')
+        ->assertSeeIn('[data-subtitle-audit-episode][data-outcome="queued"]:nth-child(1) [data-subtitle-audit-release]', 'Severance.S01E01.1080p.WEB')
+        ->assertNoJavaScriptErrors();
+});
+
 test('a failed batch row says a replacement is already pending', function (): void {
     $admin = User::factory()->admin()->create();
     ['batch' => $batch] = aiChatSubtitleAuditBatch();

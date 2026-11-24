@@ -637,9 +637,11 @@ export function useChatTurns({
      * server's toast gives the counts. A refused chunk stops the run and
      * leaves its episodes and the ones after it pending, as they were.
      *
-     * A partial run's summary only counts, so the card is then re-read from
-     * the server, which replaces 'changed' with each row's true status. When
-     * that read fails the optimistic statuses stay, without another toast.
+     * A partial chunk's summary only counts, so the card is re-read from the
+     * server right after that chunk, before the next one is sent, which
+     * replaces 'changed' with each row's true status while the rest of a long
+     * run is still going. When that read fails the optimistic statuses stay,
+     * without another toast.
      */
     async function reviewBatch(
         card: SubtitleAuditBatchCard,
@@ -656,8 +658,6 @@ export function useChatTurns({
 
         reviewingActionIds.value = [...reviewingActionIds.value, ...ids];
 
-        let partial = false;
-
         try {
             for (
                 let offset = 0;
@@ -673,8 +673,6 @@ export function useChatTurns({
                 if (summary === null) {
                     return;
                 }
-
-                partial ||= isPartialBulkRun(summary, chunk.length);
 
                 const status =
                     summary.started === chunk.length
@@ -695,12 +693,12 @@ export function useChatTurns({
                     card.pending_action_request_ids.filter(
                         (id) => !chunk.includes(id),
                     );
+
+                if (isPartialBulkRun(summary, chunk.length)) {
+                    await refreshBatchCard(card);
+                }
             }
         } finally {
-            if (partial) {
-                await refreshBatchCard(card);
-            }
-
             reviewingActionIds.value = reviewingActionIds.value.filter(
                 (id) => !ids.includes(id),
             );
