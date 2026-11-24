@@ -27,6 +27,9 @@ Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, 
 ## JSON requests come from @/lib/http
 Ad-hoc JSON calls use `jsonRequest&lt;T&gt;()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.
 
+## Type-aware lint covers .ts files only
+Oxlint runs type-aware (`lint.options.typeAware` in `vite.config.ts`), with type information from tsrs, the TypeScript 7 Rust port Vite+ bundles. It checks `.ts` files only; `<script>` blocks in `.vue` files get no type-aware rules, so `no-floating-promises` and the like never fire there. Correctness rules, the type-aware ones included, are errors (`categories.correctness`), so `pnpm run check` fails on them. Fix a finding instead of disabling it: `void` a promise nothing should wait for and `await` one the next step needs, narrow an `unknown` before turning it into text instead of calling `String()` on it, and type event payloads instead of reading `Record<string, unknown>` into template literals. Disable a rule on one line, with the reason, only for a genuine false positive. `typeCheck` stays off: it reports false TS2614 errors on type exports from `.vue` files, and vue-tsc (`pnpm run types:check`) stays the type checker.
+
 ## Confirm with useConfirm(), never the browser dialog
 Ask before a destructive or costly action with `const { confirm } = useConfirm(); if (!(await confirm({ title, description?, confirmLabel, destructive }))) return;` — one `ConfirmDialog` is mounted in the app layout. Pass `destructive: true` for deletes, removals, unlinks, declines and blocklists. Oxlint (the `lint` block in `vite.config.ts`) bans the global `confirm`, `window.confirm`, `globalThis.confirm` and `self.confirm`. Browser tests click `[data-confirm-accept]` / `[data-confirm-cancel]` instead of stubbing `window.confirm`.
 

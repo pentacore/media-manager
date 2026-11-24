@@ -3,7 +3,8 @@ import { initializeTheme } from '@/composables/useAppearance';
 import { appName, resolveLayout } from '@/inertia';
 import { initializeFlashToast } from '@/lib/flashToast';
 
-createInertiaApp({
+// Mounts the app; nothing after it waits for that.
+void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     layout: resolveLayout,
     progress: {

@@ -96,8 +96,15 @@ export default defineConfig(({ command }) => ({
             'resources/js/typefinder/**',
             'resources/js/wayfinder/**',
         ],
+        // Oxlint reports correctness rules, the type-aware ones among them, as warnings by default.
+        categories: {
+            correctness: 'error',
+        },
         options: {
             denyWarnings: true,
+            // Type-aware rules get type info from tsrs and cover .ts files only, not .vue script
+            // blocks. vue-tsc stays the type checker, so typeCheck stays off.
+            typeAware: true,
         },
         rules: {
             'typescript/no-explicit-any': 'off',
