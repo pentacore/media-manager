@@ -1,3 +1,13 @@
+## [1.63.2](https://github.com/pentacore/media-manager/compare/v1.63.1...v1.63.2) (2026-11-24)
+
+### Bug Fixes
+
+* **a11y:** name the template picker, its search boxes and the time window strip ([84ee7bf](https://github.com/pentacore/media-manager/commit/84ee7bf0742afeb8f916f418b808ab6e7512a40c))
+* **ai:** group OpenAI tool search's deferred tools in a namespace ([cedf4b1](https://github.com/pentacore/media-manager/commit/cedf4b1166218cd3e82417f9c3cd9e5e4c9e40fc)), closes [laravel/ai#1259](https://github.com/laravel/ai/issues/1259) [laravel/ai#1255](https://github.com/laravel/ai/issues/1255)
+* **ai:** let a human review override the cascade LLM's second-opinion outcome ([508740f](https://github.com/pentacore/media-manager/commit/508740fe04ded06cbc48554e28bfd19eb046991b))
+* **chat-templates:** ignore stale list refreshes, double picks and raw network errors ([ae10188](https://github.com/pentacore/media-manager/commit/ae101885d9dd421ef65372c084a6d652939c4972))
+* **chat-templates:** post a saved message's body instead of a ?body= query ([77f9a64](https://github.com/pentacore/media-manager/commit/77f9a64b2f1cecf022e9e6d3be18d0b9daa01508))
+
 ## [1.63.1](https://github.com/pentacore/media-manager/compare/v1.63.0...v1.63.1) (2026-11-24)
 
 ### Bug Fixes
