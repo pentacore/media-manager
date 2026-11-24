@@ -9,25 +9,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Decisions
 
-- **Project conventions as repo rules** (decision): move the working conventions
-  into `.ai/rules/general.md` so every contributor and agent gets them. These are:
-    - Limits are admin settings.
-    - Follow-ups go to this file.
-    - UI pull requests get screenshots with fake data.
-    - Rebase and re-time the browser shards before a pull request.
-    - Parallel work gets its own worktree and test database.
-    - The Sail quirks.
-- **Dependency approval rule** (decision): no new Composer or npm package without
-  the owner's approval, with each approval dated in the rule.
 - **Browser shard target** (decision): the `BROWSER_SHARD_TARGET_SECONDS` repo
   variable. 180 s today gives 8 shards; 240 s would give about 6 shards of about
   6.5 minutes each.
-- **Optional tooling** (decision):
-    - Vite+ (`vp check`: oxlint with type checks, oxfmt) in place of ESLint and
-      Prettier. The custom ESLint rules would need porting, so evaluate it first.
-    - `php artisan dev` in place of the long `concurrently` line in `composer dev`.
-    - An automated responsive check of every page and dialog at 375 and 1440 px, in
-      light and dark mode. The alternative is to extend `MobileLayoutTest`.
 - **Jev cascade ruling** (decision): confirm that a human review does not
   overwrite a cascade Jev row that the model already resolved.
 - **Chat template follow-ups** (decision, add or drop):
@@ -52,6 +36,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   covering every layer. Migrate one area at a time, when it is touched.
 - **Inertia live props** (brainstorm): replace `useRealtimeReload`, used in 14
   files.
+- **Wider page layouts** (brainstorm): many pages, the connections pages among
+  them, leave most of a desktop screen empty. Rework them to use the available
+  width. First decide on a shared layout pattern, then list the pages to change.
 - **AI runs and an MCP server** (brainstorm): the draft design covers AI runs, an
   MCP foundation and AI management tools.
 - **AI features** (brainstorm):
@@ -84,6 +71,18 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   Dockhand events.
 
 ## Ready to pick up
+
+- **Vite+ spike**: try Vite+ (`vp check`: oxlint with type checks, oxfmt with
+  Tailwind class sorting) on a branch, time-boxed. Report:
+    - Which custom ESLint rules it covers: no browser `confirm()`, import order,
+      consistent type imports, padding lines and brace style.
+    - How fast it is compared with ESLint + Prettier.
+    - What would be lost.
+      Do not switch yet. The owner decides after the report.
+- **Layout gate at desktop width and in dark mode**: extend the phone gate
+  (`MobileLayoutTest`) so its overlap and clipped-text checks also run at 1440 px,
+  and run both widths in light and dark mode. It adds about 450 s of CI browser
+  time, spread over the shards. Re-time the shards afterwards.
 
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
