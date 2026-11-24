@@ -94,9 +94,9 @@ final readonly class BenchmarkResultDetails
             ...$row,
             'score' => $judgement?->score,
             'passed' => $judgement?->passed,
-            'judge_status' => ($judgement?->status ?? BenchmarkJudgeStatus::None)->value,
+            'judge_status' => ($judgement->status ?? BenchmarkJudgeStatus::None)->value,
             'judge_stale' => false,
-            'score_detail' => $judgement?->detail ?? [],
+            'score_detail' => $judgement->detail ?? [],
         ];
     }
 }

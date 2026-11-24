@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
-use App\Enums\BenchmarkResultStatus;
 use App\Models\BenchmarkResult;
 
 /**
@@ -25,7 +24,7 @@ final readonly class BenchmarkComparisonScope
         $rows = BenchmarkResult::query()
             ->whereIn('benchmark_run_id', $runIds)
             ->whereNotNull('benchmark_case_id')
-            ->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])
+            ->finished()
             ->select(['case_task', 'benchmark_case_id'])
             ->selectRaw('count(distinct benchmark_run_id) as run_count')
             ->groupBy('case_task', 'benchmark_case_id')

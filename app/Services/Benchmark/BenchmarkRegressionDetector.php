@@ -109,7 +109,7 @@ final readonly class BenchmarkRegressionDetector
         return $benchmarkRun->results()
             ->where('candidate_index', $candidateIndex)
             ->whereNotNull('benchmark_case_id')
-            ->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])
+            ->finished()
             ->get(['benchmark_case_id', 'status', 'score', 'passed'])
             ->keyBy('benchmark_case_id')
             ->all();

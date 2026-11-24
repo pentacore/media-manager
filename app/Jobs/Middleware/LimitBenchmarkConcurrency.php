@@ -8,13 +8,10 @@ use App\Enums\BenchmarkJudgeStatus;
 use App\Jobs\RunBenchmarkCase;
 use App\Models\BenchmarkResult;
 use Closure;
-use Illuminate\Support\Facades\Cache;
 
 /**
- * At most two RunBenchmarkCase jobs of one run execute at a time: each holds
- * one of the run's two slot locks for its lifetime; a job finding both taken
- * goes back on the queue. The lock TTL outlives the job timeout, so a killed
- * worker frees its slot on its own.
+ * At most ConcurrencySlots::SLOTS RunBenchmarkCase jobs of one run execute
+ * at a time; a job finding every slot taken goes back on the queue.
  *
  * Re-judging queues every unscored result at once, so a judge-only job may
  * wait for a slot longer than the stale window: each release touches its
@@ -23,12 +20,6 @@ use Illuminate\Support\Facades\Cache;
  */
 final readonly class LimitBenchmarkConcurrency
 {
-    public const int SLOTS = 2;
-
-    private const int LOCK_SECONDS = 300;
-
-    private const int RETRY_AFTER_SECONDS = 15;
-
     public function __construct(private int $resultId) {}
 
     public function handle(RunBenchmarkCase $runBenchmarkCase, Closure $next): mixed
@@ -39,29 +30,19 @@ final readonly class LimitBenchmarkConcurrency
             return $next($runBenchmarkCase);
         }
 
-        for ($slot = 0; $slot < self::SLOTS; $slot++) {
-            $lock = Cache::lock(sprintf('benchmark:%d:slot:%d', $runId, $slot), self::LOCK_SECONDS);
+        return ConcurrencySlots::run(
+            sprintf('benchmark:%d', $runId),
+            fn (): mixed => $next($runBenchmarkCase),
+            function (int $retryAfter) use ($runBenchmarkCase): void {
+                if ($runBenchmarkCase->judgeOnly) {
+                    BenchmarkResult::query()
+                        ->whereKey($this->resultId)
+                        ->where('judge_status', BenchmarkJudgeStatus::Queued)
+                        ->touch();
+                }
 
-            if (! $lock->get()) {
-                continue;
-            }
-
-            try {
-                return $next($runBenchmarkCase);
-            } finally {
-                $lock->release();
-            }
-        }
-
-        if ($runBenchmarkCase->judgeOnly) {
-            BenchmarkResult::query()
-                ->whereKey($this->resultId)
-                ->where('judge_status', BenchmarkJudgeStatus::Queued)
-                ->touch();
-        }
-
-        $runBenchmarkCase->release(self::RETRY_AFTER_SECONDS);
-
-        return null;
+                $runBenchmarkCase->release($retryAfter);
+            },
+        );
     }
 }

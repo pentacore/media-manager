@@ -96,6 +96,7 @@ test('stopping a non-billing context makes the next one bill its run again', fun
     $benchmarkContextStarter = resolve(BenchmarkContextStarter::class);
 
     $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkResult->benchmarkCase, 0, billsRun: false);
+
     $benchmarkRunContext->stop();
 
     expect($benchmarkRunContext->billedRunId())->toBeNull()

@@ -30,6 +30,17 @@ enum BenchmarkResultStatus: string
     /**
      * Not finished yet: queued for its job, or claimed by it and running.
      */
+    /**
+     * The statuses of a result the candidate finished (answered or failed);
+     * skipped and in-progress results are not finished.
+     *
+     * @return list<self>
+     */
+    public static function finished(): array
+    {
+        return [self::Ok, self::Failed];
+    }
+
     public function isInProgress(): bool
     {
         return in_array($this, [self::Pending, self::Running], true);
