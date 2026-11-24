@@ -268,6 +268,17 @@ test('per-event overrides are validated', function (array $fields, string $field
     'threshold below zero' => [['jev_threshold' => -0.1], 'second_opinion_event_overrides.0.jev_threshold'],
 ]);
 
+test('per-event override errors name the field, not the raw row key', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['second_opinion_event_overrides' => [
+            decisionAgentEventOverride('sonarr:NotAnEvent', ['mode' => 'hold', 'jev_threshold' => 1.2]),
+        ]]))
+        ->assertSessionHasErrors([
+            'second_opinion_event_overrides.0.event_key' => 'The selected event is invalid.',
+            'second_opinion_event_overrides.0.jev_threshold' => 'The Jev threshold field must not be greater than 1.',
+        ]);
+});
+
 test('an event cannot be overridden twice', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['second_opinion_event_overrides' => [

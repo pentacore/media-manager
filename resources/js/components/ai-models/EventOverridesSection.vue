@@ -131,8 +131,10 @@ function removeOverride(eventKey: string): void {
             class="flex flex-col gap-2"
             v-bind="{ [hooks.override]: override.event_key }"
         >
-            <div class="flex items-center gap-2">
-                <span class="font-mono-tabular text-[13px]">
+            <div class="flex flex-wrap items-center gap-2">
+                <span
+                    class="font-mono-tabular text-[13px] max-sm:min-w-0 max-sm:break-all"
+                >
                     {{ override.event_key }}
                 </span>
                 <Pill
