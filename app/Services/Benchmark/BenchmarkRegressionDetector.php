@@ -6,15 +6,19 @@ namespace App\Services\Benchmark;
 
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
+use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Services\AiBudget\AiBudgetExceededException;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * Compares a finished scheduled run with the schedule's previous comparable
  * run, per candidate: the latest earlier Completed or StoppedCostCap run of
  * the same schedule judged by the same model that also ran this candidate.
+ * The judge only has to match when one of this run's cases is judged:
+ * deterministic cases score the same under any judge.
  * Only cases both runs finished are compared, and a case the monthly AI hard
  * cap refused counts as unfinished. A candidate regressed when its
  * pass rate fell, or its error rate rose, by more than the schedule's
@@ -40,7 +44,8 @@ final readonly class BenchmarkRegressionDetector
             ->whereIn('status', [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap])
             ->orderByDesc('id')
             ->get()
-            ->filter(fn (BenchmarkRun $earlier): bool => $this->sameSelection($earlier->judge, $benchmarkRun->judge));
+            ->when($this->hasJudgedCase($benchmarkRun), fn (Collection $runs): Collection => $runs
+                ->filter(fn (BenchmarkRun $earlier): bool => $this->sameSelection($earlier->judge, $benchmarkRun->judge)));
 
         $passThreshold = (float) $benchmarkSchedule->pass_rate_threshold / 100;
         $scoreThreshold = (float) $benchmarkSchedule->score_threshold / 100;
@@ -100,6 +105,14 @@ final readonly class BenchmarkRegressionDetector
         }
 
         return ['baseline_run_id' => $baselineRunId, 'regressions' => $regressions];
+    }
+
+    private function hasJudgedCase(BenchmarkRun $benchmarkRun): bool
+    {
+        return BenchmarkCase::query()
+            ->whereIn('id', $benchmarkRun->results()->whereNotNull('benchmark_case_id')->select('benchmark_case_id'))
+            ->get(['id', 'task', 'scoring'])
+            ->contains(static fn (BenchmarkCase $benchmarkCase): bool => $benchmarkCase->isJudged());
     }
 
     /**
