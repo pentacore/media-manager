@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\QueueLane;
 use App\Settings\AiSettings;
+use Illuminate\Foundation\DevCommands;
 
 test('production queue worker timeout is lower than retry after defaults', function (): void {
     $entrypoint = file_get_contents(base_path('docker/production/entrypoint.sh'));
@@ -214,13 +215,12 @@ test('the ai lane runs in its own worker service with a timeout under retry_afte
 
 test('the dev stack worker drains every lane', function (): void {
     $compose = (string) file_get_contents(base_path('compose.yaml'));
-    $composer = json_decode((string) file_get_contents(base_path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
     $lanes = implode(',', QueueLane::values());
 
     preg_match("/\n    queue:\n(.*?)(?=\n    [a-z][a-z.-]+:\n)/s", $compose, $devQueue);
 
     expect($devQueue[1] ?? '')->toContain(sprintf("'--queue=%s'", $lanes))
-        ->and(implode(' ', $composer['scripts']['dev']))->toContain(sprintf('queue:listen --queue=%s', $lanes));
+        ->and(collect(DevCommands::commands())->firstWhere('name', 'queue')['command'] ?? '')->toContain(sprintf('queue:listen --queue=%s', $lanes));
 });
 
 test('the octane smoke job boots the queue-ai role', function (): void {
