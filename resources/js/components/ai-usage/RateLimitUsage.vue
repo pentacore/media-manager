@@ -5,6 +5,7 @@ import type { RateLimitStatusRow } from './types';
 defineProps<{
     rows: RateLimitStatusRow[];
     enforced: boolean;
+    benchmarkFiltered?: boolean;
 }>();
 
 function rateLimitLabel(limit: RateLimitStatusRow['limits'][number]): string {
@@ -36,6 +37,10 @@ function rateLimitLabel(limit: RateLimitStatusRow['limits'][number]): string {
                         ? 'Rolling windows ending now. Enforced: an exhausted limit blocks new requests.'
                         : 'Rolling windows ending now. Informational only.'
                 }}
+                <template v-if="benchmarkFiltered">
+                    Counts every call, benchmark runs included, whatever the
+                    benchmark filter.
+                </template>
             </span>
         </div>
         <div class="divide-y divide-border">

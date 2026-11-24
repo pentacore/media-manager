@@ -9,11 +9,14 @@ use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Agents\TitleAgent;
+use App\Ai\Decision\DecisionRunContext;
+use App\Ai\Decision\DecisionRunOutOfTime;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\Middleware\StopWhenDecisionRunOutOfTime;
 use App\Ai\Middleware\StopWhenPriceRefreshOutOfTime;
 use App\Http\Streaming\ClientConnection;
 use App\Models\AiModelPrice;
@@ -86,7 +89,7 @@ test('every agent runs the step middleware its runs need', function (string $age
     'media' => [MediaAgent::class, [AnswerOnFinalStep::class, Stop::class, EnforceBudgetEachStep::class, ReplayBenchmarkTools::class]],
     'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
     'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
-    'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, ReplayBenchmarkTools::class]],
+    'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenDecisionRunOutOfTime::class, ReplayBenchmarkTools::class]],
     'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class, ReplayBenchmarkTools::class]],
     'title' => [TitleAgent::class, [ReplayBenchmarkTools::class]],
     'benchmark judge' => [BenchmarkJudgeAgent::class, [ReplayBenchmarkTools::class]],
@@ -193,3 +196,48 @@ test('the price verifier keeps going while a step still fits, and when no time b
 
     expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
 });
+
+function stepMiddlewareDecisionRun(?int $secondsLeft): void
+{
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', deadline: $secondsLeft === null ? null : now()->addSeconds($secondsLeft)));
+}
+
+test('a decision run step is cut to the time left before the run deadline', function (?int $stepTimeout, int $secondsLeft, int $expected): void {
+    $this->freezeTime();
+    stepMiddlewareDecisionRun($secondsLeft);
+    $step = new PendingStep(number: 2, isFinalStep: false, provider: 'openai', model: 'gpt-5-mini', instructions: 'Decide.', messages: [], tools: [], schema: null, options: null, timeout: $stepTimeout, invocationId: 'inv-mw');
+    $seen = null;
+
+    (new StopWhenDecisionRunOutOfTime)->handle($step, function (PendingStep $pendingStep) use (&$seen): string {
+        $seen = $pendingStep;
+
+        return 'ran';
+    });
+
+    expect($seen->timeout)->toBe($expected)
+        ->and($seen->number)->toBe(2)
+        ->and($seen->instructions)->toBe('Decide.')
+        ->and($seen->invocationId)->toBe('inv-mw');
+})->with([
+    'a step timeout longer than the time left' => [60, 25, 25],
+    'a step timeout shorter than the time left' => [20, 100, 20],
+    'no step timeout' => [null, 100, 100],
+]);
+
+test('a decision run step that no longer fits before the deadline is refused, step 0 included', function (int $number): void {
+    $this->freezeTime();
+    stepMiddlewareDecisionRun(StopWhenDecisionRunOutOfTime::MIN_STEP_SECONDS - 1);
+
+    expect(fn (): mixed => (new StopWhenDecisionRunOutOfTime)->handle(stepMiddlewarePendingStep($number, false), fn (): string => 'ran'))
+        ->toThrow(DecisionRunOutOfTime::class);
+})->with([0, 3]);
+
+test('a step outside a bounded decision run passes through untouched', function (bool $bound): void {
+    if ($bound) {
+        stepMiddlewareDecisionRun(null);
+    }
+
+    $step = stepMiddlewarePendingStep(1, false);
+
+    expect((new StopWhenDecisionRunOutOfTime)->handle($step, fn (PendingStep $pendingStep): PendingStep => $pendingStep))->toBe($step);
+})->with(['no run context' => [false], 'a run without a deadline' => [true]]);

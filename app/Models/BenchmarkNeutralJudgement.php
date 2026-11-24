@@ -106,7 +106,8 @@ class BenchmarkNeutralJudgement extends Model
 
     /**
      * Judgements the stalled sweep may fail: a claimed (pending) one untouched
-     * for the claim window (the worker died) or a queued one untouched for the
+     * past the queue's retry (BenchmarkResult::sweepAfterSeconds(); the worker
+     * died and no retry took it over) or a queued one untouched for the
      * job's whole unique window (the dispatch was lost). A queued judgement
      * younger than that is just waiting for the single AI worker.
      *
@@ -118,7 +119,7 @@ class BenchmarkNeutralJudgement extends Model
         return $query->where(static fn (Builder $builder): Builder => $builder
             ->where(static fn (Builder $pending): Builder => $pending
                 ->where('status', BenchmarkJudgeStatus::Pending)
-                ->where('updated_at', '<=', now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS)))
+                ->where('updated_at', '<=', now()->subSeconds(BenchmarkResult::sweepAfterSeconds())))
             ->orWhere(static fn (Builder $queued): Builder => $queued
                 ->where('status', BenchmarkJudgeStatus::Queued)
                 ->where('updated_at', '<=', now()->subSeconds(RunNeutralJudgement::LOST_AFTER_SECONDS))));

@@ -30,14 +30,6 @@ const projected = computed(() =>
     ),
 );
 
-const filterLabel = computed(() =>
-    props.tier && props.benchmark
-        ? 'Tier and benchmark'
-        : props.tier
-          ? 'Tier'
-          : 'Benchmark',
-);
-
 function kindLabel(value: string): string {
     return props.kinds.find((kind) => kind.value === value)?.label ?? value;
 }
@@ -53,11 +45,11 @@ function kindLabel(value: string): string {
         >
             Recent invocations
             <p
-                v-if="tier || benchmark"
+                v-if="tier"
                 class="mt-1 text-[11.5px] font-normal tracking-normal text-muted-foreground normal-case"
+                data-usage-tier-filter-note
             >
-                {{ filterLabel }} filter applies to this list; totals include
-                every run.
+                Tier filter applies to this list; totals include every tier.
             </p>
         </div>
         <div class="overflow-x-auto">

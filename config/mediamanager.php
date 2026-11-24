@@ -204,6 +204,10 @@ return [
         // Caps how many ActionRequests one decision may spawn.
         'max_actions_per_run' => 3,
 
+        // Seconds one decision run may take (its deadline), 30 to 210: the
+        // job's 240 s timeout less 30 s for recording the outcome.
+        'run_time_limit' => 210,
+
         // Second opinion on automated proposals (Action Rules choose which
         // types are checked): 'llm', 'jev_then_llm' or 'jev'.
         'second_opinion_engine' => env('MEDIAMANAGER_DECISION_AGENT_SECOND_OPINION_ENGINE', 'llm'),

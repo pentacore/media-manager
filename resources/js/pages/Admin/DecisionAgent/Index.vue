@@ -27,6 +27,7 @@ interface DecisionAgentState {
     notify_on_suggest: boolean;
     notify_on_act: boolean;
     max_actions_per_run: number;
+    run_time_limit: number;
     second_opinion_engine: SecondOpinionEngine;
     second_opinion_jev_threshold: number;
     second_opinion_event_overrides: SecondOpinionEventOverride[];
@@ -44,6 +45,7 @@ const props = defineProps<{
         label: string;
     }>;
     classifierConfigured: boolean;
+    runTimeLimitBounds: { min: number; max: number };
 }>();
 
 defineOptions({
@@ -65,6 +67,7 @@ const form = useForm<DecisionAgentState>({
     notify_on_suggest: props.settings.notify_on_suggest,
     notify_on_act: props.settings.notify_on_act,
     max_actions_per_run: props.settings.max_actions_per_run,
+    run_time_limit: props.settings.run_time_limit,
     second_opinion_engine: props.settings.second_opinion_engine,
     second_opinion_jev_threshold: props.settings.second_opinion_jev_threshold,
     second_opinion_event_overrides:
@@ -354,6 +357,34 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            for="decision-agent-run-time-limit"
+                            label="Run time limit"
+                            :hint="`Seconds one decision run may take, ${props.runTimeLimitBounds.min}–${props.runTimeLimitBounds.max}. Each agent step is cut to the time left; a run that reaches the limit is recorded as failed. The second opinion is skipped (and the action held) when less than a minute is left.`"
+                        >
+                            <span />
+                        </Field>
+                    </template>
+                    <div>
+                        <Input
+                            id="decision-agent-run-time-limit"
+                            aria-describedby="decision-agent-run-time-limit-hint"
+                            v-model.number="form.run_time_limit"
+                            type="number"
+                            :min="props.runTimeLimitBounds.min"
+                            :max="props.runTimeLimitBounds.max"
+                            class="h-8 max-w-[120px] text-sm"
+                            data-decision-agent-run-time-limit
+                        />
+                        <InputError
+                            :message="form.errors.run_time_limit"
+                            class="mt-1"
+                        />
+                    </div>
+                </SettingsRow>
+
                 <Separator />
 
                 <!-- Second opinion -->
@@ -449,6 +480,7 @@ function submit(): void {
                                 form.second_opinion_jev_threshold
                             "
                             :classifier-configured="classifierConfigured"
+                            :dirty="form.isDirty"
                             :errors="formErrors"
                             @structure-change="clearOverrideErrors"
                         />

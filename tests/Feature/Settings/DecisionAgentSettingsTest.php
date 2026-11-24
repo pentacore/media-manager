@@ -30,6 +30,25 @@ test('max actions per run is clamped to at least 1', function (): void {
     expect($decisionAgentSettings->maxActionsPerRun())->toBe(1);
 });
 
+test('the run time limit falls back to config and is clamped inside the job timeout', function (): void {
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+
+    expect($decisionAgentSettings->runTimeLimit())->toBe(210);
+
+    config()->set('mediamanager.decision_agent.run_time_limit', 9999);
+
+    expect($decisionAgentSettings->runTimeLimit())->toBe(DecisionAgentSettings::maxRunTimeLimit());
+
+    $decisionAgentSettings->setRunTimeLimit(5);
+
+    expect($decisionAgentSettings->runTimeLimit())->toBe(DecisionAgentSettings::MIN_RUN_TIME_LIMIT_SECONDS);
+
+    $decisionAgentSettings->setRunTimeLimit(null);
+    config()->set('mediamanager.decision_agent.run_time_limit', 120);
+
+    expect($decisionAgentSettings->runTimeLimit())->toBe(120);
+});
+
 test('toggles round-trip', function (): void {
     $decisionAgentSettings = resolve(DecisionAgentSettings::class);
 
