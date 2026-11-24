@@ -10,6 +10,7 @@ use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\ReplayBenchmarkTools;
+use App\Ai\Middleware\StopWhenDecisionRunOutOfTime;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -132,14 +133,15 @@ PROMPT;
 
     /**
      * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, force a plain answer on the final allowed step, and
-     * answer tools from fixtures inside a benchmark run.
+     * crossed mid-run, force a plain answer on the final allowed step, keep
+     * the whole run inside its deadline, and answer tools from fixtures
+     * inside a benchmark run.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new ReplayBenchmarkTools];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenDecisionRunOutOfTime, new ReplayBenchmarkTools];
     }
 
     /**

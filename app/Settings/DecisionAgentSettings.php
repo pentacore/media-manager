@@ -6,6 +6,7 @@ namespace App\Settings;
 
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
+use App\Jobs\RunDecisionAgent;
 
 /**
  * Configuration for the autonomous DecisionAgent — the background agent
@@ -29,6 +30,11 @@ class DecisionAgentSettings
     public const string NOTIFY_ON_ACT_KEY = 'decision_agent.notify_on_act';
 
     public const string MAX_ACTIONS_KEY = 'decision_agent.max_actions_per_run';
+
+    public const string RUN_TIME_LIMIT_KEY = 'decision_agent.run_time_limit';
+
+    /** The shortest run time limit: one provider call and its margin. */
+    public const int MIN_RUN_TIME_LIMIT_SECONDS = 30;
 
     public const string SECOND_OPINION_ENGINE_KEY = 'decision_agent.second_opinion_engine';
 
@@ -217,6 +223,40 @@ class DecisionAgentSettings
     public function setMaxActionsPerRun(int $max): void
     {
         $this->appSettings->set(self::MAX_ACTIONS_KEY, max(1, $max));
+    }
+
+    /**
+     * Seconds a decision run may take from the start of its job: the run's
+     * deadline. Every DecisionAgent step and the second opinion stop short of
+     * it, so a slow run records a Failed decision instead of being killed by
+     * the worker. Clamped between MIN_RUN_TIME_LIMIT_SECONDS and
+     * maxRunTimeLimit().
+     */
+    public function runTimeLimit(): int
+    {
+        $value = (int) $this->appSettings->get(
+            self::RUN_TIME_LIMIT_KEY,
+            config('mediamanager.decision_agent.run_time_limit', self::maxRunTimeLimit()),
+        );
+
+        return max(self::MIN_RUN_TIME_LIMIT_SECONDS, min($value, self::maxRunTimeLimit()));
+    }
+
+    /**
+     * Persist the run time limit; null clears it back to the config default.
+     */
+    public function setRunTimeLimit(?int $seconds): void
+    {
+        $this->appSettings->set(self::RUN_TIME_LIMIT_KEY, $seconds);
+    }
+
+    /**
+     * The longest run time limit: the job timeout less the time kept back for
+     * recording the decision and sending its notification.
+     */
+    public static function maxRunTimeLimit(): int
+    {
+        return RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS;
     }
 
     /**

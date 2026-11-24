@@ -274,12 +274,22 @@ test('a judgement whose case was deleted fails', function (): void {
 
 test('the stalled sweep fails lost judgements but leaves queued ones waiting', function (): void {
     Queue::fake();
+    config()->set('queue.default', 'redis');
+    config()->set('queue.connections.redis.retry_after', 330);
+
     $fixture = neutralFixture();
     $rejudge = neutralLauncher()->start($fixture['runs'], neutralJudge(), 1.0, 0.0058, User::factory()->admin()->create());
     [$waiting, $claimed] = $rejudge->judgements()->orderBy('id')->get()->all();
-    $old = now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 60);
+    $retried = now()->subSeconds(BenchmarkResult::CLAIM_STALE_AFTER_SECONDS + 60);
+    $claimed->forceFill(['status' => BenchmarkJudgeStatus::Pending, 'updated_at' => $retried])->saveQuietly();
+
+    Artisan::call('benchmark:settle-stalled');
+
+    expect($claimed->fresh()->status)->toBe(BenchmarkJudgeStatus::Pending);
+
+    $old = now()->subSeconds(BenchmarkResult::sweepAfterSeconds() + 60);
     $waiting->forceFill(['updated_at' => $old])->saveQuietly();
-    $claimed->forceFill(['status' => BenchmarkJudgeStatus::Pending, 'updated_at' => $old])->saveQuietly();
+    $claimed->forceFill(['updated_at' => $old])->saveQuietly();
 
     Artisan::call('benchmark:settle-stalled');
 

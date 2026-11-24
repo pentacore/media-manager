@@ -61,16 +61,12 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
+- **Decision prompt fence**: `DecisionPrompt::build()` leaves fence tags in the
+  webhook payload as they are, so a payload string holding
+  `</untrusted_webhook_payload>` (plain or entity-encoded) closes the fence early.
+  Neutralise it as `SecondOpinionCase` does, and keep `DecisionPrompt::parse()`
+  (benchmark capture) reading the payload back.
 - **AI routing minors**, from the review of each AI routing pull request.
-    - Decision runs and the benchmark:
-        - A deadline for the whole decision run.
-        - Sweep window shorter than `retry_after`.
-        - Sweep never-claimed pending benchmark results.
-        - Apply the benchmark filter to the tool stats, rate limits and gates.
-        - Provider names vs driver literals.
-        - Entity-encoded fence tags.
-        - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
-          end to end.
     - Cross-run comparison:
         - The drawer shows the original score in neutral mode.
         - Duplicated task order, comparability rule, concurrency middleware and

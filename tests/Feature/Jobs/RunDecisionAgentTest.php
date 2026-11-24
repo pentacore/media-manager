@@ -17,6 +17,7 @@ use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     config(['mediamanager.ai.enabled' => true]);
@@ -383,6 +384,48 @@ test('an agent run past its deadline still prompts with the minimum timeout', fu
     runJob(WebhookEvent::factory()->create()->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
 
     DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === RunDecisionAgent::MIN_AGENT_CALL_TIMEOUT_SECONDS);
+});
+
+test('the run deadline follows the admin run time limit', function (): void {
+    $this->freezeTime();
+    resolve(DecisionAgentSettings::class)->setRunTimeLimit(60);
+    DecisionAgent::fake(['Nothing to do.']);
+    $this->mock(AiBudgetGuard::class)
+        ->shouldReceive('enforce')
+        ->andReturnUsing(function (): void {
+            $this->travel(30)->seconds();
+        });
+    $providers = count((new DecisionAgent)->provider());
+
+    runJob(WebhookEvent::factory()->create()->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    $expected = max(RunDecisionAgent::MIN_AGENT_CALL_TIMEOUT_SECONDS, intdiv(30 - RunDecisionAgent::AGENT_CALL_MARGIN_SECONDS, $providers));
+
+    DecisionAgent::assertPrompted(fn ($prompt): bool => $prompt->timeout === $expected);
+});
+
+test('a multi-step run that reaches its deadline between steps records a Failed decision', function (): void {
+    $this->freezeTime();
+    $steps = 0;
+    DecisionAgent::fake(function () use (&$steps): ToolCall|string {
+        $steps++;
+
+        if ($steps === 1) {
+            $this->travel(RunDecisionAgent::TIMEOUT_SECONDS)->seconds();
+
+            return new ToolCall(id: 'c1', name: 'GetServiceStatusTool', arguments: []);
+        }
+
+        return 'Should never be reached.';
+    });
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id, eventType: 'Grab', payload: ['eventType' => 'Grab']);
+
+    expect($steps)->toBe(1)
+        ->and(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
+        ->status->toBe(AgentDecisionStatus::Failed)
+        ->summary->toStartWith('Agent run failed: The decision run reached its time limit');
 });
 
 test('an agent call that times out records a Failed decision with the reason', function (): void {

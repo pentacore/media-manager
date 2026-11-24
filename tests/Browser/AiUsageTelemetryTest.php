@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\TitleAgent;
+use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -176,6 +177,32 @@ test('benchmark rows carry a pill linking to the run and can be filtered', funct
         ->click(sprintf('[data-usage-row="%d"] [data-usage-benchmark]', $benchmarked->id))
         ->assertPathIs(route('admin.benchmarks.runs.show', $run, absolute: false))
         ->assertSee('Spring bake-off');
+});
+
+test('the only-benchmarks filter shows the tool replays and leaves out the gate and second-opinion panels', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    $run = BenchmarkRun::factory()->create();
+    $benchmarked = AiUsageRecord::factory()->benchmarked($run->id)->create(['model' => 'gpt-benchmarked']);
+    $live = AiUsageRecord::factory()->create(['model' => 'gpt-live']);
+    AiToolInvocation::factory()->create(['invocation_id' => $benchmarked->invocation_id, 'tool_class' => GetDownloadQueueTool::class]);
+    AiToolInvocation::factory()->create(['invocation_id' => $live->invocation_id]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-tool-stats-scope]', 'Benchmark replays are left out.')
+        ->assertSeeIn('[data-tool-stat-row]', 'SearchMediaTool')
+        ->assertPresent('[data-classification-gates]')
+        ->assertMissing('[data-benchmark-only-panels-note]')
+        ->click('[data-usage-benchmark-filter] button')
+        ->click('[role="option"][aria-label="Only benchmarks"]')
+        ->assertQueryStringHas('benchmark', 'only')
+        ->assertSeeIn('[data-tool-stats-scope]', 'Benchmark replays (answered from case fixtures)')
+        ->assertSeeIn('[data-tool-stat-row]', 'GetDownloadQueueTool')
+        ->assertDontSeeIn('[data-tool-stats]', 'SearchMediaTool')
+        ->assertVisible('[data-benchmark-only-panels-note]')
+        ->assertMissing('[data-classification-gates]')
+        ->assertMissing('[data-second-opinion-agreement]');
 });
 
 test('benchmark rows of a deleted run show a plain pill', function (): void {

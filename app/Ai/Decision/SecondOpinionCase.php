@@ -14,6 +14,14 @@ use Illuminate\Support\Str;
  */
 final readonly class SecondOpinionCase
 {
+    /**
+     * An opening or closing fence tag in any encoding fenced() neutralises:
+     * the "<" (plain, "&lt;", "&#60;", "&#x3c;" or "\u003c") is replaced and
+     * what follows it up to "untrusted_" (the "/" in any encoding, any run of
+     * backslashes, whitespace) is kept in group 1.
+     */
+    private const string FENCE_TAG = '~(?:<|&lt;?|&#0*60;?|&#x0*3c;?|\\\\*u003c)(\s*\\\\*(?:/|&#0*47;?|&#x0*2f;?|&sol;?|u002f)?\s*)untrusted_~i';
+
     private const int PAYLOAD_CHARS = 6000;
 
     private const int ACTION_PAYLOAD_CHARS = 2000;
@@ -130,12 +138,15 @@ PROMPT,
     }
 
     /**
-     * Neutralise any opening or closing <untrusted_...> tag in embedded text
-     * (a JSON-escaped "<\/" or any run of backslashes included), so it can
-     * neither end its own fence early nor open a fake one.
+     * Neutralise any opening or closing <untrusted_...> tag in embedded text,
+     * so it can neither end its own fence early nor open a fake one. The "<"
+     * and "/" may be written plainly, JSON-escaped ("<\/", any run of
+     * backslashes, "\u003c", "\u002f") or as an HTML entity ("&lt;", "&#60;",
+     * "&#x3c;", "&sol;", with or without the semicolon), since a model reads
+     * every one of them as the tag.
      */
     private function fenced(string $text): string
     {
-        return (string) preg_replace('~<(\s*\\\\*/?\s*)untrusted_~i', '[$1untrusted_', $text);
+        return (string) preg_replace(self::FENCE_TAG, '[$1untrusted_', $text);
     }
 }

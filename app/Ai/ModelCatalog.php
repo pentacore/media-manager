@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * The providers and catalog models an admin may pick for a model setting:
- * configured providers (an API key is set; Ollama needs none) that laravel/ai
+ * configured providers (an API key is set; an Ollama driver needs none) that laravel/ai
  * can resolve as text providers, and the priced models listed under them.
  */
 final readonly class ModelCatalog
@@ -118,7 +118,7 @@ final readonly class ModelCatalog
         $providers = config('ai.providers', []);
 
         return array_values(collect($providers)
-            ->filter(fn (array $cfg, string $name): bool => $name === 'ollama' || filled($cfg['key'] ?? null))
+            ->filter(fn (array $cfg, string $name): bool => ProviderDriver::keyless($name) || filled($cfg['key'] ?? null))
             ->keys()
             ->all());
     }

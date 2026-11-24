@@ -5,6 +5,7 @@ import type { ToolStatRow } from './types';
 
 defineProps<{
     rows: ToolStatRow[];
+    benchmarkOnly?: boolean;
 }>();
 
 function failureRate(row: ToolStatRow): string {
@@ -29,8 +30,15 @@ function failureRate(row: ToolStatRow): string {
             >
                 Tools
             </span>
-            <span class="text-[11.5px] text-muted-foreground">
-                Calls, failure rate and latency in this window.
+            <span
+                class="text-[11.5px] text-muted-foreground"
+                data-tool-stats-scope
+            >
+                {{
+                    benchmarkOnly
+                        ? 'Benchmark replays (answered from case fixtures) in this window.'
+                        : 'Live calls, failure rate and latency in this window. Benchmark replays are left out.'
+                }}
             </span>
         </div>
         <div class="overflow-x-auto">

@@ -13,20 +13,22 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Sweeps every run with a stale result, ended or not: settle() fails a
- * stale result in an ended run as stopped and in a live one as stalled.
+ * Sweeps every run with a stale or sweepable result, ended or not: settle()
+ * fails a stale result in an ended run as stopped, and in a live one a
+ * running result whose claim outlived the queue's retry as stalled and a
+ * pending one whose queued job was lost as never started.
  *
- * Safe only while RunBenchmarkCase's #[Timeout(280)] stays below
+ * Safe only while RunBenchmarkCase::TIMEOUT_SECONDS stays below
  * BenchmarkResult::CLAIM_STALE_AFTER_SECONDS: a live job never looks stalled.
  */
-#[Description('Fail benchmark results stuck running past the stale window and settle their runs. A lost queue payload leaves a result running forever; no job is left to settle its run. Also fails neutral judgements stuck past the stale window.')]
+#[Description('Fail benchmark results stuck running past the stale window and settle their runs. A lost queue payload leaves a result running or pending forever; no job is left to settle its run. Also fails neutral judgements stuck past the stale window.')]
 #[Signature('benchmark:settle-stalled')]
 class SettleStalledBenchmarkRuns extends Command
 {
     public function handle(BenchmarkRunSettler $benchmarkRunSettler, BenchmarkNeutralRejudgeLauncher $benchmarkNeutralRejudgeLauncher): int
     {
         $runIds = BenchmarkRun::query()
-            ->whereHas('results', fn (Builder $builder): Builder => $builder->runStale())
+            ->whereHas('results', fn (Builder $builder): Builder => $builder->where(fn (Builder $stale): Builder => $stale->runStale()->orWhere(fn (Builder $sweepable): Builder => $sweepable->sweepable())))
             ->pluck('id');
 
         foreach ($runIds as $runId) {

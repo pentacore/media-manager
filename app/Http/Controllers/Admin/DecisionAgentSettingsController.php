@@ -30,10 +30,12 @@ class DecisionAgentSettingsController extends Controller
                 'notify_on_suggest' => $decisionAgentSettings->notifyOnSuggest(),
                 'notify_on_act' => $decisionAgentSettings->notifyOnAct(),
                 'max_actions_per_run' => $decisionAgentSettings->maxActionsPerRun(),
+                'run_time_limit' => $decisionAgentSettings->runTimeLimit(),
                 'second_opinion_engine' => $decisionAgentSettings->secondOpinionEngine()->value,
                 'second_opinion_jev_threshold' => $decisionAgentSettings->secondOpinionJevThreshold(),
                 'second_opinion_event_overrides' => $this->eventOverrideRows($decisionAgentSettings),
             ],
+            'runTimeLimitBounds' => ['min' => DecisionAgentSettings::MIN_RUN_TIME_LIMIT_SECONDS, 'max' => DecisionAgentSettings::maxRunTimeLimit()],
             'eventCatalog' => DecisionAgentSettings::eventCatalog(),
             'secondOpinionEngines' => array_map(
                 static fn (SecondOpinionEngine $secondOpinionEngine): array => ['value' => $secondOpinionEngine->value, 'label' => $secondOpinionEngine->label()],
@@ -63,6 +65,11 @@ class DecisionAgentSettingsController extends Controller
             $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
             $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
             $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+
+            if (array_key_exists('run_time_limit', $validated)) {
+                $decisionAgentSettings->setRunTimeLimit($validated['run_time_limit'] === null ? null : (int) $validated['run_time_limit']);
+            }
+
             $decisionAgentSettings->setSecondOpinionEngine(SecondOpinionEngine::from((string) $validated['second_opinion_engine']));
             $decisionAgentSettings->setSecondOpinionJevThreshold((float) $validated['second_opinion_jev_threshold']);
 

@@ -27,6 +27,9 @@ final readonly class BenchmarkRunSettler
     /** The error of a result whose claim went stale in a run that is still going. */
     public const string STALLED_ERROR = 'Worker lost before finishing';
 
+    /** The error of a pending result whose queued job was lost before it started. */
+    public const string NEVER_STARTED_ERROR = 'Queued job lost before it started';
+
     public function __construct(private AiUsageReporting $aiUsageReporting) {}
 
     /**
@@ -39,8 +42,10 @@ final readonly class BenchmarkRunSettler
      * ended, a result still running under a stale claim lost its worker and
      * will never finish: it fails with a fixed reason. A scheduled run that
      * finishes (completed or stopped at its cap) queues its regression check.
-     * With $failStalled a run that is still going fails those results too, so
-     * it can complete.
+     * With $failStalled (the stalled sweep) a run that is still going fails
+     * its sweepable results too, so it can complete: a running one whose
+     * claim outlived the queue's retry, and a pending one whose queued job
+     * was lost before it started.
      */
     public function settle(int $runId, bool $failStalled = false): void
     {
@@ -67,9 +72,13 @@ final readonly class BenchmarkRunSettler
             }
 
             if ($failStalled) {
-                $benchmarkRun->results()->runStale()->update([
+                $benchmarkRun->results()->sweepable()->where('status', BenchmarkResultStatus::Running)->update([
                     'status' => BenchmarkResultStatus::Failed,
                     'error' => self::STALLED_ERROR,
+                ]);
+                $benchmarkRun->results()->sweepable()->where('status', BenchmarkResultStatus::Pending)->update([
+                    'status' => BenchmarkResultStatus::Failed,
+                    'error' => self::NEVER_STARTED_ERROR,
                 ]);
             }
 

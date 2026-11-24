@@ -6,8 +6,11 @@ use App\Enums\FreePoolOverflowBehavior;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\FreePoolAccounting;
 use App\Services\AiUsage\PoolHeadroom;
+use App\Services\AiUsage\PoolHeadroomUnavailable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Exceptions;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -116,4 +119,48 @@ test('the cache key changes with the UTC date', function (): void {
     $this->travel(2)->minutes();
 
     expect(PoolHeadroom::cacheKey())->not->toBe($today);
+});
+
+test('a pool accounting failure is reported once, remembered for the request and not cached', function (): void {
+    Exceptions::fake();
+    $failure = new RuntimeException('accounting down');
+    $this->mock(FreePoolAccounting::class, fn ($mock) => $mock->shouldReceive('status')->once()->andThrow($failure));
+    app()->forgetScopedInstances();
+    $poolHeadroom = resolve(PoolHeadroom::class);
+
+    $first = null;
+
+    try {
+        $poolHeadroom->forPool(1);
+    } catch (PoolHeadroomUnavailable $poolHeadroomUnavailable) {
+        $first = $poolHeadroomUnavailable;
+    }
+
+    expect($first)->toBeInstanceOf(PoolHeadroomUnavailable::class)
+        ->and($first->getPrevious())->toBe($failure)
+        ->and(fn () => $poolHeadroom->forPool(2))->toThrow(PoolHeadroomUnavailable::class)
+        ->and(Cache::has(PoolHeadroom::cacheKey()))->toBeFalse();
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException === $failure);
+});
+
+test('flushing forgets a remembered failure so the next lookup tries again', function (): void {
+    Exceptions::fake();
+    $calls = 0;
+    $this->mock(FreePoolAccounting::class, fn ($mock) => $mock->shouldReceive('status')->twice()->andReturnUsing(function () use (&$calls): array {
+        $calls++;
+
+        throw_if($calls === 1, RuntimeException::class, 'accounting down');
+
+        return [];
+    }));
+    app()->forgetScopedInstances();
+    $poolHeadroom = resolve(PoolHeadroom::class);
+
+    expect(fn () => $poolHeadroom->forPool(1))->toThrow(PoolHeadroomUnavailable::class);
+
+    $poolHeadroom->flush();
+
+    expect($poolHeadroom->forPool(1))->toBeNull();
+    Exceptions::assertReportedCount(1);
 });

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
+use App\Jobs\RunBenchmarkCase;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -55,6 +56,7 @@ use Override;
  * @method static Builder<static>|BenchmarkResult claimable()
  * @method static Builder<static>|BenchmarkResult inFlight()
  * @method static Builder<static>|BenchmarkResult runStale()
+ * @method static Builder<static>|BenchmarkResult sweepable()
  * @method static Builder<static>|BenchmarkResult judgeStale()
  *
  * @mixin \Eloquent
@@ -95,10 +97,32 @@ class BenchmarkResult extends Model
      * lock (UniqueFor) until that expires, so a re-dispatch for the same
      * result and mode is dropped until then.
      *
-     * The benchmark:settle-stalled sweep fails results past this window, so its
-     * safety relies on RunBenchmarkCase's #[Timeout(280)] staying below it.
+     * The benchmark:settle-stalled sweep waits longer (sweepAfterSeconds()):
+     * a claim this stale may still be taken over by the queue's own retry.
      */
     public const int CLAIM_STALE_AFTER_SECONDS = 300;
+
+    /**
+     * RunBenchmarkCase's #[UniqueFor] window: its job waits for a slot at most
+     * 12 h (retryUntil) and then fails its result, so a result still pending
+     * this long after it was last touched lost its queued job before the job
+     * claimed it, and the stalled sweep fails it.
+     */
+    public const int LOST_AFTER_SECONDS = 46800;
+
+    /**
+     * How long a running result's claim stays untouched before the stalled
+     * sweep fails it: past the default queue connection's `retry_after` (when
+     * the queue retries a job whose worker died) plus one whole job run, so
+     * the retry has claimed the result again (or died too) first. Never
+     * shorter than CLAIM_STALE_AFTER_SECONDS.
+     */
+    public static function sweepAfterSeconds(): int
+    {
+        $retryAfter = (int) config(sprintf('queue.connections.%s.retry_after', config('queue.default')), 0);
+
+        return max(self::CLAIM_STALE_AFTER_SECONDS, $retryAfter + RunBenchmarkCase::TIMEOUT_SECONDS);
+    }
 
     /**
      * @return array<string, string>
@@ -159,6 +183,25 @@ class BenchmarkResult extends Model
         return $query
             ->where('status', BenchmarkResultStatus::Running)
             ->where('updated_at', '<=', $this->staleBefore());
+    }
+
+    /**
+     * Results the stalled sweep fails: running under a claim untouched for
+     * sweepAfterSeconds(), or pending untouched for LOST_AFTER_SECONDS (their
+     * queued job was lost before it claimed them).
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeSweepable(Builder $query): Builder
+    {
+        return $query->where(static fn (Builder $builder): Builder => $builder
+            ->where(static fn (Builder $running): Builder => $running
+                ->where('status', BenchmarkResultStatus::Running)
+                ->where('updated_at', '<=', now()->subSeconds(self::sweepAfterSeconds())))
+            ->orWhere(static fn (Builder $pending): Builder => $pending
+                ->where('status', BenchmarkResultStatus::Pending)
+                ->where('updated_at', '<=', now()->subSeconds(self::LOST_AFTER_SECONDS))));
     }
 
     /**
