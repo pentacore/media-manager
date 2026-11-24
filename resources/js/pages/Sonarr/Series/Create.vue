@@ -296,7 +296,7 @@ function freeSpaceLabel(bytes: number | null): string {
                         >
                             <SelectTrigger
                                 :id="`root-${result.tvdb_id}`"
-                                class="max-sm:w-full"
+                                class="max-w-full max-sm:w-full"
                                 data-add-root-folder
                             >
                                 <SelectValue

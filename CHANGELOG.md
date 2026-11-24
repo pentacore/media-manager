@@ -1,3 +1,9 @@
+## [1.63.1](https://github.com/pentacore/media-manager/compare/v1.63.0...v1.63.1) (2026-11-24)
+
+### Bug Fixes
+
+* **ui:** keep the add form's root folder and the Subtitles connection mappings inside their cards on desktop ([859d741](https://github.com/pentacore/media-manager/commit/859d741165b9e7873ca77cf77fb3b045c34250ad))
+
 # [1.63.0](https://github.com/pentacore/media-manager/compare/v1.62.3...v1.63.0) (2026-11-24)
 
 ### Features
