@@ -43,6 +43,8 @@ export type AiUsageRecord = {
   benchmark_run_id: number | null;
   is_benchmark: boolean;
   tier_via: string | null;
+  error_code: string | null;
+  failed_step: number | null;
   user?: User | null;
   benchmarkRun?: BenchmarkRun | null;
 };
@@ -79,6 +81,8 @@ export type AiUsageRecordCreate = {
   benchmark_run_id?: number | null;
   is_benchmark?: boolean;
   tier_via?: string | null;
+  error_code?: string | null;
+  failed_step?: number | null;
 };
 
 export type AiUsageRecordUpdate = {
@@ -113,4 +117,6 @@ export type AiUsageRecordUpdate = {
   benchmark_run_id?: number | null;
   is_benchmark?: boolean;
   tier_via?: string | null;
+  error_code?: string | null;
+  failed_step?: number | null;
 };

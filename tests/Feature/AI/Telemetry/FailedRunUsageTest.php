@@ -7,10 +7,12 @@ use App\Ai\Middleware\ClientDisconnectedException;
 use App\Listeners\Ai\RecordFailedAgentRun;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\StepCompleted;
+use Laravel\Ai\Exceptions\StreamErrorException;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Prompts\Prompt;
 use Laravel\Ai\Responses\AgentResponse;
@@ -18,6 +20,7 @@ use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\TextResponse;
+use Laravel\Ai\Streaming\Events\Error;
 
 function makeFailedRunPrompt(object $agent, string $promptText = 'prompt text'): AgentPrompt
 {
@@ -144,4 +147,51 @@ test('a run ended by a wrapped client disconnect is stopped too', function (): v
     expect(AiUsageRecord::where('invocation_id', 'inv-wrapped')->sole())
         ->status->toBe('stopped')
         ->error_message->toBeNull();
+});
+
+test('a failed run stores the step that failed and an error code from the exception', function (): void {
+    $calls = 0;
+    DecisionAgent::fake(function () use (&$calls): mixed {
+        $calls++;
+
+        return $calls === 1
+            ? new ToolCall(id: 'c1', name: 'GetServiceStatusTool', arguments: [])
+            : throw new RuntimeException('provider fell over');
+    });
+
+    expect(fn (): AgentResponse => (new DecisionAgent)->prompt('event'))->toThrow(RuntimeException::class);
+
+    expect(AiUsageRecord::latest('id')->firstOrFail())
+        ->failed_step->toBe(2)
+        ->error_code->toBe('runtime_exception');
+});
+
+test('a failed run stores the error type the provider sent inside the stream', function (): void {
+    resolve(RunUsageAccumulator::class)->markFailedStep('inv-stream-code', 3);
+
+    (new RecordFailedAgentRun)->handle(new AgentFailed('inv-stream-code', makeFailedRunPrompt(new DecisionAgent), new StreamErrorException(
+        new Error('evt-1', 'server_error', 'An error occurred.', false, 1_700_000_000),
+    )));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-stream-code')->sole())
+        ->error_code->toBe('server_error')
+        ->failed_step->toBe(3)
+        ->and(resolve(RunUsageAccumulator::class)->failedStep('inv-stream-code'))->toBeNull();
+});
+
+test('a stopped run stores no error code', function (): void {
+    (new RecordFailedAgentRun)->handle(new AgentFailed('inv-stopped-code', makeFailedRunPrompt(new DecisionAgent), new ClientDisconnectedException));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-stopped-code')->sole())
+        ->status->toBe('stopped')
+        ->error_code->toBeNull();
+});
+
+test('the invocation detail carries the failed step and error code', function (): void {
+    $aiUsageRecord = AiUsageRecord::factory()->failed()->create(['error_code' => 'server_error', 'failed_step' => 2])->refresh();
+
+    $detail = resolve(AiUsageReporting::class)->invocationDetail($aiUsageRecord);
+
+    expect($detail['record']['error_code'])->toBe('server_error')
+        ->and($detail['record']['failed_step'])->toBe(2);
 });

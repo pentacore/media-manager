@@ -106,6 +106,8 @@ export interface InvocationDetail {
         status: string;
         kind: string;
         error_message: string | null;
+        error_code: string | null;
+        failed_step: number | null;
         benchmark_run_id: number | null;
         is_benchmark: boolean;
         created_at: string | null;

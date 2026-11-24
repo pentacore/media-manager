@@ -41,6 +41,8 @@ use Override;
  * @property string $status
  * @property AiUsageKind $kind
  * @property string|null $error_message
+ * @property string|null $error_code
+ * @property int|null $failed_step
  * @property string|null $parent_invocation_id
  * @property int|null $tier_position
  * @property string|null $tier_via
@@ -86,6 +88,8 @@ use Override;
     'status',
     'kind',
     'error_message',
+    'error_code',
+    'failed_step',
     'parent_invocation_id',
     'search_units',
     'search_unit_per_k',

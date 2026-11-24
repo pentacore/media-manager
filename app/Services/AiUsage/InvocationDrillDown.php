@@ -144,6 +144,8 @@ class InvocationDrillDown
                 'status' => $aiUsageRecord->status,
                 'kind' => $aiUsageRecord->kind->value,
                 'error_message' => $aiUsageRecord->error_message,
+                'error_code' => $aiUsageRecord->error_code,
+                'failed_step' => $aiUsageRecord->failed_step,
                 'parent_invocation_id' => $aiUsageRecord->parent_invocation_id,
                 'search_units' => (float) $aiUsageRecord->search_units,
                 'benchmark_run_id' => $aiUsageRecord->benchmark_run_id,

@@ -262,7 +262,30 @@ function rateSourceVariant(
                 <div
                     v-if="detail.record.error_message"
                     class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                    data-usage-run-error
                 >
+                    <p
+                        v-if="
+                            detail.record.failed_step !== null ||
+                            detail.record.error_code
+                        "
+                        class="mb-1 font-mono text-[11px] opacity-80"
+                    >
+                        <span v-if="detail.record.failed_step !== null"
+                            >Step {{ detail.record.failed_step }}</span
+                        >
+                        <span
+                            v-if="
+                                detail.record.failed_step !== null &&
+                                detail.record.error_code
+                            "
+                        >
+                            ·
+                        </span>
+                        <span v-if="detail.record.error_code">{{
+                            detail.record.error_code
+                        }}</span>
+                    </p>
                     {{ detail.record.error_message }}
                 </div>
 

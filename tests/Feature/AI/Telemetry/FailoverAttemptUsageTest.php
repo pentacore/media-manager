@@ -91,3 +91,16 @@ test('an abandoned provider attempt with an empty error blames the agent, not an
     expect(AiUsageRecord::where('provider', 'anthropic')->sole()->error_message)
         ->toBe('The agent failed without a usable description.');
 });
+
+test('an abandoned provider attempt stores its failed step and error code', function (): void {
+    $runUsageAccumulator = resolve(RunUsageAccumulator::class);
+    $runUsageAccumulator->add('inv-code', 'anthropic', 'claude-sonnet-4-5', new TextUsage(100, 10));
+    $runUsageAccumulator->markFailedStep('inv-code', 4);
+
+    event(new AgentFailedOver('inv-code', new DecisionAgent, Ai::textProvider('anthropic'), 'claude-sonnet-4-5', new ProviderOverloadedException('overloaded')));
+
+    expect(AiUsageRecord::where('provider', 'anthropic')->sole())
+        ->failed_step->toBe(4)
+        ->error_code->toBe('provider_overloaded_exception')
+        ->and($runUsageAccumulator->failedStep('inv-code'))->toBeNull();
+});
