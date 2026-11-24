@@ -6,10 +6,28 @@
 
 import type { ActivityLog } from './ActivityLog';
 import type { BazarrServiceLink } from './BazarrServiceLink';
+import type { HealthStatus } from '../enums';
+import type { ServiceType } from '../enums';
 import type { SubtitleCase } from './SubtitleCase';
 import type { WebhookEvent } from './WebhookEvent';
 
 export type ServiceConnection = {
+  id: number;
+  type: ServiceType;
+  name: string;
+  url: string;
+  api_key: string;
+  webhook_token: string;
+  is_active: boolean;
+  last_seen_at: string | null;
+  version: string | null;
+  settings: unknown[] | null;
+  created_at: string | null;
+  updated_at: string | null;
+  health_status: HealthStatus | null;
+  latest_version: string | null;
+  health_message: string | null;
+  external_url: string | null;
   webhookEvents?: WebhookEvent[];
   activityLogs?: ActivityLog[];
   bazarrServiceLinks?: BazarrServiceLink[];
@@ -18,6 +36,34 @@ export type ServiceConnection = {
   managedSubtitleCases?: SubtitleCase[];
 };
 
-export type ServiceConnectionCreate = Record<string, never>;
+export type ServiceConnectionCreate = {
+  type: ServiceType;
+  name: string;
+  url: string;
+  api_key: string;
+  webhook_token: string;
+  is_active?: boolean;
+  last_seen_at?: string | null;
+  version?: string | null;
+  settings?: unknown[] | null;
+  health_status?: HealthStatus | null;
+  latest_version?: string | null;
+  health_message?: string | null;
+  external_url?: string | null;
+};
 
-export type ServiceConnectionUpdate = Record<string, never>;
+export type ServiceConnectionUpdate = {
+  type?: ServiceType;
+  name?: string;
+  url?: string;
+  api_key?: string;
+  webhook_token?: string;
+  is_active?: boolean;
+  last_seen_at?: string | null;
+  version?: string | null;
+  settings?: unknown[] | null;
+  health_status?: HealthStatus | null;
+  latest_version?: string | null;
+  health_message?: string | null;
+  external_url?: string | null;
+};

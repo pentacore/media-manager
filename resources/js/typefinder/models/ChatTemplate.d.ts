@@ -4,12 +4,49 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { AiReasoningLevel } from '../enums';
 import type { User } from './User';
 
 export type ChatTemplate = {
+  id: number;
+  user_id: number;
+  name: string;
+  body: string;
+  variables: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  auto_send: boolean;
+  pinned: boolean;
+  last_used_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  model_provider: string | null;
+  model: string | null;
+  reasoning: AiReasoningLevel | null;
+  tool_groups: unknown[] | null;
   user?: User | null;
 };
 
-export type ChatTemplateCreate = Record<string, never>;
+export type ChatTemplateCreate = {
+  user_id: number;
+  name: string;
+  body: string;
+  variables: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  auto_send?: boolean;
+  pinned?: boolean;
+  model_provider?: string | null;
+  model?: string | null;
+  reasoning?: AiReasoningLevel | null;
+  tool_groups?: unknown[] | null;
+};
 
-export type ChatTemplateUpdate = Record<string, never>;
+export type ChatTemplateUpdate = {
+  user_id?: number;
+  name?: string;
+  body?: string;
+  variables?: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  auto_send?: boolean;
+  pinned?: boolean;
+  model_provider?: string | null;
+  model?: string | null;
+  reasoning?: AiReasoningLevel | null;
+  tool_groups?: unknown[] | null;
+};

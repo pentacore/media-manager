@@ -5,9 +5,16 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type AppSetting = {
-
+  key: string;
+  value: unknown;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-export type AppSettingCreate = Record<string, never>;
+export type AppSettingCreate = {
+  value: unknown;
+};
 
-export type AppSettingUpdate = Record<string, never>;
+export type AppSettingUpdate = {
+  value?: unknown;
+};

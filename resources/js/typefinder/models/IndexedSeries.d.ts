@@ -7,9 +7,62 @@
 import type { ServiceConnection } from './ServiceConnection';
 
 export type IndexedSeries = {
+  id: number;
+  service_connection_id: number;
+  sonarr_id: number;
+  tvdb_id: number | null;
+  imdb_id: number | null;
+  title: string;
+  sort_title: string | null;
+  year: number | null;
+  title_slug: string | null;
+  status: string | null;
+  monitored: boolean;
+  network: string | null;
+  genres: unknown[] | null;
+  overview: string | null;
+  poster_url: string | null;
+  arr_added_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  embedding: unknown[] | null;
   serviceConnection?: ServiceConnection | null;
 };
 
-export type IndexedSeriesCreate = Record<string, never>;
+export type IndexedSeriesCreate = {
+  service_connection_id: number;
+  sonarr_id: number;
+  tvdb_id?: number | null;
+  imdb_id?: number | null;
+  title: string;
+  sort_title?: string | null;
+  year?: number | null;
+  title_slug?: string | null;
+  status?: string | null;
+  monitored?: boolean;
+  network?: string | null;
+  genres?: unknown[] | null;
+  overview?: string | null;
+  poster_url?: string | null;
+  arr_added_at?: string | null;
+  embedding?: unknown[] | null;
+};
 
-export type IndexedSeriesUpdate = Record<string, never>;
+export type IndexedSeriesUpdate = {
+  service_connection_id?: number;
+  sonarr_id?: number;
+  tvdb_id?: number | null;
+  imdb_id?: number | null;
+  title?: string;
+  sort_title?: string | null;
+  year?: number | null;
+  title_slug?: string | null;
+  status?: string | null;
+  monitored?: boolean;
+  network?: string | null;
+  genres?: unknown[] | null;
+  overview?: string | null;
+  poster_url?: string | null;
+  arr_added_at?: string | null;
+  embedding?: unknown[] | null;
+};

@@ -4,13 +4,28 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { BazarrServiceRole } from '../enums';
 import type { ServiceConnection } from './ServiceConnection';
 
 export type BazarrServiceLink = {
+  id: number;
+  bazarr_connection_id: number;
+  related_connection_id: number;
+  role: BazarrServiceRole;
+  created_at: string | null;
+  updated_at: string | null;
   bazarrConnection?: ServiceConnection | null;
   relatedConnection?: ServiceConnection | null;
 };
 
-export type BazarrServiceLinkCreate = Record<string, never>;
+export type BazarrServiceLinkCreate = {
+  bazarr_connection_id: number;
+  related_connection_id: number;
+  role: BazarrServiceRole;
+};
 
-export type BazarrServiceLinkUpdate = Record<string, never>;
+export type BazarrServiceLinkUpdate = {
+  bazarr_connection_id?: number;
+  related_connection_id?: number;
+  role?: BazarrServiceRole;
+};

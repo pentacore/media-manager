@@ -5,9 +5,37 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type StatRollup = {
-
+  id: number;
+  metric: string;
+  period: string;
+  bucket: string;
+  dimensions: unknown[];
+  count: number;
+  sum: number | null;
+  min: number | null;
+  max: number | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-export type StatRollupCreate = Record<string, never>;
+export type StatRollupCreate = {
+  metric: string;
+  period: string;
+  bucket: string;
+  dimensions?: unknown[];
+  count?: number;
+  sum?: number | null;
+  min?: number | null;
+  max?: number | null;
+};
 
-export type StatRollupUpdate = Record<string, never>;
+export type StatRollupUpdate = {
+  metric?: string;
+  period?: string;
+  bucket?: string;
+  dimensions?: unknown[];
+  count?: number;
+  sum?: number | null;
+  min?: number | null;
+  max?: number | null;
+};

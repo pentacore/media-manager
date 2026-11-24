@@ -4,10 +4,34 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-export type ActionTypeConfig = {
+import type { SecondOpinionMode } from '../enums';
 
+export type ActionTypeConfig = {
+  id: number;
+  type: string;
+  label: string;
+  description: string | null;
+  requires_approval: boolean;
+  is_enabled: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  second_opinion: SecondOpinionMode;
 };
 
-export type ActionTypeConfigCreate = Record<string, never>;
+export type ActionTypeConfigCreate = {
+  type: string;
+  label: string;
+  description?: string | null;
+  requires_approval?: boolean;
+  is_enabled?: boolean;
+  second_opinion?: SecondOpinionMode;
+};
 
-export type ActionTypeConfigUpdate = Record<string, never>;
+export type ActionTypeConfigUpdate = {
+  type?: string;
+  label?: string;
+  description?: string | null;
+  requires_approval?: boolean;
+  is_enabled?: boolean;
+  second_opinion?: SecondOpinionMode;
+};

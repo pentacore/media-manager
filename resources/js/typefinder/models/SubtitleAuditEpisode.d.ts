@@ -6,12 +6,45 @@
 
 import type { ActionRequest } from './ActionRequest';
 import type { SubtitleAuditBatch } from './SubtitleAuditBatch';
+import type { SubtitleAuditEpisodeOutcome } from '../enums';
 
 export type SubtitleAuditEpisode = {
+  id: number;
+  subtitle_audit_batch_id: number;
+  episode_id: number;
+  season_number: number;
+  episode_number: number;
+  missing_languages: unknown[];
+  outcome: SubtitleAuditEpisodeOutcome;
+  action_request_id: number | null;
+  release_title: string | null;
+  failure_reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   batch?: SubtitleAuditBatch | null;
   actionRequest?: ActionRequest | null;
 };
 
-export type SubtitleAuditEpisodeCreate = Record<string, never>;
+export type SubtitleAuditEpisodeCreate = {
+  subtitle_audit_batch_id: number;
+  episode_id: number;
+  season_number: number;
+  episode_number: number;
+  missing_languages: unknown[];
+  outcome?: SubtitleAuditEpisodeOutcome;
+  action_request_id?: number | null;
+  release_title?: string | null;
+  failure_reason?: string | null;
+};
 
-export type SubtitleAuditEpisodeUpdate = Record<string, never>;
+export type SubtitleAuditEpisodeUpdate = {
+  subtitle_audit_batch_id?: number;
+  episode_id?: number;
+  season_number?: number;
+  episode_number?: number;
+  missing_languages?: unknown[];
+  outcome?: SubtitleAuditEpisodeOutcome;
+  action_request_id?: number | null;
+  release_title?: string | null;
+  failure_reason?: string | null;
+};

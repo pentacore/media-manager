@@ -4,12 +4,33 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { AiProposedWorkflowStatus } from '../enums';
 import type { User } from './User';
 
 export type AiProposedWorkflow = {
+  id: string;
+  user_id: number;
+  conversation_id: string | null;
+  rationale: string;
+  steps: unknown[];
+  status: AiProposedWorkflowStatus;
+  created_at: string | null;
+  updated_at: string | null;
   user?: User | null;
 };
 
-export type AiProposedWorkflowCreate = Record<string, never>;
+export type AiProposedWorkflowCreate = {
+  user_id: number;
+  conversation_id?: string | null;
+  rationale: string;
+  steps: unknown[];
+  status: AiProposedWorkflowStatus;
+};
 
-export type AiProposedWorkflowUpdate = Record<string, never>;
+export type AiProposedWorkflowUpdate = {
+  user_id?: number;
+  conversation_id?: string | null;
+  rationale?: string;
+  steps?: unknown[];
+  status?: AiProposedWorkflowStatus;
+};

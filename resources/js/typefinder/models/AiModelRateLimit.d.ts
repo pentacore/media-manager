@@ -5,11 +5,30 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { AiModelPrice } from './AiModelPrice';
+import type { RateLimitMetric } from '../enums';
+import type { RateLimitPeriod } from '../enums';
 
 export type AiModelRateLimit = {
+  id: number;
+  ai_model_price_id: number;
+  metric: RateLimitMetric;
+  period: RateLimitPeriod;
+  limit_value: number;
+  created_at: string | null;
+  updated_at: string | null;
   price?: AiModelPrice | null;
 };
 
-export type AiModelRateLimitCreate = Record<string, never>;
+export type AiModelRateLimitCreate = {
+  ai_model_price_id: number;
+  metric: RateLimitMetric;
+  period: RateLimitPeriod;
+  limit_value: number;
+};
 
-export type AiModelRateLimitUpdate = Record<string, never>;
+export type AiModelRateLimitUpdate = {
+  ai_model_price_id?: number;
+  metric?: RateLimitMetric;
+  period?: RateLimitPeriod;
+  limit_value?: number;
+};

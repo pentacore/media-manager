@@ -7,9 +7,65 @@
 import type { ServiceConnection } from './ServiceConnection';
 
 export type IndexedMovie = {
+  id: number;
+  service_connection_id: number;
+  radarr_id: number;
+  tmdb_id: number | null;
+  imdb_id: string | null;
+  title: string;
+  sort_title: string | null;
+  original_title: string | null;
+  year: number | null;
+  title_slug: string | null;
+  status: string | null;
+  monitored: boolean;
+  has_file: boolean;
+  genres: unknown[] | null;
+  overview: string | null;
+  poster_url: string | null;
+  arr_added_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  embedding: unknown[] | null;
   serviceConnection?: ServiceConnection | null;
 };
 
-export type IndexedMovieCreate = Record<string, never>;
+export type IndexedMovieCreate = {
+  service_connection_id: number;
+  radarr_id: number;
+  tmdb_id?: number | null;
+  imdb_id?: string | null;
+  title: string;
+  sort_title?: string | null;
+  original_title?: string | null;
+  year?: number | null;
+  title_slug?: string | null;
+  status?: string | null;
+  monitored?: boolean;
+  has_file?: boolean;
+  genres?: unknown[] | null;
+  overview?: string | null;
+  poster_url?: string | null;
+  arr_added_at?: string | null;
+  embedding?: unknown[] | null;
+};
 
-export type IndexedMovieUpdate = Record<string, never>;
+export type IndexedMovieUpdate = {
+  service_connection_id?: number;
+  radarr_id?: number;
+  tmdb_id?: number | null;
+  imdb_id?: string | null;
+  title?: string;
+  sort_title?: string | null;
+  original_title?: string | null;
+  year?: number | null;
+  title_slug?: string | null;
+  status?: string | null;
+  monitored?: boolean;
+  has_file?: boolean;
+  genres?: unknown[] | null;
+  overview?: string | null;
+  poster_url?: string | null;
+  arr_added_at?: string | null;
+  embedding?: unknown[] | null;
+};

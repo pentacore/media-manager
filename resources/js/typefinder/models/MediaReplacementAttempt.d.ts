@@ -5,15 +5,81 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { ActionRequest } from './ActionRequest';
+import type { MediaReplacementStatus } from '../enums';
 import type { ServiceConnection } from './ServiceConnection';
 import type { User } from './User';
 
 export type MediaReplacementAttempt = {
+  id: number;
+  action_request_id: number;
+  service_connection_id: number | null;
+  status: MediaReplacementStatus;
+  scope: string;
+  target: unknown[];
+  candidate_fingerprint: string;
+  candidate: unknown[];
+  required_languages: unknown[];
+  download_id: string | null;
+  verification: unknown[] | null;
+  failure_reason: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  grab_accepted_at: string | null;
+  was_monitored: boolean | null;
+  monitoring_suspended: boolean | null;
+  cleanup_completed_at: string | null;
+  grab_attempted_at: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: number | null;
   actionRequest?: ActionRequest | null;
   serviceConnection?: ServiceConnection | null;
   acknowledgedBy?: User | null;
 };
 
-export type MediaReplacementAttemptCreate = Record<string, never>;
+export type MediaReplacementAttemptCreate = {
+  action_request_id: number;
+  service_connection_id?: number | null;
+  status: MediaReplacementStatus;
+  scope: string;
+  target: unknown[];
+  candidate_fingerprint: string;
+  candidate: unknown[];
+  required_languages: unknown[];
+  download_id?: string | null;
+  verification?: unknown[] | null;
+  failure_reason?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  grab_accepted_at?: string | null;
+  was_monitored?: boolean | null;
+  monitoring_suspended?: boolean | null;
+  cleanup_completed_at?: string | null;
+  grab_attempted_at?: string | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: number | null;
+};
 
-export type MediaReplacementAttemptUpdate = Record<string, never>;
+export type MediaReplacementAttemptUpdate = {
+  action_request_id?: number;
+  service_connection_id?: number | null;
+  status?: MediaReplacementStatus;
+  scope?: string;
+  target?: unknown[];
+  candidate_fingerprint?: string;
+  candidate?: unknown[];
+  required_languages?: unknown[];
+  download_id?: string | null;
+  verification?: unknown[] | null;
+  failure_reason?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  grab_accepted_at?: string | null;
+  was_monitored?: boolean | null;
+  monitoring_suspended?: boolean | null;
+  cleanup_completed_at?: string | null;
+  grab_attempted_at?: string | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: number | null;
+};

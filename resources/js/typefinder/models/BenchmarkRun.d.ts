@@ -5,16 +5,64 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { BenchmarkResult } from './BenchmarkResult';
+import type { BenchmarkRunStatus } from '../enums';
 import type { BenchmarkSchedule } from './BenchmarkSchedule';
 import type { User } from './User';
 
 export type BenchmarkRun = {
+  id: number;
+  name: string;
+  status: BenchmarkRunStatus;
+  candidates: unknown[];
+  judge: unknown[] | null;
+  case_ids: unknown[];
+  estimate_usd: number;
+  cost_cap_usd: number | null;
+  cost_usd: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_by: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  benchmark_schedule_id: number | null;
+  baseline_run_id: number | null;
+  regressions: unknown[] | null;
   results?: BenchmarkResult[];
   creator?: User | null;
   schedule?: BenchmarkSchedule | null;
   baseline?: BenchmarkRun | null;
 };
 
-export type BenchmarkRunCreate = Record<string, never>;
+export type BenchmarkRunCreate = {
+  name: string;
+  status?: BenchmarkRunStatus;
+  candidates: unknown[];
+  judge?: unknown[] | null;
+  case_ids: unknown[];
+  estimate_usd?: number;
+  cost_cap_usd?: number | null;
+  cost_usd?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_by?: number | null;
+  benchmark_schedule_id?: number | null;
+  baseline_run_id?: number | null;
+  regressions?: unknown[] | null;
+};
 
-export type BenchmarkRunUpdate = Record<string, never>;
+export type BenchmarkRunUpdate = {
+  name?: string;
+  status?: BenchmarkRunStatus;
+  candidates?: unknown[];
+  judge?: unknown[] | null;
+  case_ids?: unknown[];
+  estimate_usd?: number;
+  cost_cap_usd?: number | null;
+  cost_usd?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_by?: number | null;
+  benchmark_schedule_id?: number | null;
+  baseline_run_id?: number | null;
+  regressions?: unknown[] | null;
+};

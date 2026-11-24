@@ -4,14 +4,53 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { AiTask } from '../enums';
 import type { BenchmarkCaseAttachment } from './BenchmarkCaseAttachment';
 import type { BenchmarkResult } from './BenchmarkResult';
 
 export type BenchmarkCase = {
+  id: number;
+  task: AiTask;
+  name: string;
+  tags: unknown[];
+  notes: string | null;
+  input: unknown[];
+  fixtures: unknown[];
+  scoring: unknown[];
+  source_invocation_id: string | null;
+  source_prompt_tokens: number | null;
+  source_completion_tokens: number | null;
+  source_truncated: boolean;
+  created_at: string | null;
+  updated_at: string | null;
   results?: BenchmarkResult[];
   attachments?: BenchmarkCaseAttachment[];
 };
 
-export type BenchmarkCaseCreate = Record<string, never>;
+export type BenchmarkCaseCreate = {
+  task: AiTask;
+  name: string;
+  tags?: unknown[];
+  notes?: string | null;
+  input: unknown[];
+  fixtures?: unknown[];
+  scoring: unknown[];
+  source_invocation_id?: string | null;
+  source_prompt_tokens?: number | null;
+  source_completion_tokens?: number | null;
+  source_truncated?: boolean;
+};
 
-export type BenchmarkCaseUpdate = Record<string, never>;
+export type BenchmarkCaseUpdate = {
+  task?: AiTask;
+  name?: string;
+  tags?: unknown[];
+  notes?: string | null;
+  input?: unknown[];
+  fixtures?: unknown[];
+  scoring?: unknown[];
+  source_invocation_id?: string | null;
+  source_prompt_tokens?: number | null;
+  source_completion_tokens?: number | null;
+  source_truncated?: boolean;
+};

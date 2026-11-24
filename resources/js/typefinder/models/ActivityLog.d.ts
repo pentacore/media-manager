@@ -4,17 +4,50 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { ActivityLogCategory } from '../enums';
 import type { ServiceConnection } from './ServiceConnection';
 import type { User } from './User';
 import type { WebhookEvent } from './WebhookEvent';
 
 export type ActivityLog = {
+  id: number;
+  user_id: number | null;
+  service_connection_id: number | null;
+  action: string;
+  subject_type: string | null;
+  subject_id: number | null;
+  description: string;
+  metadata: Record<string|number, any> | null;
+  created_at: string | null;
+  updated_at: string | null;
+  webhook_event_id: number | null;
+  category: ActivityLogCategory;
   user?: User | null;
   serviceConnection?: ServiceConnection | null;
   webhookEvent?: WebhookEvent | null;
   subject?: T | null;
 };
 
-export type ActivityLogCreate = Record<string, never>;
+export type ActivityLogCreate = {
+  user_id?: number | null;
+  service_connection_id?: number | null;
+  action: string;
+  subject_type?: string | null;
+  subject_id?: number | null;
+  description: string;
+  metadata?: Record<string|number, any> | null;
+  webhook_event_id?: number | null;
+  category?: ActivityLogCategory;
+};
 
-export type ActivityLogUpdate = Record<string, never>;
+export type ActivityLogUpdate = {
+  user_id?: number | null;
+  service_connection_id?: number | null;
+  action?: string;
+  subject_type?: string | null;
+  subject_id?: number | null;
+  description?: string;
+  metadata?: Record<string|number, any> | null;
+  webhook_event_id?: number | null;
+  category?: ActivityLogCategory;
+};

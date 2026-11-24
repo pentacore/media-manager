@@ -7,9 +7,30 @@
 import type { ActionRequest } from './ActionRequest';
 import type { ServiceConnection } from './ServiceConnection';
 import type { SubtitleCaseAttempt } from './SubtitleCaseAttempt';
+import type { SubtitleCaseStatus } from '../enums';
 import type { SubtitleUpload } from './SubtitleUpload';
 
 export type SubtitleCase = {
+  id: number;
+  bazarr_connection_id: number;
+  service_connection_id: number;
+  download_action_request_id: number | null;
+  replacement_action_request_id: number | null;
+  media_type: string;
+  scope: string;
+  target_ids: unknown[];
+  file_fingerprint: string;
+  required_languages: unknown[];
+  requirements_fingerprint: string;
+  status: SubtitleCaseStatus;
+  evidence: unknown[] | null;
+  failure_reason: string | null;
+  grace_until: string | null;
+  observed_at: string;
+  resolved_at: string | null;
+  superseded_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   bazarrConnection?: ServiceConnection | null;
   serviceConnection?: ServiceConnection | null;
   downloadActionRequest?: ActionRequest | null;
@@ -19,6 +40,42 @@ export type SubtitleCase = {
   uploads?: SubtitleUpload[];
 };
 
-export type SubtitleCaseCreate = Record<string, never>;
+export type SubtitleCaseCreate = {
+  bazarr_connection_id: number;
+  service_connection_id: number;
+  download_action_request_id?: number | null;
+  replacement_action_request_id?: number | null;
+  media_type: string;
+  scope: string;
+  target_ids: unknown[];
+  file_fingerprint: string;
+  required_languages: unknown[];
+  requirements_fingerprint: string;
+  status?: SubtitleCaseStatus;
+  evidence?: unknown[] | null;
+  failure_reason?: string | null;
+  grace_until?: string | null;
+  observed_at: string;
+  resolved_at?: string | null;
+  superseded_at?: string | null;
+};
 
-export type SubtitleCaseUpdate = Record<string, never>;
+export type SubtitleCaseUpdate = {
+  bazarr_connection_id?: number;
+  service_connection_id?: number;
+  download_action_request_id?: number | null;
+  replacement_action_request_id?: number | null;
+  media_type?: string;
+  scope?: string;
+  target_ids?: unknown[];
+  file_fingerprint?: string;
+  required_languages?: unknown[];
+  requirements_fingerprint?: string;
+  status?: SubtitleCaseStatus;
+  evidence?: unknown[] | null;
+  failure_reason?: string | null;
+  grace_until?: string | null;
+  observed_at?: string;
+  resolved_at?: string | null;
+  superseded_at?: string | null;
+};

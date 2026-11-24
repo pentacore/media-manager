@@ -5,13 +5,49 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { BenchmarkNeutralJudgement } from './BenchmarkNeutralJudgement';
+import type { BenchmarkNeutralRejudgeStatus } from '../enums';
 import type { User } from './User';
 
 export type BenchmarkNeutralRejudge = {
+  id: number;
+  run_ids: unknown[];
+  judge: unknown[];
+  judge_key: string;
+  status: BenchmarkNeutralRejudgeStatus;
+  estimate_usd: number;
+  cost_cap_usd: number;
+  cost_usd: number;
+  created_by: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   judgements?: BenchmarkNeutralJudgement[];
   creator?: User | null;
 };
 
-export type BenchmarkNeutralRejudgeCreate = Record<string, never>;
+export type BenchmarkNeutralRejudgeCreate = {
+  run_ids: unknown[];
+  judge: unknown[];
+  judge_key: string;
+  status?: BenchmarkNeutralRejudgeStatus;
+  estimate_usd?: number;
+  cost_cap_usd: number;
+  cost_usd?: number;
+  created_by?: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
 
-export type BenchmarkNeutralRejudgeUpdate = Record<string, never>;
+export type BenchmarkNeutralRejudgeUpdate = {
+  run_ids?: unknown[];
+  judge?: unknown[];
+  judge_key?: string;
+  status?: BenchmarkNeutralRejudgeStatus;
+  estimate_usd?: number;
+  cost_cap_usd?: number;
+  cost_usd?: number;
+  created_by?: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+};

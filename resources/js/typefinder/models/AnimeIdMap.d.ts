@@ -5,9 +5,40 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type AnimeIdMap = {
-
+  id: number;
+  anilist_id: number | null;
+  mal_id: number | null;
+  tmdb_tv_id: number | null;
+  tmdb_movie_id: number | null;
+  tvdb_id: number | null;
+  tmdb_season: number | null;
+  type: string | null;
+  user_confirmed: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  tvdb_season: number | null;
 };
 
-export type AnimeIdMapCreate = Record<string, never>;
+export type AnimeIdMapCreate = {
+  anilist_id?: number | null;
+  mal_id?: number | null;
+  tmdb_tv_id?: number | null;
+  tmdb_movie_id?: number | null;
+  tvdb_id?: number | null;
+  tmdb_season?: number | null;
+  type?: string | null;
+  user_confirmed?: boolean;
+  tvdb_season?: number | null;
+};
 
-export type AnimeIdMapUpdate = Record<string, never>;
+export type AnimeIdMapUpdate = {
+  anilist_id?: number | null;
+  mal_id?: number | null;
+  tmdb_tv_id?: number | null;
+  tmdb_movie_id?: number | null;
+  tvdb_id?: number | null;
+  tmdb_season?: number | null;
+  type?: string | null;
+  user_confirmed?: boolean;
+  tvdb_season?: number | null;
+};

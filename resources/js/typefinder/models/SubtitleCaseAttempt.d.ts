@@ -6,12 +6,49 @@
 
 import type { ActionRequest } from './ActionRequest';
 import type { SubtitleCase } from './SubtitleCase';
+import type { SubtitleCaseAttemptOutcome } from '../enums';
+import type { SubtitleCaseAttemptType } from '../enums';
 
 export type SubtitleCaseAttempt = {
+  id: number;
+  subtitle_case_id: number;
+  action_request_id: number | null;
+  type: SubtitleCaseAttemptType;
+  candidate_count: number;
+  eligible_candidate_count: number;
+  summary: unknown[] | null;
+  outcome: SubtitleCaseAttemptOutcome;
+  error_category: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   subtitleCase?: SubtitleCase | null;
   actionRequest?: ActionRequest | null;
 };
 
-export type SubtitleCaseAttemptCreate = Record<string, never>;
+export type SubtitleCaseAttemptCreate = {
+  subtitle_case_id: number;
+  action_request_id?: number | null;
+  type: SubtitleCaseAttemptType;
+  candidate_count?: number;
+  eligible_candidate_count?: number;
+  summary?: unknown[] | null;
+  outcome: SubtitleCaseAttemptOutcome;
+  error_category?: string | null;
+  started_at: string;
+  completed_at?: string | null;
+};
 
-export type SubtitleCaseAttemptUpdate = Record<string, never>;
+export type SubtitleCaseAttemptUpdate = {
+  subtitle_case_id?: number;
+  action_request_id?: number | null;
+  type?: SubtitleCaseAttemptType;
+  candidate_count?: number;
+  eligible_candidate_count?: number;
+  summary?: unknown[] | null;
+  outcome?: SubtitleCaseAttemptOutcome;
+  error_category?: string | null;
+  started_at?: string;
+  completed_at?: string | null;
+};

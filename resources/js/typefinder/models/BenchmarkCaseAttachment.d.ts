@@ -7,9 +7,35 @@
 import type { BenchmarkCase } from './BenchmarkCase';
 
 export type BenchmarkCaseAttachment = {
+  id: number;
+  benchmark_case_id: number;
+  turn: number | null;
+  disk: string;
+  path: string;
+  original_name: string;
+  mime_type: string;
+  size: number;
+  created_at: string | null;
+  updated_at: string | null;
   benchmarkCase?: BenchmarkCase | null;
 };
 
-export type BenchmarkCaseAttachmentCreate = Record<string, never>;
+export type BenchmarkCaseAttachmentCreate = {
+  benchmark_case_id: number;
+  turn?: number | null;
+  disk: string;
+  path: string;
+  original_name: string;
+  mime_type: string;
+  size: number;
+};
 
-export type BenchmarkCaseAttachmentUpdate = Record<string, never>;
+export type BenchmarkCaseAttachmentUpdate = {
+  benchmark_case_id?: number;
+  turn?: number | null;
+  disk?: string;
+  path?: string;
+  original_name?: string;
+  mime_type?: string;
+  size?: number;
+};
