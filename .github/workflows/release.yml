@@ -44,19 +44,21 @@ jobs:
           persist-credentials: true
           ref: ${{ github.event.workflow_run.head_branch }}
 
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # semantic-release 26 requires Node >= 26.13.
           node-version: '26'
-          cache: npm
+          cache: pnpm
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Stage releaserc
         run: cp .releaserc.main.json .releaserc.json
 
-      # Runs the repo's own semantic-release (package-lock) on the Node set up
+      # Runs the repo's own semantic-release (pnpm-lock) on the Node set up
       # above. cycjimmy/semantic-release-action ran it inside the action's own
       # Node 24 runtime, which semantic-release 26 no longer supports. The
       # outputs it exposed are rebuilt here: a release leaves a new v* tag on the
@@ -67,7 +69,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           before="$(git tag --points-at HEAD --list 'v*' | head -n 1)"
-          npx --no-install semantic-release
+          pnpm exec semantic-release
           tag="$(git tag --points-at HEAD --list 'v*' | head -n 1)"
           if [ -n "$tag" ] && [ "$tag" != "$before" ]; then
             echo "new_release_published=true" >> "$GITHUB_OUTPUT"
