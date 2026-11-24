@@ -5,82 +5,15 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { BenchmarkCase } from './BenchmarkCase';
-import type { BenchmarkJudgeStatus } from '../enums';
 import type { BenchmarkNeutralJudgement } from './BenchmarkNeutralJudgement';
-import type { BenchmarkResultStatus } from '../enums';
 import type { BenchmarkRun } from './BenchmarkRun';
 
 export type BenchmarkResult = {
-  id: number;
-  benchmark_run_id: number;
-  benchmark_case_id: number | null;
-  case_name: string;
-  case_task: string;
-  candidate_index: number;
-  status: BenchmarkResultStatus;
-  output: string | null;
-  intended_actions: unknown[];
-  prompt_tokens: number;
-  completion_tokens: number;
-  cost_usd: number;
-  latency_ms: number | null;
-  tool_calls: number;
-  tool_misses: number;
-  error: string | null;
-  score: number | null;
-  passed: boolean | null;
-  score_detail: unknown[] | null;
-  judge_status: BenchmarkJudgeStatus;
-  judge_cost_usd: number;
-  created_at: string | null;
-  updated_at: string | null;
   neutralJudgements?: BenchmarkNeutralJudgement[];
   run?: BenchmarkRun | null;
   benchmarkCase?: BenchmarkCase | null;
 };
 
-export type BenchmarkResultCreate = {
-  benchmark_run_id: number;
-  benchmark_case_id?: number | null;
-  case_name: string;
-  case_task: string;
-  candidate_index: number;
-  status?: BenchmarkResultStatus;
-  output?: string | null;
-  intended_actions?: unknown[];
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  cost_usd?: number;
-  latency_ms?: number | null;
-  tool_calls?: number;
-  tool_misses?: number;
-  error?: string | null;
-  score?: number | null;
-  passed?: boolean | null;
-  score_detail?: unknown[] | null;
-  judge_status?: BenchmarkJudgeStatus;
-  judge_cost_usd?: number;
-};
+export type BenchmarkResultCreate = Record<string, never>;
 
-export type BenchmarkResultUpdate = {
-  benchmark_run_id?: number;
-  benchmark_case_id?: number | null;
-  case_name?: string;
-  case_task?: string;
-  candidate_index?: number;
-  status?: BenchmarkResultStatus;
-  output?: string | null;
-  intended_actions?: unknown[];
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  cost_usd?: number;
-  latency_ms?: number | null;
-  tool_calls?: number;
-  tool_misses?: number;
-  error?: string | null;
-  score?: number | null;
-  passed?: boolean | null;
-  score_detail?: unknown[] | null;
-  judge_status?: BenchmarkJudgeStatus;
-  judge_cost_usd?: number;
-};
+export type BenchmarkResultUpdate = Record<string, never>;

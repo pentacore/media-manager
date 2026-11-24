@@ -4,42 +4,12 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { AgentDecisionStatus } from '../enums';
 import type { WebhookEvent } from './WebhookEvent';
 
 export type AgentDecision = {
-  id: number;
-  webhook_event_id: number | null;
-  service: string | null;
-  event_type: string | null;
-  status: AgentDecisionStatus;
-  summary: string | null;
-  actions_count: number;
-  action_request_ids: unknown[] | null;
-  created_at: string | null;
-  updated_at: string | null;
-  invocation_id: string | null;
   webhookEvent?: WebhookEvent | null;
 };
 
-export type AgentDecisionCreate = {
-  webhook_event_id?: number | null;
-  service?: string | null;
-  event_type?: string | null;
-  status: AgentDecisionStatus;
-  summary?: string | null;
-  actions_count?: number;
-  action_request_ids?: unknown[] | null;
-  invocation_id?: string | null;
-};
+export type AgentDecisionCreate = Record<string, never>;
 
-export type AgentDecisionUpdate = {
-  webhook_event_id?: number | null;
-  service?: string | null;
-  event_type?: string | null;
-  status?: AgentDecisionStatus;
-  summary?: string | null;
-  actions_count?: number;
-  action_request_ids?: unknown[] | null;
-  invocation_id?: string | null;
-};
+export type AgentDecisionUpdate = Record<string, never>;

@@ -5,46 +5,9 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type AiToolInvocation = {
-  id: number;
-  invocation_id: string;
-  tool_invocation_id: string | null;
-  tool_class: string;
-  agent_class: string | null;
-  status: string;
-  created_at: string | null;
-  updated_at: string | null;
-  duration_ms: number | null;
-  error_code: string | null;
-  tool_name: string | null;
-  arguments: unknown[] | null;
-  result: string | null;
-  io_truncated: boolean;
+
 };
 
-export type AiToolInvocationCreate = {
-  invocation_id: string;
-  tool_invocation_id?: string | null;
-  tool_class: string;
-  agent_class?: string | null;
-  status?: string;
-  duration_ms?: number | null;
-  error_code?: string | null;
-  tool_name?: string | null;
-  arguments?: unknown[] | null;
-  result?: string | null;
-  io_truncated?: boolean;
-};
+export type AiToolInvocationCreate = Record<string, never>;
 
-export type AiToolInvocationUpdate = {
-  invocation_id?: string;
-  tool_invocation_id?: string | null;
-  tool_class?: string;
-  agent_class?: string | null;
-  status?: string;
-  duration_ms?: number | null;
-  error_code?: string | null;
-  tool_name?: string | null;
-  arguments?: unknown[] | null;
-  result?: string | null;
-  io_truncated?: boolean;
-};
+export type AiToolInvocationUpdate = Record<string, never>;

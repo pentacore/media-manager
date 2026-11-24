@@ -4,31 +4,12 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { HealthStatus } from '../enums';
 import type { ServiceConnection } from './ServiceConnection';
 
 export type ServiceMetric = {
-  id: number;
-  service_connection_id: number;
-  status: HealthStatus;
-  latency_ms: number | null;
-  message: string | null;
-  recorded_at: string;
   serviceConnection?: ServiceConnection | null;
 };
 
-export type ServiceMetricCreate = {
-  service_connection_id: number;
-  status: HealthStatus;
-  latency_ms?: number | null;
-  message?: string | null;
-  recorded_at: string;
-};
+export type ServiceMetricCreate = Record<string, never>;
 
-export type ServiceMetricUpdate = {
-  service_connection_id?: number;
-  status?: HealthStatus;
-  latency_ms?: number | null;
-  message?: string | null;
-  recorded_at?: string;
-};
+export type ServiceMetricUpdate = Record<string, never>;

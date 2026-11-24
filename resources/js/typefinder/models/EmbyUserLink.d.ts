@@ -8,24 +8,10 @@ import type { EmbyActivity } from './EmbyActivity';
 import type { User } from './User';
 
 export type EmbyUserLink = {
-  id: number;
-  user_id: number;
-  emby_user_id: string;
-  emby_username: string;
-  created_at: string | null;
-  updated_at: string | null;
   user?: User | null;
   activities?: EmbyActivity[];
 };
 
-export type EmbyUserLinkCreate = {
-  user_id: number;
-  emby_user_id: string;
-  emby_username: string;
-};
+export type EmbyUserLinkCreate = Record<string, never>;
 
-export type EmbyUserLinkUpdate = {
-  user_id?: number;
-  emby_user_id?: string;
-  emby_username?: string;
-};
+export type EmbyUserLinkUpdate = Record<string, never>;

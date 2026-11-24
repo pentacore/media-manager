@@ -4,41 +4,10 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { AiReasoningLevel } from '../enums';
-import type { AiTask } from '../enums';
-
 export type AiTaskModel = {
-  id: number;
-  task: AiTask;
-  scope: string;
-  provider: string | null;
-  model: string | null;
-  reasoning: AiReasoningLevel | null;
-  created_at: string | null;
-  updated_at: string | null;
-  position: number;
-  min_pool_percent: number | null;
-  min_pool_tokens: number | null;
+
 };
 
-export type AiTaskModelCreate = {
-  task: AiTask;
-  scope?: string;
-  provider?: string | null;
-  model?: string | null;
-  reasoning?: AiReasoningLevel | null;
-  position?: number;
-  min_pool_percent?: number | null;
-  min_pool_tokens?: number | null;
-};
+export type AiTaskModelCreate = Record<string, never>;
 
-export type AiTaskModelUpdate = {
-  task?: AiTask;
-  scope?: string;
-  provider?: string | null;
-  model?: string | null;
-  reasoning?: AiReasoningLevel | null;
-  position?: number;
-  min_pool_percent?: number | null;
-  min_pool_tokens?: number | null;
-};
+export type AiTaskModelUpdate = Record<string, never>;

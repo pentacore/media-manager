@@ -5,51 +5,15 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { ServiceConnection } from './ServiceConnection';
-import type { SubtitleAuditBatchStatus } from '../enums';
 import type { SubtitleAuditEpisode } from './SubtitleAuditEpisode';
 import type { User } from './User';
 
 export type SubtitleAuditBatch = {
-  id: number;
-  user_id: number | null;
-  service_connection_id: number;
-  series_id: number;
-  series_title: string;
-  season_number: number | null;
-  status: SubtitleAuditBatchStatus;
-  search_deadline_at: string | null;
-  handed_off_at: string | null;
-  card_shown_at: string | null;
-  completed_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
   user?: User | null;
   serviceConnection?: ServiceConnection | null;
   episodes?: SubtitleAuditEpisode[];
 };
 
-export type SubtitleAuditBatchCreate = {
-  user_id?: number | null;
-  service_connection_id: number;
-  series_id: number;
-  series_title: string;
-  season_number?: number | null;
-  status?: SubtitleAuditBatchStatus;
-  search_deadline_at?: string | null;
-  handed_off_at?: string | null;
-  card_shown_at?: string | null;
-  completed_at?: string | null;
-};
+export type SubtitleAuditBatchCreate = Record<string, never>;
 
-export type SubtitleAuditBatchUpdate = {
-  user_id?: number | null;
-  service_connection_id?: number;
-  series_id?: number;
-  series_title?: string;
-  season_number?: number | null;
-  status?: SubtitleAuditBatchStatus;
-  search_deadline_at?: string | null;
-  handed_off_at?: string | null;
-  card_shown_at?: string | null;
-  completed_at?: string | null;
-};
+export type SubtitleAuditBatchUpdate = Record<string, never>;

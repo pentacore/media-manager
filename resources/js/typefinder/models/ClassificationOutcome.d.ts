@@ -4,51 +4,10 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { ClassificationGate } from '../enums';
-import type { ClassificationOutcomeSource } from '../enums';
-import type { ClassificationVerdict } from '../enums';
-
 export type ClassificationOutcome = {
-  id: number;
-  gate: ClassificationGate;
-  subject_key: string;
-  question: string;
-  predicted: string | null;
-  probability: number | null;
-  threshold: number | null;
-  verdict: ClassificationVerdict;
-  outcome_positive: boolean | null;
-  outcome_detail: string | null;
-  outcome_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  outcome_source: ClassificationOutcomeSource | null;
+
 };
 
-export type ClassificationOutcomeCreate = {
-  gate: ClassificationGate;
-  subject_key: string;
-  question: string;
-  predicted?: string | null;
-  probability?: number | null;
-  threshold?: number | null;
-  verdict: ClassificationVerdict;
-  outcome_positive?: boolean | null;
-  outcome_detail?: string | null;
-  outcome_at?: string | null;
-  outcome_source?: ClassificationOutcomeSource | null;
-};
+export type ClassificationOutcomeCreate = Record<string, never>;
 
-export type ClassificationOutcomeUpdate = {
-  gate?: ClassificationGate;
-  subject_key?: string;
-  question?: string;
-  predicted?: string | null;
-  probability?: number | null;
-  threshold?: number | null;
-  verdict?: ClassificationVerdict;
-  outcome_positive?: boolean | null;
-  outcome_detail?: string | null;
-  outcome_at?: string | null;
-  outcome_source?: ClassificationOutcomeSource | null;
-};
+export type ClassificationOutcomeUpdate = Record<string, never>;

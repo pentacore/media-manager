@@ -7,38 +7,9 @@
 import type { User } from './User';
 
 export type ChatAttachment = {
-  id: number;
-  user_id: number;
-  conversation_id: string | null;
-  disk: string;
-  path: string;
-  original_name: string;
-  mime_type: string;
-  size: number;
-  provider_file_ids: unknown[] | null;
-  created_at: string | null;
-  updated_at: string | null;
   user?: User | null;
 };
 
-export type ChatAttachmentCreate = {
-  user_id: number;
-  conversation_id?: string | null;
-  disk: string;
-  path: string;
-  original_name: string;
-  mime_type: string;
-  size: number;
-  provider_file_ids?: unknown[] | null;
-};
+export type ChatAttachmentCreate = Record<string, never>;
 
-export type ChatAttachmentUpdate = {
-  user_id?: number;
-  conversation_id?: string | null;
-  disk?: string;
-  path?: string;
-  original_name?: string;
-  mime_type?: string;
-  size?: number;
-  provider_file_ids?: unknown[] | null;
-};
+export type ChatAttachmentUpdate = Record<string, never>;

@@ -5,42 +5,11 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { AiModelPrice } from './AiModelPrice';
-import type { FreePoolOverflowBehavior } from '../enums';
-import type { FreeUsagePeriod } from '../enums';
 
 export type AiFreeUsagePool = {
-  id: number;
-  name: string;
-  period: FreeUsagePeriod;
-  unified: boolean;
-  free_input_tokens: number | null;
-  free_output_tokens: number | null;
-  free_total_tokens: number | null;
-  documentation_url: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  overflow_behavior: FreePoolOverflowBehavior;
   prices?: AiModelPrice[];
 };
 
-export type AiFreeUsagePoolCreate = {
-  name: string;
-  period?: FreeUsagePeriod;
-  unified?: boolean;
-  free_input_tokens?: number | null;
-  free_output_tokens?: number | null;
-  free_total_tokens?: number | null;
-  documentation_url?: string | null;
-  overflow_behavior?: FreePoolOverflowBehavior;
-};
+export type AiFreeUsagePoolCreate = Record<string, never>;
 
-export type AiFreeUsagePoolUpdate = {
-  name?: string;
-  period?: FreeUsagePeriod;
-  unified?: boolean;
-  free_input_tokens?: number | null;
-  free_output_tokens?: number | null;
-  free_total_tokens?: number | null;
-  documentation_url?: string | null;
-  overflow_behavior?: FreePoolOverflowBehavior;
-};
+export type AiFreeUsagePoolUpdate = Record<string, never>;

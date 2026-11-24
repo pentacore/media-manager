@@ -7,36 +7,9 @@
 import type { Server } from './Server';
 
 export type ServerFilesystemSample = {
-  id: number;
-  server_id: number;
-  resolution: number;
-  recorded_at: string;
-  mount: string;
-  fstype: string | null;
-  total_bytes: number;
-  used_bytes: number;
-  available_bytes: number;
   server?: Server | null;
 };
 
-export type ServerFilesystemSampleCreate = {
-  server_id: number;
-  resolution: number;
-  recorded_at: string;
-  mount: string;
-  fstype?: string | null;
-  total_bytes: number;
-  used_bytes: number;
-  available_bytes: number;
-};
+export type ServerFilesystemSampleCreate = Record<string, never>;
 
-export type ServerFilesystemSampleUpdate = {
-  server_id?: number;
-  resolution?: number;
-  recorded_at?: string;
-  mount?: string;
-  fstype?: string | null;
-  total_bytes?: number;
-  used_bytes?: number;
-  available_bytes?: number;
-};
+export type ServerFilesystemSampleUpdate = Record<string, never>;

@@ -4,68 +4,16 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { ActionRequestStatus } from '../enums';
 import type { MediaReplacementAttempt } from './MediaReplacementAttempt';
 import type { User } from './User';
 import type { WebhookEvent } from './WebhookEvent';
 
 export type ActionRequest = {
-  id: number;
-  webhook_event_id: number | null;
-  type: string;
-  source_service: string;
-  target_service: string;
-  status: ActionRequestStatus;
-  requires_approval: boolean;
-  approved_by: number | null;
-  payload: unknown[];
-  result: unknown[] | null;
-  created_at: string | null;
-  updated_at: string | null;
-  origin: string;
-  title: string | null;
-  description: string | null;
-  details: unknown[] | null;
-  description_verified: boolean;
-  status_version: number;
-  second_opinion: unknown[] | null;
   webhookEvent?: WebhookEvent | null;
   approvedByUser?: User | null;
   mediaReplacementAttempt?: MediaReplacementAttempt | null;
 };
 
-export type ActionRequestCreate = {
-  webhook_event_id?: number | null;
-  type: string;
-  source_service: string;
-  target_service: string;
-  status?: ActionRequestStatus;
-  requires_approval?: boolean;
-  approved_by?: number | null;
-  payload: unknown[];
-  result?: unknown[] | null;
-  origin?: string;
-  title?: string | null;
-  description?: string | null;
-  details?: unknown[] | null;
-  description_verified?: boolean;
-  second_opinion?: unknown[] | null;
-};
+export type ActionRequestCreate = Record<string, never>;
 
-export type ActionRequestUpdate = {
-  webhook_event_id?: number | null;
-  type?: string;
-  source_service?: string;
-  target_service?: string;
-  status?: ActionRequestStatus;
-  requires_approval?: boolean;
-  approved_by?: number | null;
-  payload?: unknown[];
-  result?: unknown[] | null;
-  origin?: string;
-  title?: string | null;
-  description?: string | null;
-  details?: unknown[] | null;
-  description_verified?: boolean;
-  second_opinion?: unknown[] | null;
-};
+export type ActionRequestUpdate = Record<string, never>;

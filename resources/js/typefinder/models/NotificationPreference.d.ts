@@ -7,44 +7,9 @@
 import type { User } from './User';
 
 export type NotificationPreference = {
-  id: number;
-  user_id: number;
-  notification_class: string;
-  severity: string;
-  database: boolean;
-  broadcast: boolean;
-  mail: boolean;
-  ntfy: boolean;
-  created_at: string | null;
-  updated_at: string | null;
-  discord: boolean;
-  telegram: boolean;
-  webhook: boolean;
   user?: User | null;
 };
 
-export type NotificationPreferenceCreate = {
-  user_id: number;
-  notification_class: string;
-  severity: string;
-  database?: boolean;
-  broadcast?: boolean;
-  mail?: boolean;
-  ntfy?: boolean;
-  discord?: boolean;
-  telegram?: boolean;
-  webhook?: boolean;
-};
+export type NotificationPreferenceCreate = Record<string, never>;
 
-export type NotificationPreferenceUpdate = {
-  user_id?: number;
-  notification_class?: string;
-  severity?: string;
-  database?: boolean;
-  broadcast?: boolean;
-  mail?: boolean;
-  ntfy?: boolean;
-  discord?: boolean;
-  telegram?: boolean;
-  webhook?: boolean;
-};
+export type NotificationPreferenceUpdate = Record<string, never>;

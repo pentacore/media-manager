@@ -331,6 +331,7 @@ const budgetState = computed<{
                         <div class="relative max-w-[200px]">
                             <Input
                                 id="chat_max_attachments"
+                                aria-describedby="chat_max_attachments-hint"
                                 name="chat_max_attachments"
                                 type="number"
                                 step="1"

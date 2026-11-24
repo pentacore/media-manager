@@ -7,41 +7,9 @@
 import type { EmbyUserLink } from './EmbyUserLink';
 
 export type EmbyActivity = {
-  id: number;
-  emby_user_link_id: number;
-  media_type: string;
-  media_title: string | null;
-  series_title: string | null;
-  emby_item_id: string;
-  action: string;
-  duration_ticks: number | null;
-  play_position: number | null;
-  created_at: string | null;
-  updated_at: string | null;
-  play_session_id: string | null;
   embyUserLink?: EmbyUserLink | null;
 };
 
-export type EmbyActivityCreate = {
-  emby_user_link_id: number;
-  media_type: string;
-  media_title?: string | null;
-  series_title?: string | null;
-  emby_item_id: string;
-  action: string;
-  duration_ticks?: number | null;
-  play_position?: number | null;
-  play_session_id?: string | null;
-};
+export type EmbyActivityCreate = Record<string, never>;
 
-export type EmbyActivityUpdate = {
-  emby_user_link_id?: number;
-  media_type?: string;
-  media_title?: string | null;
-  series_title?: string | null;
-  emby_item_id?: string;
-  action?: string;
-  duration_ticks?: number | null;
-  play_position?: number | null;
-  play_session_id?: string | null;
-};
+export type EmbyActivityUpdate = Record<string, never>;

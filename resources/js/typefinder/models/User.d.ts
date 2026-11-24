@@ -7,51 +7,13 @@
 import type { ActivityLog } from './ActivityLog';
 import type { ChatTemplate } from './ChatTemplate';
 import type { EmbyUserLink } from './EmbyUserLink';
-import type { UserRole } from '../enums';
 
 export type User = {
-  id: number;
-  name: string;
-  email: string;
-  email_verified_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  two_factor_confirmed_at: string | null;
-  sso_provider: string | null;
-  sso_id: string | null;
-  role: UserRole;
-  avatar_url: string | null;
-  invite_accepted_at: string | null;
-  preferences: unknown[] | null;
-  ntfy_topic: string | null;
-  telegram_chat_id: string | null;
   embyUserLinks?: EmbyUserLink[];
   activityLogs?: ActivityLog[];
   chatTemplates?: ChatTemplate[];
 };
 
-export type UserCreate = {
-  name: string;
-  email: string;
-  sso_provider?: string | null;
-  sso_id?: string | null;
-  role?: UserRole;
-  avatar_url?: string | null;
-  invite_accepted_at?: string | null;
-  preferences?: unknown[] | null;
-  ntfy_topic?: string | null;
-  telegram_chat_id?: string | null;
-};
+export type UserCreate = Record<string, never>;
 
-export type UserUpdate = {
-  name?: string;
-  email?: string;
-  sso_provider?: string | null;
-  sso_id?: string | null;
-  role?: UserRole;
-  avatar_url?: string | null;
-  invite_accepted_at?: string | null;
-  preferences?: unknown[] | null;
-  ntfy_topic?: string | null;
-  telegram_chat_id?: string | null;
-};
+export type UserUpdate = Record<string, never>;

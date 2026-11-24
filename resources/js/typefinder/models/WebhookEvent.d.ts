@@ -8,38 +8,14 @@ import type { ActionRequest } from './ActionRequest';
 import type { ActivityLog } from './ActivityLog';
 import type { AgentDecision } from './AgentDecision';
 import type { ServiceConnection } from './ServiceConnection';
-import type { WebhookHandlingStatus } from '../enums';
 
 export type WebhookEvent = {
-  id: number;
-  service_connection_id: number;
-  event_type: string;
-  payload: unknown[];
-  processed_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  payload_hash: string | null;
-  handling_status: WebhookHandlingStatus | null;
   serviceConnection?: ServiceConnection | null;
   actionRequests?: ActionRequest[];
   agentDecision?: AgentDecision | null;
   activityLogs?: ActivityLog[];
 };
 
-export type WebhookEventCreate = {
-  service_connection_id: number;
-  event_type: string;
-  payload: unknown[];
-  processed_at?: string | null;
-  payload_hash?: string | null;
-  handling_status?: WebhookHandlingStatus | null;
-};
+export type WebhookEventCreate = Record<string, never>;
 
-export type WebhookEventUpdate = {
-  service_connection_id?: number;
-  event_type?: string;
-  payload?: unknown[];
-  processed_at?: string | null;
-  payload_hash?: string | null;
-  handling_status?: WebhookHandlingStatus | null;
-};
+export type WebhookEventUpdate = Record<string, never>;

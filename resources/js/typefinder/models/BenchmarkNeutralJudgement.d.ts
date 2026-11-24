@@ -4,47 +4,14 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { BenchmarkJudgeStatus } from '../enums';
 import type { BenchmarkNeutralRejudge } from './BenchmarkNeutralRejudge';
 import type { BenchmarkResult } from './BenchmarkResult';
 
 export type BenchmarkNeutralJudgement = {
-  id: number;
-  benchmark_result_id: number;
-  benchmark_neutral_rejudge_id: number | null;
-  judge_key: string;
-  judge: unknown[];
-  status: BenchmarkJudgeStatus;
-  score: number | null;
-  passed: boolean | null;
-  detail: unknown[] | null;
-  cost_usd: number;
-  created_at: string | null;
-  updated_at: string | null;
   result?: BenchmarkResult | null;
   rejudge?: BenchmarkNeutralRejudge | null;
 };
 
-export type BenchmarkNeutralJudgementCreate = {
-  benchmark_result_id: number;
-  benchmark_neutral_rejudge_id?: number | null;
-  judge_key: string;
-  judge: unknown[];
-  status?: BenchmarkJudgeStatus;
-  score?: number | null;
-  passed?: boolean | null;
-  detail?: unknown[] | null;
-  cost_usd?: number;
-};
+export type BenchmarkNeutralJudgementCreate = Record<string, never>;
 
-export type BenchmarkNeutralJudgementUpdate = {
-  benchmark_result_id?: number;
-  benchmark_neutral_rejudge_id?: number | null;
-  judge_key?: string;
-  judge?: unknown[];
-  status?: BenchmarkJudgeStatus;
-  score?: number | null;
-  passed?: boolean | null;
-  detail?: unknown[] | null;
-  cost_usd?: number;
-};
+export type BenchmarkNeutralJudgementUpdate = Record<string, never>;

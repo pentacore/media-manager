@@ -4,29 +4,10 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { NotificationSeverity } from '../enums';
-import type { PushChannelType } from '../enums';
-
 export type NotificationDestination = {
-  id: number;
-  channel: PushChannelType;
-  label: string;
-  is_enabled: boolean;
-  min_severity: NotificationSeverity;
-  created_at: string | null;
-  updated_at: string | null;
+
 };
 
-export type NotificationDestinationCreate = {
-  channel: PushChannelType;
-  label: string;
-  is_enabled?: boolean;
-  min_severity?: NotificationSeverity;
-};
+export type NotificationDestinationCreate = Record<string, never>;
 
-export type NotificationDestinationUpdate = {
-  channel?: PushChannelType;
-  label?: string;
-  is_enabled?: boolean;
-  min_severity?: NotificationSeverity;
-};
+export type NotificationDestinationUpdate = Record<string, never>;

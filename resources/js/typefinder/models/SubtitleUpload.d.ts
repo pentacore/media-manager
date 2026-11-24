@@ -9,52 +9,11 @@ import type { SubtitleCase } from './SubtitleCase';
 import type { User } from './User';
 
 export type SubtitleUpload = {
-  id: number;
-  user_id: number | null;
-  subtitle_case_id: number;
-  action_request_id: number | null;
-  display_name: string;
-  checksum: string;
-  mime_type: string;
-  format: string;
-  size_bytes: number;
-  expires_at: string;
-  consumed_at: string | null;
-  cancelled_at: string | null;
-  cleaned_up_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
   owner?: User | null;
   subtitleCase?: SubtitleCase | null;
   actionRequest?: ActionRequest | null;
 };
 
-export type SubtitleUploadCreate = {
-  user_id?: number | null;
-  subtitle_case_id: number;
-  action_request_id?: number | null;
-  display_name: string;
-  checksum: string;
-  mime_type: string;
-  format: string;
-  size_bytes: number;
-  expires_at: string;
-  consumed_at?: string | null;
-  cancelled_at?: string | null;
-  cleaned_up_at?: string | null;
-};
+export type SubtitleUploadCreate = Record<string, never>;
 
-export type SubtitleUploadUpdate = {
-  user_id?: number | null;
-  subtitle_case_id?: number;
-  action_request_id?: number | null;
-  display_name?: string;
-  checksum?: string;
-  mime_type?: string;
-  format?: string;
-  size_bytes?: number;
-  expires_at?: string;
-  consumed_at?: string | null;
-  cancelled_at?: string | null;
-  cleaned_up_at?: string | null;
-};
+export type SubtitleUploadUpdate = Record<string, never>;

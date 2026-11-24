@@ -7,39 +7,9 @@
 import type { Server } from './Server';
 
 export type ServerMetricSample = {
-  id: number;
-  server_id: number;
-  resolution: number;
-  recorded_at: string;
-  cpu_percent: number;
-  load1: number;
-  memory_used_bytes: number;
-  memory_total_bytes: number;
-  swap_used_bytes: number;
-  swap_total_bytes: number;
   server?: Server | null;
 };
 
-export type ServerMetricSampleCreate = {
-  server_id: number;
-  resolution: number;
-  recorded_at: string;
-  cpu_percent: number;
-  load1: number;
-  memory_used_bytes: number;
-  memory_total_bytes: number;
-  swap_used_bytes: number;
-  swap_total_bytes: number;
-};
+export type ServerMetricSampleCreate = Record<string, never>;
 
-export type ServerMetricSampleUpdate = {
-  server_id?: number;
-  resolution?: number;
-  recorded_at?: string;
-  cpu_percent?: number;
-  load1?: number;
-  memory_used_bytes?: number;
-  memory_total_bytes?: number;
-  swap_used_bytes?: number;
-  swap_total_bytes?: number;
-};
+export type ServerMetricSampleUpdate = Record<string, never>;

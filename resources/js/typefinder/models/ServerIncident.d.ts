@@ -4,61 +4,12 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { IncidentSeverity } from '../enums';
-import type { IncidentStatus } from '../enums';
 import type { Server } from './Server';
 
 export type ServerIncident = {
-  id: number;
-  server_id: number;
-  key: string;
-  severity: IncidentSeverity;
-  status: IncidentStatus;
-  title: string;
-  detail: string | null;
-  context: unknown[];
-  opened_at: string;
-  last_seen_at: string;
-  clear_streak: number;
-  escalated_at: string | null;
-  resolved_at: string | null;
-  notified_severity: IncidentSeverity | null;
-  created_at: string | null;
-  updated_at: string | null;
-  resolve_notified_at: string | null;
   server?: Server | null;
 };
 
-export type ServerIncidentCreate = {
-  server_id: number;
-  key: string;
-  severity: IncidentSeverity;
-  status?: IncidentStatus;
-  title: string;
-  detail?: string | null;
-  context?: unknown[];
-  opened_at: string;
-  last_seen_at: string;
-  clear_streak?: number;
-  escalated_at?: string | null;
-  resolved_at?: string | null;
-  notified_severity?: IncidentSeverity | null;
-  resolve_notified_at?: string | null;
-};
+export type ServerIncidentCreate = Record<string, never>;
 
-export type ServerIncidentUpdate = {
-  server_id?: number;
-  key?: string;
-  severity?: IncidentSeverity;
-  status?: IncidentStatus;
-  title?: string;
-  detail?: string | null;
-  context?: unknown[];
-  opened_at?: string;
-  last_seen_at?: string;
-  clear_streak?: number;
-  escalated_at?: string | null;
-  resolved_at?: string | null;
-  notified_severity?: IncidentSeverity | null;
-  resolve_notified_at?: string | null;
-};
+export type ServerIncidentUpdate = Record<string, never>;
