@@ -92,9 +92,10 @@ final readonly class SubtitleItemMapper
 
     /**
      * @param  array<string, mixed>  $history
+     * @param  string|null  $timezone  the zone Bazarr runs in (BazarrClient::historyTimezone()); null reads the app timezone
      * @return array<string, mixed>|null
      */
-    public function historyItem(array $history, string $mediaType): ?array
+    public function historyItem(array $history, string $mediaType, ?string $timezone = null): ?array
     {
         $mediaId = $this->positiveInteger(
             $mediaType === 'episode'
@@ -130,7 +131,7 @@ final readonly class SubtitleItemMapper
             'provider' => $this->safeProvider($history['provider'] ?? null),
             'action' => is_int($history['action'] ?? null) ? $history['action'] : null,
             'score' => $this->safeText($history['score'] ?? null, ''),
-            'occurred_at' => $this->historyTimestamp($history),
+            'occurred_at' => $this->historyTimestamp($history, $timezone ?? config()->string('app.timezone')),
         ];
     }
 
@@ -241,21 +242,21 @@ final readonly class SubtitleItemMapper
     /**
      * Bazarr's history feeds send `parsed_timestamp` as the server's naive
      * local time in Python's C-locale `%x %X` ("07/15/26 18:00:00") and
-     * `timestamp` as relative prose ("yesterday"). The stack shares one host
-     * clock, so the parsed time is read in the app timezone and returned as
-     * ISO 8601 for the page to format; anything unparseable stays text.
+     * `timestamp` as relative prose ("yesterday"). The parsed time is read in
+     * the zone Bazarr runs in and returned as ISO 8601 in the app timezone for
+     * the page to format; anything unparseable stays text.
      *
      * @param  array<string, mixed>  $history
      */
-    private function historyTimestamp(array $history): string
+    private function historyTimestamp(array $history, string $timezone): string
     {
         $parsed = $history['parsed_timestamp'] ?? null;
 
         if (is_string($parsed) && preg_match('#^\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}$#', $parsed) === 1) {
-            $date = CarbonImmutable::createFromFormat('!m/d/y H:i:s', $parsed, config()->string('app.timezone'));
+            $date = CarbonImmutable::createFromFormat('!m/d/y H:i:s', $parsed, $timezone);
 
             if ($date instanceof CarbonImmutable && $date->format('m/d/y H:i:s') === $parsed) {
-                return $date->toIso8601String();
+                return $date->setTimezone(config()->string('app.timezone'))->toIso8601String();
             }
         }
 

@@ -197,6 +197,7 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
                                     :options="secondOpinionOptions"
                                     :model-value="rule.second_opinion"
                                     option-attribute="second-opinion-option"
+                                    :aria-label="`${rule.label}: second opinion`"
                                     @update:model-value="
                                         (v) => setSecondOpinion(rule, v)
                                     "

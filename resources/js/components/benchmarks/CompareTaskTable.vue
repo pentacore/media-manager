@@ -84,6 +84,7 @@ function deltaClass(delta: number | null): string {
             v-model="metric"
             :options="metricOptions"
             option-attribute="compare-metric"
+            aria-label="Compare by"
         />
         <div class="overflow-x-auto rounded-xl border border-border bg-card">
             <Table>

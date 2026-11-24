@@ -59,10 +59,6 @@ None open.
 
 ## Ready to pick up
 
-- **Unnamed segmented-control groups**: `NeutralJudgePanel`, `CompareTaskTable`,
-  `CaseInputFields` and `MetricsPanel` render a `SegmentedControl` whose
-  `role="group"` has no accessible name. Name each one as `TimeWindowFilter`
-  does.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
         - A deadline for the whole decision run.
@@ -140,6 +136,8 @@ None open.
   batch, but tool-loop agents (`DecisionAgent`, benchmark cases) need the step loop
   rebuilt, and OpenRouter has no batch API. Revisit if benchmarks or webhook
   decisions start costing real money, or once laravel/ai supports batch requests.
+- **AI price refresh batching** with a dedicated model, once laravel/ai supports
+  batch requests.
 - **Log provider stream errors.** laravel/ai never reports a `StreamErrorException`
   (an error the provider sent inside the stream), so a failed chat turn leaves
   nothing in the container logs; only the chat UI shows the message. Log it,

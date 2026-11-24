@@ -86,8 +86,9 @@ final readonly class SubtitleInspector
 
         throw_if($item === null, UnexpectedValueException::class, 'The requested Bazarr episode could not be projected.');
 
+        $timezone = $bazarrClient->historyTimezone();
         $history = array_values(array_filter(array_map(
-            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode'),
+            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode', $timezone),
             $bazarrClient->getEpisodeHistory(length: 10, episodeId: $episodeId)['data'],
         )));
 
@@ -129,8 +130,9 @@ final readonly class SubtitleInspector
 
         throw_if($item === null, UnexpectedValueException::class, 'The requested Bazarr movie could not be projected.');
 
+        $timezone = $bazarrClient->historyTimezone();
         $history = array_values(array_filter(array_map(
-            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie'),
+            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie', $timezone),
             $bazarrClient->getMovieHistory(length: 10, radarrId: $radarrId)['data'],
         )));
 

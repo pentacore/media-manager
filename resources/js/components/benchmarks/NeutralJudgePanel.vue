@@ -206,6 +206,7 @@ function start(): void {
                 v-model="scoreSource"
                 :options="scoreOptions"
                 option-attribute="compare-score-source"
+                aria-label="Scores from"
             />
             <Button
                 variant="outline"

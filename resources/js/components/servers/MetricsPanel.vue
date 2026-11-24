@@ -134,6 +134,7 @@ const charts = computed(() => {
                 :options="ranges"
                 :model-value="selected"
                 option-attribute="metrics-range"
+                aria-label="Time window"
                 @update:model-value="selectRange"
             />
         </div>
