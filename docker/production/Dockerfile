@@ -15,7 +15,7 @@ RUN apk add --no-cache \
         git \
         unzip \
         libzip \
-        nodejs \
+        nodejs-current \
         npm
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -73,7 +73,7 @@ RUN apk add --no-cache --upgrade \
         libjpeg-turbo \
         freetype \
         postgresql-libs \
-        nodejs \
+        nodejs-current \
     && install-php-extensions \
         bcmath \
         gd \

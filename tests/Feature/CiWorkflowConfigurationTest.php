@@ -79,3 +79,17 @@ test('ci reports unit and feature coverage without gating on it', function (): v
         ->toContain('run: php .github/scripts/coverage-summary.php build/coverage/clover.xml >> "$GITHUB_STEP_SUMMARY"')
         ->not->toContain('--min=');
 });
+
+test('ci, the release, sail and both production stages run node 26', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+    $release = (string) file_get_contents(base_path('.github/workflows/release.yml'));
+    $sail = (string) file_get_contents(base_path('docker/8.5/Dockerfile'));
+    $production = (string) file_get_contents(base_path('docker/production/Dockerfile'));
+
+    // Alpine's `nodejs` is the LTS line (24); `nodejs-current` is Node 26.
+    expect($ci)->toContain("NODE_VERSION: '26'")
+        ->and($release)->toContain("node-version: '26'")
+        ->and($sail)->toContain('ARG NODE_VERSION=26')
+        ->and(mb_substr_count($production, 'nodejs-current'))->toBe(2)
+        ->and($production)->not->toMatch('/^\s+nodejs \\\\$/m');
+});
