@@ -54,7 +54,7 @@ test('shared auth.user exposes only safe fields', function (): void {
 });
 
 test('shared auth.user is null for guests', function (): void {
-    $this->get(route('home'))
+    $this->get(route('login'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('auth.user', null));
 });
@@ -131,7 +131,7 @@ test('version update hint is off for dev builds', function (): void {
 test('version is not shared with guests', function (): void {
     config()->set('app.version', '1.7.2');
 
-    $this->get(route('home'))
+    $this->get(route('login'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('version', null));
 });
@@ -149,7 +149,7 @@ test('shared auth.can carries the viewer abilities', function (): void {
 });
 
 test('shared auth.can is all false for guests', function (): void {
-    $this->get(route('home'))
+    $this->get(route('login'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('auth.can.view-library', false)
