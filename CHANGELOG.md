@@ -1,3 +1,10 @@
+# [1.63.0](https://github.com/pentacore/media-manager/compare/v1.62.3...v1.63.0) (2026-11-24)
+
+### Features
+
+* **branding:** replace the Laravel logo with the MediaManager mark ([4bc1bc1](https://github.com/pentacore/media-manager/commit/4bc1bc1bce517aa9105ca1c050f5c8b1ff4be779))
+* **home:** redirect / to the dashboard or login instead of the Laravel starter page ([262870b](https://github.com/pentacore/media-manager/commit/262870ba83c583568811bdb7d9ac1cfbaffc1b53))
+
 ## [1.62.3](https://github.com/pentacore/media-manager/compare/v1.62.2...v1.62.3) (2026-11-23)
 
 ## [1.62.2](https://github.com/pentacore/media-manager/compare/v1.62.1...v1.62.2) (2026-11-23)
