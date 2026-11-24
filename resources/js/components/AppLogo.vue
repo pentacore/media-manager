@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import AppLogoIcon from '@/components/AppLogoIcon.vue';
 
 const host = ref('');
 onMounted(() => {
@@ -8,11 +9,10 @@ onMounted(() => {
 </script>
 
 <template>
-    <div
-        class="flex aspect-square size-7 items-center justify-center rounded-lg bg-accent font-serif text-base leading-none font-semibold text-accent-foreground italic"
-    >
-        m
-    </div>
+    <!-- Wrapped: the sidebar button forces a direct svg child to size-4. -->
+    <span class="flex size-7 shrink-0">
+        <AppLogoIcon class="size-full" aria-hidden="true" />
+    </span>
     <div class="ml-1 grid flex-1 text-left leading-tight">
         <span class="truncate text-sm font-semibold">MediaManager</span>
         <span

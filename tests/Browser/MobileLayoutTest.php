@@ -877,7 +877,6 @@ function mobileLayoutAdminPages(): array
 function mobileLayoutGuestPages(): array
 {
     return [
-        'welcome' => ['home', null],
         // Login.vue has two [data-test="login-button"] branches (with and without SSO), so it gets no primary hook.
         'login' => ['login', null],
         'register' => ['register', '[data-test="register-user-button"]'],
@@ -1024,6 +1023,7 @@ function mobileLayoutExcludedRouteNames(): array
         'monitoring.watch-history.export' => 'a CSV export download',
         'bazarr.capabilities' => 'JSON for the subtitle drawer capabilities',
         'bazarr.search' => 'JSON for the subtitle search',
+        'home' => 'a redirect to the dashboard or the login page',
         'verification.verify' => 'a signed email-verification link that redirects',
         'password.confirmation' => 'JSON for the password-confirmed status',
         'two-factor.qr-code' => 'JSON for the two-factor QR code',
@@ -1583,16 +1583,16 @@ test('the phone gate classifies every page route', function (): void {
 });
 
 test('the route guard catches an unlisted page behind auth or an auth guard', function (): void {
-    Route::middleware(['web', 'auth'])->get('example-auth-page', fn (): Response => Inertia::render('Welcome'))->name('example.auth-page');
-    Route::middleware(['web', 'auth:web'])->get('example-guarded-page', fn (): Response => Inertia::render('Welcome'))->name('example.guarded-page');
+    Route::middleware(['web', 'auth'])->get('example-auth-page', fn (): Response => Inertia::render('Dashboard'))->name('example.auth-page');
+    Route::middleware(['web', 'auth:web'])->get('example-guarded-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guarded-page');
 
     expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.auth-page', 'example.guarded-page']);
 });
 
 test('the route guard catches an unlisted guest or public page', function (): void {
-    Route::middleware(['web', 'guest'])->get('example-guest-page', fn (): Response => Inertia::render('Welcome'))->name('example.guest-page');
-    Route::middleware(['web', 'guest:web'])->get('example-guarded-guest-page', fn (): Response => Inertia::render('Welcome'))->name('example.guarded-guest-page');
-    Route::middleware('web')->get('example-public-page', fn (): Response => Inertia::render('Welcome'))->name('example.public-page');
+    Route::middleware(['web', 'guest'])->get('example-guest-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guest-page');
+    Route::middleware(['web', 'guest:web'])->get('example-guarded-guest-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guarded-guest-page');
+    Route::middleware('web')->get('example-public-page', fn (): Response => Inertia::render('Dashboard'))->name('example.public-page');
 
     expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.guest-page', 'example.guarded-guest-page', 'example.public-page']);
 });

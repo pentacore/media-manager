@@ -8,12 +8,12 @@ use App\Http\Controllers\Auth\EmbyAuthController;
 use App\Http\Controllers\Auth\InviteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HeartbeatController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\StatisticsController;
-use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', WelcomeController::class)->name('home');
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
