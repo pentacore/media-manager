@@ -7,13 +7,13 @@ namespace App\Http\Controllers\AI;
 use App\Enums\ChatTemplatePreviewMode;
 use App\Enums\ChatTemplateVariableType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AI\DraftChatTemplateRequest;
 use App\Http\Requests\AI\StoreChatTemplateRequest;
 use App\Http\Requests\AI\UpdateChatTemplateRequest;
 use App\Http\Resources\ChatTemplateResource;
 use App\Models\ChatTemplate;
 use App\Models\User;
 use App\Services\Chat\ChatTemplateDefinition;
-use App\Services\Chat\ChatTemplateRenderer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -34,14 +34,20 @@ class ChatTemplateController extends Controller
         ]);
     }
 
-    public function create(Request $request): Response
+    public function create(): Response
     {
-        return Inertia::render('AI/Templates/Edit', [
-            'template' => null,
-            'prefillBody' => $request->string('body')->substr(0, ChatTemplateRenderer::MAX_LENGTH)->toString(),
-            'variableTypes' => $this->variableTypes(),
-            'previewModes' => $this->previewModes(),
-        ]);
+        return $this->createPage('');
+    }
+
+    /**
+     * "Save as template" posts the message here and gets the editor back with
+     * it pre-filled. The route shares create's URL, so a reload is a plain GET.
+     */
+    public function draft(DraftChatTemplateRequest $draftChatTemplateRequest): Response
+    {
+        $validated = $draftChatTemplateRequest->validated();
+
+        return $this->createPage((string) $validated['body']);
     }
 
     public function store(StoreChatTemplateRequest $storeChatTemplateRequest, ChatTemplateDefinition $chatTemplateDefinition): RedirectResponse
@@ -101,6 +107,16 @@ class ChatTemplateController extends Controller
         ]);
 
         return back();
+    }
+
+    private function createPage(string $prefillBody): Response
+    {
+        return Inertia::render('AI/Templates/Edit', [
+            'template' => null,
+            'prefillBody' => $prefillBody,
+            'variableTypes' => $this->variableTypes(),
+            'previewModes' => $this->previewModes(),
+        ]);
     }
 
     private function owner(Request $request): User
