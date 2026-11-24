@@ -127,7 +127,6 @@ None open.
         - The rollup assumes UTC.
         - Filesystem index.
         - Missing tests.
-- **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
 - **AI price refresh batching** with a dedicated model, once laravel/ai supports
   batch requests.
 - **Log provider stream errors.** laravel/ai never reports a `StreamErrorException`

@@ -310,6 +310,7 @@ final readonly class SubtitleLibraryReader
         $episodeTotal = 0;
         $movieTotal = 0;
         $errors = [];
+        $timezone = null;
         $mediaTypeFilter = is_string($filters['media_type'] ?? null) ? $filters['media_type'] : null;
         throw_unless(
             $mediaTypeFilter === null || in_array($mediaTypeFilter, ['episode', 'movie'], true),
@@ -327,8 +328,9 @@ final readonly class SubtitleLibraryReader
                 $errors[] = 'The mapped Sonarr connection is missing or inactive.';
             } else {
                 try {
+                    $timezone = $bazarrClient->historyTimezone();
                     $episodeItems = array_values(array_filter(array_map(
-                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode'),
+                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode', $timezone),
                         $paginateLocally
                             ? $this->allUpstreamPages(
                                 fn (int $readOffset): array => $bazarrClient->getEpisodeHistory($readOffset, self::MAX_PER_PAGE),
@@ -353,8 +355,9 @@ final readonly class SubtitleLibraryReader
             } else {
                 try {
                     $window = $this->mergedWindow($offset, $perPage, $episodeTotal);
+                    $timezone ??= $bazarrClient->historyTimezone();
                     $movieItems = array_values(array_filter(array_map(
-                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie'),
+                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie', $timezone),
                         $paginateLocally
                             ? $this->allUpstreamPages(
                                 fn (int $readOffset): array => $bazarrClient->getMovieHistory($readOffset, self::MAX_PER_PAGE),

@@ -110,6 +110,16 @@ test("a history row reads Bazarr's parsed timestamp in the app timezone and keep
     'relative text only' => [['timestamp' => 'yesterday'], 'yesterday'],
 ]);
 
+test("a history row reads Bazarr's parsed timestamp in Bazarr's own timezone", function (): void {
+    config(['app.timezone' => 'Europe/Stockholm']);
+
+    expect(resolve(SubtitleItemMapper::class)->historyItem([
+        'radarrId' => 801,
+        'language' => 'eng',
+        'parsed_timestamp' => '07/15/26 12:00:00',
+    ], 'movie', 'America/New_York')['occurred_at'] ?? null)->toBe('2026-07-15T18:00:00+02:00');
+});
+
 test('current subtitle languages normalise the language of every track-shaped entry', function (): void {
     $subtitleItemMapper = resolve(SubtitleItemMapper::class);
 

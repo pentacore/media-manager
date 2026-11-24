@@ -69,6 +69,33 @@ beforeEach(function (): void {
     $this->client = new BazarrClient($this->connection);
 });
 
+test("history timezone is the zone Bazarr's system status reports", function (): void {
+    Http::fake([
+        'bazarr.local:6767/api/system/status' => Http::response(['data' => [
+            ...bazarrFixture('system-status')['data'],
+            'timezone' => 'America/New_York',
+        ]]),
+    ]);
+
+    expect($this->client->historyTimezone())->toBe('America/New_York');
+});
+
+test('history timezone falls back to the app timezone when Bazarr does not report a usable one', function (mixed $status): void {
+    config(['app.timezone' => 'Europe/Stockholm']);
+
+    Http::fake([
+        'bazarr.local:6767/api/system/status' => $status,
+    ]);
+
+    expect($this->client->historyTimezone())->toBe('Europe/Stockholm');
+})->with([
+    'undefined' => fn () => Http::response(['data' => [...bazarrFixture('system-status')['data'], 'timezone' => 'Undefined']]),
+    'exception text' => fn () => Http::response(['data' => [...bazarrFixture('system-status')['data'], 'timezone' => 'Exception while getting time zone name.']]),
+    'missing' => fn () => Http::response(['data' => ['bazarr_version' => '1.6.0']]),
+    'not a string' => fn () => Http::response(['data' => [...bazarrFixture('system-status')['data'], 'timezone' => 5]]),
+    'status unavailable' => fn () => Http::response(status: 500),
+]);
+
 test('system status preserves the data envelope and exposes the Bazarr version at the top level', function (): void {
     Http::fake([
         'bazarr.local:6767/api/system/status' => Http::response(bazarrFixture('system-status')),

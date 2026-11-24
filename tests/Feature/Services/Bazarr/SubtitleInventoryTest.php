@@ -628,6 +628,7 @@ test('history projection omits upstream paths and subtitle identifiers', functio
     ['bazarr' => $bazarr] = subtitleInventoryConnections();
 
     Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.6.0', 'timezone' => 'UTC']]),
         'bazarr.test/api/episodes/history*' => Http::response([
             'data' => [[
                 'sonarrEpisodeId' => 701,
@@ -681,12 +682,50 @@ test('history projection omits upstream paths and subtitle identifiers', functio
         ->not->toContain('private-upstream-id');
 });
 
+test('history reads parsed timestamps in the timezone Bazarr runs in', function (): void {
+    Http::preventStrayRequests();
+    config(['app.timezone' => 'Europe/Stockholm']);
+
+    ['bazarr' => $bazarr] = subtitleInventoryConnections();
+
+    Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => [
+            'bazarr_version' => '1.6.0',
+            'timezone' => 'America/New_York',
+        ]]),
+        'bazarr.test/api/episodes/history*' => Http::response([
+            'data' => [[
+                'sonarrEpisodeId' => 701,
+                'language' => ['code3' => 'eng'],
+                'parsed_timestamp' => '07/17/26 04:00:00',
+            ]],
+            'total' => 1,
+        ]),
+        'bazarr.test/api/movies/history*' => Http::response([
+            'data' => [[
+                'radarrId' => 801,
+                'language' => ['code3' => 'swe'],
+                'parsed_timestamp' => '07/17/26 03:00:00',
+            ]],
+            'total' => 1,
+        ]),
+    ]);
+
+    $result = resolve(SubtitleLibraryReader::class)->history($bazarr, page: 1, perPage: 25);
+
+    expect(array_column($result['data'], 'occurred_at'))->toBe([
+        '2026-07-17T10:00:00+02:00',
+        '2026-07-17T09:00:00+02:00',
+    ]);
+});
+
 test('history reaches movie rows on later pages and scopes reads to a requested media type', function (): void {
     Http::preventStrayRequests();
 
     ['bazarr' => $bazarr] = subtitleInventoryConnections();
 
     Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.6.0', 'timezone' => 'UTC']]),
         'bazarr.test/api/episodes/history*' => fn (Request $request) => Http::response([
             'data' => str_contains($request->url(), 'start=0') ? [[
                 'sonarrSeriesId' => 101,
@@ -771,6 +810,7 @@ test('inspect returns one sanitized episode and bounded history from explicit id
     ['bazarr' => $bazarr] = subtitleInventoryConnections();
 
     Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.6.0', 'timezone' => 'UTC']]),
         'bazarr.test/api/episodes?*' => Http::response([
             'data' => [[
                 'sonarrSeriesId' => 101,

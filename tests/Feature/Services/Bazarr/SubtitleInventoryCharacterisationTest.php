@@ -98,6 +98,7 @@ test('inspect returns one sanitized movie and its bounded history from explicit 
     ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
 
     Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.6.0', 'timezone' => 'UTC']]),
         'bazarr.test/api/movies/history*' => Http::response([
             'data' => [[
                 'radarrId' => 801,
@@ -359,6 +360,7 @@ test('history reports both unavailable feeds in a fixed order', function (): voi
     ['bazarr' => $bazarr] = subtitleCharacterisationConnections();
 
     Http::fake([
+        'bazarr.test/api/system/status' => Http::response(['data' => ['bazarr_version' => '1.6.0', 'timezone' => 'UTC']]),
         'bazarr.test/api/episodes/history*' => Http::response([], 500),
         'bazarr.test/api/movies/history*' => Http::response([], 500),
     ]);
