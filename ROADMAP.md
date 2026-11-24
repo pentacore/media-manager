@@ -109,18 +109,9 @@ None open.
         - "1 false alarms" plural.
         - Table accessible name.
 - **Host monitoring minors**:
-    - Agent:
-        - Crash-loop self-heal.
-        - A hung inspection pins mounts.
-        - Config apply saves every non-null value.
-        - Empty `platform_url` in the install script.
-        - `nosuid`/`nodev` on a read-only remount.
-        - Run the extracted binary before moving it.
-        - `platform_url` is read only at startup.
     - Platform:
         - The DST fall-back hour overwrites itself (samples are stored as
           zoneless app-timezone wall clock).
-- **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
 - **AI batch requests (shelved 2026-11-24).** Provider batch APIs (about 50% off,
   results within 24 h) don't pay off yet: AI spend has been about $1/month since
   October, so batching everything that can wait saves at most about $0.50/month.
@@ -129,8 +120,6 @@ None open.
   batch, but tool-loop agents (`DecisionAgent`, benchmark cases) need the step loop
   rebuilt, and OpenRouter has no batch API. Revisit if benchmarks or webhook
   decisions start costing real money, or once laravel/ai supports batch requests.
-- **AI price refresh batching** with a dedicated model, once laravel/ai supports
-  batch requests.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
