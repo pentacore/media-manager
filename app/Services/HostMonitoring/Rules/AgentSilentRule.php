@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Raises a critical `silent` incident for every enrolled server whose agent has not reported for
@@ -89,7 +90,21 @@ final readonly class AgentSilentRule
 
         return $servers
             ->filter(fn (Server $server): bool => $this->isSilent($server, $resumedAt))
-            ->sum(fn (Server $server): int => $this->raise($server->id, $resumedAt) ? 1 : 0);
+            ->sum(fn (Server $server): int => $this->raiseIsolated($server->id, $resumedAt) ? 1 : 0);
+    }
+
+    /**
+     * A server that throws is reported and skipped, so one bad row cannot stop the sweep for the rest of the fleet.
+     */
+    private function raiseIsolated(int $serverId, ?CarbonImmutable $resumedAt): bool
+    {
+        try {
+            return $this->raise($serverId, $resumedAt);
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            return false;
+        }
     }
 
     /**

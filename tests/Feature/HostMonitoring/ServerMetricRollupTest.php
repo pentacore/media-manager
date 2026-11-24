@@ -158,6 +158,64 @@ test('samples older than the lookback are left alone', function (): void {
     expect(ServerMetricSample::query()->where('resolution', 300)->count())->toBe(0);
 });
 
+test('the hourly rollup re-reads six hours and leaves older five-minute rows alone', function (): void {
+    $this->travelTo('2026-10-22 12:07:30');
+    $server = Server::factory()->create();
+
+    foreach (['2026-10-22 05:55:00' => 10.0, '2026-10-22 06:00:00' => 20.0, '2026-10-22 11:55:00' => 30.0] as $at => $cpu) {
+        ServerMetricSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse($at))->create(['cpu_percent' => $cpu]);
+    }
+
+    $this->artisan('servers:rollup-metrics', ['--resolution' => 3600])->assertSuccessful();
+
+    expect(ServerMetricSample::query()->where('resolution', 3600)->oldest('recorded_at')->get()->map(
+        fn (ServerMetricSample $serverMetricSample): array => [$serverMetricSample->recorded_at->toDateTimeString(), $serverMetricSample->cpu_percent],
+    )->all())->toBe([['2026-10-22 06:00:00', 20.0], ['2026-10-22 11:00:00', 30.0]]);
+});
+
+test('hourly filesystem buckets build from five-minute rows per mount', function (): void {
+    $this->travelTo('2026-10-22 12:07:30');
+    $server = Server::factory()->create();
+
+    ServerFilesystemSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse('2026-10-22 11:00:00'))->bytes(1000, 100, 900)->create();
+    ServerFilesystemSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse('2026-10-22 11:55:00'))->bytes(2000, 300, 1700)->create();
+    ServerFilesystemSample::factory()->for($server)->resolution(300)->mount('/mnt/backups')->at(CarbonImmutable::parse('2026-10-22 11:30:00'))->bytes(5000, 4000, 1000)->create();
+    ServerFilesystemSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse('2026-10-22 12:00:00'))->bytes(1000, 999, 1)->create();
+
+    $this->artisan('servers:rollup-metrics', ['--resolution' => 3600])->assertSuccessful();
+
+    $rows = ServerFilesystemSample::query()->where('resolution', 3600)->orderBy('mount')->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]->mount)->toBe('/')
+        ->and($rows[0]->recorded_at->toDateTimeString())->toBe('2026-10-22 11:00:00')
+        ->and($rows[0]->used_bytes)->toBe(200)
+        ->and($rows[0]->available_bytes)->toBe(1300)
+        ->and($rows[0]->total_bytes)->toBe(2000)
+        ->and($rows[1]->mount)->toBe('/mnt/backups')
+        ->and($rows[1]->used_bytes)->toBe(4000);
+});
+
+test('the rollup windows follow the app timezone wall clock, not UTC', function (int $resolution, string $sampleAt, string $bucket): void {
+    config()->set('app.timezone', 'Asia/Kolkata');
+    date_default_timezone_set('Asia/Kolkata');
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:07:30', 'Asia/Kolkata'));
+    $server = Server::factory()->create();
+
+    ServerMetricSample::factory()->for($server)->resolution($resolution === 300 ? 60 : 300)
+        ->at(CarbonImmutable::parse($sampleAt, 'Asia/Kolkata'))->create(['cpu_percent' => 42.0]);
+    ServerFilesystemSample::factory()->for($server)->resolution($resolution === 300 ? 60 : 300)
+        ->at(CarbonImmutable::parse($sampleAt, 'Asia/Kolkata'))->create();
+
+    $this->artisan('servers:rollup-metrics', ['--resolution' => $resolution])->assertSuccessful();
+
+    expect(ServerMetricSample::query()->where('resolution', $resolution)->sole()->recorded_at->toDateTimeString())->toBe($bucket)
+        ->and(ServerFilesystemSample::query()->where('resolution', $resolution)->sole()->recorded_at->toDateTimeString())->toBe($bucket);
+})->with([
+    'five minutes' => [300, '2026-10-22 12:01:00', '2026-10-22 12:00:00'],
+    'hourly' => [3600, '2026-10-22 11:25:00', '2026-10-22 11:00:00'],
+]);
+
 test('an unknown resolution fails', function (): void {
     $this->artisan('servers:rollup-metrics', ['--resolution' => 60])->assertFailed();
 });

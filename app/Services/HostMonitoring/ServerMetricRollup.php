@@ -15,6 +15,9 @@ use InvalidArgumentException;
  * (memory, swap and filesystem totals) take the maximum. Each run re-reads a lookback window and upserts, so it
  * is idempotent and picks up late samples. A bucket averages whichever source rows it has: a mount with no
  * 60 s rows (unresponsive) simply contributes none.
+ *
+ * Samples are stored as app-timezone wall clock without a zone, so the window is computed on that wall clock too
+ * (as ServerMetricRepository does), not on UTC.
  */
 final readonly class ServerMetricRollup
 {
@@ -44,9 +47,15 @@ final readonly class ServerMetricRollup
             + $this->rollupFilesystems($targetResolution, $tier['source'], $from, $to));
     }
 
+    /**
+     * Floors the app-timezone wall clock to the bucket, reading it as UTC the way Postgres reads a timestamp without a
+     * zone. The `date_bin` origin (2000-01-01) is a multiple of both bucket sizes from the epoch, so this matches it.
+     */
     private function floorToBucket(CarbonImmutable $moment, int $seconds): CarbonImmutable
     {
-        return CarbonImmutable::createFromTimestampUTC($moment->getTimestamp() - ($moment->getTimestamp() % $seconds));
+        $wallClock = CarbonImmutable::parse($moment->toDateTimeString(), 'UTC');
+
+        return $wallClock->subSeconds($wallClock->getTimestamp() % $seconds);
     }
 
     private function rollupMetrics(int $target, int $source, CarbonImmutable $from, CarbonImmutable $to): int

@@ -9,6 +9,7 @@ use App\Models\ServerMetricSample;
 use App\Services\HostMonitoring\ServerMetricRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Sequence;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * The buckets that have a value, keyed by their ISO start.
@@ -120,3 +121,7 @@ test('a new server has empty series for every range', function (ServerMetricRang
     expect(resolve(ServerMetricRepository::class)->series($server, $range))
         ->toBe(['cpu' => [], 'memory' => [], 'filesystems' => []]);
 })->with(ServerMetricRange::cases());
+
+test('filesystem samples are indexed for one server range read across every mount', function (): void {
+    expect(Schema::hasIndex('server_filesystem_samples', ['server_id', 'resolution', 'recorded_at']))->toBeTrue();
+});

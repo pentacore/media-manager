@@ -13,6 +13,7 @@ use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -341,6 +342,22 @@ test('one silent agent among reporting ones still opens', function (): void {
     $this->artisan('servers:check-silent')->assertSuccessful();
 
     expect(ServerIncident::query()->open()->sole()->server_id)->toBe($silent->id);
+});
+
+test('one server that fails in the sweep is reported and the other silent servers still open', function (): void {
+    Exceptions::fake();
+    $broken = Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(10)]);
+    $healthy = Server::factory()->reporting()->create(['last_report_at' => now()->subMinutes(5)]);
+    Server::factory()->reporting()->create(['last_report_at' => now()]);
+
+    ServerIncident::saving(function (ServerIncident $serverIncident) use ($broken): void {
+        throw_if($serverIncident->server_id === $broken->id, RuntimeException::class, 'bad row');
+    });
+
+    $this->artisan('servers:check-silent')->assertSuccessful();
+
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'bad row');
+    expect(ServerIncident::query()->open()->where('key', 'silent')->pluck('server_id')->all())->toBe([$healthy->id]);
 });
 
 test('a repeat sweep refreshes the detail without a second notification', function (): void {

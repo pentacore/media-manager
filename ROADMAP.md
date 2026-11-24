@@ -118,10 +118,8 @@ None open.
         - Run the extracted binary before moving it.
         - `platform_url` is read only at startup.
     - Platform:
-        - One bad row stops the sweep.
-        - The rollup assumes UTC.
-        - Filesystem index.
-        - Missing tests.
+        - The DST fall-back hour overwrites itself (samples are stored as
+          zoneless app-timezone wall clock).
 - **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
 - **AI batch requests (shelved 2026-11-24).** Provider batch APIs (about 50% off,
   results within 24 h) don't pay off yet: AI spend has been about $1/month since

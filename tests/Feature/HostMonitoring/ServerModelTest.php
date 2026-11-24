@@ -40,6 +40,13 @@ test('an enrolled server is no longer enrollable', function (): void {
         ->and($server->enrollmentIsUsable())->toBeFalse();
 });
 
+test('an enrollment token past its expiry is no longer usable', function (): void {
+    $server = Server::factory()->pendingEnrollment()->create(['enrollment_expires_at' => now()->subSecond()]);
+
+    expect($server->enrollmentIsUsable())->toBeFalse()
+        ->and($server->isEnrolled())->toBeFalse();
+});
+
 test('creating, reconfiguring, toggling and deleting a check bumps the server config version', function (): void {
     $server = Server::factory()->create();
     $check = ServerCheck::factory()->mountPresent()->for($server)->create();
@@ -57,6 +64,7 @@ test('recording a check result does not bump the config version', function (): v
     $before = $check->server->fresh()->config_version;
 
     $check->update(['last_status' => HostCheckStatus::Crit, 'last_message' => 'x', 'last_evaluated_at' => now()]);
+    $check->update(['last_observed' => ['seen' => true], 'last_status' => HostCheckStatus::Ok]);
 
     expect($check->server->fresh()->config_version)->toBe($before);
 });
