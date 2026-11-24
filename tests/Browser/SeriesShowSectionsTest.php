@@ -354,6 +354,39 @@ test('a processed webhook reload does not reopen a closed replace dialog', funct
         ->assertNoSmoke();
 });
 
+test('a webhook reload in flight when the replace dialog closes does not reopen it', function (): void {
+    seriesSectionsFakeSonarrWithFile($this->sonarr);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.show', ['id' => 7, 'replace_season' => 1, 'replace_episode' => 3], absolute: false))
+        ->assertPresent('[data-replacement-dialog]')
+        ->assertPresent('[data-season-card="1"]');
+    $webpage->script(appHydratedScript());
+    $webpage->script(seriesSectionsReloadRecorderScript());
+    $webpage->script(seriesSectionsHoldEpisodesScript());
+
+    // The reload leaves from the link's URL and is answered after the close.
+    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
+        'id' => 7003, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
+        'event_type' => 'Download', 'processed_at' => '2026-10-12T10:00:00.000000Z',
+    ]));
+    $webpage->script(seriesSectionsWaitForHeldEpisodesScript());
+
+    $webpage->keys('[data-replacement-dialog]', 'Escape');
+    $webpage->script(seriesSectionsWaitForClosedReplaceDialogScript());
+
+    $webpage->script('window.__mmReleaseHeld()');
+    $webpage->script(confirmDialogWaitUntilScript("window.__seriesSectionsReloads.includes('series,episodes')"));
+    $webpage->script('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    $webpage->script(seriesSectionsWaitUntilScript(
+        "!location.search.includes('replace_')",
+        'The webhook reload put the link params back in the URL.',
+    ));
+
+    $webpage->assertMissing('[data-replacement-dialog]')
+        ->assertNoSmoke();
+});
+
 test('closing a deep-linked replace dialog drops the link params and a second click reopens it', function (): void {
     seriesSectionsFakeSonarrWithFile($this->sonarr);
     $this->actingAs(User::factory()->member()->create());
