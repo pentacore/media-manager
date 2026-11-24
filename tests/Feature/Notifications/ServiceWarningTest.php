@@ -48,7 +48,7 @@ test('warning level resolves to warning severity prefs', function (): void {
     expect($notification->via($user))->toEqual(['broadcast']);
 });
 
-test('mail and ntfy toggles resolve to live channels', function (): void {
+test('the ntfy toggle resolves to its channel and mail is dropped without a mail template', function (): void {
     $user = User::factory()->create();
     NotificationPreference::create([
         'user_id' => $user->id,
@@ -62,5 +62,5 @@ test('mail and ntfy toggles resolve to live channels', function (): void {
 
     $notification = new ServiceWarning('sonarr', 'IndexerStatusCheck', '...', 'error');
 
-    expect($notification->via($user))->toEqual(['mail', NtfyChannel::class]);
+    expect($notification->via($user))->toEqual([NtfyChannel::class]);
 });

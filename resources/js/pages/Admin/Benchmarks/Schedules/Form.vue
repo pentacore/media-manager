@@ -154,13 +154,13 @@ const canEstimate = computed(
         form.judge.model !== '',
 );
 
+/**
+ * The server resolves the cases and tier models as a launch does, so a task
+ * with any number of tier models gets an estimate.
+ */
 const estimateInputs = computed(() => ({
-    case_ids: matchingCases.value.map((benchmarkCase) => benchmarkCase.id),
-    candidates: candidates.value.map((candidate) => ({
-        provider: candidate.provider,
-        model: candidate.model,
-        reasoning: candidate.reasoning,
-    })),
+    task: form.task,
+    case_tags: [...form.case_tags],
     judge: {
         provider: form.judge.provider,
         model: form.judge.model,
@@ -186,8 +186,8 @@ async function runEstimate(): Promise<void> {
     try {
         const response = await jsonRequest<BenchmarkEstimate>(
             'POST',
-            BenchmarkRunController.estimate.url(),
-            { ...estimateInputs.value, cost_cap_usd: costCapValue.value },
+            BenchmarkScheduleController.estimate.url(),
+            estimateInputs.value,
         );
 
         if (version === inputVersion) {

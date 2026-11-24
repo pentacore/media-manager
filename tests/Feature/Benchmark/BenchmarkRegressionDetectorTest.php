@@ -7,6 +7,7 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
+use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\Benchmark\BenchmarkRegressionDetector;
 
 const REGRESSION_CANDIDATE = ['provider' => 'openai', 'model' => 'gpt-tier', 'reasoning' => 'provider_default'];
@@ -138,4 +139,18 @@ test('with two candidates listed in another order only the regressed one is repo
     expect($detected['baseline_run_id'])->toBe($baseline->id)
         ->and($detected['regressions'])->toHaveCount(1)
         ->and($detected['regressions'][0]['candidate'])->toBe($mini);
+});
+
+test('results the monthly hard cap refused are left out of the comparison', function (): void {
+    scheduledRunWith($this->schedule, $this->cases, array_fill(0, 4, [0.9, true]));
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule($this->schedule)->completed()->withCandidates([REGRESSION_CANDIDATE])->create();
+    BenchmarkResult::factory()->forCase($benchmarkRun, $this->cases[0], 0)->scored(0.9, true)->create();
+
+    foreach (array_slice($this->cases, 1) as $case) {
+        BenchmarkResult::factory()->forCase($benchmarkRun, $case, 0)->failed(new AiBudgetExceededException(10.0, 5.0)->getMessage())->create();
+    }
+
+    $detected = resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun);
+
+    expect($detected['regressions'])->toBe([]);
 });

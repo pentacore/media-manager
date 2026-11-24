@@ -116,6 +116,35 @@ test('catalog includes service update available with mail defaulting on', functi
         );
 });
 
+test('catalog marks the channels a notification cannot be sent on', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('settings.notifications.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog.0.class', ServiceWarning::class)
+            ->where('catalog.0.unsupported', ['mail'])
+            ->where('catalog.0.severities.warning.mail', false)
+            ->where('catalog.2.class', ServiceUpdateAvailable::class)
+            ->where('catalog.2.unsupported', [])
+        );
+});
+
+test('PUT stores an unsupported channel as off', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->put(route('settings.notifications.update'), [
+            'preferences' => [
+                ['class' => ServiceWarning::class, 'severities' => ['warning' => ['database' => true, 'broadcast' => true, 'mail' => true, 'ntfy' => false]]],
+            ],
+        ])
+        ->assertRedirect();
+
+    expect(NotificationPreference::query()->where('user_id', $user->id)->sole()->mail)->toBeFalse();
+});
+
 test('catalog includes the subtitle replacement status notification', function (): void {
     $user = User::factory()->create();
 

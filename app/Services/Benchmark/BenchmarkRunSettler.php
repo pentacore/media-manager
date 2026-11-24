@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Jobs\CheckBenchmarkRegression;
 use App\Models\BenchmarkRun;
 use App\Services\AiUsage\AiUsageReporting;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Brings a benchmark run's bookkeeping up to date after a result changed:
@@ -85,6 +88,37 @@ final readonly class BenchmarkRunSettler
                 $this->queueRegressionCheck($benchmarkRun);
             }
         });
+    }
+
+    /**
+     * After a re-judge of a finished scheduled run whose comparison is stored:
+     * once no other re-judge of it is still live, recheck it in this job, so
+     * the stored comparison follows the new scores by the time the run page
+     * stops polling. A stale re-judge lost its worker and does not hold the
+     * recheck back. A failing recheck is reported, never failing the re-judge.
+     */
+    public function recheckAfterRejudge(int $runId): void
+    {
+        $benchmarkRun = BenchmarkRun::query()->find($runId);
+
+        if (! $benchmarkRun instanceof BenchmarkRun || $benchmarkRun->benchmark_schedule_id === null || $benchmarkRun->regressions === null || ! $benchmarkRun->isTerminal()) {
+            return;
+        }
+
+        $judging = $benchmarkRun->results()
+            ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
+            ->whereNot(static fn (Builder $builder): Builder => $builder->judgeStale())
+            ->exists();
+
+        if ($judging) {
+            return;
+        }
+
+        try {
+            dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id, recheck: true));
+        } catch (Throwable $throwable) {
+            report($throwable);
+        }
     }
 
     /**

@@ -509,6 +509,21 @@ test('the run page carries the regression comparison', function (): void {
             ->where('run.regressions.0.metrics.0.metric', 'pass_rate'));
 });
 
+test('a scheduled run that just finished waits for its regression check', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create();
+    $pending = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['finished_at' => now()]);
+    $checked = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['finished_at' => now(), 'regressions' => []]);
+    $old = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['finished_at' => now()->subHour()]);
+    $running = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->running()->create();
+    $manual = BenchmarkRun::factory()->completed()->create(['finished_at' => now()]);
+
+    foreach ([[$pending, true], [$checked, false], [$old, false], [$running, false], [$manual, false]] as [$benchmarkRun, $waiting]) {
+        $this->get(route('admin.benchmarks.runs.show', $benchmarkRun))
+            ->assertInertia(fn ($page) => $page->where('run.regression_pending', $waiting));
+    }
+});
+
 test('an unchecked run has no comparison', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $benchmarkRun = BenchmarkRun::factory()->completed()->create();

@@ -82,14 +82,15 @@ const hasFailedJudge = computed(() =>
 );
 
 /**
- * Poll while the run goes, a re-judge is in flight or a result still runs
- * (a cancelled run's running case finishes and keeps its result). A stale
- * re-judge or a stalled running result lost its worker, so it never keeps
- * polling alive.
+ * Poll while the run goes, a re-judge is in flight, a result still runs
+ * (a cancelled run's running case finishes and keeps its result) or a
+ * scheduled run waits for its regression check. A stale re-judge or a
+ * stalled running result lost its worker, so it never keeps polling alive.
  */
 const needsPolling = computed(
     () =>
         isActive.value ||
+        props.run.regression_pending ||
         allCells.value.some(isRejudgingLive) ||
         props.run.counts.running - props.run.counts.stalled > 0,
 );
@@ -418,6 +419,13 @@ function cellClass(cell: BenchmarkMatrixCell): string {
             :baseline="run.baseline"
             :run-id="run.id"
         />
+        <p
+            v-else-if="run.regression_pending"
+            class="text-[13px] text-muted-foreground"
+            data-benchmark-regression-pending
+        >
+            Comparing with the schedule's previous run…
+        </p>
 
         <p v-if="matrix.length === 0" class="text-[13px] text-muted-foreground">
             No results yet.

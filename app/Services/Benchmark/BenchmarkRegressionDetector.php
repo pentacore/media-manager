@@ -8,12 +8,15 @@ use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Services\AiBudget\AiBudgetExceededException;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Compares a finished scheduled run with the schedule's previous comparable
  * run, per candidate: the latest earlier Completed or StoppedCostCap run of
  * the same schedule judged by the same model that also ran this candidate.
- * Only cases both runs finished are compared. A candidate regressed when its
+ * Only cases both runs finished are compared, and a case the monthly AI hard
+ * cap refused counts as unfinished. A candidate regressed when its
  * pass rate fell, or its error rate rose, by more than the schedule's
  * pass-rate threshold, or its average score fell by more than the score
  * threshold (both in percentage points).
@@ -100,7 +103,9 @@ final readonly class BenchmarkRegressionDetector
     }
 
     /**
-     * Finished results of one candidate keyed by case id.
+     * Finished results of one candidate keyed by case id. A result the
+     * monthly AI hard cap refused says nothing about the model, so it is left
+     * out.
      *
      * @return array<int, BenchmarkResult>
      */
@@ -110,6 +115,10 @@ final readonly class BenchmarkRegressionDetector
             ->where('candidate_index', $candidateIndex)
             ->whereNotNull('benchmark_case_id')
             ->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])
+            ->where(static fn (Builder $builder): Builder => $builder
+                ->where('status', BenchmarkResultStatus::Ok)
+                ->orWhereNull('error')
+                ->orWhere('error', 'not like', AiBudgetExceededException::MESSAGE_PREFIX.'%'))
             ->get(['benchmark_case_id', 'status', 'score', 'passed'])
             ->keyBy('benchmark_case_id')
             ->all();

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\ScheduledBenchmarkAlert;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Messages\MailMessage;
 
 function regressionAlert(): ScheduledBenchmarkAlert
 {
@@ -50,6 +51,35 @@ test('a skipped alert carries the reason and links to the schedules', function (
     expect($payload['title'])->toBe('Scheduled benchmark skipped: Weekly titles')
         ->and($payload['message'])->toBe('The estimate $2.50 is over the $1.00 cap.')
         ->and($payload['link'])->toBe('/admin/benchmarks/schedules');
+});
+
+test('a failed alert says the run could not start', function (): void {
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create(['name' => 'Weekly titles']);
+    $scheduledBenchmarkAlert = ScheduledBenchmarkAlert::failed($benchmarkSchedule, 'The run could not start; the error is in the logs.');
+    $payload = $scheduledBenchmarkAlert->toArray(User::factory()->create());
+
+    expect($scheduledBenchmarkAlert->kind)->toBe('failed')
+        ->and($payload['title'])->toBe('Scheduled benchmark failed to start: Weekly titles')
+        ->and($payload['message'])->toBe('The run could not start; the error is in the logs.')
+        ->and($payload['link'])->toBe('/admin/benchmarks/schedules');
+});
+
+test('the alert can be mailed', function (): void {
+    $user = User::factory()->create();
+    $scheduledBenchmarkAlert = regressionAlert();
+
+    NotificationPreference::create([
+        'user_id' => $user->id, 'notification_class' => ScheduledBenchmarkAlert::class, 'severity' => 'warning',
+        'database' => false, 'broadcast' => false, 'mail' => true, 'ntfy' => false,
+    ]);
+
+    $mailMessage = $scheduledBenchmarkAlert->toMail($user);
+
+    expect($scheduledBenchmarkAlert->via($user))->toEqual(['mail'])
+        ->and($mailMessage)->toBeInstanceOf(MailMessage::class)
+        ->and($mailMessage->subject)->toBe('Benchmark regression: Nightly decisions')
+        ->and($mailMessage->introLines)->toBe(['openrouter/free/model (High): pass rate 90% → 60%, errors 0% → 30%; openai/gpt-x: score 80% → 55%'])
+        ->and($mailMessage->actionUrl)->toBe(url($scheduledBenchmarkAlert->link));
 });
 
 test('via defaults to database and broadcast and honours preference rows', function (): void {

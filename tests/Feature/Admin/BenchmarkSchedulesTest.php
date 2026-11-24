@@ -244,3 +244,32 @@ test('a schedule takes at most twenty tags', function (): void {
 
     expect(BenchmarkSchedule::query()->count())->toBe(0);
 });
+
+test('the estimate covers the cases and every tier model the schedule would run', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $anime = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['tags' => ['anime']]);
+    BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create(['tags' => ['tv']]);
+
+    foreach (range(1, 9) as $position) {
+        AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-tier-'.$position, 'input_per_mtok' => 2, 'output_per_mtok' => 8]);
+        AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-tier-'.$position)->position($position)->create();
+    }
+
+    $response = $this->postJson(route('admin.benchmarks.schedules.estimate'), [
+        'task' => AiTask::Title->value,
+        'case_tags' => ['anime'],
+        'judge' => ['provider' => 'openai', 'model' => 'gpt-judge', 'reasoning' => 'provider_default'],
+    ])->assertOk();
+
+    expect($response->json('cases'))->toBe(1)
+        ->and($response->json('candidates'))->toHaveCount(10)
+        ->and($response->json('rows.0.case_id'))->toBe($anime->id)
+        ->and($response->json('total_usd'))->toBeGreaterThan(0);
+});
+
+test('the estimate validates its task and judge', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->postJson(route('admin.benchmarks.schedules.estimate'), ['task' => 'nope', 'case_tags' => []])
+        ->assertJsonValidationErrors(['task', 'judge']);
+});

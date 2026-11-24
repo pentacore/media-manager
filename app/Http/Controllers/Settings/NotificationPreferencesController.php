@@ -108,12 +108,13 @@ class NotificationPreferencesController extends Controller
             }
 
             $defaults = $preferenceResolver->defaultsFor($class);
+            $unsupported = $preferenceResolver->unsupportedChannels($class);
             $perSeverity = [];
             foreach (PreferenceResolver::SEVERITIES as $severity) {
                 $row = $rows[$class.'|'.$severity] ?? null;
                 $flags = [];
                 foreach (PreferenceResolver::CHANNELS as $channel) {
-                    $flags[$channel] = $row->{$channel} ?? $defaults[$channel];
+                    $flags[$channel] = ! in_array($channel, $unsupported, true) && ($row->{$channel} ?? $defaults[$channel]);
                 }
 
                 $perSeverity[$severity] = $flags;
@@ -124,6 +125,7 @@ class NotificationPreferencesController extends Controller
                 'label' => $meta['label'],
                 'description' => $meta['description'],
                 'severities' => $perSeverity,
+                'unsupported' => $unsupported,
             ];
         }
 
@@ -186,6 +188,10 @@ class NotificationPreferencesController extends Controller
                 // every other channel in the shared preferences matrix.
                 if (! $isAdmin) {
                     $values['webhook'] = false;
+                }
+
+                foreach ($preferenceResolver->unsupportedChannels($entry['class']) as $channel) {
+                    $values[$channel] = false;
                 }
 
                 NotificationPreference::query()->updateOrCreate(

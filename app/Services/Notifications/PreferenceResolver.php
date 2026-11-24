@@ -18,7 +18,8 @@ use App\Notifications\ServiceUpdateAvailable;
  * Resolves the channel list for a (user, notification class, severity)
  * tuple. Anything the user hasn't explicitly toggled falls back to the
  * defaults below — database + broadcast on by default; mail and the push
- * channels off unless toggled — all of them deliver.
+ * channels off unless toggled. A channel the notification cannot be sent on
+ * (mail without a `toMail()`) is never resolved.
  *
  * A `NotificationDestination` notifiable bypasses preferences entirely: it
  * resolves to its own push channel when the severity meets its
@@ -79,6 +80,18 @@ class PreferenceResolver
     }
 
     /**
+     * Channels a notification class cannot be sent on: mail needs a
+     * `toMail()`. The settings page shows them off and disabled, and
+     * channelsFor() never resolves them, whatever a preference row says.
+     *
+     * @return list<string>
+     */
+    public function unsupportedChannels(string $notificationClass): array
+    {
+        return method_exists($notificationClass, 'toMail') ? [] : ['mail'];
+    }
+
+    /**
      * @return list<string>
      */
     public function channelsFor(User|NotificationDestination $notifiable, string $notificationClass, string $severity): array
@@ -108,9 +121,12 @@ class PreferenceResolver
         // The generic webhook channel is admin-only (it POSTs to whatever URL
         // is saved with no SSRF filtering); a role downgrade must not leave a
         // stale preference row still delivering to it.
+        $unsupported = $this->unsupportedChannels($notificationClass);
         $enabled = array_values(array_filter(
             self::CHANNELS,
-            static fn (string $channel): bool => $flags[$channel] && ($channel !== 'webhook' || $notifiable->isAdmin()),
+            static fn (string $channel): bool => $flags[$channel]
+                && ! in_array($channel, $unsupported, true)
+                && ($channel !== 'webhook' || $notifiable->isAdmin()),
         ));
 
         return array_map(

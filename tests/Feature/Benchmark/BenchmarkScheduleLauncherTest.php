@@ -13,6 +13,8 @@ use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
 use App\Models\User;
 use App\Notifications\ScheduledBenchmarkAlert;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Benchmark\BenchmarkScheduleLauncher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -151,6 +153,20 @@ test('an exception records a fixed failure and still advances the schedule', fun
         ->and($benchmarkSchedule->fresh()->last_message)->toBe(BenchmarkScheduleLauncher::FAILED_MESSAGE)
         ->and($benchmarkSchedule->fresh()->next_run_at->isFuture())->toBeTrue();
     Notification::assertSentTimes(ScheduledBenchmarkAlert::class, User::query()->where('role', 'admin')->count());
+    Notification::assertSentTo(User::query()->where('role', 'admin')->first(), ScheduledBenchmarkAlert::class, fn (ScheduledBenchmarkAlert $alert): bool => $alert->kind === 'failed');
+});
+
+test('a reached monthly hard cap skips instead of failing every case', function (): void {
+    $benchmarkSchedule = dueTitleSchedule();
+    BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    $this->mock(AiBudgetGuard::class)->shouldReceive('enforceIncluding')->with(0.0)->andThrow(new AiBudgetExceededException(6.0, 5.0));
+
+    $attempt = resolve(BenchmarkScheduleLauncher::class)->launchDue($benchmarkSchedule->id);
+
+    expect($attempt->outcome)->toBe(BenchmarkScheduleOutcome::SkippedBudget)
+        ->and($attempt->message)->toBe('The monthly AI hard cap is reached.')
+        ->and(BenchmarkRun::query()->count())->toBe(0);
+    Notification::assertSentTo(User::query()->where('role', 'admin')->first(), ScheduledBenchmarkAlert::class, fn (ScheduledBenchmarkAlert $alert): bool => $alert->kind === 'skipped');
 });
 
 test('a deleted creator leaves the scheduled run unattributed', function (): void {
