@@ -124,7 +124,7 @@ test('production stack runs SSR as an internal graceful-degradation service', fu
     $ssrService = $ssrServiceBlock[1] ?? '';
     $webService = $webServiceBlock[1] ?? '';
 
-    expect($dockerfile)->toMatch('/FROM dunglas\/frankenphp:.*?RUN apk add --no-cache\s+.*?nodejs/s')
+    expect($dockerfile)->toMatch('/FROM dunglas\/frankenphp:.*?RUN apk add --no-cache\s+.*?nodejs-current/s')
         ->and($ssrEntrypoint)->toContain('php artisan inertia:start-ssr')
         ->and($ssrHealthcheck)->toContain('php artisan inertia:check-ssr')
         ->and($ssrService)->toContain('CONTAINER_ROLE: ssr')
