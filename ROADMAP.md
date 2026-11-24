@@ -132,8 +132,14 @@ None open.
         - Filesystem index.
         - Missing tests.
 - **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
-- **AI price refresh batching** with a dedicated model, once laravel/ai supports
-  batch requests.
+- **AI batch requests (shelved 2026-11-24).** Provider batch APIs (about 50% off,
+  results within 24 h) don't pay off yet: AI spend has been about $1/month since
+  October, so batching everything that can wait saves at most about $0.50/month.
+  The price refresh is a poor fit anyway (a 40-step tool loop inside a 255 s time
+  box). Single-call tasks (decision verifier, benchmark judge) would be easy to
+  batch, but tool-loop agents (`DecisionAgent`, benchmark cases) need the step loop
+  rebuilt, and OpenRouter has no batch API. Revisit if benchmarks or webhook
+  decisions start costing real money, or once laravel/ai supports batch requests.
 - **Log provider stream errors.** laravel/ai never reports a `StreamErrorException`
   (an error the provider sent inside the stream), so a failed chat turn leaves
   nothing in the container logs; only the chat UI shows the message. Log it,
