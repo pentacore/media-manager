@@ -644,3 +644,186 @@ test("a template's tool groups are pinned when it is used", function (): void {
         ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
         ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
 });
+
+test('save as template carries a long message in the request body', function (): void {
+    MediaAgent::fake(['Sure.']);
+    $this->actingAs(User::factory()->admin()->create());
+    // ~3,900 characters: well past what a ?body= query survives behind a
+    // small proxy buffer (the old 414), and still under the 4,000 cap.
+    $message = rtrim(str_repeat('Check the anime queue for stuck downloads. ', 90));
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->fill('[data-chat-input]', $message)
+        ->click('Send')
+        ->assertSee('Sure.')
+        ->click('[data-save-as-template]')
+        ->assertValue('[data-template-body]', $message)
+        ->assertPathIs('/ai/templates/create');
+});
+
+test('double-clicking a chip inserts its template once', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->pinned()->create([
+        'name' => 'Queue check',
+        'body' => 'Check the queue',
+        'auto_send' => false,
+    ]);
+    $this->actingAs($admin);
+
+    $chip = sprintf('[data-template-chip="%d"]', $chatTemplate->id);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke()->assertVisible($chip);
+    $webpage->script(appHydratedScript());
+    // Two clicks before the first render answers, as a double-click lands.
+    $webpage->script(sprintf('(() => { const chip = document.querySelector(%s); chip.click(); chip.click(); })()', json_encode($chip)));
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[data-chat-input]").value !== ""'));
+    // Give a second render time to land before checking it never did.
+    $webpage->wait(1);
+    $webpage->assertValue('[data-chat-input]', 'Check the queue');
+});
+
+test('double-clicking insert in the fill dialog inserts once', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find {{what}}', [
+        ['name' => 'what', 'label' => 'What', 'type' => 'text', 'default' => null, 'options' => null],
+    ])->create();
+    $this->actingAs($admin);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->fill('[data-template-field="what"]', 'Dune');
+    $webpage->script('(() => { const insert = document.querySelector("[data-template-insert]"); insert.click(); insert.click(); })()');
+    $webpage->script(confirmDialogWaitUntilScript('document.querySelector("[data-chat-input]").value !== ""'));
+    $webpage->wait(1);
+    $webpage->assertValue('[data-chat-input]', 'Find Dune')
+        ->assertMissing('[data-template-fill-dialog]');
+});
+
+test('a template that cannot reach the server shows friendly copy, not the browser error', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->pinned()->create([
+        'name' => 'Queue check',
+        'body' => 'Check the queue',
+        'auto_send' => false,
+    ]);
+    $this->actingAs($admin);
+
+    $chip = sprintf('[data-template-chip="%d"]', $chatTemplate->id);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke()->assertVisible($chip);
+    $webpage->script(appHydratedScript());
+    // The render request fails the way a dropped connection does.
+    $webpage->script(<<<'JS'
+        (() => {
+            const original = window.fetch.bind(window);
+            window.fetch = (input, init) => String(input).endsWith('/render')
+                ? Promise.reject(new TypeError('Failed to fetch'))
+                : original(input, init);
+        })()
+        JS);
+    $webpage->click($chip)
+        ->assertSee('Could not reach the server. Try again.')
+        ->assertDontSee('Failed to fetch')
+        ->assertValue('[data-chat-input]', '');
+});
+
+test('an older template list refresh that answers last does not replace a newer one', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Queue check']);
+    $this->actingAs($admin);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    // The first refresh from here on answers late with an empty list; the
+    // second answers at once with the real one.
+    $webpage->script(<<<'JS_WRAP'
+    (() => {
+        const original = window.fetch.bind(window);
+        let calls = 0;
+        window.fetch = (input, init) => {
+            if (!String(input).includes('/ai/templates/options')) {
+                return original(input, init);
+            }
+            calls += 1;
+            if (calls === 1) {
+                return new Promise((resolve) => setTimeout(() => resolve(new Response(
+                    JSON.stringify({ templates: [] }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } },
+                )), 800));
+            }
+            return original(input, init);
+        };
+    })()
+    JS_WRAP);
+    $webpage->click('[data-template-picker]')
+        ->assertVisible('[data-template-picker-panel]')
+        ->keys('[data-template-filter]', 'Escape')
+        ->assertMissing('[data-template-picker-panel]')
+        ->click('[data-template-picker]')
+        ->assertVisible(sprintf('[data-template-option="%d"]', $chatTemplate->id));
+    // Let the stale answer land, then check it changed nothing.
+    $webpage->wait(1.5);
+    $webpage->assertVisible(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertDontSeeIn('[data-template-options]', 'No templates yet.');
+});
+
+test('a failed template list refresh keeps the list already shown', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Queue check']);
+    $this->actingAs($admin);
+
+    $option = sprintf('[data-template-option="%d"]', $chatTemplate->id);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-template-picker]')
+        ->assertVisible($option)
+        ->keys('[data-template-filter]', 'Escape')
+        ->assertMissing('[data-template-picker-panel]');
+    $webpage->script(<<<'JS'
+        (() => {
+            const original = window.fetch.bind(window);
+            window.fetch = (input, init) => String(input).includes('/ai/templates/options')
+                ? Promise.reject(new TypeError('Failed to fetch'))
+                : original(input, init);
+        })()
+        JS);
+    $webpage->click('[data-template-picker]')
+        ->assertVisible($option);
+    $webpage->wait(0.5);
+    $webpage->assertVisible($option)
+        ->assertMissing('[data-template-load-failed]');
+});
+
+test('the template picker, its list and its filter have accessible names', function (): void {
+    $admin = User::factory()->admin()->create();
+    ChatTemplate::factory()->for($admin)->subtitleCheck()->create();
+    $this->actingAs($admin);
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertAttribute('[data-template-picker]', 'aria-label', 'Templates')
+        ->click('[data-template-picker]')
+        ->assertAttribute('[data-template-picker-panel]', 'role', 'dialog')
+        ->assertAttribute('[data-template-picker-panel]', 'aria-label', 'Templates')
+        ->assertAttribute('[data-template-options]', 'role', 'group')
+        ->assertAttribute('[data-template-options]', 'aria-label', 'Saved templates')
+        ->assertAttribute('[data-template-filter]', 'aria-label', 'Filter templates');
+});
+
+test('the fill dialog names a library search box after its variable', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->subtitleCheck()->create();
+    $this->actingAs($admin);
+
+    $label = $chatTemplate->variables[0]['label'];
+
+    $webpage = visit('/ai/chat')->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertAttribute('[data-library-search]', 'aria-label', $label);
+});
