@@ -71,20 +71,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - Entity-encoded fence tags.
         - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
           end to end.
-    - Cross-run comparison:
-        - The drawer shows the original score in neutral mode.
-        - Duplicated task order, comparability rule, concurrency middleware and
-          candidate lookup.
-        - Test gaps.
     - Chat cases:
         - Preview a drafted attachment in the case form before it is saved: only
           saved attachments link to their file, because a chat file belongs to
           the user who uploaded it.
-    - Decision reproduction:
-        - Record the "payloads stored as JSON text" rule.
-        - Compact parsed-prompt payloads.
-        - Preview `aria-live`.
-        - Empty event type allowed on the client.
     - Verifier:
         - `judges_differ` for unjudged scopes.
         - Unindexed `invocation_id` lookup.

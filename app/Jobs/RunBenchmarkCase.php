@@ -202,7 +202,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
         $candidate = null;
 
         try {
-            $candidate = BenchmarkContextStarter::selection($this->storedCandidate($benchmarkRun, $benchmarkResult->candidate_index));
+            $candidate = BenchmarkContextStarter::selection($benchmarkRun->candidate($benchmarkResult->candidate_index));
             $this->ensureProviderReady($candidate->provider);
             $aiBudgetGuard->enforce();
             $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkRun, $benchmarkCase, $benchmarkResult->candidate_index);
@@ -392,18 +392,6 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             'tool_log' => $caseOutcome->toolLog,
             ...($caseOutcome->transcript === [] ? [] : ['transcript' => $caseOutcome->transcript]),
         ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function storedCandidate(BenchmarkRun $benchmarkRun, int $candidateIndex): array
-    {
-        $candidate = $benchmarkRun->candidates[$candidateIndex] ?? null;
-
-        throw_unless(is_array($candidate), RuntimeException::class, sprintf('The run has no candidate #%d.', $candidateIndex));
-
-        return $candidate;
     }
 
     /**

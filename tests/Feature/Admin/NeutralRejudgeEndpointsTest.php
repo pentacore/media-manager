@@ -56,10 +56,14 @@ function endpointPayload(array $runIds, array $overrides = []): array
 
 test('neutral re-judge endpoints are admin only', function (): void {
     $runIds = endpointRuns();
+    $rejudge = BenchmarkNeutralRejudge::factory()->running()->create();
     $this->actingAs(User::factory()->member()->create());
 
     $this->postJson(route('admin.benchmarks.compare.estimate'), endpointPayload($runIds))->assertForbidden();
     $this->post(route('admin.benchmarks.compare.start'), endpointPayload($runIds))->assertForbidden();
+    $this->post(route('admin.benchmarks.compare.cancel', $rejudge))->assertForbidden();
+
+    expect($rejudge->fresh()->status)->toBe(BenchmarkNeutralRejudgeStatus::Running);
 });
 
 test('the estimate prices the results still to judge', function (): void {
@@ -72,6 +76,20 @@ test('the estimate prices the results still to judge', function (): void {
         ->assertJsonPath('total_usd', 0.0058)
         ->assertJsonPath('unpriced', []);
 });
+
+test('an estimate is refused', function (Closure $payload, string $field): void {
+    $runIds = endpointRuns();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->postJson(route('admin.benchmarks.compare.estimate'), $payload($runIds))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($field);
+})->with([
+    'no judge' => [fn (array $runIds): array => endpointPayload($runIds, ['judge' => null]), 'judge'],
+    'an unpriced judge' => [fn (array $runIds): array => endpointPayload($runIds, ['judge' => ['provider' => 'openai', 'model' => 'gpt-unknown', 'reasoning' => null]]), 'judge.model'],
+    'one run' => [fn (array $runIds): array => endpointPayload([$runIds[0]]), 'run_ids'],
+    'a running run' => [fn (array $runIds): array => endpointPayload([$runIds[0], BenchmarkRun::factory()->running()->create()->id]), 'run_ids'],
+]);
 
 test('an admin starts a neutral re-judge', function (): void {
     $runIds = endpointRuns();

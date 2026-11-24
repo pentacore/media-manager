@@ -14,7 +14,6 @@ use App\Models\BenchmarkRun;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
-use RuntimeException;
 
 /**
  * Starts the benchmark context for one result: its run, the case task pinned
@@ -28,10 +27,7 @@ final readonly class BenchmarkContextStarter
      */
     public function start(BenchmarkRunContext $benchmarkRunContext, BenchmarkRun $benchmarkRun, BenchmarkCase $benchmarkCase, int $candidateIndex, ?array $judgeOverride = null, bool $billsRun = true): void
     {
-        $candidate = $benchmarkRun->candidates[$candidateIndex] ?? null;
-
-        throw_unless(is_array($candidate), RuntimeException::class, sprintf('The run has no candidate #%d.', $candidateIndex));
-
+        $candidate = $benchmarkRun->candidate($candidateIndex);
         $judge = $judgeOverride ?? $benchmarkRun->judge;
 
         $benchmarkRunContext->start(

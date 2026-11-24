@@ -59,6 +59,17 @@ enum AiTask: string
     }
 
     /**
+     * A stored task value's place in enum order, for sorting per-task
+     * sections; an unknown value sorts last.
+     */
+    public static function position(string $task): int
+    {
+        $position = array_search(self::tryFrom($task), self::cases(), true);
+
+        return $position === false ? PHP_INT_MAX : $position;
+    }
+
+    /**
      * Whether a null model on the task's default row follows the chat model.
      */
     public function inheritsChatModel(): bool

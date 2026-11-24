@@ -201,10 +201,21 @@ const payloadInvalid = computed(
             verifierPayloadsInvalid(form.input.verifier)),
 );
 
+/** The server requires an event type; a blank one is caught before saving. */
+const eventTypeMissing = computed(
+    () =>
+        form.task === 'decision' &&
+        form.input.decision_source === 'event' &&
+        form.input.event.event_type.trim() === '',
+);
+
 const showBlocked = computed(
     () =>
         blocked.value &&
-        (fixturesInvalid.value || actionsInvalid.value || payloadInvalid.value),
+        (fixturesInvalid.value ||
+            actionsInvalid.value ||
+            payloadInvalid.value ||
+            eventTypeMissing.value),
 );
 
 watch(scoringType, (type) => {
@@ -215,9 +226,12 @@ watch(scoringType, (type) => {
 
 const blocked = ref(false);
 
-const errors = computed(
-    () => form.errors as Record<string, string | undefined>,
-);
+const errors = computed<Record<string, string | undefined>>(() => ({
+    ...(blocked.value && eventTypeMissing.value
+        ? { 'input.event.event_type': 'The event type is required.' }
+        : {}),
+    ...(form.errors as Record<string, string | undefined>),
+}));
 
 function numberOrNull(
     value: number | string | null | undefined,
@@ -359,7 +373,10 @@ form.transform((data) => {
 
 function save(): void {
     blocked.value =
-        fixturesInvalid.value || actionsInvalid.value || payloadInvalid.value;
+        fixturesInvalid.value ||
+        actionsInvalid.value ||
+        payloadInvalid.value ||
+        eventTypeMissing.value;
 
     if (blocked.value) {
         return;
@@ -501,7 +518,7 @@ const selectClass =
             class="text-sm text-destructive"
             data-benchmark-blocked
         >
-            Fix the invalid JSON above before saving.
+            Fix the errors above before saving.
         </p>
 
         <div class="flex gap-2">

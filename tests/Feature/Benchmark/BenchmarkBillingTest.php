@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\BenchmarkJudgeAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\Benchmark\FixtureBook;
 use App\Enums\AiTask;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
@@ -87,4 +88,57 @@ test('a billing context reports its run id and a non-billing one does not', func
 
     expect(fn () => $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkResult->benchmarkCase, 3))
         ->toThrow(RuntimeException::class, 'The run has no candidate #3.');
+});
+
+test('stopping a non-billing context makes the next one bill its run again', function (): void {
+    $benchmarkResult = billingResult();
+    $benchmarkRunContext = resolve(BenchmarkRunContext::class);
+    $benchmarkContextStarter = resolve(BenchmarkContextStarter::class);
+
+    $benchmarkContextStarter->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkResult->benchmarkCase, 0, billsRun: false);
+
+    $benchmarkRunContext->stop();
+
+    expect($benchmarkRunContext->billedRunId())->toBeNull()
+        ->and($benchmarkRunContext->active())->toBeFalse();
+
+    $benchmarkRunContext->start($benchmarkResult->benchmark_run_id, AiTask::Title, BenchmarkContextStarter::selection($benchmarkResult->run->candidates[0]), null, new FixtureBook([]));
+
+    expect($benchmarkRunContext->billedRunId())->toBe($benchmarkResult->benchmark_run_id);
+    $benchmarkRunContext->stop();
+});
+
+test('a judge call failing outside the run bill records a failed benchmark row with no run', function (): void {
+    $benchmarkResult = billingResult();
+    $benchmarkRunContext = resolve(BenchmarkRunContext::class);
+    resolve(BenchmarkContextStarter::class)->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkResult->benchmarkCase, 0, ['provider' => 'openai', 'model' => 'gpt-neutral', 'reasoning' => null], billsRun: false);
+    BenchmarkJudgeAgent::fake(fn (): never => throw new RuntimeException('Judge fell over'));
+
+    try {
+        $scores = resolve(BenchmarkScorer::class)->score($benchmarkResult->benchmarkCase, CaseOutcome::fromResult($benchmarkResult));
+    } finally {
+        $benchmarkRunContext->stop();
+    }
+
+    $aiUsageRecord = AiUsageRecord::query()->sole();
+
+    expect($scores['score'])->toBeNull()
+        ->and($aiUsageRecord->status)->toBe('failed')
+        ->and($aiUsageRecord->is_benchmark)->toBeTrue()
+        ->and($aiUsageRecord->benchmark_run_id)->toBeNull();
+});
+
+test('a judge call failing inside the run bill records the run', function (): void {
+    $benchmarkResult = billingResult();
+    $benchmarkRunContext = resolve(BenchmarkRunContext::class);
+    resolve(BenchmarkContextStarter::class)->start($benchmarkRunContext, $benchmarkResult->run, $benchmarkResult->benchmarkCase, 0);
+    BenchmarkJudgeAgent::fake(fn (): never => throw new RuntimeException('Judge fell over'));
+
+    try {
+        resolve(BenchmarkScorer::class)->score($benchmarkResult->benchmarkCase, CaseOutcome::fromResult($benchmarkResult));
+    } finally {
+        $benchmarkRunContext->stop();
+    }
+
+    expect(AiUsageRecord::query()->sole()->benchmark_run_id)->toBe($benchmarkResult->benchmark_run_id);
 });

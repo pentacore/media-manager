@@ -50,7 +50,7 @@ class BenchmarkRunController extends Controller
     {
         $lengthAwarePaginator = BenchmarkRun::query()
             ->with(['creator:id,name', 'schedule:id,name'])
-            ->withExists(['results as has_finished_results' => fn (Builder $builder): Builder => $builder->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])])
+            ->withFinishedResultsFlag()
             ->latest()
             ->latest('id')
             ->paginate(self::PER_PAGE)
@@ -70,8 +70,7 @@ class BenchmarkRunController extends Controller
                     'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                     'created_by' => $benchmarkRun->creator?->name,
                     'created_at' => $benchmarkRun->created_at?->toIso8601String(),
-                    'comparable' => in_array($benchmarkRun->status, [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap], true)
-                        || ($benchmarkRun->status === BenchmarkRunStatus::Cancelled && (bool) $benchmarkRun->getAttribute('has_finished_results')),
+                    'comparable' => $benchmarkRun->isComparable(),
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
