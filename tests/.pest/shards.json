@@ -80,7 +80,7 @@
         "Tests\\Browser\\MediaReplacementDialogTest": 1.1145,
         "Tests\\Browser\\MobileChromeTest": 12.4947,
         "Tests\\Browser\\MobileContainmentTest": 5.0784,
-        "Tests\\Browser\\MobileLayoutTest": 148.4953,
+        "Tests\\Browser\\MobileLayoutTest": 509.125,
         "Tests\\Browser\\MonitoringPhoneTest": 5.1036,
         "Tests\\Browser\\MyRequestsTest": 0.9008,
         "Tests\\Browser\\NavBadgeOrderTest": 4.6224,

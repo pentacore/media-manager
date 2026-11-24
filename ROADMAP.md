@@ -79,11 +79,11 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
     - How fast it is compared with ESLint + Prettier.
     - What would be lost.
       Do not switch yet. The owner decides after the report.
-- **Layout gate at desktop width and in dark mode**: extend the phone gate
-  (`MobileLayoutTest`) so its overlap and clipped-text checks also run at 1440 px,
-  and run both widths in light and dark mode. It adds about 450 s of CI browser
-  time, spread over the shards. Re-time the shards afterwards.
-
+- **Split the layout gate class**: `MobileLayoutTest` runs every row on four
+  screens and takes about 450-580 s locally, so its shard sets the browser
+  wall clock (the shard plan drops from 8 shards to 4). Move its helpers to a
+  shared support file and split it by screen (phone and desktop classes), so
+  the duration-balanced shards can spread it again. Re-time the shards.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
         - A deadline for the whole decision run.
