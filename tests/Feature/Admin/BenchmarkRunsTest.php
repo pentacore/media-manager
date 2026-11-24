@@ -528,6 +528,46 @@ test('the runs list says which runs can be compared', function (): void {
                 && collect($rows)->firstWhere('id', $running->id)['comparable'] === false));
 });
 
+test('a cancelled run can be compared only once a case finished', function (): void {
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    $finished = BenchmarkRun::factory()->cancelled()->create();
+    $empty = BenchmarkRun::factory()->cancelled()->create();
+    $capped = BenchmarkRun::factory()->stoppedCostCap()->create();
+    BenchmarkResult::factory()->forCase($finished, $benchmarkCase, 0)->failed('Boom')->create();
+    BenchmarkResult::factory()->forCase($empty, $benchmarkCase, 0)->create(['status' => BenchmarkResultStatus::Skipped]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('admin.benchmarks.runs.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('runs.data', fn ($rows): bool => collect($rows)->firstWhere('id', $finished->id)['comparable'] === true
+                && collect($rows)->firstWhere('id', $empty->id)['comparable'] === false
+                && collect($rows)->firstWhere('id', $capped->id)['comparable'] === true));
+
+    expect($finished->isComparable())->toBeTrue()
+        ->and($empty->isComparable())->toBeFalse()
+        ->and(BenchmarkRun::query()->comparable()->pluck('id')->sort()->values()->all())->toBe([$finished->id, $capped->id]);
+});
+
+test('a run page offers at most twenty runs to compare with', function (): void {
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create();
+    $titleCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+    $previous = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create();
+    $others = BenchmarkRun::factory()->completed()->count(21)->create();
+    $current = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create();
+
+    foreach ([$previous, ...$others, $current] as $benchmarkRun) {
+        BenchmarkResult::factory()->forCase($benchmarkRun, $titleCase, 0)->scored(0.8, true)->create();
+    }
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    $this->get(route('admin.benchmarks.runs.show', $current))
+        ->assertInertia(fn ($page) => $page
+            ->count('compareOptions', 20)
+            ->where('compareOptions.0.id', $previous->id)
+            ->where('compareOptions.1.id', $others->last()->id));
+});
+
 test('a run page offers runs sharing a task, the previous scheduled run first', function (): void {
     $benchmarkSchedule = BenchmarkSchedule::factory()->create();
     $titleCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
