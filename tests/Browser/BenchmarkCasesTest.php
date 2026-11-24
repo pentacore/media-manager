@@ -337,6 +337,7 @@ test('a decision case is built from a webhook event with a scope and a prompt pr
         ->assertNoSmoke()
         ->select('[data-benchmark-task]', 'decision')
         ->assertAttribute('[data-benchmark-decision-source="event"]', 'aria-pressed', 'true')
+        ->assertAttribute('[data-filter-strip]:has([data-benchmark-decision-source])', 'aria-label', 'Decision case input')
         ->assertMissing('[data-benchmark-prompt]')
         ->select('[data-benchmark-event-service]', 'radarr')
         ->fill('[data-benchmark-event-type]', 'Grab')

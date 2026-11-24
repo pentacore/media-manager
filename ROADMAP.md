@@ -59,10 +59,6 @@ None open.
 
 ## Ready to pick up
 
-- **Unnamed segmented-control groups**: `NeutralJudgePanel`, `CompareTaskTable`,
-  `CaseInputFields` and `MetricsPanel` render a `SegmentedControl` whose
-  `role="group"` has no accessible name. Name each one as `TimeWindowFilter`
-  does.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
         - A deadline for the whole decision run.

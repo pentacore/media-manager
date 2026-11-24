@@ -125,7 +125,8 @@ test('switching the range reloads the graphs', function (): void {
         ->assertVisible('[data-metrics-panel] [data-metrics-chart="cpu"]')
         ->assertVisible('[data-metrics-chart="memory"]')
         ->assertVisible('[data-metrics-chart-fs="/"]')
-        ->assertAttribute('[data-metrics-range="6h"]', 'aria-pressed', 'true');
+        ->assertAttribute('[data-metrics-range="6h"]', 'aria-pressed', 'true')
+        ->assertAttribute('[data-metrics-panel] [data-filter-strip]', 'aria-label', 'Time window');
     $webpage->script(confirmDialogWaitUntilScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length === 120'));
 
     $webpage->assertScript('document.querySelectorAll(\'[data-metrics-chart="cpu"] rect\').length', 120)

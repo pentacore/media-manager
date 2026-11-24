@@ -166,6 +166,7 @@ const textareaClass =
             v-model="input.decision_source"
             :options="DECISION_SOURCES"
             option-attribute="benchmark-decision-source"
+            aria-label="Decision case input"
             class="w-fit"
         />
 
@@ -174,6 +175,7 @@ const textareaClass =
             v-model="input.verifier_source"
             :options="VERIFIER_SOURCES"
             option-attribute="benchmark-verifier-source"
+            aria-label="Verifier case input"
             class="w-fit"
         />
 

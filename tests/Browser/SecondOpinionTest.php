@@ -18,6 +18,7 @@ test('an admin picks a second opinion on an approval rule', function (): void {
     visit(route('actions.rules.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-rule-second-opinion="grab_release"]', '—')
+        ->assertAttribute('[data-rule-second-opinion="monitor_series"] [data-filter-strip]', 'aria-label', 'Monitor series: second opinion')
         ->click('[data-rule-second-opinion="monitor_series"] [data-second-opinion-option="hold"]')
         ->assertAttribute('[data-rule-second-opinion="monitor_series"] [data-second-opinion-option="hold"]', 'aria-pressed', 'true')
         ->assertSee('Rule updated.');
