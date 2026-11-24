@@ -449,6 +449,7 @@ function submit(): void {
                                 form.second_opinion_jev_threshold
                             "
                             :classifier-configured="classifierConfigured"
+                            :dirty="form.isDirty"
                             :errors="formErrors"
                             @structure-change="clearOverrideErrors"
                         />

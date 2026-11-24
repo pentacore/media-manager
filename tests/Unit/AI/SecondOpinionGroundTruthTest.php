@@ -17,5 +17,7 @@ test('only a person reviewing the action gives the expected verdict', function (
     'ran automatically' => [ActionRequestStatus::Completed, null, ['agrees' => true, 'failed' => false], null],
     'rejected by the second opinion' => [ActionRequestStatus::Rejected, null, ['agrees' => false, 'failed' => false], null],
     'a failed check a person approved' => [ActionRequestStatus::Completed, 7, ['agrees' => false, 'failed' => true], null],
+    'an event Off skip marker a person approved' => [ActionRequestStatus::Completed, 7, ['skipped' => true, 'mode' => 'off', 'event_key' => 'sonarr.download'], null],
+    'an event Off skip marker a person rejected' => [ActionRequestStatus::Rejected, 7, ['skipped' => true, 'mode' => 'off', 'event_key' => 'sonarr.download'], null],
     'no second opinion at all' => [ActionRequestStatus::Completed, 7, null, true],
 ]);

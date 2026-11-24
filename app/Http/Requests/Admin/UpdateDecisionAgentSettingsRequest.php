@@ -42,6 +42,22 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
     }
 
     /**
+     * Readable names for the per-row override fields, so their errors fit a
+     * phone screen instead of naming the raw `second_opinion_event_overrides.N.*` key.
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'second_opinion_event_overrides.*.event_key' => 'event',
+            'second_opinion_event_overrides.*.mode' => 'mode',
+            'second_opinion_event_overrides.*.engine' => 'engine',
+            'second_opinion_event_overrides.*.jev_threshold' => 'Jev threshold',
+        ];
+    }
+
+    /**
      * The field rules accept every engine; whether Jev is allowed follows the
      * classifier's API key and the stored settings, so it is checked here
      * (a rule-level list would make the generated request type differ per .env).

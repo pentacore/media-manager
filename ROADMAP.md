@@ -81,11 +81,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - `judges_differ` for unjudged scopes.
         - Unindexed `invocation_id` lookup.
         - Browser test gaps.
-    - Overrides:
-        - Page hints.
-        - Skip-marker guard.
-        - Show every error, not just the first.
-        - Phone check.
     - Agreement and gate charts:
         - Classification gates: a 0 % band with resolved events draws a
           zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement
