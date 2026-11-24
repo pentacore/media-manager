@@ -120,6 +120,21 @@ final readonly class SecondOpinionVerifier
     }
 
     /**
+     * Whether $eventKey's per-event rule changes how its checks run today,
+     * by the same test policyFor() applies (its mode or engine, its
+     * threshold under an engine that asks Jev, or verifier tiers under an
+     * engine that can ask the LLM).
+     */
+    public function eventOverrideTakesEffect(string $eventKey): bool
+    {
+        return $this->eventOverrideTookEffect(
+            $this->decisionAgentSettings->secondOpinionEventOverride($eventKey),
+            $this->decisionAgentSettings->secondOpinionEngine($eventKey),
+            $eventKey,
+        );
+    }
+
+    /**
      * $deadline is when the decision run must be done (null outside a run):
      * a check too close to it is skipped, and the LLM call is cut to fit.
      */

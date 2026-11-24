@@ -102,12 +102,13 @@ None open.
         - Skip-marker guard.
         - Show every error, not just the first.
         - Phone check.
-    - Agreement panel:
-        - Zero-height bar on a 0 % day.
-        - "All" is unbounded when retention is 0.
-        - The per-event pill can over-claim.
-        - "1 false alarms" plural.
-        - Table accessible name.
+    - Agreement and gate charts:
+        - Classification gates: a 0 % band with resolved events draws a
+          zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement
+          chart does.
+        - Agreement "All" window: verdicts are read in chunks now, so memory is
+          bounded, but the time still grows with retention. Aggregate in SQL if
+          it gets slow.
 - **Host monitoring minors**:
     - Agent:
         - Crash-loop self-heal.

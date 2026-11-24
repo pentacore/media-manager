@@ -67,6 +67,17 @@ export interface SecondOpinionAgreement {
     overridden_events: string[];
 }
 
+/**
+ * "1 false alarm", "2 false alarms": the count with its noun in the right number.
+ */
+export function countOf(
+    count: number,
+    singular: string,
+    plural = `${singular}s`,
+): string {
+    return `${formatCount(count)} ${count === 1 ? singular : plural}`;
+}
+
 export function percent(rate: number | null): string {
     return rate === null ? '—' : `${Math.round(rate * 100)}%`;
 }

@@ -7,6 +7,7 @@ namespace App\Services\AiUsage;
 use App\Ai\Decision\SecondOpinionGroundTruth;
 use App\Ai\Decision\SecondOpinionPolicy;
 use App\Ai\Decision\SecondOpinionVerdict;
+use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\TaskModelResolver;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
@@ -40,7 +41,13 @@ final readonly class SecondOpinionAgreementReporting
 
     private const string OTHER = 'other';
 
-    public function __construct(private DecisionAgentSettings $decisionAgentSettings, private TaskModelResolver $taskModelResolver) {}
+    /**
+     * Verdict rows read per query, so the All window stays bounded in memory
+     * however long action requests are kept.
+     */
+    private const int CHUNK = 1000;
+
+    public function __construct(private DecisionAgentSettings $decisionAgentSettings, private TaskModelResolver $taskModelResolver, private SecondOpinionVerifier $secondOpinionVerifier) {}
 
     /**
      * @return array{
@@ -73,7 +80,7 @@ final readonly class SecondOpinionAgreementReporting
         $disagreements = [];
         $earliest = null;
 
-        foreach ($this->verdictQuery($since)->toBase()->get() as $row) {
+        foreach ($this->verdictQuery($since)->toBase()->lazyByIdDesc(self::CHUNK, 'action_requests.id', 'id') as $row) {
             /** @var array<string, mixed>|null $secondOpinion */
             $secondOpinion = is_string($row->second_opinion) ? json_decode($row->second_opinion, true) : null;
             $secondOpinion = is_array($secondOpinion) ? $secondOpinion : null;
@@ -119,7 +126,7 @@ final readonly class SecondOpinionAgreementReporting
                 $days[$day]['right'] += (int) $right;
             }
 
-            if (($falseAlarm || $miss) && count($disagreements) < self::DISAGREEMENTS) {
+            if ($falseAlarm || $miss) {
                 $disagreements[] = [
                     'id' => (int) $row->id,
                     'title' => $row->title === null ? null : (string) $row->title,
@@ -130,8 +137,14 @@ final readonly class SecondOpinionAgreementReporting
                     'reason' => is_string($secondOpinion['reason'] ?? null) ? $secondOpinion['reason'] : null,
                     'created_at' => $createdAt->toIso8601String(),
                 ];
+
+                if (count($disagreements) > self::DISAGREEMENTS * 2) {
+                    $disagreements = $this->latestDisagreements($disagreements);
+                }
             }
         }
+
+        $disagreements = $this->latestDisagreements($disagreements);
 
         $totals['reviewed'] = $totals['agreed_approved'] + $totals['agreed_rejected'] + $totals['disagreed_rejected'] + $totals['disagreed_approved'];
 
@@ -170,9 +183,23 @@ final readonly class SecondOpinionAgreementReporting
             ->leftJoin('service_connections', 'service_connections.id', '=', 'webhook_events.service_connection_id')
             ->whereNotNull('action_requests.second_opinion')
             ->when($since instanceof CarbonImmutable, fn (Builder $builder): Builder => $builder->where('action_requests.created_at', '>=', $since))
-            ->select(['action_requests.id', 'action_requests.title', 'action_requests.type', 'action_requests.status', 'action_requests.requires_approval', 'action_requests.approved_by', 'action_requests.second_opinion', 'action_requests.created_at', 'webhook_events.event_type', 'service_connections.type as service_type'])
-            ->latest('action_requests.created_at')
-            ->orderByDesc('action_requests.id');
+            ->select(['action_requests.id', 'action_requests.title', 'action_requests.type', 'action_requests.status', 'action_requests.requires_approval', 'action_requests.approved_by', 'action_requests.second_opinion', 'action_requests.created_at', 'webhook_events.event_type', 'service_connections.type as service_type']);
+    }
+
+    /**
+     * The newest DISAGREEMENTS of $disagreements by when they were proposed.
+     * Verdicts are read in id order, which need not match created_at.
+     *
+     * @template T of array{id: int, created_at: string}
+     *
+     * @param  list<T>  $disagreements
+     * @return list<T>
+     */
+    private function latestDisagreements(array $disagreements): array
+    {
+        usort($disagreements, fn (array $a, array $b): int => CarbonImmutable::parse($b['created_at'])->getTimestamp() <=> CarbonImmutable::parse($a['created_at'])->getTimestamp() ?: $b['id'] <=> $a['id']);
+
+        return array_slice($disagreements, 0, self::DISAGREEMENTS);
     }
 
     /**
@@ -339,22 +366,18 @@ final readonly class SecondOpinionAgreementReporting
      */
     private function overriddenEvents(): array
     {
-        $events = array_keys($this->decisionAgentSettings->secondOpinionEventOverrides());
+        $candidates = array_keys($this->decisionAgentSettings->secondOpinionEventOverrides());
 
         foreach ($this->taskModelResolver->scopes(AiTask::DecisionVerifier) as $scope) {
-            if ($scope === AiTaskModel::DEFAULT_SCOPE) {
-                continue;
-            }
-
-            $tookEffect = $this->taskModelResolver->tiers(AiTask::DecisionVerifier, $scope)
-                ->contains(fn (AiTaskModel $aiTaskModel): bool => filled($aiTaskModel->provider) || filled($aiTaskModel->model) || $aiTaskModel->reasoning !== null);
-
-            if ($tookEffect) {
-                $events[] = $scope;
+            if ($scope !== AiTaskModel::DEFAULT_SCOPE) {
+                $candidates[] = $scope;
             }
         }
 
-        $events = array_values(array_unique(array_map(strval(...), $events)));
+        $events = array_values(array_filter(
+            array_unique(array_map(strval(...), $candidates)),
+            $this->secondOpinionVerifier->eventOverrideTakesEffect(...),
+        ));
         sort($events);
 
         return $events;
