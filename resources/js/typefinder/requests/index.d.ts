@@ -26,6 +26,7 @@ export type { DiscoverMediaRequest } from './DiscoverMediaRequest';
 export type { DraftChatTemplateRequest } from './DraftChatTemplateRequest';
 export type { EmbyLoginRequest } from './EmbyLoginRequest';
 export type { EstimateBenchmarkRunRequest } from './EstimateBenchmarkRunRequest';
+export type { EstimateBenchmarkScheduleRequest } from './EstimateBenchmarkScheduleRequest';
 export type { EstimateNeutralRejudgeRequest } from './EstimateNeutralRejudgeRequest';
 export type { ExecuteManualImportRequest } from './ExecuteManualImportRequest';
 export type { FindAnimeMatchRequest } from './FindAnimeMatchRequest';

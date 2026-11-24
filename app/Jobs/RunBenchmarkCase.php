@@ -47,7 +47,8 @@ use Throwable;
  * failure of any step fails this result only; the run always settles.
  *
  * Judge-only mode re-scores a stored result whose judge failed, from its
- * stored outcome, without running the candidate again.
+ * stored outcome, without running the candidate again; the last re-judge of
+ * a checked scheduled run queues a recheck of its regression comparison.
  *
  * Unlimited tries bounded by retryUntil(): the concurrency middleware
  * releases a job while the run's two slots are busy, and every release counts
@@ -170,6 +171,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 ->whereIn('judge_status', [BenchmarkJudgeStatus::Queued, BenchmarkJudgeStatus::Pending])
                 ->update(['judge_status' => BenchmarkJudgeStatus::Failed]);
             $this->settle($benchmarkResult->benchmark_run_id);
+            $this->recheckRegressions($benchmarkResult->benchmark_run_id);
 
             return;
         }
@@ -248,7 +250,8 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 'score_detail' => $this->storedDetail([], $caseOutcome),
             ] : []),
             'status' => BenchmarkResultStatus::Failed,
-            'error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT),
+            // A wrapped hard cap refusal keeps the guard's message, which the regression check recognises.
+            'error' => UpstreamErrorText::sanitize(($throwable->getPrevious() instanceof AiBudgetExceededException ? $throwable->getPrevious() : $throwable)->getMessage(), self::ERROR_LIMIT),
         ]);
     }
 
@@ -271,6 +274,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 'judge_status' => BenchmarkJudgeStatus::Failed,
                 'score_detail' => $this->storedDetail(['error' => 'Case was deleted'], $caseOutcome),
             ]);
+            $this->recheckRegressions($benchmarkResult->benchmark_run_id);
 
             return;
         }
@@ -287,6 +291,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
                 'score_detail' => $this->storedDetail(['error' => UpstreamErrorText::sanitize($throwable->getMessage(), self::ERROR_LIMIT)], $caseOutcome),
             ]);
             $this->settle($benchmarkResult->benchmark_run_id);
+            $this->recheckRegressions($benchmarkResult->benchmark_run_id);
 
             return;
         } finally {
@@ -301,6 +306,7 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
             'judge_cost_usd' => $scores['judge_cost_usd'],
         ]);
         $this->settle($benchmarkResult->benchmark_run_id);
+        $this->recheckRegressions($benchmarkResult->benchmark_run_id);
     }
 
     /**
@@ -452,5 +458,10 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
     private function settle(int $runId): void
     {
         resolve(BenchmarkRunSettler::class)->settle($runId);
+    }
+
+    private function recheckRegressions(int $runId): void
+    {
+        resolve(BenchmarkRunSettler::class)->recheckAfterRejudge($runId);
     }
 }

@@ -39,6 +39,13 @@ class BenchmarkRunController extends Controller
     /** How far the confirmed estimate may drift from a fresh one, in USD. */
     private const float ESTIMATE_TOLERANCE_USD = 0.01;
 
+    /**
+     * How long after a scheduled run finished its page keeps polling for the
+     * regression check; a check that takes longer (a backed-up queue) shows
+     * on the next visit.
+     */
+    private const int REGRESSION_WAIT_SECONDS = 120;
+
     public function index(): Response
     {
         $lengthAwarePaginator = BenchmarkRun::query()
@@ -172,6 +179,7 @@ class BenchmarkRunController extends Controller
                 'schedule' => $benchmarkRun->schedule === null ? null : ['id' => $benchmarkRun->schedule->id, 'name' => $benchmarkRun->schedule->name],
                 'baseline' => $benchmarkRun->baseline === null ? null : ['id' => $benchmarkRun->baseline->id, 'name' => $benchmarkRun->baseline->name],
                 'regressions' => $benchmarkRun->regressions,
+                'regression_pending' => $this->regressionPending($benchmarkRun),
                 'started_at' => $benchmarkRun->started_at?->toIso8601String(),
                 'finished_at' => $benchmarkRun->finished_at?->toIso8601String(),
                 'counts' => [
@@ -239,6 +247,18 @@ class BenchmarkRunController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Benchmark run deleted.')]);
 
         return to_route('admin.benchmarks.runs.index');
+    }
+
+    /**
+     * A scheduled run that finished moments ago and whose regression check has
+     * not stored its comparison yet.
+     */
+    private function regressionPending(BenchmarkRun $benchmarkRun): bool
+    {
+        return $benchmarkRun->benchmark_schedule_id !== null
+            && $benchmarkRun->regressions === null
+            && in_array($benchmarkRun->status, [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap], true)
+            && $benchmarkRun->finished_at?->isAfter(now()->subSeconds(self::REGRESSION_WAIT_SECONDS)) === true;
     }
 
     /**

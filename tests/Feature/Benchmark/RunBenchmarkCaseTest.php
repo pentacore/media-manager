@@ -13,6 +13,7 @@ use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use App\Enums\QueueLane;
+use App\Jobs\CheckBenchmarkRegression;
 use App\Jobs\Middleware\LimitBenchmarkConcurrency;
 use App\Jobs\RunBenchmarkCase;
 use App\Models\ActionRequest;
@@ -22,6 +23,7 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkResult;
 use App\Models\BenchmarkRun;
+use App\Models\BenchmarkSchedule;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Benchmark\BenchmarkRunLauncher;
@@ -30,6 +32,7 @@ use App\Settings\AiSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\SyncQueue;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
@@ -775,6 +778,60 @@ test('a refused monthly hard cap fails the result with the guard message before 
     TitleAgent::assertNeverPrompted();
     BenchmarkJudgeAgent::assertNeverPrompted();
 });
+
+test('a wrapped hard cap refusal stores the guard message', function (): void {
+    $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new RuntimeException('Agent step failed', previous: new AiBudgetExceededException(10.0, 5.0)));
+    $benchmarkRun = jobRun();
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->error)->toBe('Monthly AI hard cap reached (spend $10.00 / cap $5.00).');
+});
+
+test('the last re-judge of a checked scheduled run queues a fresh regression check', function (): void {
+    Bus::fake([CheckBenchmarkRegression::class]);
+    $benchmarkRun = jobRun([
+        'status' => BenchmarkRunStatus::Completed,
+        'finished_at' => now(),
+        'benchmark_schedule_id' => BenchmarkSchedule::factory()->forTask(AiTask::Title)->create()->id,
+        'regressions' => [],
+    ]);
+    $benchmarkCase = jobTitleCase();
+    [$first, $second] = BenchmarkResult::factory()->forCase($benchmarkRun, $benchmarkCase, 0)->count(2)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+    ])->all();
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($first->id, judgeOnly: true));
+
+    Bus::assertNotDispatched(CheckBenchmarkRegression::class);
+
+    dispatch_sync(new RunBenchmarkCase($second->id, judgeOnly: true));
+
+    Bus::assertDispatchedSync(CheckBenchmarkRegression::class, fn (CheckBenchmarkRegression $checkBenchmarkRegression): bool => $checkBenchmarkRegression->runId === $benchmarkRun->id && $checkBenchmarkRegression->recheck);
+});
+
+test('a re-judge queues no regression check for an unchecked or unscheduled run', function (array $attributes): void {
+    Bus::fake([CheckBenchmarkRegression::class]);
+    $benchmarkRun = jobRun(['status' => BenchmarkRunStatus::Completed, 'finished_at' => now(), ...$attributes]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create([
+        'status' => BenchmarkResultStatus::Ok,
+        'output' => 'Expanse Season Three',
+        'judge_status' => BenchmarkJudgeStatus::Queued,
+    ]);
+    jobFakeJudge();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id, judgeOnly: true));
+
+    Bus::assertNotDispatched(CheckBenchmarkRegression::class);
+})->with([
+    'unscheduled' => [['regressions' => []]],
+    'not yet checked' => [fn (): array => ['benchmark_schedule_id' => BenchmarkSchedule::factory()->create()->id]],
+]);
 
 test('a refused monthly hard cap leaves a re-judge unscored with the guard message', function (): void {
     $this->mock(AiBudgetGuard::class)->shouldReceive('enforce')->andThrow(new AiBudgetExceededException(10.0, 5.0));

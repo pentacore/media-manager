@@ -13,10 +13,12 @@ use App\Services\Notifications\PreferenceResolver;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * A scheduled benchmark run found a regressed model, or could not start.
+ * A scheduled benchmark run found a regressed model, was skipped, or failed
+ * to start.
  */
 class ScheduledBenchmarkAlert extends Notification
 {
@@ -46,6 +48,11 @@ class ScheduledBenchmarkAlert extends Notification
         return new self('skipped', $benchmarkSchedule->name, $reason, route('admin.benchmarks.schedules.index', absolute: false));
     }
 
+    public static function failed(BenchmarkSchedule $benchmarkSchedule, string $reason): self
+    {
+        return new self('failed', $benchmarkSchedule->name, $reason, route('admin.benchmarks.schedules.index', absolute: false));
+    }
+
     /**
      * @return array<int, string>
      */
@@ -61,9 +68,11 @@ class ScheduledBenchmarkAlert extends Notification
     {
         return [
             'service' => 'system',
-            'title' => $this->kind === 'regression'
-                ? sprintf('Benchmark regression: %s', $this->scheduleName)
-                : sprintf('Scheduled benchmark skipped: %s', $this->scheduleName),
+            'title' => match ($this->kind) {
+                'regression' => sprintf('Benchmark regression: %s', $this->scheduleName),
+                'failed' => sprintf('Scheduled benchmark failed to start: %s', $this->scheduleName),
+                default => sprintf('Scheduled benchmark skipped: %s', $this->scheduleName),
+            },
             'message' => $this->message,
             'link' => $this->link,
             'kind' => $this->kind,
@@ -73,6 +82,16 @@ class ScheduledBenchmarkAlert extends Notification
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
         return new BroadcastMessage($this->toArray($notifiable));
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $data = $this->toArray($notifiable);
+
+        return new MailMessage()
+            ->subject($data['title'])
+            ->line($data['message'])
+            ->action($this->kind === 'regression' ? 'Open the run' : 'Open the schedules', url($this->link));
     }
 
     public function toPush(object $notifiable): PushMessage

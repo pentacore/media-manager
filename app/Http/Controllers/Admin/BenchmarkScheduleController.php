@@ -11,15 +11,18 @@ use App\Enums\AiTask;
 use App\Enums\BenchmarkScheduleFrequency;
 use App\Enums\BenchmarkScheduleOutcome;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\EstimateBenchmarkScheduleRequest;
 use App\Http\Requests\Admin\StoreBenchmarkScheduleRequest;
 use App\Http\Requests\Admin\ToggleBenchmarkScheduleRequest;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
 use App\Services\Audit\AuditLogger;
+use App\Services\Benchmark\BenchmarkEstimator;
 use App\Services\Benchmark\BenchmarkScheduleClock;
 use App\Services\Benchmark\BenchmarkScheduleLauncher;
 use App\Services\Benchmark\BenchmarkTierCandidates;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -80,6 +83,24 @@ class BenchmarkScheduleController extends Controller
     public function edit(BenchmarkSchedule $benchmarkSchedule, TaskModelResolver $taskModelResolver, ModelCatalog $modelCatalog, BenchmarkTierCandidates $benchmarkTierCandidates): Response
     {
         return $this->form($benchmarkSchedule, $taskModelResolver, $modelCatalog, $benchmarkTierCandidates);
+    }
+
+    /**
+     * The estimate a launch of this schedule would check against its cap:
+     * its matching cases against every current tier model of its task.
+     */
+    public function estimate(EstimateBenchmarkScheduleRequest $estimateBenchmarkScheduleRequest, BenchmarkTierCandidates $benchmarkTierCandidates, BenchmarkEstimator $benchmarkEstimator): JsonResponse
+    {
+        $validated = $estimateBenchmarkScheduleRequest->validated();
+        $aiTask = AiTask::from($validated['task']);
+        $cases = BenchmarkScheduleLauncher::casesFor($aiTask, $validated['case_tags']);
+        $candidates = $benchmarkTierCandidates->forTask($aiTask);
+
+        return response()->json([
+            ...$benchmarkEstimator->estimate($cases, $candidates, $validated['judge']),
+            'cases' => $cases->count(),
+            'candidates' => $candidates,
+        ]);
     }
 
     public function store(StoreBenchmarkScheduleRequest $storeBenchmarkScheduleRequest, BenchmarkScheduleClock $benchmarkScheduleClock, AuditLogger $auditLogger): RedirectResponse

@@ -9,7 +9,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Decisions
 
-None open.
+- **Email for every notification** (decision): only "Service update available" and
+  "Scheduled benchmark alerts" have a mail template, so Notification Preferences
+  shows Email disabled for the others. Should each of them get one?
 
 ## Brainstorms
 
@@ -69,14 +71,6 @@ None open.
         - Entity-encoded fence tags.
         - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
           end to end.
-    - Scheduled benchmarks:
-        - A budget hard cap reads as "every model regressed".
-        - The regression banner needs a reload.
-        - Re-judging leaves stored regressions stale.
-        - More than 8 tier models break the estimate preview.
-        - Email channel offered with only one `toMail()`.
-        - A failed launch uses the "skipped" title.
-        - DST handling.
     - Cross-run comparison:
         - The drawer shows the original score in neutral mode.
         - Duplicated task order, comparability rule, concurrency middleware and

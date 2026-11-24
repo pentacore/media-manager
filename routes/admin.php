@@ -104,6 +104,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('/', [BenchmarkScheduleController::class, 'index'])->name('index');
             Route::get('create', [BenchmarkScheduleController::class, 'create'])->name('create');
             Route::post('/', [BenchmarkScheduleController::class, 'store'])->name('store');
+            Route::post('estimate', [BenchmarkScheduleController::class, 'estimate'])->name('estimate');
             Route::get('{benchmarkSchedule}/edit', [BenchmarkScheduleController::class, 'edit'])->whereNumber('benchmarkSchedule')->name('edit');
             Route::put('{benchmarkSchedule}', [BenchmarkScheduleController::class, 'update'])->whereNumber('benchmarkSchedule')->name('update');
             Route::patch('{benchmarkSchedule}/toggle', [BenchmarkScheduleController::class, 'toggle'])->whereNumber('benchmarkSchedule')->name('toggle');

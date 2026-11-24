@@ -250,6 +250,8 @@ export type BenchmarkRunDetail = {
     schedule: { id: number; name: string } | null;
     baseline: { id: number; name: string } | null;
     regressions: BenchmarkRegression[] | null;
+    /** A scheduled run that just finished, waiting for its regression check. */
+    regression_pending: boolean;
     started_at: string | null;
     finished_at: string | null;
     counts: {

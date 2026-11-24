@@ -62,6 +62,39 @@ test('a checked run is never checked twice', function (): void {
     Notification::assertSentTimes(ScheduledBenchmarkAlert::class, $this->adminCount);
 });
 
+test('a recheck replaces the stored comparison and alerts only on new regressions', function (): void {
+    $baseline = regressionRun($this->schedule, $this->case, true);
+    $benchmarkRun = regressionRun($this->schedule, $this->case, false);
+    dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id));
+    $stored = $benchmarkRun->fresh()->regressions;
+
+    // Re-judging left the same regression: the comparison is refreshed without a second alert.
+    dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id, recheck: true));
+
+    expect($benchmarkRun->fresh()->regressions)->toBe($stored);
+    Notification::assertSentTimes(ScheduledBenchmarkAlert::class, $this->adminCount);
+
+    // Re-judging cleared it: the stored comparison follows.
+    $benchmarkRun->results()->update(['score' => 0.9, 'passed' => true]);
+    dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id, recheck: true));
+
+    expect($benchmarkRun->fresh()->regressions)->toBe([])
+        ->and($benchmarkRun->fresh()->baseline_run_id)->toBe($baseline->id);
+    Notification::assertSentTimes(ScheduledBenchmarkAlert::class, $this->adminCount);
+});
+
+test('a recheck that finds a new regression alerts about it alone', function (): void {
+    regressionRun($this->schedule, $this->case, true);
+    $benchmarkRun = regressionRun($this->schedule, $this->case, true);
+    dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id));
+
+    $benchmarkRun->results()->update(['score' => 0.1, 'passed' => false]);
+    dispatch_sync(new CheckBenchmarkRegression($benchmarkRun->id, recheck: true));
+
+    expect($benchmarkRun->fresh()->regressions)->toHaveCount(1);
+    Notification::assertSentTimes(ScheduledBenchmarkAlert::class, $this->adminCount);
+});
+
 test('a deleted run is ignored', function (): void {
     dispatch_sync(new CheckBenchmarkRegression(999_999));
 

@@ -10,6 +10,7 @@ use App\Notifications\Channels\DiscordChannel;
 use App\Notifications\Channels\NtfyChannel;
 use App\Notifications\Channels\TelegramChannel;
 use App\Notifications\Channels\WebhookChannel;
+use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Support\Facades\DB;
@@ -129,4 +130,23 @@ test('a disabled destination resolves to no channels', function (): void {
     $destination = NotificationDestination::factory()->discord()->disabled()->create();
 
     expect(resolve(PreferenceResolver::class)->channelsFor($destination, ServiceWarning::class, 'error'))->toBe([]);
+});
+
+test('mail is never resolved for a notification that cannot be mailed', function (): void {
+    $user = User::factory()->create();
+    NotificationPreference::create([
+        'user_id' => $user->id,
+        'notification_class' => ServiceWarning::class,
+        'severity' => 'warning',
+        'database' => true,
+        'broadcast' => false,
+        'mail' => true,
+        'ntfy' => false,
+    ]);
+
+    $preferenceResolver = resolve(PreferenceResolver::class);
+
+    expect($preferenceResolver->channelsFor($user, ServiceWarning::class, 'warning'))->toBe(['database'])
+        ->and($preferenceResolver->unsupportedChannels(ServiceWarning::class))->toBe(['mail'])
+        ->and($preferenceResolver->unsupportedChannels(ServiceUpdateAvailable::class))->toBe([]);
 });

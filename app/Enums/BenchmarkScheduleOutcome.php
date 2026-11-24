@@ -15,6 +15,7 @@ enum BenchmarkScheduleOutcome: string
     case SkippedNoCandidates = 'skipped_no_candidates';
     case SkippedRunning = 'skipped_running';
     case SkippedOverCap = 'skipped_over_cap';
+    case SkippedBudget = 'skipped_budget';
     case Failed = 'failed';
 
     public function label(): string
@@ -25,12 +26,13 @@ enum BenchmarkScheduleOutcome: string
             self::SkippedNoCandidates => 'Skipped: no tier models',
             self::SkippedRunning => 'Skipped: still running',
             self::SkippedOverCap => 'Skipped: over cost cap',
+            self::SkippedBudget => 'Skipped: AI budget reached',
             self::Failed => 'Failed to start',
         };
     }
 
     public function isSkip(): bool
     {
-        return $this !== self::Launched;
+        return $this !== self::Launched && $this !== self::Failed;
     }
 }
