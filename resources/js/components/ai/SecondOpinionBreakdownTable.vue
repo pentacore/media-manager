@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { LOW_SAMPLE, percent } from '@/components/ai/secondOpinionAgreement';
 import type { AgreementBreakdownRow } from '@/components/ai/secondOpinionAgreement';
 import { Pill } from '@/components/mm';
 import { formatCount } from '@/lib/format';
 
-withDefaults(
+const props = withDefaults(
     defineProps<{
         heading: string;
         dimension: 'event' | 'action_type' | 'answered_by';
@@ -14,6 +15,8 @@ withDefaults(
     { overriddenEvents: () => [] },
 );
 
+const label = computed(() => `Agreement by ${props.heading.toLowerCase()}`);
+
 const headerClass =
     'border-b border-border px-3 py-2 text-[11.5px] font-medium tracking-[0.05em] whitespace-nowrap text-muted-foreground uppercase';
 </script>
@@ -21,7 +24,10 @@ const headerClass =
 <template>
     <div class="min-w-0" :data-agreement-breakdown="dimension">
         <div class="overflow-x-auto rounded-lg border border-border">
-            <table class="w-full border-collapse text-[13px]">
+            <table
+                class="w-full border-collapse text-[13px]"
+                :aria-label="label"
+            >
                 <thead>
                     <tr>
                         <th :class="[headerClass, 'text-left']">

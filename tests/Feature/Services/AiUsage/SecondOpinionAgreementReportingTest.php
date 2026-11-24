@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiTask;
+use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
 use App\Models\AiTaskModel;
@@ -14,6 +15,7 @@ use App\Services\AiUsage\SecondOpinionAgreementReporting;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Database\Seeders\ActionTypeConfigSeeder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A verdict a person reviewed: approved ends Completed, rejected ends Rejected.
@@ -263,4 +265,47 @@ test('a review whose reviewer was deleted is no longer scored', function (): voi
         ->and($summary['totals']['unattributed'])->toBe(3)
         ->and($summary['totals']['verdicts'])->toBe(3)
         ->and($summary['rates']['agreement'])->toBeNull();
+});
+
+test('overridden events leave out overrides that cannot take effect under their engine', function (): void {
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setSecondOpinionEngine(SecondOpinionEngine::Llm);
+    $decisionAgentSettings->setSecondOpinionEventOverrides([
+        'sonarr:Download' => ['mode' => null, 'engine' => null, 'jev_threshold' => 0.8],
+        'radarr:Download' => ['mode' => null, 'engine' => SecondOpinionEngine::Jev, 'jev_threshold' => 0.8],
+        'lidarr:Download' => ['mode' => null, 'engine' => SecondOpinionEngine::Jev, 'jev_threshold' => null],
+    ]);
+
+    AiTaskModel::factory()->event('lidarr:Download', AiTask::DecisionVerifier)->selecting('openai', 'gpt-5')->create();
+    AiTaskModel::factory()->event('sonarr:Grab', AiTask::DecisionVerifier)->selecting('openai', 'gpt-5')->create();
+
+    expect(agreementSummary(now()->subDays(7))['overridden_events'])->toBe(['lidarr:Download', 'radarr:Download', 'sonarr:Grab']);
+
+    $decisionAgentSettings->setSecondOpinionEventOverrides(['radarr:Grab' => ['mode' => null, 'engine' => SecondOpinionEngine::Jev, 'jev_threshold' => null]]);
+    AiTaskModel::factory()->event('radarr:Grab', AiTask::DecisionVerifier)->selecting('openai', 'gpt-5')->create();
+    $decisionAgentSettings->setSecondOpinionEngine(SecondOpinionEngine::Jev);
+
+    expect(agreementSummary(now()->subDays(7))['overridden_events'])->toBe(['radarr:Grab']);
+});
+
+test('the All window reads verdicts in bounded chunks', function (): void {
+    agreementReviewed(true, true);
+    DB::enableQueryLog();
+
+    agreementSummary();
+
+    $verdictQueries = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'second_opinion') && str_contains($sql, 'from "action_requests"'));
+
+    expect($verdictQueries)->not->toBeEmpty()
+        ->and($verdictQueries->every(fn (string $sql): bool => str_contains($sql, 'limit')))->toBeTrue();
+});
+
+test('recent disagreements are ordered by when they were proposed, not by id', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-10-26 12:00:00'));
+
+    $newest = agreementReviewed(false, true, ['created_at' => now()->subMinute()]);
+    $oldest = agreementReviewed(true, false, ['created_at' => now()->subHours(3)]);
+    $middle = agreementReviewed(false, true, ['created_at' => now()->subHour()]);
+
+    expect(array_column(agreementSummary(now()->subDays(7))['disagreements'], 'id'))->toBe([$newest->id, $middle->id, $oldest->id]);
 });

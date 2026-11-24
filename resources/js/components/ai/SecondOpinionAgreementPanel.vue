@@ -2,7 +2,11 @@
 import { Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
-import { dailyBars, percent } from '@/components/ai/secondOpinionAgreement';
+import {
+    countOf,
+    dailyBars,
+    percent,
+} from '@/components/ai/secondOpinionAgreement';
 import type {
     AgreementBreakdownRow,
     SecondOpinionAgreement,
@@ -50,7 +54,7 @@ const breakdown = computed<{
 
 const countsLine = computed(() => {
     const parts = [
-        `${formatCount(totals.value.verdicts)} verdicts`,
+        countOf(totals.value.verdicts, 'verdict'),
         `${formatCount(totals.value.failed)} failed`,
         `${formatCount(totals.value.rejected_by_verifier)} rejected by the verifier`,
         `${formatCount(totals.value.awaiting_review)} awaiting review`,
@@ -121,7 +125,7 @@ const headerClass =
                 <StatCard
                     label="Holds that were right"
                     :value="percent(rates.holds_right)"
-                    :hint="`of ${formatCount(reviewedHolds)} reviewed holds`"
+                    :hint="`of ${countOf(reviewedHolds, 'reviewed hold')}`"
                     data-agreement-stat="holds_right"
                 />
                 <StatCard
@@ -143,7 +147,7 @@ const headerClass =
                 <StatCard
                     label="Coverage"
                     :value="percent(rates.coverage)"
-                    :hint="`of ${formatCount(totals.verdicts)} verdicts`"
+                    :hint="`of ${countOf(totals.verdicts, 'verdict')}`"
                     data-agreement-stat="coverage"
                 />
             </div>
@@ -162,6 +166,7 @@ const headerClass =
                 >
                     <table
                         class="w-full border-collapse text-[13px]"
+                        aria-label="Second opinion against the reviewer’s decision"
                         data-agreement-matrix
                     >
                         <thead>
@@ -227,7 +232,11 @@ const headerClass =
                                                 ? 'text-warning'
                                                 : 'text-muted-foreground'
                                         "
-                                        >false alarms</span
+                                        >{{
+                                            totals.disagreed_approved === 1
+                                                ? 'false alarm'
+                                                : 'false alarms'
+                                        }}</span
                                     >
                                 </td>
                                 <td
@@ -255,6 +264,7 @@ const headerClass =
                         "
                         :height="90"
                         :max="100"
+                        show-zero
                     />
                 </div>
             </div>

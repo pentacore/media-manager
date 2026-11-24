@@ -147,3 +147,41 @@ test('the second opinion panel fits a phone screen', function (): void {
         ->assertVisible('[data-agreement-disagreements]')
         ->assertScript(phoneOverflowScript(), '');
 });
+
+test('agreement per day draws a visible bar for a day the verifier was always wrong', function (): void {
+    agreementBrowserReviewed(false, true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', ['window' => '7d'], absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-agreement-daily] rect[data-bar-placeholder]:nth-of-type(8)', 'data-bar-zero', 'true')
+        ->assertScript("Number(document.querySelector('[data-agreement-daily] rect[data-bar-placeholder]:nth-of-type(8)').getAttribute('height')) > 0", true)
+        ->assertAttribute('[data-agreement-daily] rect[data-bar-placeholder]:nth-of-type(1)', 'data-bar-zero', 'false');
+});
+
+test('the second opinion panel counts one of a kind in the singular', function (): void {
+    agreementBrowserReviewed(false, true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertScript("document.querySelector('[data-agreement-cell=\"disagreed_approved\"]').textContent.replace(/\\s+/g, ' ').trim()", '1 false alarm')
+        ->assertScript("document.querySelector('[data-agreement-cell=\"agreed_rejected\"]').textContent.replace(/\\s+/g, ' ').trim()", '0 missed')
+        ->assertSeeIn('[data-agreement-stat="holds_right"]', 'of 1 reviewed hold')
+        ->assertDontSeeIn('[data-agreement-stat="holds_right"]', 'reviewed holds')
+        ->assertSeeIn('[data-agreement-stat="coverage"]', 'of 1 verdict')
+        ->assertDontSeeIn('[data-agreement-stat="coverage"]', 'verdicts')
+        ->assertScript("document.querySelector('[data-agreement-counts]').textContent.trim().startsWith('1 verdict ·')", true);
+});
+
+test('the agreement tables have accessible names', function (): void {
+    agreementBrowserReviewed(true, true);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-agreement-matrix]', 'aria-label', 'Second opinion against the reviewer’s decision')
+        ->assertAttribute('[data-agreement-breakdown="event"] table', 'aria-label', 'Agreement by event')
+        ->click('[data-agreement-breakdown-tab="answered_by"]')
+        ->assertAttribute('[data-agreement-breakdown="answered_by"] table', 'aria-label', 'Agreement by verifier');
+});

@@ -26,11 +26,18 @@ const props = withDefaults(
          * a full one.
          */
         max?: number | null;
+        /**
+         * Draw a thin stub for a measured zero (a non-placeholder point whose
+         * value is 0) so it isn't an empty slot. Use it where zero is a real
+         * reading, such as a 0 % rate, and placeholders mark "no data".
+         */
+        showZero?: boolean;
     }>(),
     {
         height: 120,
         markerAt: null,
         max: null,
+        showZero: false,
     },
 );
 
@@ -43,6 +50,8 @@ const scaleMax = computed(
 const showLabels = computed(() => props.data.length <= 20);
 
 const PLACEHOLDER_HEIGHT_PCT = 6;
+
+const ZERO_HEIGHT_PCT = 3;
 
 const bars = computed(() => {
     const count = props.data.length;
@@ -57,15 +66,19 @@ const bars = computed(() => {
 
     return props.data.map((point, index) => {
         const ratio = scaleMax.value > 0 ? point.value / scaleMax.value : 0;
+        const zero = props.showZero && !point.placeholder && point.value === 0;
         const heightPct = point.placeholder
             ? PLACEHOLDER_HEIGHT_PCT
-            : Math.min(ratio * 100, 100);
+            : zero
+              ? ZERO_HEIGHT_PCT
+              : Math.min(ratio * 100, 100);
 
         return {
             key: `${point.label}-${index}`,
             label: point.label,
             value: point.value,
             placeholder: point.placeholder ?? false,
+            zero,
             tooltip: point.tooltip ?? `${point.label}: ${point.value}`,
             x: index * slot + gap / 2,
             width: barWidth,
@@ -95,6 +108,7 @@ const bars = computed(() => {
                 :height="bar.height"
                 rx="0.6"
                 :data-bar-placeholder="bar.placeholder ? 'true' : 'false'"
+                :data-bar-zero="bar.zero ? 'true' : 'false'"
                 :class="
                     bar.placeholder
                         ? 'fill-none stroke-muted-foreground/50 stroke-[1.5] [stroke-dasharray:3,2]'
