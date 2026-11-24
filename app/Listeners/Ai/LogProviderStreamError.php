@@ -30,7 +30,7 @@ class LogProviderStreamError
             'model' => $stepFailed->model,
             'agent' => $stepFailed->agent::class,
             'invocation_id' => $stepFailed->invocationId,
-            'step' => $stepFailed->stepNumber,
+            'step' => $stepFailed->stepNumber + 1,
             'error_type' => $exception->error?->type,
             'error' => UpstreamErrorText::sanitize($exception->getMessage(), 2000),
             'metadata' => $exception->error?->metadata,

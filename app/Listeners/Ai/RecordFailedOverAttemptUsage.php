@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
+use App\Ai\FailureCode;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
@@ -45,6 +46,8 @@ class RecordFailedOverAttemptUsage
                 'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
                 'status' => 'failed',
                 'error_message' => UpstreamErrorText::sanitize($agentFailedOver->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
+                'error_code' => FailureCode::for($agentFailedOver->exception),
+                'failed_step' => $runUsageAccumulator->failedStep($invocationId),
             ]);
         }
 

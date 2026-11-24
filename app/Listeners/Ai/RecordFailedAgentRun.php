@@ -6,6 +6,7 @@ namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\FailureCode;
 use App\Ai\StoppedByUser;
 use App\Ai\TierOutcome;
 use App\Enums\AiUsageKind;
@@ -52,6 +53,8 @@ class RecordFailedAgentRun
             'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
             'status' => $stopped ? 'stopped' : 'failed',
             'error_message' => $stopped ? null : UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
+            'error_code' => $stopped ? null : FailureCode::for($agentFailed->exception),
+            'failed_step' => $runUsageAccumulator->failedStep($invocationId),
         ]);
 
         $runUsageAccumulator->forget($invocationId);

@@ -12,7 +12,7 @@ use Laravel\Ai\Streaming\Events\Error;
 
 function streamErrorStep(Throwable $exception): StepFailed
 {
-    return new StepFailed('inv-stream', 2, new DecisionAgent, Ai::textProvider('openai'), 'gpt-5-mini', false, $exception, 812.5);
+    return new StepFailed('inv-stream', 1, new DecisionAgent, Ai::textProvider('openai'), 'gpt-5-mini', false, $exception, 812.5);
 }
 
 test('an error the provider sent inside the stream is logged with the run details', function (): void {

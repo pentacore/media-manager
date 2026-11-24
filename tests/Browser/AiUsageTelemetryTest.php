@@ -54,6 +54,23 @@ test('the invocation drill-down lists sub-agent runs and tool errors', function 
         ->assertSeeIn('[data-usage-tool-error]', 'tool_failed');
 });
 
+test('the invocation drill-down shows the failed step and error code', function (): void {
+    $record = AiUsageRecord::factory()->failed()->create([
+        'error_message' => 'Provider returned 500.',
+        'error_code' => 'server_error',
+        'failed_step' => 2,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[data-usage-run-error]', 'Step 2')
+        ->assertSeeIn('[data-usage-run-error]', 'server_error')
+        ->assertSeeIn('[data-usage-run-error]', 'Provider returned 500.');
+});
+
 test('a stopped run shows a stopped pill without an error', function (): void {
     $record = AiUsageRecord::factory()->create(['status' => 'stopped']);
 
