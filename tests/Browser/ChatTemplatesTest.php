@@ -498,7 +498,7 @@ test('while a workflow proposal is pending a template only fills the composer an
 
 /**
  * Fake an agent that proposes a workflow for the first message, acknowledges
- * a decline and answers the stuck-downloads template. Every prompt the agent
+ * a decline or an approval and answers the stuck-downloads template. Every prompt the agent
  * sees is collected, whatever asked for it.
  *
  * @param  array<int, string>  $prompts
@@ -510,6 +510,7 @@ function fakeChatWithWorkflowProposal(User $user, array &$prompts): void
 
         return match (true) {
             str_contains($prompt, 'DECLINED') => 'Understood, what next?',
+            str_contains($prompt, 'APPROVED') => 'All steps executed.',
             str_contains($prompt, 'stuck downloads') => 'Nothing is stuck.',
             default => (function () use ($user): string {
                 AiProposedWorkflow::query()->firstOrCreate(['user_id' => $user->id], [
@@ -575,6 +576,34 @@ test('once the proposal is declined the model picker is enabled and templates se
         ->assertSee('Nothing is stuck.');
 
     expect(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toHaveCount(1);
+});
+
+test('once the proposal is approved the model picker is enabled and templates send normally', function (): void {
+    $admin = User::factory()->admin()->create();
+    $prompts = [];
+    fakeChatWithWorkflowProposal($admin, $prompts);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->autoSend()->create([
+        'name' => 'Stuck downloads',
+        'body' => 'Check Sonarr and Radarr for stuck downloads',
+    ]);
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('[data-chat-input]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", true)
+        ->click('Approve')
+        ->assertSee('All steps executed.')
+        ->assertScript("document.querySelector('[data-chat-model-chip]').disabled", false)
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertSeeIn('[data-chat-thread]', 'Check Sonarr and Radarr for stuck downloads')
+        ->assertSee('Nothing is stuck.');
+
+    expect(AiProposedWorkflow::query()->sole()->status)->toBe(AiProposedWorkflowStatus::Approved)
+        ->and(collect($prompts)->filter(fn (string $prompt): bool => str_contains($prompt, 'stuck downloads')))->toHaveCount(1);
 });
 
 test('the fill dialog names the preset model in a new chat', function (): void {

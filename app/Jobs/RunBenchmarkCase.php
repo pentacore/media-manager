@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Benchmark\BenchmarkRunContext;
+use App\Ai\ProviderDriver;
 use App\Ai\ResolvedSelection;
 use App\Enums\BenchmarkJudgeStatus;
 use App\Enums\BenchmarkResultStatus;
@@ -61,14 +62,17 @@ use Throwable;
  * cap is enforced before every agent call.
  */
 #[Queue(QueueLane::Ai)]
-#[Timeout(280)]
+#[Timeout(self::TIMEOUT_SECONDS)]
 #[Tries(0)]
 #[MaxExceptions(1)]
 #[FailOnTimeout]
-#[UniqueFor(46800)]
+#[UniqueFor(BenchmarkResult::LOST_AFTER_SECONDS)]
 final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+
+    /** The job timeout; BenchmarkResult::sweepAfterSeconds() waits one whole run past the queue's retry. */
+    public const int TIMEOUT_SECONDS = 280;
 
     /** Kept below the 13 h UniqueFor window. */
     private const int MAX_WAIT_HOURS = 12;
@@ -396,14 +400,14 @@ final class RunBenchmarkCase implements ShouldBeUnique, ShouldQueue
 
     /**
      * Fail before any agent work when the candidate cannot run, with a reason
-     * an admin can act on (Ollama needs no key).
+     * an admin can act on (an Ollama driver needs no key).
      */
     private function ensureProviderReady(string $provider): void
     {
         $config = $provider === '' ? null : config(sprintf('ai.providers.%s', $provider));
 
         throw_unless(is_array($config), RuntimeException::class, sprintf('The %s provider is not configured.', $provider === '' ? 'candidate' : $provider));
-        throw_if($provider !== 'ollama' && blank($config['key'] ?? null), RuntimeException::class, sprintf('The %s provider has no API key configured.', $provider));
+        throw_if(! ProviderDriver::keyless($provider) && blank($config['key'] ?? null), RuntimeException::class, sprintf('The %s provider has no API key configured.', $provider));
     }
 
     /**

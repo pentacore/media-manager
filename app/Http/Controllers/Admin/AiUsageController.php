@@ -65,7 +65,7 @@ class AiUsageController extends Controller
             'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind, benchmark: $benchmark),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind, benchmark: $benchmark),
             'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind, fellThrough: $fellThrough, benchmark: $benchmark),
-            'tool_stats' => $aiUsageReporting->toolStats($since),
+            'tool_stats' => $aiUsageReporting->toolStats($since, $benchmark),
             'priced_models' => AiModelPrice::query()
                 ->orderBy('provider')
                 ->orderBy('model')
@@ -79,16 +79,23 @@ class AiUsageController extends Controller
             // Usage vs configured provider rate limits over rolling
             // windows. Enforced by AiRateLimitGuard only when the admin has
             // switched enforcement on; the page words the card accordingly.
+            // Benchmark runs count too, whatever the benchmark filter: the
+            // limits apply to every call.
             'rate_limits' => $aiUsageReporting->rateLimitStatus(),
             'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
             'unpricedModels' => $unpricedModelDetector->forHardCap(),
+        ];
+
+        // Benchmark runs never pass a classification gate or a second
+        // opinion, so with only benchmarks shown these panels are left out.
+        if ($benchmark !== true) {
             // Calibration per classification gate; deferred so the page
             // paints before the aggregate runs.
-            'classification_gates' => Inertia::defer(fn (): array => $classificationGateReporting->summary($since)),
-            // Verifier verdicts against the people who reviewed the same actions;
-            // its own group so it loads beside the gate calibration.
-            'second_opinion_agreement' => Inertia::defer(fn (): array => $secondOpinionAgreementReporting->summary($since), 'secondOpinionAgreement'),
-        ];
+            $page['classification_gates'] = Inertia::defer(fn (): array => $classificationGateReporting->summary($since));
+            // Verifier verdicts against the people who reviewed the same
+            // actions; its own group so it loads beside the gate calibration.
+            $page['second_opinion_agreement'] = Inertia::defer(fn (): array => $secondOpinionAgreementReporting->summary($since), 'secondOpinionAgreement');
+        }
 
         if ($scenario instanceof Scenario) {
             $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind, $benchmark);
@@ -176,9 +183,11 @@ class AiUsageController extends Controller
     }
 
     /**
-     * The Recent invocations benchmark filter: `only`, `exclude`, or null
-     * for every row (unknown values too). Like the tier filter, totals are
-     * never filtered by it.
+     * The benchmark filter: `only`, `exclude`, or null for every row (unknown
+     * values too). Totals, breakdowns, recent invocations and the export
+     * follow it; tool stats show benchmark replays only under `only`; the
+     * gate and second-opinion panels are left out under `only`; rate limits
+     * and free pools always count every call, as their enforcement does.
      */
     private function benchmark(Request $request): ?bool
     {

@@ -50,9 +50,10 @@ class DecisionRunContext
      * $actionKind is the action kind the gate scoped this run to, or null for
      * the full toolset.
      *
-     * $deadline is when the run must be done to finish inside its job
-     * timeout (null when nothing bounds it); the second-opinion check stops
-     * short of it.
+     * $deadline is when the run must be done (the admin's run time limit,
+     * inside its job timeout; null when nothing bounds it): every
+     * DecisionAgent step (StopWhenDecisionRunOutOfTime) and the
+     * second-opinion check stop short of it.
      *
      * @param  array<string, mixed>  $eventPayload
      */

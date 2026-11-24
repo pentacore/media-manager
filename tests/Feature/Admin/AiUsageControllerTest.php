@@ -812,6 +812,40 @@ test('tool stats leave out the tool calls of benchmark runs', function (): void 
         ->assertInertia(fn ($page) => $page->where('tool_stats.0.calls', 2));
 });
 
+test('tool stats under the only-benchmarks filter show the benchmark replays alone', function (): void {
+    $run = BenchmarkRun::factory()->create();
+    $benchmarked = AiUsageRecord::factory()->benchmarked($run->id)->create();
+    $live = AiUsageRecord::factory()->create();
+    AiToolInvocation::factory()->create(['invocation_id' => $benchmarked->invocation_id, 'tool_class' => 'App\\Ai\\Tools\\ReplayedTool']);
+    AiToolInvocation::factory()->create(['invocation_id' => $live->invocation_id, 'tool_class' => 'App\\Ai\\Tools\\LiveTool']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']))
+        ->assertInertia(fn ($page) => $page
+            ->has('tool_stats', 1)
+            ->where('tool_stats.0.tool_class', 'App\\Ai\\Tools\\ReplayedTool'));
+
+    $this->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->has('tool_stats', 1)
+            ->where('tool_stats.0.tool_class', 'App\\Ai\\Tools\\LiveTool'));
+});
+
+test('the only-benchmarks filter leaves out the gate and second-opinion panels benchmark runs never feed', function (): void {
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['benchmark' => 'only']));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('benchmark', 'only')
+        ->missing('classification_gates')
+        ->missing('second_opinion_agreement'));
+    expect($response->viewData('page')['deferredProps'] ?? [])->toBe([]);
+
+    $this->get(route('admin.ai-usage.index', ['benchmark' => 'exclude']))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload->has('classification_gates', count(ClassificationGate::cases()))));
+});
+
 test('show flags whether an invocation can become a benchmark case', function (string $reason, array $attributes, bool $capturable): void {
     $record = AiUsageRecord::factory()->create($attributes);
 

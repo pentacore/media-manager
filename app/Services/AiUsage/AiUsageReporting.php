@@ -218,17 +218,25 @@ class AiUsageReporting
      * Per-tool call counts, failures and latency percentiles inside the
      * window. Percentiles skip rows recorded before duration tracking
      * existed (null duration_ms), so they are null for such tools. Tool calls
-     * made by benchmark runs are left out: they replay fixtures, not live tools.
+     * made by benchmark runs replay fixtures, not live tools, so they never
+     * mix with live calls: $benchmark true shows the replays alone, anything
+     * else (every row, or benchmarks left out) the live calls.
      *
      * @return Collection<int, object{tool_class: string, calls: int, failures: int, p50_ms: int|null, p95_ms: int|null}>
      */
-    public function toolStats(?CarbonImmutable $since): Collection
+    public function toolStats(?CarbonImmutable $since, ?bool $benchmark = null): Collection
     {
+        $benchmarkRows = fn (Builder $builder) => $builder->from('ai_usage_records')
+            ->whereColumn('ai_usage_records.invocation_id', 'ai_tool_invocations.invocation_id')
+            ->where('ai_usage_records.is_benchmark', true);
+
         /** @var Collection<int, object{tool_class: string, calls: int, failures: int, p50_ms: int|null, p95_ms: int|null}> $rows */
         $rows = DB::table('ai_tool_invocations')
-            ->whereNotExists(fn (Builder $builder) => $builder->from('ai_usage_records')
-                ->whereColumn('ai_usage_records.invocation_id', 'ai_tool_invocations.invocation_id')
-                ->where('ai_usage_records.is_benchmark', true))
+            ->when(
+                $benchmark === true,
+                fn (Builder $builder) => $builder->whereExists($benchmarkRows),
+                fn (Builder $builder) => $builder->whereNotExists($benchmarkRows),
+            )
             ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_tool_invocations.created_at', '>=', $since))
             ->selectRaw("
                 ai_tool_invocations.tool_class,

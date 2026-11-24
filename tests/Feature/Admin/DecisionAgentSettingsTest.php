@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
+use App\Jobs\RunDecisionAgent;
 use App\Models\User;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Cache;
@@ -334,3 +335,25 @@ test('a cleared threshold inherits the global one while zero is kept', function 
     expect($decisionAgentSettings->secondOpinionJevThreshold('sonarr:Download'))->toBe(0.8)
         ->and($decisionAgentSettings->secondOpinionJevThreshold('radarr:Grab'))->toBe(0.0);
 });
+
+test('the decision agent page shows and saves the run time limit', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.decision-agent.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('settings.run_time_limit', RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS)
+            ->where('runTimeLimitBounds', ['min' => DecisionAgentSettings::MIN_RUN_TIME_LIMIT_SECONDS, 'max' => DecisionAgentSettings::maxRunTimeLimit()]));
+
+    $this->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['run_time_limit' => 90]))
+        ->assertRedirect(route('admin.decision-agent.index'));
+
+    expect(resolve(DecisionAgentSettings::class)->runTimeLimit())->toBe(90);
+});
+
+test('the run time limit must fit inside the job timeout', function (int $seconds): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.decision-agent.update'), decisionAgentSettingsPayload(['run_time_limit' => $seconds]))
+        ->assertSessionHasErrors('run_time_limit');
+})->with([
+    'below the minimum' => [DecisionAgentSettings::MIN_RUN_TIME_LIMIT_SECONDS - 1],
+    'past the job timeout less its reserve' => [RunDecisionAgent::TIMEOUT_SECONDS - RunDecisionAgent::RUN_DEADLINE_RESERVE_SECONDS + 1],
+]);

@@ -11,6 +11,7 @@ export type UpdateDecisionAgentSettingsRequest = {
   notify_on_suggest: boolean;
   notify_on_act: boolean;
   max_actions_per_run: number;
+  run_time_limit?: number | null;
   second_opinion_engine: 'llm' | 'jev_then_llm' | 'jev';
   second_opinion_jev_threshold: number;
   second_opinion_event_overrides?: Array<{ event_key: string; mode: string | null; engine: string | null; jev_threshold: number | null }>;

@@ -301,6 +301,18 @@ test('a candidate whose provider has no API key fails with a readable error', fu
     TitleAgent::assertNeverPrompted();
 });
 
+test('a candidate on a custom-named Ollama provider runs without an API key', function (): void {
+    config()->set('ai.providers.local-llm', ['driver' => 'ollama', 'url' => 'http://ollama.local:11434']);
+    $benchmarkRun = jobRun(['candidates' => [['provider' => 'local-llm', 'model' => 'llama-candidate', 'reasoning' => 'provider_default']]]);
+    $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
+    jobFakeTitle();
+
+    dispatch_sync(new RunBenchmarkCase($benchmarkResult->id));
+
+    expect($benchmarkResult->fresh()->error)->toBeNull()
+        ->and($benchmarkResult->fresh()->status)->toBe(BenchmarkResultStatus::Ok);
+});
+
 test('a candidate on an unknown provider fails with a readable error', function (): void {
     $benchmarkRun = jobRun(['candidates' => [['provider' => 'no-such-provider', 'model' => 'whatever', 'reasoning' => 'bogus-level']]]);
     $benchmarkResult = BenchmarkResult::factory()->forCase($benchmarkRun, jobTitleCase(), 0)->create();
