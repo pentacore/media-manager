@@ -4,7 +4,7 @@ import type { PriceRow, RateField } from './types';
 /** Provider filter value meaning "no provider filter". */
 export const ALL_PROVIDERS = 'all';
 
-const BATCH_FIELD: Record<RateField, keyof PriceRow> = {
+const BATCH_FIELD: Record<RateField, `batch_${RateField}`> = {
     input_per_mtok: 'batch_input_per_mtok',
     output_per_mtok: 'batch_output_per_mtok',
     cache_read_per_mtok: 'batch_cache_read_per_mtok',
@@ -83,9 +83,7 @@ export function rateFor(
     showBatch: boolean,
 ): string | null {
     if (showBatch) {
-        const value = price[BATCH_FIELD[field]];
-
-        return value === null || value === undefined ? null : String(value);
+        return price[BATCH_FIELD[field]];
     }
 
     return price[field];

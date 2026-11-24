@@ -1,8 +1,16 @@
 import { onUnmounted } from 'vue';
 import { toast } from 'vue-sonner';
+import type { LiveStatusChange } from '@/components/actions/liveStatus';
 import { useCan } from '@/composables/useCan';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
+import type { ActionRequestResource } from '@/typefinder';
+
+/** The ActionRequestCreated payload fields the toast reads. */
+type CreatedEvent = Pick<
+    ActionRequestResource,
+    'type' | 'source_service' | 'target_service'
+>;
 
 const CHANNEL_NAME = 'members.actions';
 
@@ -27,26 +35,22 @@ export function useNotifications(): UseNotifications {
         }
 
         lease = acquirePrivateChannel(CHANNEL_NAME)
-            .listen(
-                '.ActionRequestCreated',
-                (event: Record<string, unknown>) => {
-                    toast.info('New Action Request', {
-                        description: `${event.type} from ${event.source_service} → ${event.target_service}`,
-                    });
-                },
-            )
+            .listen('.ActionRequestCreated', (event: CreatedEvent) => {
+                toast.info('New Action Request', {
+                    description: `${event.type} from ${event.source_service} → ${event.target_service}`,
+                });
+            })
             .listen(
                 '.ActionRequestStatusChanged',
-                (event: Record<string, unknown>) => {
-                    const status = event.status as string;
+                (event: LiveStatusChange) => {
                     const toastFn =
-                        status === 'completed'
+                        event.status === 'completed'
                             ? toast.success
-                            : status === 'failed'
+                            : event.status === 'failed'
                               ? toast.error
                               : toast.info;
                     toastFn('Action Request Updated', {
-                        description: `Request #${event.id} is now ${status}`,
+                        description: `Request #${event.id} is now ${event.status}`,
                     });
                 },
             );

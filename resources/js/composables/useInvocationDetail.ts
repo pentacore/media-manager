@@ -128,7 +128,8 @@ export function useInvocationDetail(
                     // the admin may have closed it, or opened another run,
                     // while the assignment saved.
                     if (shownRecordId === recordId) {
-                        openDetail({ id: recordId });
+                        // openDetail reports its own failures in the dialog.
+                        void openDetail({ id: recordId });
                     }
                 },
                 onError: () => {

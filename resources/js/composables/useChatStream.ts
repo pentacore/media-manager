@@ -147,8 +147,12 @@ function toolResultFailed(event: AgUiEvent): boolean {
         return true;
     }
 
+    if (typeof event.content !== 'string') {
+        return false;
+    }
+
     try {
-        const parsed = JSON.parse(String(event.content ?? '')) as Record<
+        const parsed = JSON.parse(event.content) as Record<
             string,
             unknown
         > | null;
