@@ -8,6 +8,7 @@ use App\Cache\Services\BazarrCache;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use Closure;
+use DateTimeZone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -88,6 +89,25 @@ final class BazarrClient
     public function getFreshSystemStatus(): array
     {
         return $this->fetchSystemStatus();
+    }
+
+    /**
+     * The timezone Bazarr writes its history in. Bazarr stores history with a
+     * naive `datetime.now()` and reports the host zone (tzlocal's IANA name)
+     * as `timezone` in its system status, or "Undefined" when it cannot tell.
+     * An unreadable status or unknown zone falls back to the app timezone.
+     */
+    public function historyTimezone(): string
+    {
+        try {
+            $timezone = $this->getSystemStatus()['data']['timezone'] ?? null;
+        } catch (ConnectionException|RequestException|UnexpectedValueException) {
+            $timezone = null;
+        }
+
+        return is_string($timezone) && in_array($timezone, DateTimeZone::listIdentifiers(), true)
+            ? $timezone
+            : config()->string('app.timezone');
     }
 
     /**
