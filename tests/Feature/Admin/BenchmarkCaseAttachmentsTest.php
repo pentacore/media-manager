@@ -2,13 +2,21 @@
 
 declare(strict_types=1);
 
+use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
+use App\Enums\AiUsageKind;
+use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use App\Services\Benchmark\CaseAttachmentSync;
+use App\Settings\AiSettings;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -69,6 +77,37 @@ function chatCaseWithHistory(): BenchmarkCase
             ['role' => 'user', 'content' => 'Here is the log.'],
         ],
     ]]);
+}
+
+/**
+ * A chat turn with stored attachments, captured as an AI usage row, so its
+ * attachments may be drafted into a case saved with that source invocation.
+ *
+ * @return array{0: string, 1: list<ChatAttachment>}
+ */
+function chatCaseCapturedAttachments(int $count = 1): array
+{
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    $chatAttachments = ChatAttachment::factory()->count($count)->sequence(fn (Sequence $sequence): array => ['conversation_id' => $conversationId, 'path' => sprintf('chat-attachments/1/%s-%d.png', $conversationId, $sequence->index)])->create()->all();
+
+    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => $turnAt, 'updated_at' => $turnAt]);
+    DB::table('agent_conversation_messages')->insert([
+        'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+        'role' => 'user', 'content' => 'What does this error mean?', 'steps' => '[]', 'usage' => '[]', 'meta' => '[]',
+        'attachments' => json_encode(array_map(static fn (ChatAttachment $chatAttachment): array => ['type' => 'stored-image', 'name' => null, 'path' => $chatAttachment->path, 'disk' => 'local'], $chatAttachments)),
+        'created_at' => $turnAt, 'updated_at' => $turnAt,
+    ]);
+
+    $aiUsageRecord = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class,
+        'kind' => AiUsageKind::Text,
+        'prompt_text' => "What does this error mean?\n\nAttachments: screenshot.png",
+        'conversation_id' => $conversationId,
+        'created_at' => $turnAt,
+    ]);
+
+    return [$aiUsageRecord->invocation_id, $chatAttachments];
 }
 
 test('new files are stored per turn in the case folder', function (): void {
@@ -165,9 +204,10 @@ test('an empty keep map in the form payload deletes every saved attachment', fun
 });
 
 test('a draft attachment is copied into the case folder on save and the chat file stays', function (): void {
-    $chatAttachment = ChatAttachment::factory()->create();
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
 
     $this->post(route('admin.benchmarks.cases.store'), chatCaseMultipart(chatCaseBody([
+        'source_invocation_id' => $invocationId,
         'draft_attachment_ids' => ['final' => [$chatAttachment->id]],
     ])))->assertSessionHasNoErrors()->assertInertiaFlash('toast.type', 'success');
 
@@ -181,10 +221,11 @@ test('a draft attachment is copied into the case folder on save and the chat fil
 });
 
 test('a draft attachment whose file is gone is skipped and the toast says so', function (): void {
-    $chatAttachment = ChatAttachment::factory()->create();
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
     Storage::disk('local')->delete($chatAttachment->path);
 
     $this->post(route('admin.benchmarks.cases.store'), chatCaseMultipart(chatCaseBody([
+        'source_invocation_id' => $invocationId,
         'draft_attachment_ids' => ['final' => [$chatAttachment->id]],
     ])))
         ->assertRedirect(route('admin.benchmarks.cases.index'))
@@ -201,7 +242,17 @@ test('attachments and the replay mode are validated', function (array $payload, 
     expect(BenchmarkCase::query()->count())->toBe(0);
 })->with([
     'four files on the prompt' => [fn (): array => chatCaseMultipart(chatCaseBody(), ['final' => array_map(static fn (int $i): UploadedFile => UploadedFile::fake()->image(sprintf('%d.png', $i)), [1, 2, 3, 4])]), 'attachments.final'],
-    'two files and two draft copies on the prompt' => [fn (): array => chatCaseMultipart(chatCaseBody(['draft_attachment_ids' => ['final' => ChatAttachment::factory()->count(2)->create()->modelKeys()]]), ['final' => [UploadedFile::fake()->image('1.png'), UploadedFile::fake()->image('2.png')]]), 'attachments.final'],
+    'two files and two draft copies on the prompt' => [function (): array {
+        [$invocationId, $chatAttachments] = chatCaseCapturedAttachments(2);
+
+        return chatCaseMultipart(chatCaseBody(['source_invocation_id' => $invocationId, 'draft_attachment_ids' => ['final' => array_map(static fn (ChatAttachment $chatAttachment): int => $chatAttachment->id, $chatAttachments)]]), ['final' => [UploadedFile::fake()->image('1.png'), UploadedFile::fake()->image('2.png')]]);
+    }, 'attachments.final'],
+    'a draft copy from outside the captured conversation' => [function (): array {
+        [$invocationId] = chatCaseCapturedAttachments();
+
+        return chatCaseMultipart(chatCaseBody(['source_invocation_id' => $invocationId, 'draft_attachment_ids' => ['final' => [ChatAttachment::factory()->create()->id]]]));
+    }, 'draft_attachment_ids.final'],
+    'a draft copy without a captured invocation' => [fn (): array => chatCaseMultipart(chatCaseBody(['draft_attachment_ids' => ['final' => [ChatAttachment::factory()->create()->id]]])), 'draft_attachment_ids.final'],
     'an executable' => [fn (): array => chatCaseMultipart(chatCaseBody(), ['final' => [UploadedFile::fake()->create('run.exe', 10, 'application/x-msdownload')]]), 'attachments.final.0'],
     'a file over 10 MB' => [fn (): array => chatCaseMultipart(chatCaseBody(), ['final' => [UploadedFile::fake()->create('big.pdf', 10_241, 'application/pdf')]]), 'attachments.final.0'],
     'a file on an assistant turn' => [fn (): array => chatCaseMultipart(chatCaseBody(['input' => ['history' => [['role' => 'assistant', 'content' => 'Hi']]]]), [0 => [UploadedFile::fake()->image('1.png')]]), 'attachments.0'],
@@ -229,8 +280,8 @@ test('the edit page lists the case attachments by turn', function (): void {
         ->assertInertia(fn ($page) => $page
             ->where('case.input.conversation', 'context')
             ->where('case.attachments', [
-                ['id' => $first->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64],
-                ['id' => $final->id, 'turn' => null, 'name' => 'screenshot.png', 'mime_type' => 'image/png', 'size' => 1024],
+                ['id' => $first->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64, 'url' => route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $first])],
+                ['id' => $final->id, 'turn' => null, 'name' => 'screenshot.png', 'mime_type' => 'image/png', 'size' => 1024, 'url' => route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $final])],
             ]));
 });
 
@@ -242,4 +293,98 @@ test('the index rows count attachments and flag scripted cases', function (): vo
         ->assertInertia(fn ($page) => $page
             ->where('cases.data.0.attachment_count', 2)
             ->where('cases.data.0.scripted', true));
+});
+
+test('a JSON update without a keep list counts the saved attachments toward the per-turn cap', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    BenchmarkCaseAttachment::factory()->count(3)->for($benchmarkCase)->image()->create();
+    $body = chatCaseBody(['input' => ['history' => [
+        ['role' => 'user', 'content' => 'First screenshot'],
+        ['role' => 'assistant', 'content' => 'Looks like a stall.'],
+        ['role' => 'user', 'content' => 'Here is the log.'],
+    ]]]);
+
+    $this->post(route('admin.benchmarks.cases.update', $benchmarkCase), chatCaseMultipart($body, ['final' => [UploadedFile::fake()->image('4.png')]], update: true))
+        ->assertSessionHasErrors(['attachments.final' => 'A turn can carry at most 3 attachments.']);
+
+    expect($benchmarkCase->attachments()->count())->toBe(3);
+});
+
+test('the per-turn cap follows the attachments-per-message setting', function (): void {
+    resolve(AiSettings::class)->setChatMaxAttachments(1);
+
+    $this->post(route('admin.benchmarks.cases.store'), chatCaseMultipart(chatCaseBody(), ['final' => [UploadedFile::fake()->image('1.png'), UploadedFile::fake()->image('2.png')]]))
+        ->assertSessionHasErrors(['attachments.final' => 'A turn can carry at most 1 attachment.']);
+
+    resolve(AiSettings::class)->setChatMaxAttachments(5);
+
+    $this->post(route('admin.benchmarks.cases.store'), chatCaseMultipart(chatCaseBody(), ['final' => array_map(static fn (int $i): UploadedFile => UploadedFile::fake()->image(sprintf('%d.png', $i)), [1, 2, 3, 4, 5])]))
+        ->assertSessionHasNoErrors();
+
+    expect(BenchmarkCaseAttachment::query()->count())->toBe(5);
+});
+
+test('the case form gets the attachments-per-message setting', function (): void {
+    resolve(AiSettings::class)->setChatMaxAttachments(4);
+
+    $this->get(route('admin.benchmarks.cases.create'))
+        ->assertInertia(fn ($page) => $page->where('maxAttachments', 4));
+});
+
+test('an upload the disk refuses fails the save and removes the files already copied', function (): void {
+    [, [$chatAttachment]] = chatCaseCapturedAttachments();
+    $benchmarkCase = chatCaseWithHistory();
+    $refused = Mockery::mock(UploadedFile::fake()->image('refused.png'))->makePartial();
+    $refused->shouldReceive('storeAs')->andReturn(false);
+
+    expect(fn (): int => resolve(CaseAttachmentSync::class)->sync($benchmarkCase, null, ['final' => [$chatAttachment->id]], ['final' => [$refused]]))
+        ->toThrow(RuntimeException::class, 'The attachment refused.png could not be stored.');
+
+    expect($benchmarkCase->attachments()->count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles(BenchmarkCaseAttachment::directoryFor($benchmarkCase->id)))->toBe([]);
+    Storage::disk('local')->assertExists($chatAttachment->path);
+});
+
+test('a saved attachment can be previewed: images inline, other files as a download', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    $image = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    $log = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->text()->forTurn(0)->create();
+
+    $imageResponse = $this->get(route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $image]))->assertOk();
+    $logResponse = $this->get(route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $log]))->assertOk();
+
+    expect($imageResponse->headers->get('Content-Disposition'))->toStartWith('inline')
+        ->and($imageResponse->headers->get('X-Content-Type-Options'))->toBe('nosniff')
+        ->and($logResponse->headers->get('Content-Disposition'))->toStartWith('attachment')
+        ->and($logResponse->headers->get('Content-Security-Policy'))->toContain('sandbox');
+});
+
+test('an attachment is previewed only through its own case', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    $other = BenchmarkCaseAttachment::factory()->image()->create();
+
+    $this->get(route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $other]))->assertNotFound();
+});
+
+test('a previewed attachment whose file is gone is a 404', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    $image = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    Storage::disk('local')->delete($image->path);
+
+    $this->get(route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $image]))->assertNotFound();
+});
+
+test('members cannot preview case attachments', function (): void {
+    $image = BenchmarkCaseAttachment::factory()->image()->create();
+    $this->actingAs(User::factory()->member()->create());
+
+    $this->get(route('admin.benchmarks.cases.attachments.show', [$image->benchmark_case_id, $image]))->assertForbidden();
+});
+
+test('the edit page links each saved attachment to its preview', function (): void {
+    $benchmarkCase = chatCaseWithHistory();
+    $image = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+
+    $this->get(route('admin.benchmarks.cases.edit', $benchmarkCase))
+        ->assertInertia(fn ($page) => $page->where('case.attachments.0.url', route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $image])));
 });

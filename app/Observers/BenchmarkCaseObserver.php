@@ -4,19 +4,18 @@ declare(strict_types=1);
 
 namespace App\Observers;
 
+use App\Jobs\DeleteBenchmarkCaseFiles;
 use App\Models\BenchmarkCase;
-use App\Models\BenchmarkCaseAttachment;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * The attachment rows cascade in the database, so only the case's folder on
- * disk needs removing.
+ * disk needs removing, which a queued job does.
  */
 class BenchmarkCaseObserver implements ShouldHandleEventsAfterCommit
 {
     public function deleted(BenchmarkCase $benchmarkCase): void
     {
-        Storage::disk(BenchmarkCaseAttachment::DISK)->deleteDirectory(BenchmarkCaseAttachment::directoryFor($benchmarkCase->id));
+        dispatch(new DeleteBenchmarkCaseFiles($benchmarkCase->id));
     }
 }

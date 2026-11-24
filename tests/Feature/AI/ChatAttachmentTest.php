@@ -8,6 +8,7 @@ use App\Models\AiTaskModel;
 use App\Models\ChatAttachment;
 use App\Models\User;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Settings\AiSettings;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files;
@@ -50,6 +51,22 @@ test('attachments are validated for type, size and count', function (Closure $fi
     'too large' => [fn (): array => [UploadedFile::fake()->create('big.pdf', 10_241, 'application/pdf')], 'attachments.0'],
     'too many' => [fn (): array => array_map(static fn (int $i): UploadedFile => UploadedFile::fake()->image(sprintf('%d.png', $i)), [1, 2, 3, 4]), 'attachments'],
 ]);
+
+test('the attachment count limit follows the attachments-per-message setting', function (): void {
+    resolve(AiSettings::class)->setChatMaxAttachments(1);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hi', 'attachments' => [UploadedFile::fake()->image('1.png'), UploadedFile::fake()->image('2.png')]])
+        ->assertSessionHasErrors('attachments');
+});
+
+test('pages share the attachments-per-message setting with the chat composer', function (): void {
+    resolve(AiSettings::class)->setChatMaxAttachments(5);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('ai.max_attachments', 5));
+});
 
 test('only the owner can download an attachment', function (): void {
     $attachment = ChatAttachment::factory()->create();

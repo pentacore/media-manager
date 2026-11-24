@@ -28,6 +28,7 @@ interface AiSettingsState {
     hard_budget_usd: number | null;
     chat_timeout: number;
     chat_timeout_effective: number;
+    chat_max_attachments: number;
     models_dev_pricing_enabled: boolean;
     openrouter_pricing_enabled: boolean;
     litellm_pricing_enabled: boolean;
@@ -308,6 +309,46 @@ const budgetState = computed<{
                         </p>
                         <InputError
                             :message="errors.chat_timeout"
+                            class="mt-1"
+                        />
+                    </div>
+                </SettingsRow>
+
+                <Separator />
+
+                <!-- Attachments per message -->
+                <SettingsRow>
+                    <template #label>
+                        <Field
+                            for="chat_max_attachments"
+                            label="Attachments per message"
+                            hint="How many files (images, text files or PDFs, 10 MB each) one chat message may carry, 1 to 10. Each user turn of a chat benchmark case follows the same limit. Leave blank to use the .env default."
+                        >
+                            <span />
+                        </Field>
+                    </template>
+                    <div>
+                        <div class="relative max-w-[200px]">
+                            <Input
+                                id="chat_max_attachments"
+                                name="chat_max_attachments"
+                                type="number"
+                                step="1"
+                                min="1"
+                                max="10"
+                                class="h-8 pr-12 text-sm"
+                                :default-value="settings.chat_max_attachments"
+                                placeholder="3"
+                                data-chat-max-attachments
+                            />
+                            <span
+                                class="font-mono-tabular pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[12px] text-muted-foreground"
+                            >
+                                files
+                            </span>
+                        </div>
+                        <InputError
+                            :message="errors.chat_max_attachments"
                             class="mt-1"
                         />
                     </div>

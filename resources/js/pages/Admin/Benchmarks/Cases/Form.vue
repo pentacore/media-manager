@@ -45,6 +45,8 @@ const props = defineProps<{
     verifierActionTypes: BenchmarkVerifierActionType[];
     writeTools: string[];
     defaultRubrics: Record<string, string>;
+    /** Files one user turn may carry (the attachments-per-message setting). */
+    maxAttachments: number;
 }>();
 
 defineOptions({
@@ -94,6 +96,7 @@ function turnEntries(turn: number | null): BenchmarkAttachmentEntry[] {
                 id: attachment.id,
                 name: attachment.name,
                 size: attachment.size,
+                url: attachment.url,
             })),
         ...(props.draft?.draft_attachments ?? [])
             .filter((attachment) => attachment.turn === turn)
@@ -449,6 +452,7 @@ const selectClass =
             :decision-services="decisionServices"
             :action-kinds="actionKinds"
             :verifier-action-types="verifierActionTypes"
+            :max-attachments="maxAttachments"
             :errors="errors"
         />
 

@@ -10,8 +10,12 @@ use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
 use App\Enums\BenchmarkScoringType;
 use App\Models\AiToolInvocation;
+use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Services\Benchmark\CaptureSource;
+use App\Services\Benchmark\CaseDraftFromUsage;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
@@ -173,7 +177,8 @@ trait BenchmarkCaseValidationRules
                 }
             },
             function (Validator $validator): void {
-                $totals = [];
+                $limit = $this->chatMaxAttachments();
+                $totals = $this->savedAttachmentTotals();
 
                 foreach ($this->attachmentTurnMaps() as $turns) {
                     foreach ($turns as $key => $items) {
@@ -182,8 +187,27 @@ trait BenchmarkCaseValidationRules
                 }
 
                 foreach ($totals as $key => $total) {
-                    if ($total > 3) {
-                        $validator->errors()->add(sprintf('attachments.%s', $key), 'A turn can carry at most 3 attachments.');
+                    if ($total > $limit) {
+                        $validator->errors()->add(sprintf('attachments.%s', $key), trans_choice('A turn can carry at most :count attachment.|A turn can carry at most :count attachments.', $limit, ['count' => $limit]));
+                    }
+                }
+            },
+            function (Validator $validator): void {
+                $drafts = $this->attachmentTurnMaps()['draft_attachment_ids'];
+
+                if ($drafts === []) {
+                    return;
+                }
+
+                $allowed = $this->capturedChatAttachmentIds();
+
+                foreach ($drafts as $key => $ids) {
+                    foreach (is_array($ids) ? $ids : [] as $id) {
+                        if (! in_array((int) $id, $allowed, true)) {
+                            $validator->errors()->add(sprintf('draft_attachment_ids.%s', $key), 'Draft attachments must come from the captured conversation.');
+
+                            continue 2;
+                        }
                     }
                 }
             },
@@ -200,6 +224,51 @@ trait BenchmarkCaseValidationRules
                 }
             },
         ];
+    }
+
+    /**
+     * The saved attachments per turn key that the save leaves in place: on an
+     * update that sends no keep list (a JSON client), every saved attachment
+     * stays, so it counts toward the per-turn cap. The form always sends its
+     * keep list, whose ids attachmentTurnMaps() already counts.
+     *
+     * @return array<string, int>
+     */
+    private function savedAttachmentTotals(): array
+    {
+        $benchmarkCase = $this->route('benchmarkCase');
+
+        if (! $benchmarkCase instanceof BenchmarkCase || $this->has('keep_attachment_ids')) {
+            return [];
+        }
+
+        $totals = [];
+
+        foreach ($benchmarkCase->attachments()->get(['turn']) as $attachment) {
+            $key = BenchmarkCaseAttachment::keyForTurn($attachment->turn);
+            $totals[$key] = ($totals[$key] ?? 0) + 1;
+        }
+
+        return $totals;
+    }
+
+    /**
+     * The chat attachments the capture of the case's source invocation
+     * drafted: the only ones a save may copy in.
+     *
+     * @return list<int>
+     */
+    private function capturedChatAttachmentIds(): array
+    {
+        $invocationId = $this->input('source_invocation_id');
+
+        if (! is_string($invocationId) || $invocationId === '') {
+            return [];
+        }
+
+        $aiUsageRecord = resolve(CaptureSource::class)->forInvocation($invocationId);
+
+        return $aiUsageRecord instanceof AiUsageRecord ? resolve(CaseDraftFromUsage::class)->draftAttachmentIds($aiUsageRecord) : [];
     }
 
     /**

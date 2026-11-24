@@ -464,6 +464,22 @@ test('a judge that cannot take images fails the judge, not the result', function
         ->and($scores['detail']['error'])->toContain('image input');
 });
 
+test('a final-prompt image that is no longer stored fails the judge with a readable reason', function (): void {
+    Storage::fake('local');
+    scorerStartContext(AiTask::Chat);
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['input' => ['prompt' => 'What is this?']]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+    Storage::disk('local')->delete($attachment->path);
+    BenchmarkJudgeAgent::fake([['score' => 9, 'rationale' => 'unused']]);
+
+    $scores = resolve(BenchmarkScorer::class)->score($benchmarkCase, scorerOutcome(output: 'A screenshot of an error.'));
+
+    expect($scores['judge_status'])->toBe(BenchmarkJudgeStatus::Failed)
+        ->and($scores['score'])->toBeNull()
+        ->and($scores['detail']['error'])->toBe('The attachment screenshot.png (final prompt) is no longer stored; attach it to the case again.');
+    BenchmarkJudgeAgent::assertNeverPrompted();
+});
+
 function scorerVerdict(bool $agrees, string $reason): string
 {
     return (string) json_encode(['agrees' => $agrees, 'reason' => $reason]);

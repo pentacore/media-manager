@@ -41,6 +41,8 @@ const props = defineProps<{
     decisionServices: string[];
     actionKinds: BenchmarkActionKindOption[];
     verifierActionTypes: BenchmarkVerifierActionType[];
+    /** Files one user turn may carry. */
+    maxAttachments: number;
     /** Server validation errors keyed like `input.prompt`. */
     errors: Record<string, string | undefined>;
 }>();
@@ -197,6 +199,7 @@ const textareaClass =
             v-if="task === 'chat'"
             v-model="input.attachments"
             turn-key="final"
+            :max="maxAttachments"
             :error="attachmentError('final')"
         />
 
@@ -303,6 +306,7 @@ const textareaClass =
                             v-if="turn.role === 'user'"
                             v-model="turn.attachments"
                             :turn-key="String(index)"
+                            :max="maxAttachments"
                             :error="attachmentError(String(index))"
                         />
                     </div>

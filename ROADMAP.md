@@ -77,11 +77,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
           candidate lookup.
         - Test gaps.
     - Chat cases:
-        - The 3-per-turn cap.
-        - Draft id scoping.
-        - Attachment storage, orphan files and preview.
-        - Duplicated attachment mapping.
-        - Re-judging a vanished image.
+        - Preview a drafted attachment in the case form before it is saved: only
+          saved attachments link to their file, because a chat file belongs to
+          the user who uploaded it.
     - Decision reproduction:
         - Record the "payloads stored as JSON text" rule.
         - Compact parsed-prompt payloads.

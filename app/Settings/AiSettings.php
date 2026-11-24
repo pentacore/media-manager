@@ -30,6 +30,13 @@ class AiSettings
 
     public const string CHAT_TIMEOUT_KEY = 'ai.chat_timeout';
 
+    public const string CHAT_MAX_ATTACHMENTS_KEY = 'ai.chat_max_attachments';
+
+    /** Bounds of the files a chat message, or one turn of a chat benchmark case, may carry. */
+    public const int CHAT_MAX_ATTACHMENTS_FLOOR = 1;
+
+    public const int CHAT_MAX_ATTACHMENTS_CEILING = 10;
+
     /**
      * Seconds kept between the chat timeout and Octane's hard request
      * ceiling, so the agent's own timeout fires (and the turn ends cleanly)
@@ -202,6 +209,29 @@ class AiSettings
     public function setChatTimeout(?int $seconds): void
     {
         $this->appSettings->set(self::CHAT_TIMEOUT_KEY, $seconds);
+    }
+
+    /**
+     * How many files one chat message, or one user turn of a chat benchmark
+     * case, may carry: the saved value, or the
+     * `mediamanager.ai.chat_max_attachments` config default, clamped to
+     * CHAT_MAX_ATTACHMENTS_FLOOR..CHAT_MAX_ATTACHMENTS_CEILING.
+     */
+    public function chatMaxAttachments(): int
+    {
+        $stored = $this->appSettings->get(self::CHAT_MAX_ATTACHMENTS_KEY);
+        $value = $stored === null ? (int) config('mediamanager.ai.chat_max_attachments', 3) : (int) $stored;
+
+        return max(self::CHAT_MAX_ATTACHMENTS_FLOOR, min(self::CHAT_MAX_ATTACHMENTS_CEILING, $value));
+    }
+
+    /**
+     * Persist the attachments per chat message. A null value clears the
+     * setting so the limit falls back to the config default again.
+     */
+    public function setChatMaxAttachments(?int $count): void
+    {
+        $this->appSettings->set(self::CHAT_MAX_ATTACHMENTS_KEY, $count);
     }
 
     /**

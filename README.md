@@ -300,6 +300,7 @@ MEDIAMANAGER_AI_MODE=executive          # or 'advisory'
 MEDIAMANAGER_AI_MODEL=gpt-5-mini        # any configured provider model
 MEDIAMANAGER_AI_TITLE_MODEL=gpt-5.4-nano # cheap model for chat titles ('auto' = provider's cheapest)
 MEDIAMANAGER_AI_CHAT_TIMEOUT=120
+MEDIAMANAGER_AI_CHAT_MAX_ATTACHMENTS=3  # files per chat message and per benchmark case turn (1-10)
 OPENAI_API_KEY=sk-...
 ```
 
