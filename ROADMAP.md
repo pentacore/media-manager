@@ -71,11 +71,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - Entity-encoded fence tags.
         - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
           end to end.
-    - Cross-run comparison:
-        - The drawer shows the original score in neutral mode.
-        - Duplicated task order, comparability rule, concurrency middleware and
-          candidate lookup.
-        - Test gaps.
     - Chat cases:
         - The 3-per-turn cap.
         - Draft id scoping.

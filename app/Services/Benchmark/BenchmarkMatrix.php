@@ -42,7 +42,7 @@ final readonly class BenchmarkMatrix
 
         $matrix = [];
 
-        foreach ($results->sortBy(fn (Collection $group, string $task): int => self::taskOrder($task)) as $task => $taskResults) {
+        foreach ($results->sortBy(fn (Collection $group, string $task): int => AiTask::position($task)) as $task => $taskResults) {
             $candidates = [];
             $verdict = AiTask::tryFrom((string) $task)?->benchmarkScoringType() === BenchmarkScoringType::Verdict;
             $judged = AiTask::tryFrom((string) $task)?->benchmarkScoringType() === BenchmarkScoringType::Judge;
@@ -184,12 +184,5 @@ final readonly class BenchmarkMatrix
                 ])->all()),
             ])
             ->all());
-    }
-
-    private static function taskOrder(string $task): int
-    {
-        $position = array_search(AiTask::tryFrom($task), AiTask::cases(), true);
-
-        return $position === false ? PHP_INT_MAX : $position;
     }
 }
