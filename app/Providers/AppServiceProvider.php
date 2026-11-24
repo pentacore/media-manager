@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Enums\QueueLane;
 use App\Events\ActionRequestCreated;
 use App\Events\ActionRequestStatusChanged;
 use App\Events\ServiceHealthChanged;
@@ -20,6 +21,7 @@ use App\Settings\DecisionAgentSettings;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
@@ -66,6 +68,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureDevCommands();
         Abilities::define();
         RateLimiter::for(
             'bazarr-reconciliation',
@@ -134,6 +137,16 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Configure default behaviors for production-ready applications.
      */
+    /**
+     * `php artisan dev` (behind `composer dev`): Octane and Reverb register their
+     * own `server` and `reverb` processes; the default queue listener only works
+     * the `default` queue, so listen on every QueueLane like the production worker.
+     */
+    private function configureDevCommands(): void
+    {
+        DevCommands::artisan(sprintf('queue:listen --queue=%s --tries=1 --timeout=0', implode(',', QueueLane::values())), 'queue');
+    }
+
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
