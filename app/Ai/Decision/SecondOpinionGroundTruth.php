@@ -16,13 +16,14 @@ final class SecondOpinionGroundTruth
     /**
      * A person's review is the only ground truth: approved_by is set by
      * ActionRequestReviewer for both approve and reject; the verifier's own
-     * rejection and an auto-run leave it null.
+     * rejection and an auto-run leave it null. A failed check and an event
+     * Off skip marker carry no verdict to compare, so they have none either.
      *
      * @param  array<string, mixed>|null  $secondOpinion
      */
     public static function expectedAgrees(ActionRequestStatus $status, ?int $approvedBy, ?array $secondOpinion): ?bool
     {
-        if ($approvedBy === null || ($secondOpinion['failed'] ?? false) === true) {
+        if ($approvedBy === null || ($secondOpinion['failed'] ?? false) === true || SecondOpinionPolicy::isSkipMarker($secondOpinion)) {
             return null;
         }
 

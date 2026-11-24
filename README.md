@@ -309,7 +309,7 @@ Env vars are only the boot defaults — mode, model, budgets, reasoning level, f
 Four agents live under `app/Ai/Agents/`:
 
 - **`MediaAgent`** — the interactive chat assistant (admin-only, `/ai/chat`). ~45 tools across `app/Ai/Tools/{Arr,Bazarr,Emby,Seerr,Prowlarr,System,Tmdb,Trakt,Workflow,PriceFetcher}/`; Sonarr/Radarr/Whisparr share the `Arr` tools via a `service` parameter. Prowlarr/Bazarr/TMDB/Trakt tools are only exposed when the matching connection or API key exists.
-- **`DecisionAgent`** — optional autonomous agent that runs once per inbound webhook event (opt-in via `MEDIAMANAGER_DECISION_AGENT_ENABLED` + Admin → Decision Agent). It can propose actions and resolve stuck imports; every proposal is an `ActionRequest` and each run is recorded as an `AgentDecision` audit row.
+- **`DecisionAgent`** — optional autonomous agent that runs once per inbound webhook event (opt-in via `MEDIAMANAGER_DECISION_AGENT_ENABLED` + Admin → Decision Agent). It can propose actions and resolve stuck imports; every proposal is an `ActionRequest` and each run is recorded as an `AgentDecision` audit row. A run is bounded by the admin's run time limit (30–210 s, default 210): each step is cut to the time left, and a run that reaches the limit is recorded as failed.
 - **`PriceFetcherAgent`** — re-verifies model prices against first-party pricing pages.
 - **`TitleAgent`** — names chat conversations.
 

@@ -61,16 +61,12 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
+- **Decision prompt fence**: `DecisionPrompt::build()` leaves fence tags in the
+  webhook payload as they are, so a payload string holding
+  `</untrusted_webhook_payload>` (plain or entity-encoded) closes the fence early.
+  Neutralise it as `SecondOpinionCase` does, and keep `DecisionPrompt::parse()`
+  (benchmark capture) reading the payload back.
 - **AI routing minors**, from the review of each AI routing pull request.
-    - Decision runs and the benchmark:
-        - A deadline for the whole decision run.
-        - Sweep window shorter than `retry_after`.
-        - Sweep never-claimed pending benchmark results.
-        - Apply the benchmark filter to the tool stats, rate limits and gates.
-        - Provider names vs driver literals.
-        - Entity-encoded fence tags.
-        - Missing tests: picker unlock, the headroom `Throwable` path, call-id pairing
-          end to end.
     - Chat cases:
         - Preview a drafted attachment in the case form before it is saved: only
           saved attachments link to their file, because a chat file belongs to
@@ -79,11 +75,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - `judges_differ` for unjudged scopes.
         - Unindexed `invocation_id` lookup.
         - Browser test gaps.
-    - Overrides:
-        - Page hints.
-        - Skip-marker guard.
-        - Show every error, not just the first.
-        - Phone check.
     - Agreement and gate charts:
         - Classification gates: a 0 % band with resolved events draws a
           zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement

@@ -30,6 +30,7 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
             'notify_on_suggest' => ['required', 'boolean'],
             'notify_on_act' => ['required', 'boolean'],
             'max_actions_per_run' => ['required', 'integer', 'min:1', 'max:20'],
+            'run_time_limit' => ['sometimes', 'nullable', 'integer', 'min:'.DecisionAgentSettings::MIN_RUN_TIME_LIMIT_SECONDS, 'max:'.DecisionAgentSettings::maxRunTimeLimit()],
             'second_opinion_engine' => ['required', 'string', SecondOpinionEngine::validationRule()],
             'second_opinion_jev_threshold' => ['required', 'numeric', 'min:0', 'max:1'],
             'second_opinion_event_overrides' => ['sometimes', 'array', 'list'],
@@ -38,6 +39,22 @@ class UpdateDecisionAgentSettingsRequest extends FormRequest
             'second_opinion_event_overrides.*.mode' => ['nullable', 'string', SecondOpinionMode::validationRule()],
             'second_opinion_event_overrides.*.jev_threshold' => ['nullable', 'numeric', 'min:0', 'max:1'],
             'second_opinion_event_overrides.*.engine' => ['nullable', 'string', SecondOpinionEngine::validationRule()],
+        ];
+    }
+
+    /**
+     * Readable names for the per-row override fields, so their errors fit a
+     * phone screen instead of naming the raw `second_opinion_event_overrides.N.*` key.
+     *
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'second_opinion_event_overrides.*.event_key' => 'event',
+            'second_opinion_event_overrides.*.mode' => 'mode',
+            'second_opinion_event_overrides.*.engine' => 'engine',
+            'second_opinion_event_overrides.*.jev_threshold' => 'Jev threshold',
         ];
     }
 

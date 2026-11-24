@@ -138,6 +138,7 @@ const {
             v-if="props.rate_limits.length > 0"
             :rows="props.rate_limits"
             :enforced="props.rate_limits_enforced"
+            :benchmark-filtered="props.benchmark !== null"
         />
 
         <ScenarioPanel
@@ -166,9 +167,21 @@ const {
             />
         </div>
 
-        <ToolStatsTable :rows="props.tool_stats" />
+        <ToolStatsTable
+            :rows="props.tool_stats"
+            :benchmark-only="props.benchmark === 'only'"
+        />
 
-        <Deferred data="classification_gates">
+        <div
+            v-if="props.benchmark === 'only'"
+            class="rounded-xl border border-border bg-card px-4 py-3 text-[12.5px] text-muted-foreground"
+            data-benchmark-only-panels-note
+        >
+            Classification gates and second opinions are left out: benchmark
+            runs never pass through them.
+        </div>
+
+        <Deferred v-else data="classification_gates">
             <template #fallback>
                 <div
                     class="h-48 animate-pulse rounded-xl border border-border bg-card"
@@ -181,7 +194,10 @@ const {
             />
         </Deferred>
 
-        <Deferred data="second_opinion_agreement">
+        <Deferred
+            v-if="props.benchmark !== 'only'"
+            data="second_opinion_agreement"
+        >
             <template #fallback>
                 <div
                     class="h-64 animate-pulse rounded-xl border border-border bg-card"

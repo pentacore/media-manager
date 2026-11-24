@@ -67,8 +67,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     public const int TIMEOUT_SECONDS = 240;
 
     /**
-     * Seconds of the job timeout kept back past the run's deadline for
-     * recording the decision and sending its notification.
+     * Seconds of the job timeout kept back past the run's longest deadline
+     * (DecisionAgentSettings::maxRunTimeLimit()) for recording the decision
+     * and sending its notification.
      */
     public const int RUN_DEADLINE_RESERVE_SECONDS = 30;
 
@@ -79,9 +80,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     public const int AGENT_CALL_TIMEOUT_SECONDS = 60;
 
     /**
-     * The shortest DecisionAgent provider call allowed, even at or past the
-     * run's deadline: RUN_DEADLINE_RESERVE_SECONDS still lies between the
-     * deadline and the job timeout.
+     * The shortest DecisionAgent provider call allowed. With less time than
+     * this left before the run's deadline, StopWhenDecisionRunOutOfTime
+     * refuses the step instead, so the run ends with a Failed decision.
      */
     public const int MIN_AGENT_CALL_TIMEOUT_SECONDS = 10;
 
@@ -198,7 +199,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
             eventType: $this->eventType,
             actionKind: $actionKind,
-            deadline: $startedAt->addSeconds(self::TIMEOUT_SECONDS - self::RUN_DEADLINE_RESERVE_SECONDS),
+            deadline: $startedAt->addSeconds($decisionAgentSettings->runTimeLimit()),
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
@@ -259,9 +260,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      * chain, between MIN_AGENT_CALL_TIMEOUT_SECONDS and
      * AGENT_CALL_TIMEOUT_SECONDS. A call that times out throws into
      * handle()'s catch, which records a Failed decision with the reason.
-     * The timeout bounds each provider call (each step), not the whole
-     * multi-step run; a run that still outlives the job timeout is recorded
-     * by failed().
+     * The whole multi-step run is bounded by StopWhenDecisionRunOutOfTime,
+     * which cuts each step to the time left and refuses a step that no
+     * longer fits; a run that still outlives the job timeout is recorded by
+     * failed().
      */
     private function agentCallTimeout(DecisionAgent $decisionAgent, DecisionRunContext $decisionRunContext): int
     {

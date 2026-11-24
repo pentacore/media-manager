@@ -3,7 +3,6 @@ import { Link } from '@inertiajs/vue3';
 import { Plus, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
-import InputError from '@/components/InputError.vue';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +24,8 @@ const props = defineProps<{
     defaultEngine: SecondOpinionEngine;
     defaultThreshold: number;
     classifierConfigured: boolean;
+    /** Whether the page form has unsaved edits the model link would drop. */
+    dirty: boolean;
     errors: Record<string, string | undefined>;
 }>();
 
@@ -53,7 +54,8 @@ function usesClassifier(override: SecondOpinionEventOverride): boolean {
     return (override.engine ?? props.defaultEngine) !== 'llm';
 }
 
-function errorFor(index: number): string | undefined {
+/** Every field error of a row, in field order. */
+function errorsFor(index: number): string[] {
     return ['event_key', 'mode', 'engine', 'jev_threshold']
         .map(
             (field) =>
@@ -61,7 +63,16 @@ function errorFor(index: number): string | undefined {
                     `second_opinion_event_overrides.${index}.${field}`
                 ],
         )
-        .find(Boolean);
+        .filter((message): message is string => Boolean(message));
+}
+
+/** A row on every default is dropped by the server when the form saves. */
+function onDefaults(override: SecondOpinionEventOverride): boolean {
+    return (
+        override.mode === null &&
+        override.engine === null &&
+        override.jev_threshold === null
+    );
 }
 
 function addOverride(eventKey: string): void {
@@ -222,14 +233,37 @@ function setThreshold(
                     "
                 />
             </div>
-            <Link
-                :href="modelLinkHref"
-                class="w-fit text-[12px] underline underline-offset-2 touch:flex touch:min-h-10 touch:items-center"
-                data-override-model-link
+            <p
+                v-if="onDefaults(override)"
+                class="text-[12px] text-fg-subtle"
+                data-override-defaults-hint
             >
-                Model: set on AI Models
-            </Link>
-            <InputError :message="errorFor(index)" />
+                Every setting is on its default, so saving drops this row.
+            </p>
+            <div class="flex flex-wrap items-center gap-x-2">
+                <Link
+                    :href="modelLinkHref"
+                    class="w-fit text-[12px] underline underline-offset-2 touch:flex touch:min-h-10 touch:items-center"
+                    data-override-model-link
+                >
+                    Model: set on AI Models
+                </Link>
+                <span
+                    v-if="dirty"
+                    class="text-[12px] text-warning"
+                    data-override-model-link-hint
+                >
+                    Save first: leaving this page drops unsaved changes.
+                </span>
+            </div>
+            <p
+                v-for="(message, errorIndex) in errorsFor(index)"
+                :key="errorIndex"
+                class="text-sm break-words text-red-600 dark:text-red-500"
+                data-override-error
+            >
+                {{ message }}
+            </p>
         </div>
         <div v-if="addableEvents.length > 0" data-add-second-opinion-override>
             <!-- Held empty so every pick emits and the placeholder returns. -->

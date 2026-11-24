@@ -57,6 +57,7 @@
         "Tests\\Browser\\ConfirmDialogTest": 28.0736,
         "Tests\\Browser\\DashboardActivityFeedTest": 5.3751,
         "Tests\\Browser\\DashboardPendingApprovalsTest": 1.7774,
+        "Tests\\Browser\\DecisionAgentRunTimeLimitTest": 12.96,
         "Tests\\Browser\\DetailToolbarPhoneTest": 7.4749,
         "Tests\\Browser\\DiscoverTest": 7.7484,
         "Tests\\Browser\\DownloadsPhoneTest": 12.7851,
