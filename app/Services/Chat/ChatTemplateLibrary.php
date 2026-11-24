@@ -22,11 +22,7 @@ final class ChatTemplateLibrary
 
     public function activeConnection(ChatTemplateVariableType $chatTemplateVariableType): ?ServiceConnection
     {
-        return ServiceConnection::query()
-            ->where('type', $this->serviceType($chatTemplateVariableType))
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->first();
+        return ServiceConnection::findActive($this->serviceType($chatTemplateVariableType));
     }
 
     /**

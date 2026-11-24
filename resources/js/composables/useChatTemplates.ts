@@ -11,21 +11,40 @@ const MAX_CHIPS = 6;
 // Module-level so the page panel, the sheet panel and the picker share one list.
 const templates = ref<ChatTemplate[]>([]);
 const loaded = ref(false);
+/** True only while no list has ever loaded: a failed refresh keeps the last list. */
 const loadFailed = ref(false);
 let inflight: Promise<void> | null = null;
+/** Bumped per refresh; only the newest one applies its answer. */
+let latestRefresh = 0;
+let hasList = false;
 
 async function refreshTemplates(): Promise<void> {
+    const refresh = ++latestRefresh;
+
     try {
         const response = await jsonRequest<{ templates: ChatTemplate[] }>(
             'GET',
             ChatTemplateOptionsController.url(),
         );
+
+        // An older refresh that answers last must not overwrite a newer list.
+        if (refresh !== latestRefresh) {
+            return;
+        }
+
         templates.value = response.templates;
+        hasList = true;
         loadFailed.value = false;
     } catch {
-        loadFailed.value = true;
+        if (refresh !== latestRefresh) {
+            return;
+        }
+
+        loadFailed.value = !hasList;
     } finally {
-        loaded.value = true;
+        if (refresh === latestRefresh) {
+            loaded.value = true;
+        }
     }
 }
 

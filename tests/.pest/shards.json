@@ -49,7 +49,7 @@
         "Tests\\Browser\\ChatBlockingCardsTest": 3.63,
         "Tests\\Browser\\ChatModelOverrideTest": 10.7558,
         "Tests\\Browser\\ChatSheetPhoneTest": 21.1009,
-        "Tests\\Browser\\ChatTemplatesTest": 30.5973,
+        "Tests\\Browser\\ChatTemplatesTest": 40.6,
         "Tests\\Browser\\ChatToolGroupsTest": 16.5605,
         "Tests\\Browser\\ChatTurnsTest": 5.2757,
         "Tests\\Browser\\CollapsibleTest": 2.6263,
@@ -61,7 +61,7 @@
         "Tests\\Browser\\DiscoverTest": 7.7484,
         "Tests\\Browser\\DownloadsPhoneTest": 12.7851,
         "Tests\\Browser\\EmbyManagementTest": 13.66,
-        "Tests\\Browser\\FilterStripTest": 4.3889,
+        "Tests\\Browser\\FilterStripTest": 4.4,
         "Tests\\Browser\\GrabQueueBulkTest": 30.1102,
         "Tests\\Browser\\GrabQueueHistoryTest": 6.2808,
         "Tests\\Browser\\GrabQueueStatusMessageTest": 0.6121,
@@ -129,5 +129,5 @@
         "Tests\\Browser\\WhisparrPreferencesTest": 1.6447
     },
     "checksum": "715eceec3ee3341debf4df617f069dd2",
-    "updated_at": "2026-11-24T08:47:22+00:00"
+    "updated_at": "2026-11-24T10:26:22+00:00"
 }

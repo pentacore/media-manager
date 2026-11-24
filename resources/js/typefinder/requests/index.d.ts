@@ -23,6 +23,7 @@ export type { DeleteHistoryRequest } from './DeleteHistoryRequest';
 export type { DeleteWhisparrItemRequest } from './DeleteWhisparrItemRequest';
 export type { DestroyArrMediaRequest } from './DestroyArrMediaRequest';
 export type { DiscoverMediaRequest } from './DiscoverMediaRequest';
+export type { DraftChatTemplateRequest } from './DraftChatTemplateRequest';
 export type { EmbyLoginRequest } from './EmbyLoginRequest';
 export type { EstimateBenchmarkRunRequest } from './EstimateBenchmarkRunRequest';
 export type { EstimateNeutralRejudgeRequest } from './EstimateNeutralRejudgeRequest';
