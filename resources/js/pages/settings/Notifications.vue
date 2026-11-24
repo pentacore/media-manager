@@ -20,6 +20,8 @@ interface CatalogEntry {
     label: string;
     description: string;
     severities: Record<string, SeverityFlags>;
+    /** Channels this notification cannot be sent on (mail without a mail template). */
+    unsupported: string[];
 }
 
 interface Destinations {
@@ -246,6 +248,23 @@ function save(): void {
                                                 entry.severities[severity][
                                                     channel
                                                 ]
+                                            "
+                                            :disabled="
+                                                entry.unsupported.includes(
+                                                    channel,
+                                                )
+                                            "
+                                            :title="
+                                                entry.unsupported.includes(
+                                                    channel,
+                                                )
+                                                    ? `${entry.label} is not sent by ${channelLabel(channel)}`
+                                                    : undefined
+                                            "
+                                            :data-notification-unsupported="
+                                                entry.unsupported.includes(
+                                                    channel,
+                                                ) || undefined
                                             "
                                             :aria-label="`${entry.label}: ${SEVERITY_LABELS[severity] ?? severity} by ${channelLabel(channel)}`"
                                             class="size-4 rounded border-border accent-accent disabled:opacity-40"

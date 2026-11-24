@@ -54,6 +54,25 @@ test('an admin creates a weekly schedule with a preview of the tier models', fun
     expect(BenchmarkSchedule::query()->sole()->case_tags)->toBe(['anime']);
 });
 
+test('a task with more than eight tier models still gets an estimate', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    foreach (range(1, 9) as $position) {
+        AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-tier-'.$position, 'input_per_mtok' => 1, 'output_per_mtok' => 4]);
+        AiTaskModel::factory()->task(AiTask::Title)->selecting('openai', 'gpt-tier-'.$position)->position($position + 1)->create();
+    }
+
+    visit(route('admin.benchmarks.schedules.create', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-benchmark-schedule-task]')
+        ->click('[role="option"]:has-text("Conversation titles")')
+        ->assertSeeIn('[data-benchmark-schedule-candidates]', 'gpt-tier-9')
+        ->fill('[data-benchmark-schedule-cap]', '0.000001')
+        ->click('[data-benchmark-schedule-estimate-button]')
+        ->assertVisible('[data-benchmark-schedule-over-cap]');
+});
+
 test('the index toggles, runs now and deletes a schedule', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $benchmarkSchedule = BenchmarkSchedule::factory()->forTask(AiTask::Title)->create(['name' => 'Nightly titles']);

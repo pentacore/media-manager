@@ -69,3 +69,32 @@ test('the slot keeps its wall-clock time across a daylight saving change', funct
     // Stockholm leaves summer time on 2026-10-25 at 03:00.
     expect(nextRun($benchmarkSchedule, '2026-10-25 12:00'))->toBe('2026-10-26 03:00');
 });
+
+test('a slot in the spring-forward gap runs after the gap that day and back on time the next', function (): void {
+    $benchmarkSchedule = clockSchedule(['frequency' => BenchmarkScheduleFrequency::Daily, 'time_of_day' => '02:30']);
+
+    // Stockholm skips 02:00–03:00 on 2027-03-28: that day's slot moves to 03:30.
+    expect(nextRun($benchmarkSchedule, '2027-03-27 12:00'))->toBe('2027-03-28 03:30')
+        ->and(nextRun($benchmarkSchedule, '2027-03-28 03:45'))->toBe('2027-03-29 02:30');
+});
+
+test('a weekly or monthly slot shifted by the gap is back on time a period later', function (): void {
+    // 2027-03-28 is a Sunday.
+    $weekly = clockSchedule(['frequency' => BenchmarkScheduleFrequency::Weekly, 'weekday' => 7, 'time_of_day' => '02:30']);
+    $monthly = clockSchedule(['frequency' => BenchmarkScheduleFrequency::Monthly, 'day_of_month' => 28, 'time_of_day' => '02:30']);
+
+    expect(nextRun($weekly, '2027-03-28 03:45'))->toBe('2027-04-04 02:30')
+        ->and(nextRun($monthly, '2027-03-28 03:45'))->toBe('2027-04-28 02:30');
+});
+
+test('a slot in the fall-back overlap runs once that day', function (): void {
+    $benchmarkSchedule = clockSchedule(['frequency' => BenchmarkScheduleFrequency::Daily, 'time_of_day' => '02:30']);
+    $clock = resolve(BenchmarkScheduleClock::class);
+    $at = static fn (string $utc): string => $clock->nextRunAfter($benchmarkSchedule, CarbonImmutable::parse($utc, 'UTC'))->setTimezone('UTC')->format('Y-m-d H:i');
+
+    // 2026-10-25 02:30 happens twice in Stockholm: 00:30 UTC (CEST) and 01:30 UTC (CET).
+    // The slot is always the CET one, so the first pass never fires it.
+    expect($at('2026-10-24 12:00'))->toBe('2026-10-25 01:30')
+        ->and($at('2026-10-25 00:30'))->toBe('2026-10-25 01:30')
+        ->and($at('2026-10-25 01:30'))->toBe('2026-10-26 01:30');
+});

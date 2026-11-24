@@ -362,6 +362,30 @@ test('a scheduled run shows the regression banner and links to its schedule', fu
         ->assertSeeIn('[data-benchmark-regression="0"]', 'errors 0% → 25%');
 });
 
+test('a scheduled run that just finished shows its regression banner without a reload', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkSchedule = BenchmarkSchedule::factory()->create(['name' => 'Nightly titles']);
+    $baseline = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Nightly titles · 2026-10-19']);
+    $benchmarkRun = BenchmarkRun::factory()->forSchedule($benchmarkSchedule)->completed()->create(['name' => 'Nightly titles · 2026-10-20']);
+
+    $webpage = visit(route('admin.benchmarks.runs.show', $benchmarkRun, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-benchmark-regression-pending]', "Comparing with the schedule's previous run")
+        ->assertMissing('[data-benchmark-regressions]');
+
+    $benchmarkRun->update([
+        'baseline_run_id' => $baseline->id,
+        'regressions' => [[
+            'candidate' => ['provider' => 'openai', 'model' => 'gpt-5-nano', 'reasoning' => 'provider_default'],
+            'paired_cases' => 4,
+            'metrics' => [['metric' => 'pass_rate', 'before' => 1.0, 'after' => 0.5]],
+        ]],
+    ]);
+
+    $webpage->assertSeeIn('[data-benchmark-regression="0"]', 'pass rate 100% → 50%')
+        ->assertMissing('[data-benchmark-regression-pending]');
+});
+
 test('a checked run without regressions says so', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $benchmarkRun = BenchmarkRun::factory()->forSchedule(BenchmarkSchedule::factory()->create())->completed()->create(['regressions' => []]);

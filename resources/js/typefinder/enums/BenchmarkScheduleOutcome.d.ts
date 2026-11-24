@@ -4,4 +4,4 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-export type BenchmarkScheduleOutcome = 'launched' | 'skipped_no_cases' | 'skipped_no_candidates' | 'skipped_running' | 'skipped_over_cap' | 'failed';
+export type BenchmarkScheduleOutcome = 'launched' | 'skipped_no_cases' | 'skipped_no_candidates' | 'skipped_running' | 'skipped_over_cap' | 'skipped_budget' | 'failed';

@@ -72,3 +72,12 @@ test('a member does not see the webhook destination field or column', function (
         ->assertMissing('[name="webhook_secret"]')
         ->assertMissing('[data-test-send="webhook"]');
 });
+
+test('email is disabled for a notification without a mail template', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('settings.notifications.edit', absolute: false))
+        ->assertNoSmoke()
+        ->assertDisabled('input[aria-label="Service warning: Warning by Email"]')
+        ->assertEnabled('input[aria-label="Scheduled benchmark alerts: Warning by Email"]');
+});

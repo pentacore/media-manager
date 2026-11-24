@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Benchmark;
 
+use App\Enums\AiTask;
 use App\Enums\BenchmarkRunStatus;
 use App\Enums\BenchmarkScheduleOutcome;
 use App\Models\BenchmarkCase;
@@ -11,6 +12,8 @@ use App\Models\BenchmarkRun;
 use App\Models\BenchmarkSchedule;
 use App\Models\User;
 use App\Notifications\ScheduledBenchmarkAlert;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Audit\AuditLogger;
 use App\Services\Notifications\AdminNotifier;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,8 +25,9 @@ use Throwable;
 /**
  * Launches benchmark schedules: due ones from the scheduler sweep, any one
  * from Run now. Each attempt checks, under a lock on the schedule, that no
- * earlier run of it is still going, that its task has cases and tier
- * models, and that a fresh estimate fits its cost cap; then it starts a
+ * earlier run of it is still going, that the monthly AI hard cap is not
+ * reached, that its task has cases and tier models, and that a fresh
+ * estimate fits its cost cap; then it starts a
  * run of those cases against those models. A due launch advances the
  * schedule first, in its own transaction, so neither downtime nor a crash
  * can launch it twice for one slot.
@@ -39,6 +43,7 @@ final readonly class BenchmarkScheduleLauncher
         private BenchmarkRunLauncher $benchmarkRunLauncher,
         private AdminNotifier $adminNotifier,
         private AuditLogger $auditLogger,
+        private AiBudgetGuard $aiBudgetGuard,
     ) {}
 
     public function launchDue(int $scheduleId): ?BenchmarkScheduleAttempt
@@ -61,7 +66,9 @@ final readonly class BenchmarkScheduleLauncher
 
         $benchmarkScheduleAttempt = $this->attempt($benchmarkSchedule, $benchmarkSchedule->creator);
 
-        if ($benchmarkScheduleAttempt->outcome->isSkip()) {
+        if ($benchmarkScheduleAttempt->outcome === BenchmarkScheduleOutcome::Failed) {
+            $this->adminNotifier->send(ScheduledBenchmarkAlert::failed($benchmarkSchedule, $benchmarkScheduleAttempt->message));
+        } elseif ($benchmarkScheduleAttempt->outcome->isSkip()) {
             $this->adminNotifier->send(ScheduledBenchmarkAlert::skipped($benchmarkSchedule, $benchmarkScheduleAttempt->message));
         }
 
@@ -101,6 +108,11 @@ final readonly class BenchmarkScheduleLauncher
 
         if ($running instanceof BenchmarkRun) {
             return new BenchmarkScheduleAttempt(BenchmarkScheduleOutcome::SkippedRunning, sprintf('The previous run "%s" is still going.', $running->name));
+        }
+
+        if ($this->budgetHalted()) {
+            // Every case would be refused, and the comparison would read that as every model regressing.
+            return new BenchmarkScheduleAttempt(BenchmarkScheduleOutcome::SkippedBudget, 'The monthly AI hard cap is reached.');
         }
 
         $cases = $this->cases($benchmarkSchedule);
@@ -144,20 +156,42 @@ final readonly class BenchmarkScheduleLauncher
         return new BenchmarkScheduleAttempt(BenchmarkScheduleOutcome::Launched, sprintf('Started run "%s".', $benchmarkRun->name), $benchmarkRun);
     }
 
+    private function budgetHalted(): bool
+    {
+        try {
+            $this->aiBudgetGuard->enforceIncluding(0.0);
+        } catch (AiBudgetExceededException) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * The cases a schedule runs: its task's cases, narrowed to any of its tags.
+     *
+     * @param  list<string>  $tags
+     * @return Collection<int, BenchmarkCase>
+     */
+    public static function casesFor(AiTask $aiTask, array $tags): Collection
+    {
+        return BenchmarkCase::query()
+            ->where('task', $aiTask)
+            ->when($tags !== [], static fn (Builder $builder): Builder => $builder->where(static function (Builder $query) use ($tags): void {
+                foreach ($tags as $tag) {
+                    $query->orWhereJsonContains('tags', $tag);
+                }
+            }))
+            ->orderBy('id')
+            ->get();
+    }
+
     /**
      * @return Collection<int, BenchmarkCase>
      */
     private function cases(BenchmarkSchedule $benchmarkSchedule): Collection
     {
-        return BenchmarkCase::query()
-            ->where('task', $benchmarkSchedule->task)
-            ->when($benchmarkSchedule->case_tags !== [], static fn (Builder $builder): Builder => $builder->where(static function (Builder $tags) use ($benchmarkSchedule): void {
-                foreach ($benchmarkSchedule->case_tags as $tag) {
-                    $tags->orWhereJsonContains('tags', $tag);
-                }
-            }))
-            ->orderBy('id')
-            ->get();
+        return self::casesFor($benchmarkSchedule->task, $benchmarkSchedule->case_tags);
     }
 
     private function usd(float $usd): string
