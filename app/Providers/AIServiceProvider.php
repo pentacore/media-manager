@@ -9,6 +9,7 @@ use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\ChatTurnContext;
 use App\Ai\Conversations\ChatAnsweredCard;
 use App\Ai\Conversations\ConversationStore;
+use App\Ai\Gateway\NamespacedToolSearchOpenAiGateway;
 use App\Ai\ReasoningOptions;
 use App\Ai\Routing\ChatToolRunContext;
 use App\Ai\TaskModelResolver;
@@ -21,12 +22,15 @@ use App\Services\AiUsage\PoolHeadroom;
 use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\RunUsageAccumulator;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\AiManager;
 use Laravel\Ai\Contracts\ConversationStore as ConversationStoreContract;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StreamingAgent;
+use Laravel\Ai\Providers\OpenAiProvider;
 use Override;
 
 class AIServiceProvider extends ServiceProvider
@@ -41,6 +45,17 @@ class AIServiceProvider extends ServiceProvider
         $this->app->singleton(ConversationStoreContract::class, fn (): ConversationStore => new ConversationStore(
             config('ai.conversations.connection'),
         ));
+
+        // Serve the openai driver through a gateway that groups tool search's
+        // deferred tools in a namespace; loose, OpenAI fails the follow-up
+        // request with a 500. https://github.com/laravel/ai/issues/1255
+        $this->app->afterResolving(AiManager::class, static function (AiManager $manager): void {
+            $manager->extend('openai', fn (Application $application, array $config): OpenAiProvider => new OpenAiProvider(
+                new NamespacedToolSearchOpenAiGateway($application->make(Dispatcher::class)),
+                $config,
+                $application->make(Dispatcher::class),
+            ));
+        });
 
         $this->app->scoped(BatchPricingContext::class);
 
