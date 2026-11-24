@@ -227,6 +227,16 @@ test('neutral scores replace judged results only and coverage counts the judged 
         ->and($judgedB->fresh()->score)->toBe(0.3);
 });
 
+test('judges differ only when a compared case is judged', function (): void {
+    $decision = BenchmarkCase::factory()->create(['name' => 'Decision']);
+    $benchmarkRun = compareRun([compareSelection('gpt-a')], 'gpt-judge-a');
+    $runB = compareRun([compareSelection('gpt-a')], 'gpt-judge-b');
+    compareResult($benchmarkRun, $decision, 0, 1.0, true, ['case_task' => 'decision']);
+    compareResult($runB, $decision, 0, 0.5, false, ['case_task' => 'decision']);
+
+    expect(compareBuild([$benchmarkRun->id, $runB->id])['judges_differ'])->toBeFalse();
+});
+
 test('a candidate is self-judged against the judge whose scores are shown', function (): void {
     $benchmarkCase = compareTitleCase('Shared');
     $benchmarkRun = compareRun([compareSelection('gpt-judge'), compareSelection('gpt-neutral')]);

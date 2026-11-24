@@ -156,6 +156,99 @@ test('editing a structured verifier case reopens its fields and its verdict', fu
     expect($benchmarkCase->fresh()->input['prompt'])->toContain('Monitor Severance (2022)');
 });
 
+/**
+ * A structured verifier case with the given fields over verifierBrowserFields().
+ *
+ * @param  array<string, mixed>  $fields
+ */
+function verifierBrowserCase(array $fields): BenchmarkCase
+{
+    $verifier = [...verifierBrowserFields(), ...$fields];
+
+    return BenchmarkCase::factory()->expectingVerdict(true)->create([
+        'name' => 'Monitor new series',
+        'input' => ['prompt' => VerifierCaseInput::prompt($verifier), 'verifier' => $verifier],
+    ]);
+}
+
+test('a saved action type outside the catalogue stays selected and saves unchanged', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = verifierBrowserCase(['action_type' => 'retired_action', 'action_label' => 'Retired action']);
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertValue('[data-verifier-action-type]', 'retired_action')
+        ->assertValue('[data-verifier-action-label]', 'Retired action')
+        ->assertScript("Array.from(document.querySelector('[data-verifier-action-type]').options).filter((option) => option.value === 'retired_action').map((option) => option.text.trim()).join('|')", 'retired_action')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case updated.');
+
+    expect($benchmarkCase->fresh()->input['verifier'])->toMatchArray(['action_type' => 'retired_action', 'action_label' => 'Retired action']);
+});
+
+test('details stop at twenty rows and removing one frees a slot', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $details = array_map(static fn (int $i): array => ['label' => 'Label '.$i, 'value' => 'Value '.$i], range(1, 20));
+    $benchmarkCase = verifierBrowserCase(['details' => $details]);
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertCount('[data-verifier-detail-row]', 20)
+        ->assertButtonDisabled('[data-verifier-detail-add]')
+        ->click('[data-verifier-detail-row="19"] [data-verifier-detail-remove]')
+        ->assertCount('[data-verifier-detail-row]', 19)
+        ->assertButtonEnabled('[data-verifier-detail-add]')
+        ->click('[data-verifier-detail-add]')
+        ->assertCount('[data-verifier-detail-row]', 20)
+        ->assertButtonDisabled('[data-verifier-detail-add]');
+});
+
+test('removing a detail drops that row from the preview and the saved case', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = verifierBrowserCase(['details' => [
+        ['label' => 'Quality profile', 'value' => 'HD-1080p'],
+        ['label' => 'Delete files', 'value' => 'Yes'],
+        ['label' => 'Root folder', 'value' => '/tv'],
+    ]]);
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-verifier-prompt-preview]', 'Delete files: Yes')
+        ->click('[data-verifier-detail-row="1"] [data-verifier-detail-remove]')
+        ->assertCount('[data-verifier-detail-row]', 2)
+        ->assertValue('[data-verifier-detail-row="0"] [data-verifier-detail-label]', 'Quality profile')
+        ->assertValue('[data-verifier-detail-row="1"] [data-verifier-detail-label]', 'Root folder')
+        ->assertValue('[data-verifier-detail-row="1"] [data-verifier-detail-value]', '/tv')
+        ->assertSeeIn('[data-verifier-prompt-preview]', 'Root folder: /tv')
+        ->assertDontSeeIn('[data-verifier-prompt-preview]', 'Delete files')
+        ->click('[data-benchmark-save]')
+        ->assertSee('Benchmark case updated.');
+
+    expect($benchmarkCase->fresh()->input['verifier']['details'])->toEqual([
+        ['label' => 'Quality profile', 'value' => 'HD-1080p'],
+        ['label' => 'Root folder', 'value' => '/tv'],
+    ]);
+});
+
+test('a preview the server rejects shows its error until the case is fixed', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.benchmarks.cases.create', absolute: false))
+        ->assertNoSmoke()
+        ->select('[data-benchmark-task]', 'decision_verifier')
+        ->fill('[data-verifier-title]', 'Monitor Severance')
+        ->fill('[data-verifier-description]', 'Turns monitoring on for Severance.')
+        ->assertSeeIn('[data-verifier-prompt-preview]', 'Monitor Severance')
+        ->click('[data-verifier-detail-add]')
+        ->assertVisible('[data-verifier-prompt-preview-error]')
+        ->assertSeeIn('[data-verifier-prompt-preview-error]', 'label')
+        ->assertDontSeeIn('[data-verifier-prompt-preview]', 'Monitor Severance')
+        ->fill('[data-verifier-detail-label]', 'Monitored')
+        ->fill('[data-verifier-detail-value]', 'Yes')
+        ->assertSeeIn('[data-verifier-prompt-preview]', 'Monitored: Yes')
+        ->assertMissing('[data-verifier-prompt-preview-error]');
+});
+
 test('a raw-prompt verifier case saves the pasted case file', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $prompt = "PROPOSED ACTION\nType: delete_series (Delete series)";

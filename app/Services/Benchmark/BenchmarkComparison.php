@@ -21,7 +21,8 @@ use Illuminate\Support\Collection;
  * the cases common to all runs, their deltas against the baseline and the
  * case grid. In a neutral score mode, judge-scored results take the neutral
  * judge's score and verdict instead of their own; deterministic cases keep
- * theirs and costs are always the stored ones.
+ * theirs and costs are always the stored ones. The runs' judges only differ
+ * when at least one compared case is judged.
  */
 final readonly class BenchmarkComparison
 {
@@ -137,7 +138,7 @@ final readonly class BenchmarkComparison
             'pairs' => $appliedPairs,
             'tasks' => $tasks,
             'score_source' => ['current' => $current, 'options' => $options],
-            'judges_differ' => $judgeKeys->count() > 1,
+            'judges_differ' => $judgeKeys->count() > 1 && $judgedCaseIds->isNotEmpty(),
         ];
     }
 

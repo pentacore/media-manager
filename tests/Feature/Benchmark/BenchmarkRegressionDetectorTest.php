@@ -97,6 +97,17 @@ test('a run judged by another model is not a baseline', function (): void {
     expect(resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun))->toBe(['baseline_run_id' => null, 'regressions' => []]);
 });
 
+test('a run judged by another model is a baseline when no case is judged', function (): void {
+    $cases = BenchmarkCase::factory()->forTask(AiTask::Decision)->count(4)->create()->all();
+    $baseline = scheduledRunWith($this->schedule, $cases, array_fill(0, 4, [1.0, true]), ['judge' => ['provider' => 'openai', 'model' => 'old-judge', 'reasoning' => 'provider_default']]);
+    $benchmarkRun = scheduledRunWith($this->schedule, $cases, array_fill(0, 4, [0.0, false]));
+
+    $detected = resolve(BenchmarkRegressionDetector::class)->detect($benchmarkRun);
+
+    expect($detected['baseline_run_id'])->toBe($baseline->id)
+        ->and($detected['regressions'])->toHaveCount(1);
+});
+
 test('a candidate absent from earlier runs is skipped and another one still compares', function (): void {
     scheduledRunWith($this->schedule, $this->cases, array_fill(0, 4, [0.9, true]), candidate: ['provider' => 'openai', 'model' => 'gpt-old', 'reasoning' => 'provider_default']);
     $benchmarkRun = scheduledRunWith($this->schedule, $this->cases, array_fill(0, 4, [0.1, false]));

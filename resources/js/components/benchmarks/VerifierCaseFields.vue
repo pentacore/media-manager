@@ -238,7 +238,7 @@ const jsonTextareaClass =
                 v-for="(detail, index) in verifier.details"
                 :key="index"
                 class="grid gap-2 sm:grid-cols-[1fr_2fr_auto]"
-                data-verifier-detail-row
+                :data-verifier-detail-row="index"
             >
                 <div class="grid gap-1">
                     <input
