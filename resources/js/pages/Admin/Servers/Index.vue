@@ -89,7 +89,8 @@ onMounted(() => {
                         Latest agent release:
                         <span class="font-mono-tabular text-foreground">{{
                             latestAgentVersion
-                        }}</span>.
+                        }}</span
+                        >.
                     </span>
                 </p>
             </template>

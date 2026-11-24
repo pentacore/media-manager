@@ -11,6 +11,7 @@ use App\Ai\TaskModelResolver;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Enums\AiTask;
 use App\Enums\ClassificationGate;
+use App\Enums\ClassificationOutcomeSource;
 use App\Enums\ClassificationVerdict;
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
@@ -154,12 +155,13 @@ final readonly class SecondOpinionVerifier
 
     /**
      * Store Jev's answer for this action request and, when the LLM ran after
-     * it, resolve it with the LLM's verdict.
+     * it, resolve it with the LLM's verdict as a provisional outcome that a
+     * later human review replaces (resolveFromReview()).
      *
-     * Otherwise the row stays open until a human reviews the request
-     * (resolveFromReview()). Rows for requests born Rejected or auto-run
-     * (never held for review) stay open on purpose: only a human review or
-     * the cascade's LLM resolves them.
+     * Otherwise the row stays open until a human reviews the request. Rows
+     * for requests born Rejected or auto-run (never held for review) stay
+     * open on purpose. The LLM only ever settles open rows, so it never
+     * overwrites a reviewer's outcome.
      */
     public function recordOutcome(SecondOpinionVerdict $secondOpinionVerdict, int $actionRequestId): void
     {
@@ -185,12 +187,16 @@ final readonly class SecondOpinionVerifier
                 $secondOpinionVerdict->agrees,
                 $secondOpinionVerdict->agrees ? 'the LLM verifier agreed' : 'the LLM verifier disagreed',
                 [ClassificationVerdict::AuditRun, ClassificationVerdict::Fallback],
+                classificationOutcomeSource: ClassificationOutcomeSource::Llm,
             );
         }
     }
 
     /**
-     * A reviewer's approve/reject is the real outcome of a held action.
+     * A reviewer's approve/reject is the real outcome of a held action: it
+     * settles open rows and replaces an outcome the cascade's LLM recorded,
+     * so Jev's accuracy is measured against people. A row a reviewer
+     * already settled is left as it is.
      */
     public function resolveFromReview(ActionRequest $actionRequest, bool $approved): void
     {
@@ -204,6 +210,8 @@ final readonly class SecondOpinionVerifier
             $approved,
             $approved ? 'approved by a reviewer' : 'rejected by a reviewer',
             [ClassificationVerdict::Passed, ClassificationVerdict::AuditRun, ClassificationVerdict::Fallback, ClassificationVerdict::Skipped],
+            classificationOutcomeSource: ClassificationOutcomeSource::Reviewer,
+            overriding: [ClassificationOutcomeSource::Llm],
         );
     }
 

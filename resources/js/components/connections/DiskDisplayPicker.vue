@@ -17,7 +17,7 @@ const props = defineProps<{
 const diskMode = ref<'all' | 'selected' | 'sum'>(props.disk?.mode ?? 'all');
 const selectedDiskPaths = ref<string[]>([...(props.disk?.paths ?? [])]);
 const diskDisplay = reactive<Record<string, DiskMetric>>({
-    ...(props.disk?.display ?? {}),
+    ...props.disk?.display,
 });
 
 function toggleDiskPath(path: string): void {

@@ -1,5 +1,8 @@
 export type CalendarState =
-    'downloaded' | 'missing' | 'upcoming' | 'unmonitored';
+    | 'downloaded'
+    | 'missing'
+    | 'upcoming'
+    | 'unmonitored';
 
 export interface CalendarItem {
     key: string;

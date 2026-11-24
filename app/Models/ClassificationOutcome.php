@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ClassificationGate;
+use App\Enums\ClassificationOutcomeSource;
 use App\Enums\ClassificationVerdict;
 use Carbon\CarbonImmutable;
 use Database\Factories\ClassificationOutcomeFactory;
@@ -26,6 +27,7 @@ use Override;
  * @property ClassificationVerdict $verdict
  * @property bool|null $outcome_positive
  * @property string|null $outcome_detail
+ * @property ClassificationOutcomeSource|null $outcome_source
  * @property CarbonImmutable|null $outcome_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -37,7 +39,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['gate', 'subject_key', 'question', 'predicted', 'probability', 'threshold', 'verdict', 'outcome_positive', 'outcome_detail', 'outcome_at'])]
+#[Fillable(['gate', 'subject_key', 'question', 'predicted', 'probability', 'threshold', 'verdict', 'outcome_positive', 'outcome_detail', 'outcome_source', 'outcome_at'])]
 class ClassificationOutcome extends Model
 {
     /** @use HasFactory<ClassificationOutcomeFactory> */
@@ -66,6 +68,7 @@ class ClassificationOutcome extends Model
             'probability' => 'float',
             'threshold' => 'float',
             'outcome_positive' => 'boolean',
+            'outcome_source' => ClassificationOutcomeSource::class,
             'outcome_at' => 'immutable_datetime',
         ];
     }

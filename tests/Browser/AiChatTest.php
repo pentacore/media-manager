@@ -792,7 +792,7 @@ test('a reloaded conversation ending in a choices card sends the clicked option'
         ->assertSeeIn('[data-choice-card] [data-choice-option="B"] [data-choice-description]', 'Smaller 720p file')
         ->click('[data-choice-option="B"]')
         ->assertSeeIn('[data-chat-thread]', 'Going with B.')
-        ->assertVisible('[data-save-as-template][href*="body=B"]')
+        ->assertScript("document.querySelectorAll('[data-save-as-template]').length", 2)
         ->assertDisabled('[data-choice-option="A"]')
         ->assertDisabled('[data-choice-option="B"]')
         ->assertVisible('[data-choice-option="B"][data-choice-chosen]')

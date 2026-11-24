@@ -260,19 +260,32 @@ const { renderWithoutValues } = useChatTemplates();
 const fillTemplate = ref<ChatTemplate | null>(null);
 
 /**
+ * Whether a template without variables is being rendered and delivered. A
+ * second pick meanwhile (a double-click on a chip) is ignored, so the text
+ * is never inserted or sent twice.
+ */
+let applyingTemplate = false;
+
+/**
  * Templates with variables open the fill-in dialog; the rest render right
  * away and are sent (auto-send) or inserted into the composer.
  */
 async function applyTemplate(template: ChatTemplate): Promise<void> {
+    if (applyingTemplate) {
+        return;
+    }
+
     if (template.variables.length > 0) {
         fillTemplate.value = template;
 
         return;
     }
 
+    applyingTemplate = true;
+
     try {
         const text = await renderWithoutValues(template);
-        void deliverTemplate(
+        await deliverTemplate(
             text,
             template.auto_send ? 'send' : 'insert',
             template,
@@ -283,6 +296,8 @@ async function applyTemplate(template: ChatTemplate): Promise<void> {
                 ? cause.message
                 : 'That template could not be used.',
         );
+    } finally {
+        applyingTemplate = false;
     }
 }
 

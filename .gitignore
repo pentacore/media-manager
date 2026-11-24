@@ -54,3 +54,4 @@ graphify-out
 # FrankenPHP binary and worker script that `octane:start` (php artisan dev) writes
 /frankenphp
 /public/frankenphp-worker.php
+/.pnpm-store

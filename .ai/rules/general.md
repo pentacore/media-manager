@@ -6,7 +6,7 @@ paths:
 # General
 
 ## Run `composer test` before every commit
-`vendor/bin/sail composer test` is the full local gate: Pint, the Rector dry-run, Larastan, ESLint, Prettier and vue-tsc, then the Unit and Feature Pest suites in parallel (they include the Typefinder drift check in `GeneratedTypesTest`). It runs what CI's lint, static analysis and Pest jobs run, so run it before every commit and fix every failure it reports instead of leaving it to CI. The browser suite is not part of it; run `vendor/bin/sail composer test:browser` (see `.ai/rules/browser.md`) when a change touches pages, components or browser tests.
+`vendor/bin/sail composer test` is the full local gate: Pint, the Rector dry-run, Larastan, Vite+ `pnpm run check` (the Oxfmt format check and Oxlint) and vue-tsc, then the Unit and Feature Pest suites in parallel (they include the Typefinder drift check in `GeneratedTypesTest`). It runs what CI's lint, static analysis and Pest jobs run, so run it before every commit and fix every failure it reports instead of leaving it to CI. The browser suite is not part of it; run `vendor/bin/sail composer test:browser` (see `.ai/rules/browser.md`) when a change touches pages, components or browser tests.
 
 ## Change a behaviour's description in the same commit
 When a change alters behaviour, update every description of it in the same commit. That means the README, `.ai` rules and guidelines, admin settings help text, AI chat tool descriptions and agent instructions (the models read these, so a stale one changes what they do), and the conventional commit subject, which becomes the CHANGELOG entry. Treat a stale description as a review finding.
@@ -32,7 +32,7 @@ Work that runs alongside other work gets its own git worktree under `.worktrees/
 ## Know the Sail quirks
 - Paratest takes one path per run. Use `--testsuite=Feature,Unit` for the whole non-browser suite.
 - Regenerate Wayfinder with `php artisan wayfinder:generate --with-form`, because the Vite plugin uses `formVariants`. Without the flag, `types:check` loses the `.form()` typings.
-- `npm ci` wipes the Playwright browser inside `node_modules`, so run `npx playwright install chromium` after it.
+- A fresh `pnpm install` (after deleting `node_modules`, or a Playwright upgrade) loses the Playwright browser inside `node_modules`, so run `pnpm exec playwright install chromium` after it.
 
 (owner's rule, 2026-11-23)
 

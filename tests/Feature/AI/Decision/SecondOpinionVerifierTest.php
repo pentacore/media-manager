@@ -9,6 +9,7 @@ use App\Ai\Decision\SecondOpinionVerifier;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\ClassificationGate;
+use App\Enums\ClassificationOutcomeSource;
 use App\Enums\ClassificationVerdict;
 use App\Enums\SecondOpinionEngine;
 use App\Enums\SecondOpinionMode;
@@ -185,6 +186,93 @@ test('a jev-only disagreement stays open until a reviewer decides', function ():
 
     $secondOpinionVerifier->resolveFromReview($actionRequest, approved: true);
     expect(ClassificationOutcome::query()->sole()->outcome_positive)->toBeTrue();
+});
+
+test('a review settles an open jev row as the reviewer', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: true, engine: 'jev', confidence: 0.9)->create();
+    $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
+    $secondOpinionVerifier->recordOutcome(
+        new SecondOpinionVerdict(engine: 'jev', agrees: true, confidence: 0.9, jevVerdict: ClassificationVerdict::Passed, jevThreshold: 0.8),
+        $actionRequest->id,
+    );
+
+    $secondOpinionVerifier->resolveFromReview($actionRequest, approved: false);
+
+    expect(ClassificationOutcome::query()->sole())
+        ->outcome_positive->toBeFalse()
+        ->outcome_detail->toBe('rejected by a reviewer')
+        ->outcome_source->toBe(ClassificationOutcomeSource::Reviewer)
+        ->outcome_at->not->toBeNull();
+});
+
+test('a review replaces the outcome the cascade llm recorded', function (bool $llmAgrees, bool $approved, string $detail): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: $llmAgrees, engine: 'llm', confidence: 0.4)->create();
+    $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
+    $secondOpinionVerifier->recordOutcome(
+        new SecondOpinionVerdict(engine: 'llm', agrees: $llmAgrees, reason: 'Checked.')->withJev(0.4, ClassificationVerdict::Fallback, 0.8),
+        $actionRequest->id,
+    );
+
+    expect(ClassificationOutcome::query()->sole())
+        ->outcome_positive->toBe($llmAgrees)
+        ->outcome_source->toBe(ClassificationOutcomeSource::Llm);
+
+    $secondOpinionVerifier->resolveFromReview($actionRequest, approved: $approved);
+
+    expect(ClassificationOutcome::query()->sole())
+        ->outcome_positive->toBe($approved)
+        ->outcome_detail->toBe($detail)
+        ->outcome_source->toBe(ClassificationOutcomeSource::Reviewer);
+})->with([
+    'llm agreed, reviewer rejected' => [true, false, 'rejected by a reviewer'],
+    'llm disagreed, reviewer approved' => [false, true, 'approved by a reviewer'],
+]);
+
+test('a second review leaves the outcome the first reviewer recorded', function (): void {
+    $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, engine: 'jev', confidence: 0.3)->create();
+    $secondOpinionVerifier = resolve(SecondOpinionVerifier::class);
+    $secondOpinionVerifier->recordOutcome(
+        new SecondOpinionVerdict(engine: 'jev', agrees: false, confidence: 0.3, jevVerdict: ClassificationVerdict::Skipped, jevThreshold: 0.8),
+        $actionRequest->id,
+    );
+    $secondOpinionVerifier->resolveFromReview($actionRequest, approved: true);
+
+    $settledAt = ClassificationOutcome::query()->sole()->outcome_at;
+
+    $this->travel(1)->hours();
+    $secondOpinionVerifier->resolveFromReview($actionRequest, approved: false);
+
+    expect(ClassificationOutcome::query()->sole())
+        ->outcome_positive->toBeTrue()
+        ->outcome_detail->toBe('approved by a reviewer')
+        ->outcome_source->toBe(ClassificationOutcomeSource::Reviewer)
+        ->outcome_at->toEqual($settledAt);
+});
+
+test('a later llm verdict never overwrites a reviewer outcome', function (): void {
+    $classificationOutcome = ClassificationOutcome::factory()->create([
+        'gate' => ClassificationGate::SecondOpinion,
+        'subject_key' => SecondOpinionVerifier::outcomeSubjectKey(42),
+        'question' => 'second_opinion',
+        'verdict' => ClassificationVerdict::Fallback,
+        'outcome_positive' => true,
+        'outcome_detail' => 'approved by a reviewer',
+        'outcome_source' => ClassificationOutcomeSource::Reviewer,
+        'outcome_at' => now(),
+    ]);
+
+    resolve(SecondOpinionVerifier::class)->recordOutcome(
+        new SecondOpinionVerdict(engine: 'llm', agrees: false, reason: 'No.')->withJev(0.4, ClassificationVerdict::Fallback, 0.8),
+        42,
+    );
+
+    expect($classificationOutcome->fresh())
+        ->outcome_positive->toBeTrue()
+        ->outcome_detail->toBe('approved by a reviewer')
+        ->outcome_source->toBe(ClassificationOutcomeSource::Reviewer)
+        ->and(ClassificationOutcome::query()->whereKeyNot($classificationOutcome->id)->sole())
+        ->outcome_positive->toBeFalse()
+        ->outcome_source->toBe(ClassificationOutcomeSource::Llm);
 });
 
 test('only types an automated proposer can produce support a second opinion', function (string $type, bool $supported): void {

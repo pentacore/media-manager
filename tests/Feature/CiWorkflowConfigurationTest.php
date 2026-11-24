@@ -40,9 +40,18 @@ test('ci audits runtime dependencies as a gate and dev dependencies as a report'
     $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
 
     expect($ci)->toContain('run: composer audit --locked --no-dev --abandoned=report')
-        ->toContain('run: npm audit --omit=dev --audit-level=high --package-lock-only')
+        ->toContain('run: pnpm audit --prod --audit-level high')
         ->toMatch('/continue-on-error: true\n\s+run: composer audit --locked --abandoned=report/')
-        ->toMatch('/continue-on-error: true\n\s+run: npm audit --audit-level=high --package-lock-only/');
+        ->toMatch('/continue-on-error: true\n\s+run: pnpm audit --audit-level high/');
+});
+
+test('ci installs with pnpm and runs the vite+ check and vue-tsc', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    expect($ci)->toContain('run: pnpm install --frozen-lockfile')
+        ->toContain('run: pnpm run check')
+        ->toContain('run: pnpm run types:check')
+        ->not->toMatch('/(?<!p)npm (ci|run)\b/');
 });
 
 test('ci fails on rector drift', function (): void {
@@ -69,4 +78,18 @@ test('ci reports unit and feature coverage without gating on it', function (): v
         ->toContain('--exclude-testsuite=Browser --coverage-clover=build/coverage/clover.xml')
         ->toContain('run: php .github/scripts/coverage-summary.php build/coverage/clover.xml >> "$GITHUB_STEP_SUMMARY"')
         ->not->toContain('--min=');
+});
+
+test('ci, the release, sail and both production stages run node 26', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+    $release = (string) file_get_contents(base_path('.github/workflows/release.yml'));
+    $sail = (string) file_get_contents(base_path('docker/8.5/Dockerfile'));
+    $production = (string) file_get_contents(base_path('docker/production/Dockerfile'));
+
+    // Alpine's `nodejs` is the LTS line (24); `nodejs-current` is Node 26.
+    expect($ci)->toContain("NODE_VERSION: '26'")
+        ->and($release)->toContain("node-version: '26'")
+        ->and($sail)->toContain('ARG NODE_VERSION=26')
+        ->and(mb_substr_count($production, 'nodejs-current'))->toBe(2)
+        ->and($production)->not->toMatch('/^\s+nodejs \\\\$/m');
 });

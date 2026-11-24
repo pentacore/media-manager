@@ -3,16 +3,16 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { FlaskConical } from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import AiModelsController from '@/actions/App/Http/Controllers/Admin/AiModelsController';
-import ModelSelect from '@/components/ai/ModelSelect.vue';
-import TierListEditor from '@/components/ai/TierListEditor.vue';
-import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
-import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import { EventOverridesSection } from '@/components/ai-models';
 import type {
     EventOverrideForm,
     EventOverrideRow,
     ResolvedSummary,
 } from '@/components/ai-models';
+import ModelSelect from '@/components/ai/ModelSelect.vue';
+import TierListEditor from '@/components/ai/TierListEditor.vue';
+import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
+import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill } from '@/components/mm';
 import { Alert, AlertDescription } from '@/components/ui/alert';

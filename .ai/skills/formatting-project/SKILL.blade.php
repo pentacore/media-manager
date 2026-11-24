@@ -1,6 +1,6 @@
 ---
 name: formatting-project
-description: "Use when formatting, cleaning up, linting, or finalizing code changes in this Laravel project, including requests involving Rector, Pint, Prettier, ESLint, npm format, or npm lint."
+description: "Use when formatting, cleaning up, linting, or finalizing code changes in this Laravel project, including requests involving Rector, Pint, Vite+, Oxfmt, Oxlint, or `pnpm run check:fix`."
 ---
 @php
 /** @var \Laravel\Boost\Install\GuidelineAssist $assist */
@@ -14,11 +14,10 @@ Run the complete formatting workflow from the repository root. All commands must
 Run every step in this exact order:
 
 1. `{{ $assist->binCommand('rector') }}`
-2. `{{ $assist->nodePackageManagerCommand('run format') }}`
-3. `{{ $assist->nodePackageManagerCommand('run lint') }}`
-4. `{{ $assist->binCommand('pint') }} --dirty --format agent`
+2. `{{ $assist->nodePackageManagerCommand('run check:fix') }}`
+3. `{{ $assist->binCommand('pint') }} --dirty --format agent`
 
-Rector must transform PHP before Pint applies final PHP styling. Prettier must format frontend files before ESLint applies its fixes. Pint must run last.
+Rector must transform PHP before Pint applies final PHP styling. `check:fix` runs `vp check --fix`: Oxfmt formats the frontend files under `resources/`, then Oxlint applies its fixes. Pint must run last.
 
 Do not substitute check-only commands for these fix commands. If Sail is not running, start it with `vendor/bin/sail up -d`, then restart the workflow.
 
@@ -26,7 +25,7 @@ Do not substitute check-only commands for these fix commands. If Sail is not run
 
 Before formatting, inspect `git status --short` and the current diff so existing user changes remain identifiable.
 
-Every change produced by Rector, Prettier, ESLint, or Pint is part of the formatting pass and must be respected, even when it touches a file outside the current feature or fix.
+Every change produced by Rector, Oxfmt, Oxlint, or Pint is part of the formatting pass and must be respected, even when it touches a file outside the current feature or fix.
 
 - Never revert, discard, omit, or unstage a formatter-generated change merely because it is out of scope.
 - Never restore a file to its pre-format state merely to reduce the diff.
@@ -38,4 +37,4 @@ Every change produced by Rector, Prettier, ESLint, or Pint is part of the format
 
 Stop at the first failing command without reverting changes already made. Resolve the failure, rerun that command, then continue through the remaining commands in order.
 
-After all four commands succeed, inspect `git status --short` and the final diff. Report failures, fixes, and every file changed by the formatting workflow. Do not characterize formatter-generated changes as disposable scope noise.
+After all three commands succeed, inspect `git status --short` and the final diff. Report failures, fixes, and every file changed by the formatting workflow. Do not characterize formatter-generated changes as disposable scope noise.

@@ -57,7 +57,8 @@ let stopFlashListener: (() => void) | null = null;
 onMounted(() => {
     stopFlashListener = router.on('flash', (event) => {
         const flash = (event as CustomEvent).detail?.flash as
-            { matchCandidates?: MatchCandidate[] } | undefined;
+            | { matchCandidates?: MatchCandidate[] }
+            | undefined;
 
         if (!flash || !('matchCandidates' in flash)) {
             return;
@@ -165,7 +166,8 @@ function confirm(): void {
                     Pick the TMDB title that matches
                     <span class="font-medium text-foreground">{{
                         entry.title
-                    }}</span>. We'll remember the mapping and file the request.
+                    }}</span
+                    >. We'll remember the mapping and file the request.
                 </DialogDescription>
             </DialogHeader>
 

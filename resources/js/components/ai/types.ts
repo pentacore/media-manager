@@ -60,7 +60,10 @@ export type ToolGroupValue = string;
 
 /** Why a tool group was loaded for a turn. */
 export type ToolGroupSource =
-    'pinned' | 'assistant' | 'carried_over' | 'picked';
+    | 'pinned'
+    | 'assistant'
+    | 'carried_over'
+    | 'picked';
 
 /** One routed tool group a turn carried, with its label and why it loaded. */
 export type TurnToolGroup = {

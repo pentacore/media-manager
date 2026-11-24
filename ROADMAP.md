@@ -9,20 +9,7 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Decisions
 
-- **Browser shard target** (decision): the `BROWSER_SHARD_TARGET_SECONDS` repo
-  variable. 180 s today gives 8 shards; 240 s would give about 6 shards of about
-  6.5 minutes each.
-- **Jev cascade ruling** (decision): confirm that a human review does not
-  overwrite a cascade Jev row that the model already resolved.
-- **Chat template follow-ups** (decision, add or drop):
-    - `?body=` length (414).
-    - Per-route auth dataset.
-    - Duplicated `resolveActive`.
-    - Picker refresh races.
-    - Double insert on double-click.
-    - Raw "Failed to fetch" toast.
-    - Missing accessible labels: the template picker, and the `TimeWindowFilter`
-      group.
+None open.
 
 ## Brainstorms
 
@@ -72,13 +59,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
-- **Vite+ spike**: try Vite+ (`vp check`: oxlint with type checks, oxfmt with
-  Tailwind class sorting) on a branch, time-boxed. Report:
-    - Which custom ESLint rules it covers: no browser `confirm()`, import order,
-      consistent type imports, padding lines and brace style.
-    - How fast it is compared with ESLint + Prettier.
-    - What would be lost.
-      Do not switch yet. The owner decides after the report.
+- **Unnamed segmented-control groups**: `NeutralJudgePanel`, `CompareTaskTable`,
+  `CaseInputFields` and `MetricsPanel` render a `SegmentedControl` whose
+  `role="group"` has no accessible name. Name each one as `TimeWindowFilter`
+  does.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Decision runs and the benchmark:
         - A deadline for the whole decision run.
@@ -150,13 +134,25 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
 - **AI price refresh batching** with a dedicated model, once laravel/ai supports
   batch requests.
+- **Log provider stream errors.** laravel/ai never reports a `StreamErrorException`
+  (an error the provider sent inside the stream), so a failed chat turn leaves
+  nothing in the container logs; only the chat UI shows the message. Log it,
+  with provider, model and request id, from a `StepFailed` listener.
+- **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
+  [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
+  namespace), along with its registration in `AIServiceProvider`.
 
 ## Held dependency updates
 
 - **vue-tsc**: held at 3.3.11. 3.3.12 to 3.3.14 break `types:check`
   (vuejs/language-tools#6240). Lift the hold when a release includes #6297.
-- **@stylistic/eslint-plugin 6**: lift when eslint-plugin-vue peers `^6`.
-- **TypeScript 7**: lift when typescript-eslint and vue-tsc both support it.
+- **TypeScript 7**: lift when vue-tsc (or its successor) checks `.vue` files on
+  TypeScript 7. vue-tsc runs `typescript/lib/tsc`, which 7 no longer ships
+  (vuejs/language-tools#6167).
+- **Vite+**: Dependabot ignores `vite-plus` and `vite`. Bump `vite-plus`, the
+  `vite` alias in `package.json` and the `vite` override in `pnpm-workspace.yaml`
+  to the same release by hand (the release's `vite` dependency names the
+  `@voidzero-dev/vite-plus-core` version).
 - **pest-plugin-browser**: a long `script()` waits for the 30 s timeout
   (pestphp/pest#1852). Bump and recheck when a fixed release lands.
 - **PHP 8.6**: move to it once it reaches general availability.

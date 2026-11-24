@@ -20,7 +20,9 @@ type JsonShallow = JsonScalar | JsonScalar[] | { [key: string]: JsonScalar };
  * nest further).
  */
 export type JsonValue =
-    JsonShallow | JsonShallow[] | { [key: string]: JsonShallow };
+    | JsonShallow
+    | JsonShallow[]
+    | { [key: string]: JsonShallow };
 
 export type JsonObject = { [key: string]: JsonValue };
 
@@ -427,7 +429,11 @@ export type BenchmarkScheduleForm = {
 };
 
 export type BenchmarkComparisonMetric =
-    'pass_rate' | 'avg_score' | 'cost_per_case' | 'latency_p50' | 'error_rate';
+    | 'pass_rate'
+    | 'avg_score'
+    | 'cost_per_case'
+    | 'latency_p50'
+    | 'error_rate';
 
 export type BenchmarkComparisonStats = {
     results: number;
