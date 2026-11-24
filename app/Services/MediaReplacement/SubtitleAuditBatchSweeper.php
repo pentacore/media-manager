@@ -28,25 +28,28 @@ class SubtitleAuditBatchSweeper
      */
     public function sweep(): int
     {
-        $expired = SubtitleAuditBatch::query()
+        $settled = 0;
+
+        // By id, a chunk at a time: settling moves a batch out of the Searching
+        // filter, which an offset-paged each() would skip rows over.
+        SubtitleAuditBatch::query()
             ->where('status', SubtitleAuditBatchStatus::Searching)
             ->where('search_deadline_at', '<', now()->subMinutes($this->mediaReplacementSettings->subtitleAuditSweepGraceMinutes()))
-            ->get();
+            ->eachById(function (SubtitleAuditBatch $subtitleAuditBatch) use (&$settled): void {
+                $subtitleAuditBatch->episodes()
+                    ->where('outcome', SubtitleAuditEpisodeOutcome::Searching)
+                    ->update([
+                        'outcome' => SubtitleAuditEpisodeOutcome::Failed,
+                        'failure_reason' => 'search_expired',
+                    ]);
 
-        foreach ($expired as $subtitleAuditBatch) {
-            $subtitleAuditBatch->episodes()
-                ->where('outcome', SubtitleAuditEpisodeOutcome::Searching)
-                ->update([
-                    'outcome' => SubtitleAuditEpisodeOutcome::Failed,
-                    'failure_reason' => 'search_expired',
-                ]);
+                $this->subtitleAuditBatchSettler->settle($subtitleAuditBatch);
+                // A batch nobody handed off or showed (chat turn and watchdog both lost)
+                // would otherwise be ready without a notification and unclaimable.
+                $this->subtitleAuditBatchSettler->adopt($subtitleAuditBatch);
+                $settled++;
+            });
 
-            $this->subtitleAuditBatchSettler->settle($subtitleAuditBatch);
-            // A batch nobody handed off or showed (chat turn and watchdog both lost)
-            // would otherwise be ready without a notification and unclaimable.
-            $this->subtitleAuditBatchSettler->adopt($subtitleAuditBatch);
-        }
-
-        return $expired->count();
+        return $settled;
     }
 }
