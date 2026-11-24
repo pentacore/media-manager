@@ -296,10 +296,10 @@ function saveAutomation(): void {
                     <div
                         v-for="mapping in mappings"
                         :key="mapping.role"
-                        class="flex justify-between rounded-md border border-border p-3 text-sm max-sm:gap-3"
+                        class="flex justify-between gap-3 rounded-md border border-border p-3 text-sm"
                     >
                         <span class="capitalize">{{ mapping.role }}</span>
-                        <span class="max-sm:min-w-0 max-sm:wrap-anywhere">{{
+                        <span class="min-w-0 wrap-anywhere">{{
                             mapping.connection_name
                         }}</span>
                     </div>
