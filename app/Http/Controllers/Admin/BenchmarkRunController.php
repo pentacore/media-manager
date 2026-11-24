@@ -9,6 +9,7 @@ use App\Ai\TaskModelResolver;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
 use App\Enums\BenchmarkResultStatus;
+use App\Enums\BenchmarkRunStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\EstimateBenchmarkRunRequest;
 use App\Http\Requests\Admin\StoreBenchmarkRunRequest;
