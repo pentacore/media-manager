@@ -3,7 +3,7 @@ paths:
   - 'composer.json'
   - 'composer.lock'
   - 'package.json'
-  - 'package-lock.json'
+  - 'pnpm-lock.yaml'
 ---
 
 # Dependencies

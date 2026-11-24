@@ -52,14 +52,14 @@ vendor/bin/sail up -d
 
 # install PHP + JS deps (first run only)
 vendor/bin/sail composer install
-vendor/bin/sail npm install
+vendor/bin/sail pnpm install
 
 # Laravel bootstrap
 vendor/bin/sail artisan key:generate
 vendor/bin/sail artisan migrate --seed
 
 # build the frontend
-vendor/bin/sail npm run build
+vendor/bin/sail pnpm run build
 
 # visit http://localhost:${APP_PORT}
 vendor/bin/sail open
@@ -67,10 +67,10 @@ vendor/bin/sail open
 
 In local/testing environments, the default seed creates an admin user `test@example.com` (password from the `User` factory — check it via `vendor/bin/sail artisan tinker` if you need it, or create one directly with `vendor/bin/sail artisan users:create`). In non-local environments it skips that fixed user. It always seeds the `ActionTypeConfig` rows (add/delete/monitor/quality-profile for Sonarr+Radarr, Seerr cleanup/approve/decline, Emby library scan, media replacement, stuck-import resolution, and the nine `bazarr_*` subtitle operations) and, if any `*_URL` / `*_API_KEY` env vars are set, the matching `ServiceConnection` rows.
 
-During development you probably want the Vite dev server running instead of `npm run build`:
+During development you probably want the Vite dev server running instead of `pnpm run build`:
 
 ```bash
-vendor/bin/sail npm run dev
+vendor/bin/sail pnpm run dev
 ```
 
 ## Production deployment
@@ -500,7 +500,7 @@ vendor/bin/sail artisan users:create            # create a user with a chosen ro
 
 ## Running tests
 
-Run the full local gate before every commit. It runs Pint, Rector (dry run), Larastan, ESLint, Prettier, vue-tsc and the Unit and Feature suites in parallel, the same checks as CI apart from the browser suite:
+Run the full local gate before every commit. It runs Pint, Rector (dry run), Larastan, Vite+ `check` (Oxfmt and Oxlint), vue-tsc and the Unit and Feature suites in parallel, the same checks as CI apart from the browser suite:
 
 ```bash
 vendor/bin/sail composer test
@@ -533,10 +533,10 @@ vendor/bin/sail composer analyse
 Other useful checks:
 
 ```bash
-vendor/bin/sail npm run lint            # eslint --fix
-vendor/bin/sail npm run format          # prettier --write
-vendor/bin/sail npm run types:check     # vue-tsc --noEmit
-vendor/bin/sail npm run build           # vite build
+vendor/bin/sail pnpm run check:fix     # vp check --fix: Oxfmt, then Oxlint fixes
+vendor/bin/sail pnpm run check         # vp check: format check and lint
+vendor/bin/sail pnpm run types:check   # vue-tsc --noEmit
+vendor/bin/sail pnpm run build         # vp build && vp build --ssr
 ```
 
 Regenerate frontend typings after changing Laravel routes, models, enums, or form requests:

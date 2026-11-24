@@ -83,11 +83,11 @@ const state = reactive<MediaReplacementConfiguration>({
     ...incomingConfiguration,
     subtitle_check: {
         ...defaultSubtitleCheck,
-        ...(incomingConfiguration.subtitle_check ?? {}),
+        ...incomingConfiguration.subtitle_check,
     },
     subtitle_audit: {
         ...defaultSubtitleAudit,
-        ...(incomingConfiguration.subtitle_audit ?? {}),
+        ...incomingConfiguration.subtitle_audit,
     },
 });
 

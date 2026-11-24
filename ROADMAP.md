@@ -24,6 +24,15 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
     - Missing accessible labels: the template picker, and the `TimeWindowFilter`
       group.
 
+- **Type-aware lint** (decision): `lint.options.typeAware` is off, because Oxlint
+  gets type information from tsrs, the Rust port of TypeScript 7 that Vite+
+  bundles. Turned on, it finds 13 warnings in `.ts` files
+  (`no-floating-promises` in `app.ts`, `ssr.ts` and `useInvocationDetail.ts`,
+  `no-base-to-string` in `chatCards.ts`, `priceTable.ts` and `useChatStream.ts`,
+  `restrict-template-expressions` in `useNotifications.ts`). It does not cover
+  `.vue` files. `typeCheck` stays off until the TypeScript 7 hold lifts: it
+  reports false TS2614 errors on type exports from `.vue` files.
+
 ## Brainstorms
 
 - **Frontend unit tests** (brainstorm): Vitest, `@vue/test-utils` and jsdom. For
@@ -72,13 +81,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
-- **Vite+ spike**: try Vite+ (`vp check`: oxlint with type checks, oxfmt with
-  Tailwind class sorting) on a branch, time-boxed. Report:
-    - Which custom ESLint rules it covers: no browser `confirm()`, import order,
-      consistent type imports, padding lines and brace style.
-    - How fast it is compared with ESLint + Prettier.
-    - What would be lost.
-      Do not switch yet. The owner decides after the report.
 - **Layout gate at desktop width and in dark mode**: extend the phone gate
   (`MobileLayoutTest`) so its overlap and clipped-text checks also run at 1440 px,
   and run both widths in light and dark mode. It adds about 450 s of CI browser
@@ -160,8 +162,13 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 - **vue-tsc**: held at 3.3.11. 3.3.12 to 3.3.14 break `types:check`
   (vuejs/language-tools#6240). Lift the hold when a release includes #6297.
-- **@stylistic/eslint-plugin 6**: lift when eslint-plugin-vue peers `^6`.
-- **TypeScript 7**: lift when typescript-eslint and vue-tsc both support it.
+- **TypeScript 7**: lift when vue-tsc (or its successor) checks `.vue` files on
+  TypeScript 7. vue-tsc runs `typescript/lib/tsc`, which 7 no longer ships
+  (vuejs/language-tools#6167).
+- **Vite+**: Dependabot ignores `vite-plus` and `vite`. Bump `vite-plus`, the
+  `vite` alias in `package.json` and the `vite` override in `pnpm-workspace.yaml`
+  to the same release by hand (the release's `vite` dependency names the
+  `@voidzero-dev/vite-plus-core` version).
 - **pest-plugin-browser**: a long `script()` waits for the 30 s timeout
   (pestphp/pest#1852). Bump and recheck when a fixed release lands.
 - **PHP 8.6**: move to it once it reaches general availability.

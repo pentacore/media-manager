@@ -6,7 +6,7 @@ use Symfony\Component\Finder\Finder;
 
 /**
  * Interactive elements found inside a <Link> or <a> in one SFC, as
- * "line: tag". Prettier may split a closing tag across lines (`</a\n>`), so
+ * "line: tag". The formatter (Oxfmt) may split a closing tag across lines (`</a\n>`), so
  * the anchor ends at `</a` or `</Link` followed by optional whitespace and `>`.
  *
  * @return list<string>

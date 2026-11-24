@@ -40,9 +40,18 @@ test('ci audits runtime dependencies as a gate and dev dependencies as a report'
     $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
 
     expect($ci)->toContain('run: composer audit --locked --no-dev --abandoned=report')
-        ->toContain('run: npm audit --omit=dev --audit-level=high --package-lock-only')
+        ->toContain('run: pnpm audit --prod --audit-level high')
         ->toMatch('/continue-on-error: true\n\s+run: composer audit --locked --abandoned=report/')
-        ->toMatch('/continue-on-error: true\n\s+run: npm audit --audit-level=high --package-lock-only/');
+        ->toMatch('/continue-on-error: true\n\s+run: pnpm audit --audit-level high/');
+});
+
+test('ci installs with pnpm and runs the vite+ check and vue-tsc', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    expect($ci)->toContain('run: pnpm install --frozen-lockfile')
+        ->toContain('run: pnpm run check')
+        ->toContain('run: pnpm run types:check')
+        ->not->toMatch('/(?<!p)npm (ci|run)\b/');
 });
 
 test('ci fails on rector drift', function (): void {
