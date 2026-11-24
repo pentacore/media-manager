@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Benchmark\VerifierCaseCapture;
 use App\Services\Benchmark\VerifierCaseInput;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -261,3 +262,14 @@ test('a captured draft saves as-is through the store the way the form posts it',
     expect($input['verifier'])->toEqual($draft['input']['verifier'])
         ->and($input['prompt'])->toBe(VerifierCaseInput::prompt($draft['input']['verifier']));
 })->with(['action request' => ['action_request'], 'usage row' => ['usage']]);
+
+test('the second opinion invocation lookup uses an index', function (): void {
+    verifierCaptureRequest();
+    DB::statement('SET LOCAL enable_seqscan = off');
+
+    $plan = collect(DB::select('EXPLAIN '.ActionRequest::query()->where('second_opinion->invocation_id', 'inv-verifier-1')->toRawSql()))
+        ->map(static fn (object $row): string => (string) $row->{'QUERY PLAN'})
+        ->implode("\n");
+
+    expect($plan)->toContain('action_requests_second_opinion_invocation_id_index');
+});

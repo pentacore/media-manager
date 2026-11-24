@@ -73,10 +73,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - Attachment storage, orphan files and preview.
         - Duplicated attachment mapping.
         - Re-judging a vanished image.
-    - Verifier:
-        - `judges_differ` for unjudged scopes.
-        - Unindexed `invocation_id` lookup.
-        - Browser test gaps.
     - Agreement and gate charts:
         - Classification gates: a 0 % band with resolved events draws a
           zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement
