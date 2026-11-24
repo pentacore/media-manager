@@ -307,7 +307,8 @@ export function useChatStream(): UseChatStreamReturn {
                     // the sub-agent's whole output so far — show its tail.
                     const call = calls.get(String(event.messageId));
                     const content = event.content as
-                        { output?: unknown } | undefined;
+                        | { output?: unknown }
+                        | undefined;
                     const output =
                         typeof content?.output === 'string'
                             ? content.output.trim()

@@ -224,7 +224,8 @@ let stopFlashListener: (() => void) | null = null;
 onMounted(() => {
     stopFlashListener = router.on('flash', (event) => {
         const outcome = (event as CustomEvent).detail?.flash?.requestOutcome as
-            RequestOutcome | undefined;
+            | RequestOutcome
+            | undefined;
         const current = detail.value;
 
         if (

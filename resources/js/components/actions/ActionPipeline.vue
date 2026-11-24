@@ -31,7 +31,10 @@ defineProps<{
                         pipelineState(
                             request,
                             stage.id as
-                                'created' | 'approved' | 'executing' | 'done',
+                                | 'created'
+                                | 'approved'
+                                | 'executing'
+                                | 'done',
                         ) === 'done'
                             ? 'text-accent'
                             : pipelineState(
