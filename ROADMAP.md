@@ -134,10 +134,6 @@ None open.
 - **Bazarr history time** assumes Bazarr runs in `APP_TIMEZONE`.
 - **AI price refresh batching** with a dedicated model, once laravel/ai supports
   batch requests.
-- **Log provider stream errors.** laravel/ai never reports a `StreamErrorException`
-  (an error the provider sent inside the stream), so a failed chat turn leaves
-  nothing in the container logs; only the chat UI shows the message. Log it,
-  with provider, model and request id, from a `StepFailed` listener.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
