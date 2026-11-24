@@ -10,6 +10,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Ai/** | .ai/rules/ai.md |
 | app/** | .ai/rules/app.md |
 | app/Services/Arr/** | .ai/rules/arr.md |
+| app/Services/Benchmark/**, app/Ai/Decision/DecisionPrompt.php, app/Concerns/DecisionEventValidationRules.php, app/Concerns/VerifierCaseValidationRules.php, resources/js/components/benchmarks/** | .ai/rules/benchmarks.md |
 | tests/Browser/** | .ai/rules/browser.md |
 | app/Cache/Services/*.php | .ai/rules/cache-services.md |
 | app/Notifications/Channels/** | .ai/rules/channels.md |

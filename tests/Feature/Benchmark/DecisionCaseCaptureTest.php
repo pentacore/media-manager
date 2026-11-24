@@ -149,6 +149,24 @@ test('a payload whose pretty text is over the case limit is stored compact and s
         ->assertRedirect(route('admin.benchmarks.cases.index'));
 });
 
+test('a recorded prompt whose payload is over the case limit pretty is stored compact', function (): void {
+    // Prompts recorded before the 8000-character cap carry the whole payload.
+    $payload = ['items' => array_fill(0, 3000, ['a' => 1])];
+    $pretty = (string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $prompt = str_replace("<untrusted_webhook_payload>\n[]\n", "<untrusted_webhook_payload>\n{$pretty}\n", DecisionPrompt::build('sonarr', 'Grab', []));
+    ['usage' => $usage] = captureDecisionRun([], trimmed: true);
+    $usage->update(['prompt_text' => $prompt]);
+
+    ['draft' => $draft, 'warnings' => $warnings] = resolve(CaseDraftFromUsage::class)->draft($usage);
+    $payloadJson = $draft['input']['event']['payload_json'];
+
+    expect(mb_strlen($pretty))->toBeGreaterThan(DecisionPrompt::MAX_STORED_PAYLOAD_CHARS)
+        ->and($payloadJson)->toBe(DecisionPrompt::payloadJson($payload))
+        ->and($payloadJson)->not->toContain("\n")
+        ->and($draft['source_truncated'])->toBeFalse()
+        ->and($warnings)->not->toContain(DecisionCaseCapture::PAYLOAD_TOO_LARGE_WARNING);
+});
+
 test('a payload too large even compact keeps the recorded prompt as free text and warns', function (): void {
     ['usage' => $usage] = captureDecisionRun(['blob' => str_repeat('a', 70000)]);
 
