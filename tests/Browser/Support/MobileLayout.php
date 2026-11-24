@@ -41,8 +41,6 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
-use Inertia\Inertia;
-use Inertia\Response;
 use Pest\Browser\Api\AwaitableWebpage;
 use Pest\Browser\Api\PendingAwaitablePage;
 use Pest\Browser\Api\Webpage;
@@ -56,6 +54,9 @@ use Pest\Browser\Api\Webpage;
  * hover, overlap no two controls, cut no text and leave no scroller scrolling
  * by a sliver. The touch-target sweeps and the phone wrap check stay phone
  * only: they measure a finger and a phone's line length.
+ * Each screen is its own test class under tests/Browser/MobileLayout, which
+ * calls mobileLayoutGateTests(); PhoneLightTest also holds the phone-only
+ * tests and the route guard.
  * The gate covers every page route: `the phone gate classifies every page
  * route` fails while a named GET route in the `web` group (behind `auth`,
  * behind `guest` or public) is in no dataset and not in
@@ -1134,197 +1135,6 @@ function mobileLayoutUnclassifiedRouteNames(): array
     return collect(mobileLayoutPageRouteNames())->diff($classified)->values()->all();
 }
 
-dataset('mobile layout member pages', mobileLayoutMemberPages());
-dataset('mobile layout admin pages', mobileLayoutAdminPages());
-dataset('mobile layout guest pages', mobileLayoutGuestPages());
-dataset('mobile layout signed-in auth pages', mobileLayoutSignedInAuthPages());
-dataset('mobile layout flow auth pages', mobileLayoutFlowAuthPages());
-dataset('mobile layout touch pages', mobileLayoutTouchPages());
-dataset('mobile layout modes', mobileLayoutModes());
-
-test('a dark mode row renders the dark theme on both widths', function (string $viewport, string $scheme): void {
-    $this->actingAs(User::factory()->member()->create());
-
-    $webpage = mobileLayoutVisit(route('profile.edit', absolute: false), $viewport, $scheme)->assertNoSmoke();
-
-    $webpage->assertScript("document.documentElement.classList.contains('dark')", $scheme === 'dark')
-        ->assertScript('window.innerWidth', $viewport === 'desktop' ? 1440 : 375);
-})->with('mobile layout modes');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('a member page fits the screen', function (string $viewport, string $scheme, string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
-    mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create(['name' => 'Example Member', 'email' => 'requester@example.com']));
-
-    mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred);
-})->with('mobile layout modes')->with('mobile layout member pages');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('an admin page fits the screen', function (string $viewport, string $scheme, string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
-    config()->set('mediamanager.ai.enabled', true);
-    mobileLayoutFakeServices();
-    $admin = User::factory()->admin()->create(['name' => 'Example Admin']);
-    mobileLayoutSeedDetailModels($admin);
-    $this->actingAs($admin);
-
-    mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred);
-})->with('mobile layout modes')->with('mobile layout admin pages');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('a guest page fits the screen', function (string $viewport, string $scheme, string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
-    mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred, 'body');
-})->with('mobile layout modes')->with('mobile layout guest pages');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('a signed-in auth page fits the screen', function (string $viewport, string $scheme, string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
-    $this->actingAs(User::factory()->member()->unverified()->create());
-
-    mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred, 'body');
-})->with('mobile layout modes')->with('mobile layout signed-in auth pages');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('every control on a page is a 40 px target on a phone', function (string $routeName, array $parameters, ?string $deferred): void {
-    config()->set('mediamanager.ai.enabled', true);
-    mobileLayoutFakeServices();
-    $admin = User::factory()->admin()->create(['name' => 'Example Admin']);
-    mobileLayoutSeedDetailModels($admin);
-    $this->actingAs($admin);
-
-    $webpage = visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage, $deferred);
-
-    $webpage->assertScript(phoneSmallTargetsScript(), '');
-})->with('mobile layout touch pages');
-
-/**
- * @param  array<string, int|string>  $parameters
- */
-test('every control on a guest page is a 40 px target on a phone', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []): void {
-    $webpage = visit(route($routeName, $parameters, absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage);
-
-    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
-})->with('mobile layout guest pages');
-
-test('a page reached through its flow fits the screen with 40 px targets on a phone', function (string $viewport, string $scheme, string $routeName, string $root): void {
-    if ($routeName === 'auth.set-password') {
-        // An invited user signed in before setting a password.
-        $this->actingAs(User::factory()->member()->create(['password' => null, 'invite_accepted_at' => null]));
-        $webpage = mobileLayoutVisit(route($routeName, absolute: false), $viewport, $scheme)->assertNoSmoke();
-    } elseif ($routeName === 'security.edit') {
-        // Security redirects to password confirmation first.
-        $this->actingAs(User::factory()->member()->create());
-        $webpage = mobileLayoutVisit(route($routeName, absolute: false), $viewport, $scheme)->assertNoSmoke();
-        $webpage->script(appHydratedScript());
-        $webpage->fill('[data-confirm-password-input]', 'password')
-            ->click('[data-test="confirm-password-button"]');
-    } else {
-        // Without Authentik or Emby the login page shows its email form directly.
-        config()->set('services.authentik.client_id');
-        $user = User::factory()->member()->create();
-        $user->forceFill([
-            'two_factor_secret' => encrypt('EXAMPLESECRETKEY'),
-            'two_factor_recovery_codes' => encrypt(json_encode(['example-recovery-code'])),
-            'two_factor_confirmed_at' => now(),
-        ])->save();
-
-        $webpage = mobileLayoutVisit(route('login', absolute: false), $viewport, $scheme)->assertNoSmoke();
-        $webpage->script(appHydratedScript());
-        $webpage->fill('[data-login-email]', $user->email)
-            ->fill('[data-login-password]', 'password')
-            ->click('[data-test="login-button"]');
-    }
-
-    $webpage->assertPathIs(route($routeName, absolute: false))->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-
-    mobileLayoutAssertPage($webpage, null, null, $root);
-
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript($root), '');
-    }
-})->with('mobile layout modes')->with('mobile layout flow auth pages');
-
-/**
- * The sign-in a real install shows: Authentik and Emby buttons, the open Emby
- * form and the opened email-login collapsible.
- */
-test('the login page with single sign-on fits the screen with 40 px targets on a phone', function (string $viewport, string $scheme): void {
-    config()->set('services.authentik.client_id', 'example-client-id');
-    ServiceConnection::factory()->emby()->create(['name' => 'Emby', 'url' => 'http://emby.local:8096', 'api_key' => 'k']);
-
-    $webpage = mobileLayoutVisit(route('login', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutAssertPage($webpage, '[data-login-authentik]', '[data-login-emby]', 'body');
-
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript('body'), '');
-    }
-
-    $webpage->click('[data-login-emby]')
-        ->click('[data-login-local-toggle]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-login-emby-form]") && document.getAnimations().length === 0'));
-    mobileLayoutAssertPage($webpage, '[data-test="login-button"]', '[data-login-emby-form]', 'body');
-
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript('body'), '');
-    }
-})->with('mobile layout modes');
-
-test('every control on a signed-in auth page is a 40 px target on a phone', function (string $routeName): void {
-    $this->actingAs(User::factory()->member()->unverified()->create());
-
-    $webpage = visit(route($routeName, absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage);
-
-    $webpage->assertScript(phoneSmallTargetsScript('body'), '');
-})->with('mobile layout signed-in auth pages');
-
-/**
- * The add form a result card opens (quality profile, root folder, Add and
- * Cancel), with a long first root folder: its select shows that path.
- */
-test('the add form of an add page fits the screen', function (string $viewport, string $scheme, string $routeName, string $query, int $resultId): void {
-    // The `*` keys differ from the defaults' keys, so these match first.
-    $rootFolders = [
-        ['id' => 1, 'path' => '/mnt/user/data/media/example-library-with-a-long-folder-name/tv', 'freeSpace' => 1_200_000_000_000],
-        ['id' => 2, 'path' => '/data/tv', 'freeSpace' => 100_000_000_000],
-    ];
-    mobileLayoutFakeServices([
-        'sonarr.local:8989/api/v3/rootfolder*' => Http::response($rootFolders),
-        'radarr.local:7878/api/v3/rootfolder*' => Http::response($rootFolders),
-    ]);
-    $this->actingAs(User::factory()->member()->create());
-
-    $webpage = mobileLayoutVisit(route($routeName, ['q' => $query], absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage, sprintf('[data-add-result="%d"]', $resultId));
-    $webpage->click(sprintf('[data-add-result="%d"]', $resultId));
-
-    mobileLayoutAssertPage($webpage, '[data-add-root-folder]', '[data-add-root-folder]');
-    $webpage->assertSeeIn('[data-add-root-folder]', '/mnt/user/data/media');
-
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '');
-    }
-})->with('mobile layout modes')->with([
-    'add series' => ['media.series.create', 'severance', 371980],
-    'add movie' => ['media.movies.create', 'dune', 438631],
-]);
-
 /**
  * Fits $root (an open dialog, sheet or drawer) on the screen: nothing past it,
  * no overlap, no scroll sliver and no cut text, and the box itself inside
@@ -1341,386 +1151,363 @@ function mobileLayoutAssertOverlay(AwaitableWebpage|PendingAwaitablePage|Webpage
         ->assertScript("(() => { const rect = document.querySelector({$encoded}).getBoundingClientRect(); return rect.left >= 0 && rect.right <= window.innerWidth && rect.top >= 0 && rect.bottom <= window.innerHeight; })()", true);
 }
 
-test('an open dialog fits the screen', function (string $viewport, string $scheme): void {
-    $this->actingAs(User::factory()->admin()->create());
-
-    $webpage = mobileLayoutVisit(route('admin.users.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    $webpage->click('[data-users-invite]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
-    mobileLayoutSettle($webpage);
-
-    mobileLayoutAssertOverlay($webpage, '[role="dialog"]');
-})->with('mobile layout modes');
-
 /**
- * The phone opens a request in a sheet from its card; the desktop shows the
- * table and the selected request's detail panel beside it, so a desktop row
- * selects the request and measures the page with that panel filled.
+ * Registers the layout gate's page, flow and dialog tests for one screen (a
+ * mobileLayoutModes() row) in the calling test file. Each screen is its own
+ * test class under tests/Browser/MobileLayout, so the duration-balanced
+ * shards can put the four screens on different shards.
  */
-test('an open action sheet fits the screen', function (string $viewport, string $scheme): void {
-    mobileLayoutFakeServices();
-    $actionRequest = ActionRequest::query()->where('status', ActionRequestStatus::Pending)->sole();
-    $this->actingAs(User::factory()->admin()->create());
+function mobileLayoutGateTests(string $viewport, string $scheme): void
+{
+    test('the page renders the width and colour scheme of the screen', function () use ($viewport, $scheme): void {
+        $this->actingAs(User::factory()->member()->create());
 
-    $webpage = mobileLayoutVisit(route('actions.requests.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+        $webpage = mobileLayoutVisit(route('profile.edit', absolute: false), $viewport, $scheme)->assertNoSmoke();
 
-    if ($viewport === 'desktop') {
-        $webpage->click(sprintf('[data-action-row="%d"]', $actionRequest->id));
-        mobileLayoutAssertPage($webpage, '[data-action-approve]', '[data-action-approve]');
+        $webpage->assertScript("document.documentElement.classList.contains('dark')", $scheme === 'dark')
+            ->assertScript('window.innerWidth', $viewport === 'desktop' ? 1440 : 375);
+    });
 
-        return;
-    }
+    /**
+     * @param  array<string, int|string>  $parameters
+     */
+    test('a member page fits the screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []) use ($viewport, $scheme): void {
+        mobileLayoutFakeServices();
+        $this->actingAs(User::factory()->member()->create(['name' => 'Example Member', 'email' => 'requester@example.com']));
 
-    $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet]") && document.querySelector("[data-action-sheet]").getAnimations().length === 0'));
-    mobileLayoutSettle($webpage);
+        mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred);
+    })->with(mobileLayoutMemberPages());
 
-    mobileLayoutAssertOverlay($webpage, '[data-action-sheet]');
-})->with('mobile layout modes');
+    /**
+     * @param  array<string, int|string>  $parameters
+     */
+    test('an admin page fits the screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []) use ($viewport, $scheme): void {
+        config()->set('mediamanager.ai.enabled', true);
+        mobileLayoutFakeServices();
+        $admin = User::factory()->admin()->create(['name' => 'Example Admin']);
+        mobileLayoutSeedDetailModels($admin);
+        $this->actingAs($admin);
 
-test('the open subtitle item drawer fits the screen', function (string $viewport, string $scheme): void {
-    mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create());
+        mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred);
+    })->with(mobileLayoutAdminPages());
 
-    $webpage = mobileLayoutVisit(route('bazarr.missing', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage, '[data-test^="subtitle-item-"]');
-    // The episode with the long unbroken file name and an external track.
-    $webpage->click('[data-test="subtitle-item-episode-81"]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
-    mobileLayoutSettle($webpage);
+    /**
+     * @param  array<string, int|string>  $parameters
+     */
+    test('a guest page fits the screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []) use ($viewport, $scheme): void {
+        mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred, 'body');
+    })->with(mobileLayoutGuestPages());
 
-    mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
+    /**
+     * @param  array<string, int|string>  $parameters
+     */
+    test('a signed-in auth page fits the screen', function (string $routeName, ?string $primary, ?string $deferred = null, array $parameters = []) use ($viewport, $scheme): void {
+        $this->actingAs(User::factory()->member()->unverified()->create());
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
-    }
+        mobileLayoutAssertPage(mobileLayoutVisit(route($routeName, $parameters, absolute: false), $viewport, $scheme)->assertNoSmoke(), $primary, $deferred, 'body');
+    })->with(mobileLayoutSignedInAuthPages());
 
-    // The widest state: the provider search lists a candidate with a long release name.
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"subtitle-search\"]:not([disabled])")'));
-    $webpage->click('[data-test="subtitle-search"]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"candidate-request-0\"]")'));
+    test('a page reached through its flow fits the screen with 40 px targets on a phone', function (string $routeName, string $root) use ($viewport, $scheme): void {
+        if ($routeName === 'auth.set-password') {
+            // An invited user signed in before setting a password.
+            $this->actingAs(User::factory()->member()->create(['password' => null, 'invite_accepted_at' => null]));
+            $webpage = mobileLayoutVisit(route($routeName, absolute: false), $viewport, $scheme)->assertNoSmoke();
+        } elseif ($routeName === 'security.edit') {
+            // Security redirects to password confirmation first.
+            $this->actingAs(User::factory()->member()->create());
+            $webpage = mobileLayoutVisit(route($routeName, absolute: false), $viewport, $scheme)->assertNoSmoke();
+            $webpage->script(appHydratedScript());
+            $webpage->fill('[data-confirm-password-input]', 'password')
+                ->click('[data-test="confirm-password-button"]');
+        } else {
+            // Without Authentik or Emby the login page shows its email form directly.
+            config()->set('services.authentik.client_id');
+            $user = User::factory()->member()->create();
+            $user->forceFill([
+                'two_factor_secret' => encrypt('EXAMPLESECRETKEY'),
+                'two_factor_recovery_codes' => encrypt(json_encode(['example-recovery-code'])),
+                'two_factor_confirmed_at' => now(),
+            ])->save();
 
-    mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
+            $webpage = mobileLayoutVisit(route('login', absolute: false), $viewport, $scheme)->assertNoSmoke();
+            $webpage->script(appHydratedScript());
+            $webpage->fill('[data-login-email]', $user->email)
+                ->fill('[data-login-password]', 'password')
+                ->click('[data-test="login-button"]');
+        }
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
-    }
-})->with('mobile layout modes');
+        $webpage->assertPathIs(route($routeName, absolute: false))->assertNoSmoke();
+        $webpage->script(appHydratedScript());
 
-/**
- * Two Bazarr connections (the connection select shows) and Bazarr's movie
- * reads failing (each inventory page shows its partial-read warning), seen
- * by an admin, whose tab strip also has Admin.
- */
-test('a Subtitles page with two Bazarr connections and a failed read fits the screen', function (string $viewport, string $scheme, string $routeName, ?string $deferred, bool $failedRead): void {
-    // A key unlike the defaults' keys, so it matches first.
-    mobileLayoutFakeServices(['*bazarr.local:6767/api/movies*' => Http::response(['message' => 'Example upstream failure'], 500)]);
-    $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
-    ServiceConnection::factory()->bazarr()->create(['name' => 'Example Second Bazarr With A Long Connection Name', 'url' => 'http://bazarr.local:6767', 'api_key' => 'k']);
-    $this->actingAs(User::factory()->admin()->create());
+        mobileLayoutAssertPage($webpage, null, null, $root);
 
-    $webpage = mobileLayoutVisit(route($routeName, ['connection' => $serviceConnection->id], absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutAssertPage($webpage, '[data-test="bazarr-connection"]', $deferred);
-    $webpage->assertScript('document.querySelector("main").textContent.includes("temporarily unavailable")', $failedRead);
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript($root), '');
+        }
+    })->with(mobileLayoutFlowAuthPages());
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '');
-    }
-})->with('mobile layout modes')->with([
-    'subtitles' => ['bazarr.overview', null, true],
-    'missing subtitles' => ['bazarr.missing', '[data-test^="subtitle-item-"]', true],
-    'subtitle library' => ['bazarr.library', '[data-test^="subtitle-item-"]', true],
-    'subtitle history' => ['bazarr.history', '[data-test="history-filters"]', true],
-    'subtitles admin' => ['bazarr.admin.index', '[data-test="bazarr-admin-form"]', false],
-]);
+    /**
+     * The sign-in a real install shows: Authentik and Emby buttons, the open Emby
+     * form and the opened email-login collapsible.
+     */
+    test('the login page with single sign-on fits the screen with 40 px targets on a phone', function () use ($viewport, $scheme): void {
+        config()->set('services.authentik.client_id', 'example-client-id');
+        ServiceConnection::factory()->emby()->create(['name' => 'Emby', 'url' => 'http://emby.local:8096', 'api_key' => 'k']);
 
-/**
- * The titles are prose ("series — episode"): on a phone they wrap at a space,
- * and only an unbroken run (a file name) may split mid-word.
- */
-test('a long spaced Subtitles title wraps at a space on a phone', function (): void {
-    mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create());
-    $title = 'Example Episode With A Fairly Long Name 2';
+        $webpage = mobileLayoutVisit(route('login', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutAssertPage($webpage, '[data-login-authentik]', '[data-login-emby]', 'body');
 
-    $webpage = visit(route('bazarr.missing', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage, '[data-test="subtitle-item-episode-82"]');
-    $webpage->assertScript(mobileLayoutMidWordBreaksScript('main', $title), '');
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+        }
 
-    $webpage->click('[data-test="subtitle-item-episode-82"]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
-    $webpage->assertScript(mobileLayoutMidWordBreaksScript('[data-slot="sheet-content"] [data-slot="sheet-header"]', $title), '');
+        $webpage->click('[data-login-emby]')
+            ->click('[data-login-local-toggle]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-login-emby-form]") && document.getAnimations().length === 0'));
+        mobileLayoutAssertPage($webpage, '[data-test="login-button"]', '[data-login-emby-form]', 'body');
 
-    foreach (['bazarr.library' => '[data-test="subtitle-item-episode-82"]', 'bazarr.history' => '[data-test="history-filters"]'] as $routeName => $deferred) {
-        $webpage->navigate(route($routeName, absolute: false))->assertNoSmoke();
-        mobileLayoutSettle($webpage, $deferred);
-        $webpage->assertScript(mobileLayoutMidWordBreaksScript('main', $title), '');
-    }
-});
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript('body'), '');
+        }
+    });
 
-/**
- * Subtitles admin with every panel filled: a long unbroken mapped connection
- * name, a throttled provider, a notification with a long unbroken name (the
- * fakes), then the open notification setup with its two readonly URIs. Every
- * native input is 40 px on touch.
- */
-test('the Subtitles admin page with every panel filled fits the screen', function (string $viewport, string $scheme): void {
-    mobileLayoutFakeServices();
-    ServiceConnection::query()->where('name', 'Radarr')->sole()->update(['name' => 'Example_Radarr_Connection_With_A_Very_Long_Unbroken_Name_0123456789']);
-    $this->actingAs(User::factory()->admin()->create());
-    $inputs = '[...document.querySelectorAll("main input:not([type=\"checkbox\"]):not([type=\"radio\"])")].filter((input) => input.getBoundingClientRect().height > 0 && input.getBoundingClientRect().height < 39.5).map((input) => `${input.getAttribute("data-test") ?? input.type} ${Math.round(input.getBoundingClientRect().height)}px`).join(" | ")';
+    /**
+     * The add form a result card opens (quality profile, root folder, Add and
+     * Cancel), with a long first root folder: its select shows that path.
+     */
+    test('the add form of an add page fits the screen', function (string $routeName, string $query, int $resultId) use ($viewport, $scheme): void {
+        // The `*` keys differ from the defaults' keys, so these match first.
+        $rootFolders = [
+            ['id' => 1, 'path' => '/mnt/user/data/media/example-library-with-a-long-folder-name/tv', 'freeSpace' => 1_200_000_000_000],
+            ['id' => 2, 'path' => '/data/tv', 'freeSpace' => 100_000_000_000],
+        ];
+        mobileLayoutFakeServices([
+            'sonarr.local:8989/api/v3/rootfolder*' => Http::response($rootFolders),
+            'radarr.local:7878/api/v3/rootfolder*' => Http::response($rootFolders),
+        ]);
+        $this->actingAs(User::factory()->member()->create());
 
-    $webpage = mobileLayoutVisit(route('bazarr.admin.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutAssertPage($webpage, '[data-test="save-bazarr-settings"]', 'main:has([data-test="bazarr-admin-form"]):has([data-test="show-bazarr-notification-hint"])');
-    $webpage->assertScript('["Throttled until", "example_apprise_notification_target", "Example_Radarr_Connection"].every((text) => document.querySelector("main").textContent.includes(text))', true);
+        $webpage = mobileLayoutVisit(route($routeName, ['q' => $query], absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutSettle($webpage, sprintf('[data-add-result="%d"]', $resultId));
+        $webpage->click(sprintf('[data-add-result="%d"]', $resultId));
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '')
-            ->assertScript($inputs, '');
-    }
+        mobileLayoutAssertPage($webpage, '[data-add-root-folder]', '[data-add-root-folder]');
+        $webpage->assertSeeIn('[data-add-root-folder]', '/mnt/user/data/media');
 
-    $webpage->click('[data-test="show-bazarr-notification-hint"]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"bazarr-apprise-config-uri\"]")'));
-    mobileLayoutAssertPage($webpage, '[data-test="bazarr-apprise-config-uri"]');
-
-    if ($viewport === 'phone') {
-        $webpage->assertScript($inputs, '');
-    }
-})->with('mobile layout modes');
-
-/**
- * The admin's escalations: the filters, an investigate button on every case
- * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
- */
-test('the subtitle escalations page with every action and a pager fits the screen', function (string $viewport, string $scheme): void {
-    config()->set('mediamanager.ai.enabled', true);
-    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
-    mobileLayoutFakeServices();
-    $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
-    SubtitleCase::factory()->count(60)->create([
-        'bazarr_connection_id' => $serviceConnection->id, 'service_connection_id' => ServiceConnection::query()->where('name', 'Sonarr')->sole()->id, 'scope' => 'tv', 'status' => SubtitleCaseStatus::NeedsReview,
-        'evidence' => ['display_name' => 'Severance S01E03', 'missing_languages' => ['swe']],
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '');
+        }
+    })->with([
+        'add series' => ['media.series.create', 'severance', 371980],
+        'add movie' => ['media.movies.create', 'dune', 438631],
     ]);
-    $this->actingAs(User::factory()->admin()->create());
 
-    $webpage = mobileLayoutVisit(route('bazarr.escalations', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutAssertPage($webpage, '[data-test="escalation-filters"]', 'main:has([data-test^="investigate-subtitle-case-"]):has(nav[aria-label="Escalation pages"])');
+    test('an open dialog fits the screen', function () use ($viewport, $scheme): void {
+        $this->actingAs(User::factory()->admin()->create());
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '');
-    }
-})->with('mobile layout modes');
+        $webpage = mobileLayoutVisit(route('admin.users.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        $webpage->click('[data-users-invite]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[role=\"dialog\"]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+        mobileLayoutSettle($webpage);
 
-test('the seasonal anime page with Seerr unreachable fits the screen', function (string $viewport, string $scheme): void {
-    mobileLayoutFakeServices(['*seerr.local:5055/api/v1/user*' => Http::response(['message' => 'Example upstream failure'], 500)]);
-    $this->actingAs(User::factory()->member()->create());
+        mobileLayoutAssertOverlay($webpage, '[role="dialog"]');
+    });
 
-    $webpage = mobileLayoutVisit(route('media.anime.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutAssertPage($webpage, null, 'main:has([data-anime-open]):has([data-seerr-picker-unreachable])');
+    /**
+     * The phone opens a request in a sheet from its card; the desktop shows the
+     * table and the selected request's detail panel beside it, so a desktop row
+     * selects the request and measures the page with that panel filled.
+     */
+    test('an open action sheet fits the screen', function () use ($viewport, $scheme): void {
+        mobileLayoutFakeServices();
+        $actionRequest = ActionRequest::query()->where('status', ActionRequestStatus::Pending)->sole();
+        $this->actingAs(User::factory()->admin()->create());
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '');
-    }
-})->with('mobile layout modes');
+        $webpage = mobileLayoutVisit(route('actions.requests.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
 
-/**
- * Every card action as a member (Open, Monitor, an enabled Request and Find
- * match, the fourth entry having no id map), then the match dialog listing
- * the Seerr search's candidates.
- */
-test('the seasonal anime page and its open match dialog fit the screen', function (string $viewport, string $scheme): void {
-    mobileLayoutFakeServices();
-    $this->actingAs(User::factory()->member()->create(['email' => 'requester@example.com']));
+        if ($viewport === 'desktop') {
+            $webpage->click(sprintf('[data-action-row="%d"]', $actionRequest->id));
+            mobileLayoutAssertPage($webpage, '[data-action-approve]', '[data-action-approve]');
 
-    $webpage = mobileLayoutVisit(route('media.anime.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    mobileLayoutSettle($webpage, 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request]:not([disabled]))');
+            return;
+        }
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript(), '');
-    }
+        $webpage->click(sprintf('[data-action-card-open="%d"]', $actionRequest->id));
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-action-sheet]") && document.querySelector("[data-action-sheet]").getAnimations().length === 0'));
+        mobileLayoutSettle($webpage);
 
-    $webpage->click('[data-anime-find-match]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-anime-match-candidate]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
-    mobileLayoutSettle($webpage);
+        mobileLayoutAssertOverlay($webpage, '[data-action-sheet]');
+    });
 
-    mobileLayoutAssertOverlay($webpage, '[role="dialog"]');
+    test('the open subtitle item drawer fits the screen', function () use ($viewport, $scheme): void {
+        mobileLayoutFakeServices();
+        $this->actingAs(User::factory()->member()->create());
 
-    if ($viewport === 'phone') {
-        $webpage->assertScript(phoneSmallTargetsScript('[role="dialog"]'), '');
-    }
-})->with('mobile layout modes');
+        $webpage = mobileLayoutVisit(route('bazarr.missing', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutSettle($webpage, '[data-test^="subtitle-item-"]');
+        // The episode with the long unbroken file name and an external track.
+        $webpage->click('[data-test="subtitle-item-episode-81"]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
+        mobileLayoutSettle($webpage);
 
-test('the open chat sheet fits the screen', function (string $viewport, string $scheme): void {
-    config()->set('mediamanager.ai.enabled', true);
-    $this->actingAs(User::factory()->admin()->create());
+        mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
 
-    $webpage = mobileLayoutVisit(route('dashboard', absolute: false), $viewport, $scheme)->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-    // The phone opens the sheet from the header, the desktop from the sidebar.
-    $webpage->click($viewport === 'desktop' ? '[data-sidebar-ai-chat-open]' : '[data-header-ai-chat-sheet]');
-    $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"] [data-chat-input]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
-    mobileLayoutSettle($webpage, '[data-chat-options]');
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
+        }
 
-    mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
-})->with('mobile layout modes');
+        // The widest state: the provider search lists a candidate with a long release name.
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"subtitle-search\"]:not([disabled])")'));
+        $webpage->click('[data-test="subtitle-search"]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"candidate-request-0\"]")'));
 
-test('the settle wait fails loudly when the deferred content never renders', function (): void {
-    $this->actingAs(User::factory()->member()->create());
+        mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
 
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript('[data-slot="sheet-content"]'), '');
+        }
+    });
 
-    expect(fn () => mobileLayoutSettle($webpage, '[data-never-rendered]'))
-        ->toThrow('the deferred content [data-never-rendered] never rendered');
-});
+    /**
+     * Two Bazarr connections (the connection select shows) and Bazarr's movie
+     * reads failing (each inventory page shows its partial-read warning), seen
+     * by an admin, whose tab strip also has Admin.
+     */
+    test('a Subtitles page with two Bazarr connections and a failed read fits the screen', function (string $routeName, ?string $deferred, bool $failedRead) use ($viewport, $scheme): void {
+        // A key unlike the defaults' keys, so it matches first.
+        mobileLayoutFakeServices(['*bazarr.local:6767/api/movies*' => Http::response(['message' => 'Example upstream failure'], 500)]);
+        $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
+        ServiceConnection::factory()->bazarr()->create(['name' => 'Example Second Bazarr With A Long Connection Name', 'url' => 'http://bazarr.local:6767', 'api_key' => 'k']);
+        $this->actingAs(User::factory()->admin()->create());
 
-test('the overlap check names two overlapping controls and excuses nested or clipped ones', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+        $webpage = mobileLayoutVisit(route($routeName, ['connection' => $serviceConnection->id], absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutAssertPage($webpage, '[data-test="bazarr-connection"]', $deferred);
+        $webpage->assertScript('document.querySelector("main").textContent.includes("temporarily unavailable")', $failedRead);
 
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-overlap-fixture style="position:relative;height:60px"><button style="position:absolute;left:0;top:0;width:100px;height:40px">One</button><button style="position:absolute;left:60px;top:10px;width:100px;height:40px">Two</button></div>`)');
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '');
+        }
+    })->with([
+        'subtitles' => ['bazarr.overview', null, true],
+        'missing subtitles' => ['bazarr.missing', '[data-test^="subtitle-item-"]', true],
+        'subtitle library' => ['bazarr.library', '[data-test^="subtitle-item-"]', true],
+        'subtitle history' => ['bazarr.history', '[data-test="history-filters"]', true],
+        'subtitles admin' => ['bazarr.admin.index', '[data-test="bazarr-admin-form"]', false],
+    ]);
 
-    $overlap = $webpage->script(phoneOverlapScript());
-    expect($overlap)->toContain('"One"')->toContain('"Two"')->toContain(' × ');
+    /**
+     * Subtitles admin with every panel filled: a long unbroken mapped connection
+     * name, a throttled provider, a notification with a long unbroken name (the
+     * fakes), then the open notification setup with its two readonly URIs. Every
+     * native input is 40 px on touch.
+     */
+    test('the Subtitles admin page with every panel filled fits the screen', function () use ($viewport, $scheme): void {
+        mobileLayoutFakeServices();
+        ServiceConnection::query()->where('name', 'Radarr')->sole()->update(['name' => 'Example_Radarr_Connection_With_A_Very_Long_Unbroken_Name_0123456789']);
+        $this->actingAs(User::factory()->admin()->create());
+        $inputs = '[...document.querySelectorAll("main input:not([type=\"checkbox\"]):not([type=\"radio\"])")].filter((input) => input.getBoundingClientRect().height > 0 && input.getBoundingClientRect().height < 39.5).map((input) => `${input.getAttribute("data-test") ?? input.type} ${Math.round(input.getBoundingClientRect().height)}px`).join(" | ")';
 
-    // A disabled Button is pointer-events: none yet keeps its box, so it still collides.
-    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:60px"><button disabled style="position:absolute;left:0;top:0;width:100px;height:40px;pointer-events:none">Off</button><button style="position:absolute;left:60px;top:10px;width:100px;height:40px">On</button></div>`');
-    expect($webpage->script(phoneOverlapScript()))->toContain('"Off"')->toContain('"On"');
+        $webpage = mobileLayoutVisit(route('bazarr.admin.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutAssertPage($webpage, '[data-test="save-bazarr-settings"]', 'main:has([data-test="bazarr-admin-form"]):has([data-test="show-bazarr-notification-hint"])');
+        $webpage->assertScript('["Throttled until", "example_apprise_notification_target", "Example_Radarr_Connection"].every((text) => document.querySelector("main").textContent.includes(text))', true);
 
-    // A small control wholly inside a bigger one's box (a checkbox on a card link) is the overlay pattern.
-    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:120px"><a href="#" style="position:absolute;inset:0">Card</a><button style="position:absolute;left:8px;top:8px;width:40px;height:40px" aria-label="Pick">x</button></div>`');
-    $webpage->assertScript(phoneOverlapScript(), '');
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '')
+                ->assertScript($inputs, '');
+        }
 
-    // A control its scroller clips away overlaps nothing on screen.
-    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="position:relative;height:60px"><div style="width:100px;overflow:hidden;white-space:nowrap"><button style="margin-left:150px;width:80px;height:40px">Hidden</button></div><button style="position:absolute;left:150px;top:0;width:80px;height:40px">Shown</button></div>`');
-    $webpage->assertScript(phoneOverlapScript(), '');
+        $webpage->click('[data-test="show-bazarr-notification-hint"]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-test=\"bazarr-apprise-config-uri\"]")'));
+        mobileLayoutAssertPage($webpage, '[data-test="bazarr-apprise-config-uri"]');
 
-    // An inline link wrapping onto a second line is measured by its line boxes, not its bounding box,
-    // so a taller button after it on the second line overlaps nothing.
-    $webpage->script('document.querySelector("[data-overlap-fixture]").outerHTML = `<div data-overlap-fixture style="width:200px;font-size:16px;line-height:20px"><a href="#">An inline link that wraps here</a> <button style="height:40px;vertical-align:top">Next</button></div>`');
-    $webpage->assertScript('(() => { const link = document.querySelector("[data-overlap-fixture] a"); const button = document.querySelector("[data-overlap-fixture] button"); const box = link.getBoundingClientRect(); const target = button.getBoundingClientRect(); return link.getClientRects().length === 2 && target.top < box.bottom && target.left < box.right && target.bottom > box.bottom; })()', true);
-    $webpage->assertScript(phoneOverlapScript(), '');
-});
+        if ($viewport === 'phone') {
+            $webpage->assertScript($inputs, '');
+        }
+    });
 
-test('the sliver check names a scroller that scrolls by a few pixels', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+    /**
+     * The admin's escalations: the filters, an investigate button on every case
+     * (AI and Bazarr automation on) and three pages of cases, so the pager shows.
+     */
+    test('the subtitle escalations page with every action and a pager fits the screen', function () use ($viewport, $scheme): void {
+        config()->set('mediamanager.ai.enabled', true);
+        resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
+        mobileLayoutFakeServices();
+        $serviceConnection = ServiceConnection::query()->where('name', 'Bazarr')->sole();
+        SubtitleCase::factory()->count(60)->create([
+            'bazarr_connection_id' => $serviceConnection->id, 'service_connection_id' => ServiceConnection::query()->where('name', 'Sonarr')->sole()->id, 'scope' => 'tv', 'status' => SubtitleCaseStatus::NeedsReview,
+            'evidence' => ['display_name' => 'Severance S01E03', 'missing_languages' => ['swe']],
+        ]);
+        $this->actingAs(User::factory()->admin()->create());
 
-    // A 32 px touch-target in a 32 px scroller: its 40 px ::after overhangs 4 px below.
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-sliver-fixture style="height:32px;overflow-y:auto"><button class="touch-target" style="display:block;height:32px">Sliver</button></div>`)');
-    expect($webpage->script(phoneScrollSliverScript()))->toContain('[data-sliver-fixture]')->toContain('by 4px');
+        $webpage = mobileLayoutVisit(route('bazarr.escalations', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutAssertPage($webpage, '[data-test="escalation-filters"]', 'main:has([data-test^="investigate-subtitle-case-"]):has(nav[aria-label="Escalation pages"])');
 
-    // Content that really scrolls is not a sliver.
-    $webpage->script('document.querySelector("[data-sliver-fixture]").outerHTML = `<div data-sliver-fixture style="height:100px;overflow-y:auto"><div style="height:300px">Tall</div></div>`');
-    $webpage->assertScript(phoneScrollSliverScript(), '');
-});
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '');
+        }
+    });
 
-test('the clipped-text check names text past its box and passes a touch target', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+    test('the seasonal anime page with Seerr unreachable fits the screen', function () use ($viewport, $scheme): void {
+        mobileLayoutFakeServices(['*seerr.local:5055/api/v1/user*' => Http::response(['message' => 'Example upstream failure'], 500)]);
+        $this->actingAs(User::factory()->member()->create());
 
-    // Unbroken text inside a span is measured against its block, which a frame clips.
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden"><div><span>ExampleUnbrokenTextThatRunsPastItsBox</span></div></div>`)');
+        $webpage = mobileLayoutVisit(route('media.anime.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutAssertPage($webpage, null, 'main:has([data-anime-open]):has([data-seerr-picker-unreachable])');
 
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '');
+        }
+    });
 
-    // A touch-target's 40 px ::after is wider than its 24 px button, but its text fits.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture><button class="touch-target" style="width:24px;height:24px;padding:0;font-size:10px">OK</button></div>`');
-    $webpage->assertScript('(() => { const button = document.querySelector("[data-clipped-fixture] button"); return parseFloat(getComputedStyle(button, "::after").width) > button.clientWidth; })()', true)
-        ->assertScript(mobileLayoutClippedTextScript(), '');
+    /**
+     * Every card action as a member (Open, Monitor, an enabled Request and Find
+     * match, the fourth entry having no id map), then the match dialog listing
+     * the Seerr search's candidates.
+     */
+    test('the seasonal anime page and its open match dialog fit the screen', function () use ($viewport, $scheme): void {
+        mobileLayoutFakeServices();
+        $this->actingAs(User::factory()->member()->create(['email' => 'requester@example.com']));
 
-    // Text that ends in an ellipsis is clipped on purpose.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px"><div class="truncate">ExampleUnbrokenTextThatRunsPastItsBox</div></div>`');
-    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
-});
+        $webpage = mobileLayoutVisit(route('media.anime.index', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        mobileLayoutSettle($webpage, 'main:has([data-anime-open]):has([data-anime-monitor]):has([data-anime-request]:not([disabled]))');
 
-test('the clipped-text check finds the frame that cuts text above a box the text fits', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript(), '');
+        }
 
-    // A flex item grows to its unwrapped text, so the text fits its own box; the frame two levels up cuts it.
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden"><div style="display:flex"><span style="white-space:nowrap">Words that run past the frame</span></div></div>`)');
-    $webpage->assertScript('(() => { const span = document.querySelector("[data-clipped-fixture] span"); return span.scrollWidth <= span.clientWidth && span.getBoundingClientRect().right > document.querySelector("[data-clipped-fixture]").getBoundingClientRect().right; })()', true);
+        $webpage->click('[data-anime-find-match]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-anime-match-candidate]") && document.querySelector("[role=\"dialog\"]").getAnimations().length === 0'));
+        mobileLayoutSettle($webpage);
 
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "Words that run past the frame" cut sideways');
+        mobileLayoutAssertOverlay($webpage, '[role="dialog"]');
 
-    // A position: absolute box escapes a frame that is not its containing block.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="position:relative;width:200px;height:40px"><div style="width:100px;height:20px;overflow:hidden"><span style="position:absolute;white-space:nowrap">Words past the frame</span></div></div>`');
-    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
-});
+        if ($viewport === 'phone') {
+            $webpage->assertScript(phoneSmallTargetsScript('[role="dialog"]'), '');
+        }
+    });
 
-test('the clipped-text check names text a line clamp or its own overflow cuts without an ellipsis', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
+    test('the open chat sheet fits the screen', function () use ($viewport, $scheme): void {
+        config()->set('mediamanager.ai.enabled', true);
+        $this->actingAs(User::factory()->admin()->create());
 
-    // A line clamp hides its extra lines behind its own ellipsis, but cuts an unbroken word sideways.
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2">An ExampleUnbrokenTextThatRunsPastItsBox</div>`)');
+        $webpage = mobileLayoutVisit(route('dashboard', absolute: false), $viewport, $scheme)->assertNoSmoke();
+        $webpage->script(appHydratedScript());
+        // The phone opens the sheet from the header, the desktop from the sidebar.
+        $webpage->click($viewport === 'desktop' ? '[data-sidebar-ai-chat-open]' : '[data-header-ai-chat-sheet]');
+        $webpage->script(confirmDialogWaitUntilScript('!!document.querySelector("[data-slot=\"sheet-content\"] [data-chat-input]") && document.querySelector("[data-slot=\"sheet-content\"]").getAnimations().length === 0'));
+        mobileLayoutSettle($webpage, '[data-chat-options]');
 
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "An ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
-
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2">Many short words that wrap onto five or six lines in all</div>`');
-    $webpage->assertScript('(() => { const box = document.querySelector("[data-clipped-fixture]"); return box.scrollHeight > box.clientHeight; })()', true)
-        ->assertScript(mobileLayoutClippedTextScript(), '');
-
-    // A box that clips its own text to one line hides the rest without an ellipsis.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;height:20px;line-height:20px;overflow:hidden">Short words that wrap onto more lines</div>`');
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-clipped-fixture] "Short words that wrap onto more lines" cut down');
-
-    // A clipping box that ends in an ellipsis cuts on purpose.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture class="truncate" style="width:100px"><span>ExampleUnbrokenTextThatRunsPastItsBox</span></div>`');
-    $webpage->assertScript(mobileLayoutClippedTextScript(), '');
-});
-
-test('the clipped-text check passes text a scroller reveals', function (): void {
-    $this->actingAs(User::factory()->member()->create());
-    $webpage = visit(route('profile.edit', absolute: false))->on()->mobile()->assertNoSmoke();
-    $webpage->script(appHydratedScript());
-
-    // The paragraph is as wide as its scroller, so its text runs past it, but the scroller reaches it.
-    $webpage->script('document.querySelector("main").insertAdjacentHTML("afterbegin", `<div data-clipped-fixture style="width:100px;overflow-x:auto"><p style="white-space:nowrap">ExampleUnbrokenTextThatRunsPastItsBox</p></div>`)');
-    $webpage->assertScript('(() => { const scroller = document.querySelector("[data-clipped-fixture]"); return scroller.scrollWidth > scroller.clientWidth; })()', true)
-        ->assertScript(mobileLayoutClippedTextScript(), '');
-
-    // A frame inside the scroller still cuts.
-    $webpage->script('document.querySelector("[data-clipped-fixture]").outerHTML = `<div data-clipped-fixture style="width:100px;overflow-x:auto"><div data-inner-frame style="width:80px;overflow:hidden"><p style="white-space:nowrap">ExampleUnbrokenTextThatRunsPastItsBox</p></div></div>`');
-    expect($webpage->script(mobileLayoutClippedTextScript()))->toContain('div[data-inner-frame] "ExampleUnbrokenTextThatRunsPastItsBox" cut sideways');
-});
-
-test('the phone gate classifies every page route', function (): void {
-    $listed = collect([...mobileLayoutMemberPages(), ...mobileLayoutAdminPages(), ...mobileLayoutGuestPages(), ...mobileLayoutSignedInAuthPages(), ...mobileLayoutFlowAuthPages()])->map(fn (array $row): string => $row[0])->unique();
-    $excluded = collect(mobileLayoutExcludedRouteNames())->keys();
-
-    $pageRoutes = collect(mobileLayoutPageRouteNames());
-
-    expect(mobileLayoutUnclassifiedRouteNames())->toBe([])
-        ->and($listed->merge($excluded)->diff($pageRoutes)->values()->all())->toBe([])
-        ->and($listed->intersect($excluded)->values()->all())->toBe([]);
-});
-
-test('the route guard catches an unlisted page behind auth or an auth guard', function (): void {
-    Route::middleware(['web', 'auth'])->get('example-auth-page', fn (): Response => Inertia::render('Dashboard'))->name('example.auth-page');
-    Route::middleware(['web', 'auth:web'])->get('example-guarded-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guarded-page');
-
-    expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.auth-page', 'example.guarded-page']);
-});
-
-test('the route guard catches an unlisted guest or public page', function (): void {
-    Route::middleware(['web', 'guest'])->get('example-guest-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guest-page');
-    Route::middleware(['web', 'guest:web'])->get('example-guarded-guest-page', fn (): Response => Inertia::render('Dashboard'))->name('example.guarded-guest-page');
-    Route::middleware('web')->get('example-public-page', fn (): Response => Inertia::render('Dashboard'))->name('example.public-page');
-
-    expect(mobileLayoutUnclassifiedRouteNames())->toBe(['example.guest-page', 'example.guarded-guest-page', 'example.public-page']);
-});
+        mobileLayoutAssertOverlay($webpage, '[data-slot="sheet-content"]');
+    });
+}

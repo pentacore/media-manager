@@ -80,7 +80,10 @@
         "Tests\\Browser\\MediaReplacementDialogTest": 1.1145,
         "Tests\\Browser\\MobileChromeTest": 12.4947,
         "Tests\\Browser\\MobileContainmentTest": 5.0784,
-        "Tests\\Browser\\MobileLayoutTest": 509.125,
+        "Tests\\Browser\\MobileLayout\\DesktopDarkTest": 83.8492,
+        "Tests\\Browser\\MobileLayout\\DesktopLightTest": 84.0876,
+        "Tests\\Browser\\MobileLayout\\PhoneDarkTest": 81.4554,
+        "Tests\\Browser\\MobileLayout\\PhoneLightTest": 139.6487,
         "Tests\\Browser\\MonitoringPhoneTest": 5.1036,
         "Tests\\Browser\\MyRequestsTest": 0.9008,
         "Tests\\Browser\\NavBadgeOrderTest": 4.6224,
@@ -125,6 +128,6 @@
         "Tests\\Browser\\WhisparrLibraryTest": 16.88,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.6447
     },
-    "checksum": "fe3079d5e2e82945e492b70cd21cab3e",
-    "updated_at": "2026-11-23T14:22:05+00:00"
+    "checksum": "715eceec3ee3341debf4df617f069dd2",
+    "updated_at": "2026-11-24T08:47:22+00:00"
 }
