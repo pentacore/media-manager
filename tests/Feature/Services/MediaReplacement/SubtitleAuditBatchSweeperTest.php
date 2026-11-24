@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\SubtitleAuditBatchSweeper;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -87,4 +88,23 @@ test('an expired batch nobody handed off or showed notifies admins once', functi
 
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
     expect($batch->refresh()->handed_off_at)->not->toBeNull();
+});
+
+test('the sweep settles every expired batch, reading them a chunk at a time', function (): void {
+    $batches = SubtitleAuditBatch::factory()->count(3)->create(['search_deadline_at' => now()->subMinutes(10)]);
+    $batches->each(fn (SubtitleAuditBatch $batch) => SubtitleAuditEpisode::factory()->for($batch, 'batch')->create());
+
+    DB::enableQueryLog();
+    $swept = resolve(SubtitleAuditBatchSweeper::class)->sweep();
+    $batchReads = collect(DB::getQueryLog())
+        ->pluck('query')
+        ->filter(fn (string $query): bool => str_starts_with($query, 'select * from "subtitle_audit_batches"'));
+
+    expect($swept)->toBe(3)
+        ->and($batchReads)->not->toBeEmpty()
+        ->and($batchReads->every(fn (string $query): bool => str_contains($query, 'limit')))->toBeTrue();
+
+    foreach ($batches as $batch) {
+        expect($batch->refresh()->status)->toBe(SubtitleAuditBatchStatus::Ready);
+    }
 });
