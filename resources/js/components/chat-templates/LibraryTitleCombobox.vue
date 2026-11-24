@@ -12,6 +12,8 @@ const props = defineProps<{
     type: SearchChatTemplateLibraryRequestQuery['type'];
     modelValue: LibraryHit | null;
     fieldName: string;
+    /** The variable's label; names the search box, which sits outside a <label>. */
+    label: string;
 }>();
 
 const emit = defineEmits<{
@@ -113,6 +115,7 @@ function pick(hit: LibraryHit): void {
                         ? 'Search your series…'
                         : 'Search your movies…'
                 "
+                :aria-label="label"
                 data-library-search
             />
             <p v-if="loading" class="text-[12px] text-fg-subtle">Searching…</p>
