@@ -304,3 +304,20 @@ test('outputs show both sides with the rationale of the score source', function 
         ->and($neutral[1])->toMatchArray(['score' => null, 'rationale' => null])
         ->and($benchmarkComparison->outputs([$benchmarkRun->id], [$after->id], 'original'))->toBe([]);
 });
+
+test('a selection with no reasoning and one with the provider default share a line', function (): void {
+    $benchmarkCase = compareTitleCase('Shared');
+    $benchmarkRun = compareRun([compareSelection('gpt-a')]);
+    $runB = compareRun([compareSelection('gpt-a', 'provider_default')]);
+    compareResult($benchmarkRun, $benchmarkCase, 0, 0.8, true);
+    compareResult($runB, $benchmarkCase, 0, 0.6, false);
+
+    $comparison = compareBuild([$benchmarkRun->id, $runB->id]);
+
+    expect($comparison['lines'])->toHaveCount(1)
+        ->and($comparison['lines'][0]['label'])->toBe('openai · gpt-a')
+        ->and($comparison['lines'][0]['members'])->toBe([
+            ['run_id' => $benchmarkRun->id, 'candidate_index' => 0],
+            ['run_id' => $runB->id, 'candidate_index' => 0],
+        ]);
+});

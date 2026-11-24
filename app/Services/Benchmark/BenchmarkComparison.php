@@ -107,7 +107,10 @@ final readonly class BenchmarkComparison
 
         $tasks = [];
 
-        foreach ($this->taskOrder(array_keys($scope)) as $task) {
+        $taskNames = array_keys($scope);
+        usort($taskNames, static fn (string $a, string $b): int => AiTask::position($a) <=> AiTask::position($b));
+
+        foreach ($taskNames as $task) {
             $tasks[] = $this->task($task, $scope[$task], $columns, $lines, $effective->where('case_task', $task), $neutralJudge);
         }
 
@@ -501,20 +504,5 @@ final readonly class BenchmarkComparison
         return is_array($judge)
             && ($judge['provider'] ?? null) === ($candidate['provider'] ?? null)
             && ($judge['model'] ?? null) === ($candidate['model'] ?? null);
-    }
-
-    /**
-     * @param  list<string>  $tasks
-     * @return list<string>
-     */
-    private function taskOrder(array $tasks): array
-    {
-        usort($tasks, static function (string $a, string $b): int {
-            $position = static fn (string $task): int => ($index = array_search(AiTask::tryFrom($task), AiTask::cases(), true)) === false ? PHP_INT_MAX : $index;
-
-            return $position($a) <=> $position($b);
-        });
-
-        return $tasks;
     }
 }

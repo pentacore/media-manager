@@ -29,6 +29,18 @@ enum BenchmarkRunStatus: string
         };
     }
 
+    /**
+     * The statuses a run is comparable in whatever its results: it ran to the
+     * end or to its cap. A cancelled run is comparable only once a case
+     * finished (BenchmarkRun::isComparable()).
+     *
+     * @return list<self>
+     */
+    public static function comparable(): array
+    {
+        return [self::Completed, self::StoppedCostCap];
+    }
+
     public function isTerminal(): bool
     {
         return ! in_array($this, [self::Pending, self::Running], true);

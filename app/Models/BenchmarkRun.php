@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\BenchmarkResultStatus;
 use App\Enums\BenchmarkRunStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkRunFactory;
@@ -16,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Override;
+use RuntimeException;
 
 /**
  * One benchmark execution: a set of cases run against a set of candidate models.
@@ -47,6 +47,7 @@ use Override;
  * @method static Builder<static>|BenchmarkRun newQuery()
  * @method static Builder<static>|BenchmarkRun query()
  * @method static Builder<static>|BenchmarkRun comparable()
+ * @method static Builder<static>|BenchmarkRun withFinishedResultsFlag()
  *
  * @mixin \Eloquent
  */
@@ -71,6 +72,9 @@ class BenchmarkRun extends Model
     /** @use HasFactory<BenchmarkRunFactory> */
     use HasFactory;
 
+    /** The column scopeWithFinishedResultsFlag() adds. */
+    private const string HAS_FINISHED_RESULTS = 'has_finished_results';
+
     /**
      * @return array<string, string>
      */
@@ -93,28 +97,67 @@ class BenchmarkRun extends Model
 
     /**
      * Whether the run can be compared: it finished (completed or stopped at
-     * its cap), or it was cancelled after at least one case finished.
+     * its cap), or it was cancelled after at least one case finished. Reads
+     * the withFinishedResultsFlag() column when the query loaded it.
      */
     public function isComparable(): bool
     {
-        return match ($this->status) {
-            BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap => true,
-            BenchmarkRunStatus::Cancelled => $this->results()->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed])->exists(),
-            default => false,
-        };
+        if (in_array($this->status, BenchmarkRunStatus::comparable(), true)) {
+            return true;
+        }
+
+        if ($this->status !== BenchmarkRunStatus::Cancelled) {
+            return false;
+        }
+
+        return array_key_exists(self::HAS_FINISHED_RESULTS, $this->getAttributes())
+            ? (bool) $this->getAttribute(self::HAS_FINISHED_RESULTS)
+            : $this->results()->finished()->exists();
     }
 
     /**
+     * The runs isComparable() accepts.
+     *
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
     protected function scopeComparable(Builder $query): Builder
     {
         return $query->where(fn (Builder $builder): Builder => $builder
-            ->whereIn('status', [BenchmarkRunStatus::Completed, BenchmarkRunStatus::StoppedCostCap])
+            ->whereIn('status', BenchmarkRunStatus::comparable())
             ->orWhere(fn (Builder $cancelled): Builder => $cancelled
                 ->where('status', BenchmarkRunStatus::Cancelled)
-                ->whereHas('results', fn (Builder $results): Builder => $results->whereIn('status', [BenchmarkResultStatus::Ok, BenchmarkResultStatus::Failed]))));
+                ->whereHas('results', fn (Builder $results): Builder => $results->finished())));
+    }
+
+    /**
+     * Loads whether each run has a finished result, so isComparable() on a
+     * page of runs needs no query per run.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeWithFinishedResultsFlag(Builder $query): Builder
+    {
+        return $query->withExists([sprintf('results as %s', self::HAS_FINISHED_RESULTS) => static function (Builder $results): void {
+            /** @var Builder<BenchmarkResult> $results */
+            $results->finished();
+        }]);
+    }
+
+    /**
+     * The stored `{provider, model, reasoning}` of one of the run's
+     * candidates; throws when the run has no such candidate.
+     *
+     * @return array<string, mixed>
+     */
+    public function candidate(int $index): array
+    {
+        $candidate = $this->candidates[$index] ?? null;
+
+        throw_unless(is_array($candidate), RuntimeException::class, sprintf('The run has no candidate #%d.', $index));
+
+        return $candidate;
     }
 
     /**
