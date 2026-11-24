@@ -11,6 +11,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
+use Throwable;
 
 /**
  * Brings a case's attachments in line with a saved form: keeps and renumbers the
@@ -23,12 +25,45 @@ final readonly class CaseAttachmentSync
      * @param  array<array-key, list<int>>  $drafts  chat attachment ids to copy per turn key
      * @param  array<array-key, list<UploadedFile>>  $uploads  new files per turn key
      * @return int how many draft copies were skipped because the chat file is gone
+     *
+     * @throws RuntimeException when an upload could not be stored; the files written so far are removed
      */
     public function sync(BenchmarkCase $benchmarkCase, ?array $keep, array $drafts, array $uploads): int
     {
         $removedPaths = [];
+        $writtenPaths = [];
 
-        $skipped = DB::transaction(function () use ($benchmarkCase, $keep, $drafts, $uploads, &$removedPaths): int {
+        try {
+            $skipped = $this->apply($benchmarkCase, $keep, $drafts, $uploads, $removedPaths, $writtenPaths);
+        } catch (Throwable $throwable) {
+            $this->deleteFiles($writtenPaths);
+
+            throw $throwable;
+        }
+
+        // A rollback of an enclosing transaction (the controller's) drops the
+        // rows, so the files written for them go too.
+        if ($writtenPaths !== []) {
+            DB::afterRollBack(fn () => $this->deleteFiles($writtenPaths));
+        }
+
+        if ($removedPaths !== []) {
+            DB::afterCommit(fn () => $this->deleteFiles($removedPaths));
+        }
+
+        return $skipped;
+    }
+
+    /**
+     * @param  array<array-key, list<int>>|null  $keep
+     * @param  array<array-key, list<int>>  $drafts
+     * @param  array<array-key, list<UploadedFile>>  $uploads
+     * @param  list<string>  $removedPaths
+     * @param  list<string>  $writtenPaths
+     */
+    private function apply(BenchmarkCase $benchmarkCase, ?array $keep, array $drafts, array $uploads, array &$removedPaths, array &$writtenPaths): int
+    {
+        return DB::transaction(function () use ($benchmarkCase, $keep, $drafts, $uploads, &$removedPaths, &$writtenPaths): int {
             if ($keep !== null) {
                 $removedPaths = $this->reconcileKept($benchmarkCase, $keep);
             }
@@ -37,26 +72,36 @@ final readonly class CaseAttachmentSync
 
             foreach ($drafts as $key => $ids) {
                 foreach ($ids as $id) {
-                    if (! $this->copyDraft($benchmarkCase, BenchmarkCaseAttachment::turnFromKey($key), $id)) {
+                    $path = $this->copyDraft($benchmarkCase, BenchmarkCaseAttachment::turnFromKey($key), $id);
+
+                    if ($path === null) {
                         $skipped++;
+
+                        continue;
                     }
+
+                    $writtenPaths[] = $path;
                 }
             }
 
             foreach ($uploads as $key => $files) {
                 foreach ($files as $file) {
-                    $this->storeUpload($benchmarkCase, BenchmarkCaseAttachment::turnFromKey($key), $file);
+                    $writtenPaths[] = $this->storeUpload($benchmarkCase, BenchmarkCaseAttachment::turnFromKey($key), $file);
                 }
             }
 
             return $skipped;
         });
+    }
 
-        if ($removedPaths !== []) {
-            DB::afterCommit(static fn (): bool => Storage::disk(BenchmarkCaseAttachment::DISK)->delete($removedPaths));
+    /**
+     * @param  list<string>  $paths
+     */
+    private function deleteFiles(array $paths): void
+    {
+        if ($paths !== []) {
+            Storage::disk(BenchmarkCaseAttachment::DISK)->delete($paths);
         }
-
-        return $skipped;
     }
 
     /**
@@ -91,24 +136,33 @@ final readonly class CaseAttachmentSync
         return $removedPaths;
     }
 
-    private function copyDraft(BenchmarkCase $benchmarkCase, ?int $turn, int $chatAttachmentId): bool
+    /**
+     * @return string|null the stored copy's path, or null when the chat file is gone
+     */
+    private function copyDraft(BenchmarkCase $benchmarkCase, ?int $turn, int $chatAttachmentId): ?string
     {
         $chatAttachment = ChatAttachment::query()->find($chatAttachmentId);
 
         if (! $chatAttachment instanceof ChatAttachment) {
-            return false;
+            return null;
         }
 
         $filesystem = Storage::disk($chatAttachment->disk);
+        $stream = $filesystem->exists($chatAttachment->path) ? $filesystem->readStream($chatAttachment->path) : null;
 
-        if (! $filesystem->exists($chatAttachment->path)) {
-            return false;
+        if (! is_resource($stream)) {
+            return null;
         }
 
-        $extension = pathinfo($chatAttachment->path, PATHINFO_EXTENSION);
-        $path = sprintf('%s/%s.%s', BenchmarkCaseAttachment::directoryFor($benchmarkCase->id), Str::uuid7(), $extension === '' ? 'bin' : $extension);
+        $path = sprintf('%s/%s.%s', BenchmarkCaseAttachment::directoryFor($benchmarkCase->id), Str::uuid7(), pathinfo($chatAttachment->path, PATHINFO_EXTENSION) ?: 'bin');
 
-        Storage::disk(BenchmarkCaseAttachment::DISK)->writeStream($path, $filesystem->readStream($chatAttachment->path));
+        try {
+            $written = Storage::disk(BenchmarkCaseAttachment::DISK)->writeStream($path, $stream);
+        } finally {
+            fclose($stream);
+        }
+
+        throw_unless($written, RuntimeException::class, sprintf('The attachment %s could not be stored.', $chatAttachment->original_name));
 
         $benchmarkCase->attachments()->create([
             'turn' => $turn,
@@ -119,17 +173,21 @@ final readonly class CaseAttachmentSync
             'size' => $chatAttachment->size,
         ]);
 
-        return true;
+        return $path;
     }
 
-    private function storeUpload(BenchmarkCase $benchmarkCase, ?int $turn, UploadedFile $file): void
+    /**
+     * @return string the stored file's path
+     */
+    private function storeUpload(BenchmarkCase $benchmarkCase, ?int $turn, UploadedFile $file): string
     {
-        $extension = $file->extension();
         $path = $file->storeAs(
             BenchmarkCaseAttachment::directoryFor($benchmarkCase->id),
-            sprintf('%s.%s', Str::uuid7(), $extension === '' ? 'bin' : $extension),
+            sprintf('%s.%s', Str::uuid7(), $file->extension() ?: 'bin'),
             BenchmarkCaseAttachment::DISK,
         );
+
+        throw_unless(is_string($path), RuntimeException::class, sprintf('The attachment %s could not be stored.', $file->getClientOriginalName()));
 
         $benchmarkCase->attachments()->create([
             'turn' => $turn,
@@ -139,5 +197,7 @@ final readonly class CaseAttachmentSync
             'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
             'size' => $file->getSize(),
         ]);
+
+        return $path;
     }
 }

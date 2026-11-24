@@ -56,6 +56,10 @@ return [
         // the admin AI Settings page (which persists on top of this default).
         'chat_timeout' => (int) env('MEDIAMANAGER_AI_CHAT_TIMEOUT', 120),
 
+        // Files one chat message (and one user turn of a chat benchmark case)
+        // may carry, 1 to 10. Overridable on the admin AI Settings page.
+        'chat_max_attachments' => (int) env('MEDIAMANAGER_AI_CHAT_MAX_ATTACHMENTS', 3),
+
         // Opt-in: refuse a provider call when the model's configured rate
         // limit (Admin > AI Prices) is already exhausted over its rolling
         // window, instead of only showing the usage on the AI Usage page.

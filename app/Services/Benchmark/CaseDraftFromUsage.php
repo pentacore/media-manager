@@ -51,12 +51,8 @@ final readonly class CaseDraftFromUsage
 
         throw_if($blocker !== null, CaseDraftRefused::class, $blocker);
 
-        $prompt = (string) $prompt;
-        $hadAttachments = str_contains($prompt, self::ATTACHMENTS_MARKER);
-
-        if ($hadAttachments) {
-            $prompt = substr($prompt, 0, (int) strrpos($prompt, self::ATTACHMENTS_MARKER));
-        }
+        $hadAttachments = str_contains((string) $prompt, self::ATTACHMENTS_MARKER);
+        $prompt = $this->promptWithoutAttachmentList((string) $prompt);
 
         $aiTask = $this->taskFor($aiUsageRecord);
         $warnings = [];
@@ -94,48 +90,13 @@ final readonly class CaseDraftFromUsage
         $draftAttachments = [];
 
         if ($aiTask === AiTask::Chat) {
-            $conversation = $this->conversation($aiUsageRecord, $prompt);
-            $replyMode = AiMode::tryFrom((string) (json_decode((string) ($conversation['reply']->meta ?? ''), true)['mode'] ?? ''));
+            $chat = $this->chatTurns($aiUsageRecord, $prompt, $hadAttachments);
 
-            $input['history'] = $conversation['history'];
-            $input['mode'] = ($replyMode ?? $this->aiSettings->mode())->value;
+            $input['history'] = $chat['conversation']['history'];
+            $input['mode'] = ($chat['replyMode'] ?? $this->aiSettings->mode())->value;
             $input['conversation'] = 'context';
-
-            $turns = [];
-
-            foreach ($conversation['historyRows'] as $index => $row) {
-                if ($row->role === 'user') {
-                    $turns[] = [$index, $row];
-                }
-            }
-
-            if ($conversation['captured'] !== null) {
-                $turns[] = [null, $conversation['captured']];
-            }
-
-            $missing = 0;
-            $capturedFound = 0;
-
-            foreach ($turns as [$turn, $row]) {
-                $found = $this->attachmentsOf($row, $turn, $missing);
-                array_push($draftAttachments, ...$found);
-
-                if ($turn === null) {
-                    $capturedFound = count($found);
-                }
-            }
-
-            if ($missing > 0) {
-                $warnings[] = 'Some attachments of this conversation are no longer stored and were left out.';
-            }
-
-            if ($hadAttachments && $conversation['captured'] === null) {
-                $warnings[] = 'The captured message could not be located, so its attachments were left out; attach them by hand.';
-            }
-
-            if ($hadAttachments && $conversation['captured'] !== null && $capturedFound === 0 && $missing === 0) {
-                $warnings[] = 'The captured turn listed attachments, but none could be found.';
-            }
+            $draftAttachments = $chat['attachments'];
+            array_push($warnings, ...$chat['warnings']);
         }
 
         $sourceTruncated = $warnings !== [];
@@ -194,6 +155,101 @@ final readonly class CaseDraftFromUsage
             ],
             'warnings' => $warnings,
         ];
+    }
+
+    /**
+     * The ids of the chat attachments of the captured chat turn and the
+     * user turns before it, the only ones a case saved from this usage row
+     * may copy in (a file deleted since is skipped at save, not refused).
+     * Empty when the row cannot be captured or is not a chat turn.
+     *
+     * @return list<int>
+     */
+    public function draftAttachmentIds(AiUsageRecord $aiUsageRecord): array
+    {
+        if (self::captureBlocker($aiUsageRecord) !== null) {
+            return [];
+        }
+
+        try {
+            $aiTask = $this->taskFor($aiUsageRecord);
+        } catch (CaseDraftRefused) {
+            return [];
+        }
+
+        if ($aiTask !== AiTask::Chat) {
+            return [];
+        }
+
+        $conversation = $this->conversation($aiUsageRecord, $this->promptWithoutAttachmentList((string) $aiUsageRecord->prompt_text));
+        $ids = [];
+
+        foreach ([...$conversation['historyRows'], ...array_filter([$conversation['captured']])] as $row) {
+            if ($row->role === 'user') {
+                array_push($ids, ...array_column($this->storedAttachments($row), 'id'));
+            }
+        }
+
+        return $ids;
+    }
+
+    private function promptWithoutAttachmentList(string $prompt): string
+    {
+        return str_contains($prompt, self::ATTACHMENTS_MARKER)
+            ? substr($prompt, 0, (int) strrpos($prompt, self::ATTACHMENTS_MARKER))
+            : $prompt;
+    }
+
+    /**
+     * The conversation before a captured chat turn, the mode its reply ran
+     * in, and the still-stored attachments of every kept user turn and the
+     * captured one, with warnings for the ones left out.
+     *
+     * @return array{conversation: array{history: list<array{role: string, content: string}>, historyRows: list<MessageRow>, captured: MessageRow|null, reply: MessageRow|null}, replyMode: AiMode|null, attachments: list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int}>, warnings: list<string>}
+     */
+    private function chatTurns(AiUsageRecord $aiUsageRecord, string $prompt, bool $hadAttachments): array
+    {
+        $conversation = $this->conversation($aiUsageRecord, $prompt);
+        $replyMode = AiMode::tryFrom((string) (json_decode((string) ($conversation['reply']->meta ?? ''), true)['mode'] ?? ''));
+        $warnings = [];
+        $attachments = [];
+        $turns = [];
+
+        foreach ($conversation['historyRows'] as $index => $row) {
+            if ($row->role === 'user') {
+                $turns[] = [$index, $row];
+            }
+        }
+
+        if ($conversation['captured'] !== null) {
+            $turns[] = [null, $conversation['captured']];
+        }
+
+        $missing = 0;
+        $capturedFound = 0;
+
+        foreach ($turns as [$turn, $row]) {
+            $found = $this->attachmentsOf($row, $turn, $missing);
+            array_push($attachments, ...$found);
+
+            if ($turn === null) {
+                $capturedFound = count($found);
+            }
+        }
+
+        if ($missing > 0) {
+            $warnings[] = 'Some attachments of this conversation are no longer stored and were left out.';
+        }
+
+        if ($hadAttachments && $conversation['captured'] === null) {
+            $warnings[] = 'The captured message could not be located, so its attachments were left out; attach them by hand.';
+        }
+
+        if ($hadAttachments && $conversation['captured'] !== null && $capturedFound === 0 && $missing === 0) {
+            $warnings[] = 'The captured turn listed attachments, but none could be found.';
+        }
+
+        return ['conversation' => $conversation, 'replyMode' => $replyMode, 'attachments' => $attachments, 'warnings' => $warnings];
     }
 
     /**
@@ -287,6 +343,32 @@ final readonly class CaseDraftFromUsage
     }
 
     /**
+     * The `attachments` JSON entries of one stored message.
+     *
+     * @param  MessageRow  $message
+     * @return list<array<string, mixed>>
+     */
+    private function storedEntries(object $message): array
+    {
+        $stored = json_decode((string) $message->attachments, true);
+
+        return is_array($stored) ? array_values(array_filter($stored, is_array(...))) : [];
+    }
+
+    /**
+     * The chat attachment rows one stored message refers to, file or not.
+     *
+     * @param  MessageRow  $message
+     * @return list<array{id: int, name: string, mime: string, url: string}>
+     */
+    private function storedAttachments(object $message): array
+    {
+        $stored = $this->storedEntries($message);
+
+        return $stored === [] ? [] : $this->chatAttachmentStore->forMessage($stored);
+    }
+
+    /**
      * The chat attachments of one stored message that still have a file.
      *
      * @param  MessageRow  $message
@@ -294,14 +376,13 @@ final readonly class CaseDraftFromUsage
      */
     private function attachmentsOf(object $message, ?int $turn, int &$missing): array
     {
-        $stored = json_decode((string) $message->attachments, true);
-        $stored = is_array($stored) ? array_values(array_filter($stored, is_array(...))) : [];
+        $stored = $this->storedEntries($message);
 
         if ($stored === []) {
             return [];
         }
 
-        $mapped = $this->chatAttachmentStore->forMessage($stored);
+        $mapped = $this->storedAttachments($message);
         $missing += max(0, count($stored) - count($mapped));
 
         $rows = ChatAttachment::query()->whereIn('id', array_column($mapped, 'id'))->orderBy('id')->get();

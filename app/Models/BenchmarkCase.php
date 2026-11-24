@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Ai\Files\File;
 use Override;
 
 /**
@@ -122,6 +123,20 @@ class BenchmarkCase extends Model
             ->filter(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): bool => $benchmarkCaseAttachment->turn === $turn)
             ->sortBy('id')
             ->values();
+    }
+
+    /**
+     * One user turn's attachments (null is the final prompt) as SDK files,
+     * optionally only the images.
+     *
+     * @return list<File>
+     */
+    public function sdkFilesFor(?int $turn, bool $imagesOnly = false): array
+    {
+        return array_values($this->attachmentsFor($turn)
+            ->filter(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): bool => ! $imagesOnly || $benchmarkCaseAttachment->isImage())
+            ->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): File => $benchmarkCaseAttachment->toSdkFile())
+            ->all());
     }
 
     /**

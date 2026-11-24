@@ -10,9 +10,7 @@ use App\Ai\ResolvedSelection;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Models\BenchmarkCase;
-use App\Models\BenchmarkCaseAttachment;
 use App\Models\BenchmarkRun;
-use Laravel\Ai\Files\File;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
@@ -73,9 +71,7 @@ final readonly class BenchmarkContextStarter
             $message = match ($turn['role'] ?? null) {
                 'user' => new UserMessage(
                     $turn['content'],
-                    is_int($index)
-                        ? $benchmarkCase->attachmentsFor($index)->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): File => $benchmarkCaseAttachment->toSdkFile())->all()
-                        : [],
+                    is_int($index) ? $benchmarkCase->sdkFilesFor($index) : [],
                 ),
                 'assistant' => new AssistantMessage($turn['content']),
                 default => null,

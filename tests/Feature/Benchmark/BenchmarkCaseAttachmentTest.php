@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use App\Enums\AiTask;
 use App\Enums\BenchmarkConversationMode;
+use App\Jobs\DeleteBenchmarkCaseFiles;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files\StoredDocument;
 use Laravel\Ai\Files\StoredImage;
@@ -51,6 +53,15 @@ test('deleting a case deletes its attachments and its folder but no other case f
     Storage::disk('local')->assertMissing($attachment->path);
     Storage::disk('local')->assertMissing(BenchmarkCaseAttachment::directoryFor($benchmarkCase->id));
     Storage::disk('local')->assertExists($otherAttachment->path);
+});
+
+test('deleting a case queues the removal of its folder', function (): void {
+    Queue::fake();
+    $benchmarkCase = attachmentChatCase();
+
+    $benchmarkCase->delete();
+
+    Queue::assertPushed(DeleteBenchmarkCaseFiles::class, fn (DeleteBenchmarkCaseFiles $job): bool => $job->benchmarkCaseId === $benchmarkCase->id);
 });
 
 test('attachments are picked by exact turn, so the first history turn never counts as the prompt', function (): void {

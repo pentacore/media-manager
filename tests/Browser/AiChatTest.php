@@ -17,6 +17,7 @@ use App\Models\SubtitleAuditEpisode;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\Chat\SubtitleAuditBatchCard;
+use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -406,6 +407,18 @@ test('a picked attachment shows as a removable chip in the composer', function (
         ->assertSeeIn('[data-attachment-chips]', 'screenshot.png')
         ->click('[data-attachment-remove]')
         ->assertMissing('[data-attachment-chip]');
+});
+
+test('the attach button turns off at the attachments-per-message setting', function (): void {
+    resolve(AiSettings::class)->setChatMaxAttachments(1);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->assertEnabled('[data-attach-button]')
+        ->attach('[data-attachment-input]', base_path('tests/Fixtures/screenshot.png'))
+        ->assertVisible('[data-attachment-chips] [data-attachment-chip]')
+        ->assertDisabled('[data-attach-button]');
 });
 
 test('a stored attachment is shown when the conversation is reopened', function (): void {

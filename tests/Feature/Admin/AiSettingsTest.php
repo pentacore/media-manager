@@ -106,6 +106,38 @@ test('admin can update the chat timeout', function (): void {
     expect(resolve(AiSettings::class)->chatTimeout())->toBe(300);
 });
 
+test('admin can update the attachments per chat message', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'chat_max_attachments' => 5,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->chatMaxAttachments())->toBe(5);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertInertia(fn ($page) => $page->where('settings.chat_max_attachments', 5));
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [...baseAiSettingsPayload(), 'chat_max_attachments' => ''])
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->chatMaxAttachments())->toBe(3);
+});
+
+test('update rejects an out-of-range attachments per chat message', function (int $value): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), [...baseAiSettingsPayload(), 'chat_max_attachments' => $value])
+        ->assertSessionHasErrors('chat_max_attachments');
+})->with([
+    'none' => [0],
+    'above the ceiling' => [11],
+]);
+
 test('a blank chat timeout clears the override back to the config default', function (): void {
     $admin = User::factory()->admin()->create();
     config()->set('mediamanager.ai.chat_timeout', 120);

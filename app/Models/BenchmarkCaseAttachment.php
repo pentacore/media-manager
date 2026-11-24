@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Benchmark\CaseAttachmentMissing;
 use Carbon\CarbonImmutable;
 use Database\Factories\BenchmarkCaseAttachmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Laravel\Ai\Files\Document;
 use Laravel\Ai\Files\File;
@@ -102,6 +104,18 @@ class BenchmarkCaseAttachment extends Model
     public function isImage(): bool
     {
         return str_starts_with($this->mime_type, 'image/');
+    }
+
+    /**
+     * @throws CaseAttachmentMissing when the file is no longer stored
+     */
+    public function ensureStored(): void
+    {
+        throw_unless(Storage::disk($this->disk)->exists($this->path), CaseAttachmentMissing::class, sprintf(
+            'The attachment %s (%s) is no longer stored; attach it to the case again.',
+            $this->original_name,
+            $this->turnLabel(),
+        ));
     }
 
     public function toSdkFile(): File

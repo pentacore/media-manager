@@ -68,11 +68,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   (benchmark capture) reading the payload back.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Chat cases:
-        - The 3-per-turn cap.
-        - Draft id scoping.
-        - Attachment storage, orphan files and preview.
-        - Duplicated attachment mapping.
-        - Re-judging a vanished image.
+        - Preview a drafted attachment in the case form before it is saved: only
+          saved attachments link to their file, because a chat file belongs to
+          the user who uploaded it.
     - Agreement and gate charts:
         - Classification gates: a 0 % band with resolved events draws a
           zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement

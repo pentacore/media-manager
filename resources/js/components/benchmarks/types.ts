@@ -59,6 +59,8 @@ export type BenchmarkCaseAttachment = {
     name: string;
     mime_type: string;
     size: number;
+    /** Opens the stored file: images inline, other files as a download. */
+    url: string;
 };
 
 export type BenchmarkDraftAttachment = {
@@ -71,7 +73,7 @@ export type BenchmarkDraftAttachment = {
 
 /** One row of a turn's attachment list in the form. */
 export type BenchmarkAttachmentEntry =
-    | { kind: 'saved'; id: number; name: string; size: number }
+    | { kind: 'saved'; id: number; name: string; size: number; url: string }
     | { kind: 'draft'; chatAttachmentId: number; name: string; size: number }
     | { kind: 'new'; file: File; name: string; size: number };
 

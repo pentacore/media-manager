@@ -28,6 +28,7 @@ use App\Services\Benchmark\CaseDraftRefused;
 use App\Services\Benchmark\DefaultRubrics;
 use App\Services\Benchmark\VerifierCaseCapture;
 use App\Services\Benchmark\VerifierCaseInput;
+use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -242,6 +243,7 @@ class BenchmarkCaseController extends Controller
      */
     private function form(?BenchmarkCase $benchmarkCase, ?array $draft, array $warnings): Response
     {
+
         $benchmarkCase?->loadMissing('attachments');
 
         return Inertia::render('Admin/Benchmarks/Cases/Form', [
@@ -264,6 +266,7 @@ class BenchmarkCaseController extends Controller
                     'name' => $attachment->original_name,
                     'mime_type' => $attachment->mime_type,
                     'size' => $attachment->size,
+                    'url' => route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $attachment]),
                 ])->all(),
             ] : null,
             'draft' => $draft,
@@ -279,6 +282,7 @@ class BenchmarkCaseController extends Controller
             'verifierActionTypes' => $this->verifierActionTypes(),
             'writeTools' => $this->writeToolNames(),
             'defaultRubrics' => $this->defaultRubrics(),
+            'maxAttachments' => resolve(AiSettings::class)->chatMaxAttachments(),
         ]);
     }
 

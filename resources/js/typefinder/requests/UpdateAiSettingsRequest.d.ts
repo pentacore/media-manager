@@ -9,6 +9,7 @@ export type UpdateAiSettingsRequest = {
   soft_budget_usd?: number | null;
   hard_budget_usd?: number | null;
   chat_timeout?: number | null;
+  chat_max_attachments?: number | null;
   models_dev_pricing_enabled?: boolean | null;
   openrouter_pricing_enabled?: boolean | null;
   litellm_pricing_enabled?: boolean | null;

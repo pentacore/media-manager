@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiModelsController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
+use App\Http\Controllers\Admin\BenchmarkCaseAttachmentController;
 use App\Http\Controllers\Admin\BenchmarkCaseController;
 use App\Http\Controllers\Admin\BenchmarkComparisonController;
 use App\Http\Controllers\Admin\BenchmarkDecisionPromptController;
@@ -91,6 +92,10 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
             Route::get('{benchmarkCase}/edit', [BenchmarkCaseController::class, 'edit'])->whereNumber('benchmarkCase')->name('edit');
             Route::put('{benchmarkCase}', [BenchmarkCaseController::class, 'update'])->whereNumber('benchmarkCase')->name('update');
             Route::delete('{benchmarkCase}', [BenchmarkCaseController::class, 'destroy'])->whereNumber('benchmarkCase')->name('destroy');
+            Route::get('{benchmarkCase}/attachments/{attachment}', BenchmarkCaseAttachmentController::class)
+                ->whereNumber(['benchmarkCase', 'attachment'])
+                ->scopeBindings()
+                ->name('attachments.show');
         });
 
         Route::prefix('benchmarks/compare')->name('benchmarks.compare.')->group(function (): void {

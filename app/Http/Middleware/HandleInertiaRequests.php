@@ -15,6 +15,7 @@ use App\Services\Actions\PendingActionCount;
 use App\Services\Library\InterventionCounter;
 use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use App\Settings\AiSettings;
 use App\Support\Abilities;
 use App\Support\AppVersion;
 use Illuminate\Http\Request;
@@ -68,6 +69,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
+                'max_attachments' => resolve(AiSettings::class)->chatMaxAttachments(),
             ],
             // Closures: Inertia resolves a shared closure only when the
             // response includes its key, so full visits and prefetches build

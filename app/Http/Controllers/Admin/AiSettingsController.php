@@ -45,6 +45,7 @@ class AiSettingsController extends Controller
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'chat_timeout' => $aiSettings->configuredChatTimeout(),
                 'chat_timeout_effective' => $aiSettings->chatTimeout(),
+                'chat_max_attachments' => $aiSettings->chatMaxAttachments(),
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
                 'openrouter_pricing_enabled' => $aiSettings->openRouterPricingEnabled(),
                 'litellm_pricing_enabled' => $aiSettings->liteLlmPricingEnabled(),
@@ -207,6 +208,11 @@ class AiSettingsController extends Controller
             $aiSettings->setChatTimeout(
                 isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
             );
+            // Absent leaves the saved limit alone; a blank field (null) clears it to the default.
+            if (array_key_exists('chat_max_attachments', $validated)) {
+                $aiSettings->setChatMaxAttachments(isset($validated['chat_max_attachments']) ? (int) $validated['chat_max_attachments'] : null);
+            }
+
             $aiSettings->setModelsDevPricingEnabled(
                 array_key_exists('models_dev_pricing_enabled', $validated)
                     ? (bool) $validated['models_dev_pricing_enabled']

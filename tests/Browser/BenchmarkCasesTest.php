@@ -13,6 +13,7 @@ use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -284,6 +285,27 @@ test('scripted mode greys out the recorded replies and saving keeps the attachme
     expect($benchmarkCase->fresh()->isScripted())->toBeTrue()
         ->and($attachment->fresh()?->turn)->toBeNull();
     Storage::disk('local')->assertExists($attachment->path);
+});
+
+test('a saved attachment links to its file and each turn takes as many files as the setting allows', function (): void {
+    Storage::fake('local');
+    resolve(AiSettings::class)->setChatMaxAttachments(1);
+    $this->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create(['name' => 'Dune chat', 'input' => [
+        'prompt' => 'And this one?', 'mode' => null, 'conversation' => 'context',
+        'history' => [['role' => 'user', 'content' => 'Is Dune in the library?'], ['role' => 'assistant', 'content' => 'Yes.']],
+    ]]);
+    $attachment = BenchmarkCaseAttachment::factory()->for($benchmarkCase)->image()->create();
+
+    visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-benchmark-attachments="final"] [data-benchmark-attachment-open]', 'href', route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $attachment]))
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment-open]', 'screenshot.png')
+        ->assertMissing('[data-benchmark-attachments="final"] [data-benchmark-attachment-input]')
+        ->attach('[data-benchmark-attachments="0"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/stuck-log.txt'))
+        ->assertSeeIn('[data-benchmark-attachments="0"] [data-benchmark-attachment]', 'stuck-log.txt')
+        ->assertMissing('[data-benchmark-attachments="0"] [data-benchmark-attachment-open]')
+        ->assertMissing('[data-benchmark-attachments="0"] [data-benchmark-attachment-input]');
 });
 
 test('a captured chat turn shows its attachment as a pending copy and copies it on save', function (): void {

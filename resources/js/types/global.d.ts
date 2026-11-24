@@ -25,7 +25,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
-            ai: { enabled: boolean };
+            ai: { enabled: boolean; max_attachments: number };
             integrations: {
                 seerr: boolean;
                 prowlarr: boolean;

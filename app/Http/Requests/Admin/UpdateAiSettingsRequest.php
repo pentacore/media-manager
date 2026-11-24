@@ -32,6 +32,7 @@ class UpdateAiSettingsRequest extends FormRequest
             // turn chains many) but below the PHP/proxy request ceiling that
             // would cut the response off before the timeout could fire.
             'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
+            'chat_max_attachments' => ['nullable', 'integer', sprintf('between:%d,%d', AiSettings::CHAT_MAX_ATTACHMENTS_FLOOR, AiSettings::CHAT_MAX_ATTACHMENTS_CEILING)],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
             'openrouter_pricing_enabled' => ['nullable', 'boolean'],
             'litellm_pricing_enabled' => ['nullable', 'boolean'],
@@ -70,7 +71,7 @@ class UpdateAiSettingsRequest extends FormRequest
     }
 
     /**
-     * Normalize a blank `chat_timeout` and blank model overrides to null so
+     * Normalize a blank `chat_timeout`, `chat_max_attachments` and blank model overrides to null so
      * the nullable rules apply.
      */
     #[Override]
@@ -78,8 +79,10 @@ class UpdateAiSettingsRequest extends FormRequest
     {
         // A cleared number input posts an empty string, which would fail the
         // integer rule; null instead clears the setting back to the default.
-        if ($this->input('chat_timeout') === '') {
-            $this->merge(['chat_timeout' => null]);
+        foreach (['chat_timeout', 'chat_max_attachments'] as $field) {
+            if ($this->input($field) === '') {
+                $this->merge([$field => null]);
+            }
         }
 
         // A blank model field means "use the default", which the nullable rules

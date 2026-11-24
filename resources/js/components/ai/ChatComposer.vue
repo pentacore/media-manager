@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { ArrowRight, Paperclip, Square } from '@lucide/vue';
-import { nextTick, ref, useTemplateRef } from 'vue';
+import { computed, nextTick, ref, useTemplateRef } from 'vue';
 import { ChatTemplatePicker } from '@/components/chat-templates';
 import type { ChatTemplate } from '@/components/chat-templates';
 import { Button } from '@/components/ui/button';
@@ -23,8 +24,10 @@ const emit = defineEmits<{
     (e: 'template', template: ChatTemplate): void;
 }>();
 
-/** Matches the server's chat attachment rules (count and extensions). */
-const MAX_ATTACHMENTS = 3;
+const page = usePage();
+
+/** The server's attachments-per-message setting; the extensions match its chat attachment rules. */
+const maxAttachments = computed(() => page.props.ai.max_attachments);
 const ATTACHMENT_EXTENSIONS = [
     'png',
     'jpg',
@@ -45,8 +48,9 @@ const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 
 /**
- * Queue picked or dropped files for the next turn, keeping at most three and
- * only the types the server accepts. Images get an object-URL preview.
+ * Queue picked or dropped files for the next turn, keeping at most the
+ * attachments-per-message setting and only the types the server accepts.
+ * Images get an object-URL preview.
  */
 function addFiles(list: FileList | null): void {
     if (!list) {
@@ -54,7 +58,7 @@ function addFiles(list: FileList | null): void {
     }
 
     for (const file of Array.from(list)) {
-        if (pendingFiles.value.length >= MAX_ATTACHMENTS) {
+        if (pendingFiles.value.length >= maxAttachments.value) {
             break;
         }
 
@@ -177,7 +181,7 @@ defineExpose({
                 class="size-7 p-0 text-muted-foreground"
                 title="Attach files"
                 data-attach-button
-                :disabled="sending || pendingFiles.length >= MAX_ATTACHMENTS"
+                :disabled="sending || pendingFiles.length >= maxAttachments"
                 @click="fileInput?.click()"
             >
                 <Paperclip class="size-3.5" />

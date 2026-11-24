@@ -123,3 +123,22 @@ test('configuredChatTimeout reports the saved value or the config default, uncap
     expect($aiSettings->configuredChatTimeout())->toBe(600)
         ->and($aiSettings->chatTimeout())->toBe(110);
 });
+
+test('chatMaxAttachments reads the config default, then the saved value, clamped to 1-10', function (): void {
+    config()->set('mediamanager.ai.chat_max_attachments', 3);
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->chatMaxAttachments())->toBe(3);
+
+    $aiSettings->setChatMaxAttachments(6);
+    expect($aiSettings->chatMaxAttachments())->toBe(6);
+
+    $aiSettings->setChatMaxAttachments(50);
+    expect($aiSettings->chatMaxAttachments())->toBe(10);
+
+    $aiSettings->setChatMaxAttachments(0);
+    expect($aiSettings->chatMaxAttachments())->toBe(1);
+
+    $aiSettings->setChatMaxAttachments(null);
+    expect($aiSettings->chatMaxAttachments())->toBe(3);
+});

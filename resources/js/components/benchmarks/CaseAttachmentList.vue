@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button';
 import { formatBytes } from '@/lib/format';
 import type { BenchmarkAttachmentEntry } from './types';
 
-const MAX_ATTACHMENTS = 3;
 const ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.txt,.log,.json,.pdf';
 
-defineProps<{
+const props = defineProps<{
     /** `final` for the last prompt, otherwise the history index. */
     turnKey: string;
+    /** Files the turn may carry (the attachments-per-message setting). */
+    max: number;
     error?: string;
 }>();
 
@@ -21,7 +22,7 @@ const overflow = ref(0);
 
 function onPick(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const free = MAX_ATTACHMENTS - entries.value.length;
+    const free = props.max - entries.value.length;
     const all = Array.from(input.files ?? []);
     const picked = all.slice(0, Math.max(free, 0));
 
@@ -53,7 +54,17 @@ function removeEntry(index: number): void {
             class="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-[12.5px]"
             data-benchmark-attachment
         >
-            <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
+            <a
+                v-if="entry.kind === 'saved'"
+                :href="entry.url"
+                target="_blank"
+                rel="noopener"
+                class="min-w-0 flex-1 truncate underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"
+                :title="`Open ${entry.name}`"
+                data-benchmark-attachment-open
+                >{{ entry.name }}</a
+            >
+            <span v-else class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
             <span class="text-muted-foreground">{{
                 formatBytes(entry.size)
             }}</span>
@@ -77,7 +88,7 @@ function removeEntry(index: number): void {
         </div>
 
         <label
-            v-if="entries.length < MAX_ATTACHMENTS"
+            v-if="entries.length < max"
             class="inline-flex h-7 w-fit cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-xs font-medium focus-within:ring-2 focus-within:ring-ring hover:bg-bg-hover"
         >
             <Paperclip class="size-3.5" />Attach file
@@ -95,8 +106,8 @@ function removeEntry(index: number): void {
             class="text-xs text-destructive"
             data-benchmark-attachment-overflow
         >
-            Only {{ MAX_ATTACHMENTS }} files per turn — {{ overflow }} not
-            added.
+            Only {{ max }} {{ max === 1 ? 'file' : 'files' }} per turn —
+            {{ overflow }} not added.
         </p>
         <InputError :message="error" />
     </div>

@@ -277,7 +277,7 @@ final readonly class BenchmarkScorer
 
             $score10 = max(1, min(10, (int) round((float) $rawScore)));
         } catch (Throwable $throwable) {
-            report_unless($throwable instanceof AiBudgetExceededException, $throwable);
+            report_unless($throwable instanceof AiBudgetExceededException || $throwable instanceof CaseAttachmentMissing, $throwable);
 
             return [
                 'score' => null,
@@ -351,16 +351,23 @@ final readonly class BenchmarkScorer
     }
 
     /**
-     * The final prompt's images, the only files the judge receives.
+     * The final prompt's images, the only files the judge receives. A
+     * re-judge after an image was deleted fails readably instead of with
+     * the storage error the SDK would raise when it reads the file.
      *
      * @return list<File>
+     *
+     * @throws CaseAttachmentMissing
      */
     private function judgeImages(BenchmarkCase $benchmarkCase): array
     {
-        return array_values($benchmarkCase->attachmentsFor(null)
-            ->filter(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): bool => $benchmarkCaseAttachment->isImage())
-            ->map(static fn (BenchmarkCaseAttachment $benchmarkCaseAttachment): File => $benchmarkCaseAttachment->toSdkFile())
-            ->all());
+        foreach ($benchmarkCase->attachmentsFor(null) as $attachment) {
+            if ($attachment->isImage()) {
+                $attachment->ensureStored();
+            }
+        }
+
+        return $benchmarkCase->sdkFilesFor(null, imagesOnly: true);
     }
 
     /**
