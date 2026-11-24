@@ -150,3 +150,34 @@ test('the latest re-judge of exactly these runs is summarised', function (): voi
             ->where('rejudge.failed', 0)
             ->where('rejudge.cost_usd', 0.001));
 });
+
+test('in a neutral score mode the drawer shows the neutral judge score, verdict and rationale', function (): void {
+    [$runA, $runB, $before, $after] = comparePagePair();
+    $neutral = ['provider' => 'openai', 'model' => 'gpt-neutral', 'reasoning' => null];
+    BenchmarkNeutralJudgement::factory()->forResult($before, $neutral)->scored(0.3, false)->create(['detail' => ['score_10' => 3, 'rationale' => 'Neutral view']]);
+    BenchmarkNeutralJudgement::factory()->forResult($after, $neutral)->queued()->create();
+    $this->actingAs(User::factory()->admin()->create());
+    $url = comparePageUrl($runA, $runB).'&scores='.urlencode(BenchmarkNeutralJudgement::keyFor($neutral));
+
+    $this->get($url.'&result='.$before->id, comparePartialHeaders($this, $url, 'resultDetail'))
+        ->assertOk()
+        ->assertJsonPath('props.resultDetail.neutral_judge_label', 'openai · gpt-neutral')
+        ->assertJsonPath('props.resultDetail.results.0.score', 0.3)
+        ->assertJsonPath('props.resultDetail.results.0.passed', false)
+        ->assertJsonPath('props.resultDetail.results.0.score_detail.rationale', 'Neutral view')
+        ->assertJsonPath('props.resultDetail.results.0.output', 'Old');
+
+    $this->get($url.'&result='.$after->id, comparePartialHeaders($this, $url, 'resultDetail'))
+        ->assertOk()
+        ->assertJsonPath('props.resultDetail.results.0.score', null)
+        ->assertJsonPath('props.resultDetail.results.0.passed', null)
+        ->assertJsonPath('props.resultDetail.results.0.judge_status', 'none')
+        ->assertJsonMissingPath('props.resultDetail.results.0.score_detail.rationale');
+
+    $original = comparePageUrl($runA, $runB);
+
+    $this->get($original.'&result='.$before->id, comparePartialHeaders($this, $original, 'resultDetail'))
+        ->assertJsonPath('props.resultDetail.neutral_judge_label', null)
+        ->assertJsonPath('props.resultDetail.results.0.score', 0.8)
+        ->assertJsonPath('props.resultDetail.results.0.score_detail.rationale', 'Fine');
+});

@@ -103,6 +103,14 @@ function toolBadgeVariant(
                     <Skeleton class="h-24 w-full" />
                 </div>
                 <template v-else>
+                    <p
+                        v-if="detail.neutral_judge_label"
+                        class="rounded-md border border-border bg-bg-elev px-3 py-2 text-[12.5px] text-muted-foreground"
+                        data-benchmark-drawer-neutral
+                    >
+                        Judge scores are from the neutral judge
+                        {{ detail.neutral_judge_label }}.
+                    </p>
                     <section v-if="detail.prompt" data-benchmark-drawer-prompt>
                         <h3
                             class="mb-1 text-[12px] font-semibold text-muted-foreground"

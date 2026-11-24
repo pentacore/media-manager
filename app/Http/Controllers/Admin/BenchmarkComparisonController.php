@@ -61,6 +61,7 @@ class BenchmarkComparisonController extends Controller
             ],
             'resultDetail' => Inertia::optional(fn (): array => BenchmarkResultDetails::for(
                 BenchmarkResult::query()->whereIn('benchmark_run_id', $runIds)->findOrFail($showBenchmarkComparisonRequest->integer('result')),
+                $comparison['score_source']['current'] === BenchmarkComparison::ORIGINAL ? null : $comparison['score_source']['current'],
             )),
             'outputs' => Inertia::optional(fn (): array => $benchmarkComparison->outputs(
                 $runIds,

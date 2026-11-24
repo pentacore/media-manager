@@ -344,6 +344,8 @@ export type BenchmarkResultDetail = {
     case_task: string;
     scoring: BenchmarkCaseScoring | null;
     prompt: string | null;
+    /** Set in a comparison's neutral score mode: judge-scored rows show this judge's scores. */
+    neutral_judge_label: string | null;
     results: Array<{
         result_id: number;
         candidate_index: number;
