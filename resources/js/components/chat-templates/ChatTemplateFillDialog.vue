@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useChatTemplates } from '@/composables/useChatTemplates';
+import { NETWORK_ERROR_MESSAGE } from '@/lib/http';
 import LibraryTitleCombobox from './LibraryTitleCombobox.vue';
 import type {
     ChatTemplate,
@@ -170,7 +171,7 @@ function submit(action: TemplateAction): void {
         },
         onNetworkError: () => {
             if (!isStale()) {
-                failure.value = 'Could not reach the server. Try again.';
+                failure.value = NETWORK_ERROR_MESSAGE;
             }
         },
     }).catch(() => {
@@ -260,6 +261,7 @@ function onEnter(event: KeyboardEvent): void {
                         v-model="library[variable.name]"
                         :type="variable.type"
                         :field-name="variable.name"
+                        :label="variable.label"
                     />
                     <select
                         v-else-if="variable.type === 'choice'"

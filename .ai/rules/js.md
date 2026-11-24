@@ -25,7 +25,7 @@ Inertia's `useHttp` calls `onError` only for a 422 validation response. A 500 go
 Format every byte count with `formatBytes()` from `@/lib/format` (binary steps, whole numbers to MB, one decimal from GB, `"0 B"` for zero, `"—"` for a missing, negative or non-finite value). Never add a local size formatter; `tests/Browser/ByteFormatTest.php` pins the output.
 
 ## JSON requests come from @/lib/http
-Ad-hoc JSON calls use `jsonRequest&lt;T&gt;()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.
+Ad-hoc JSON calls use `jsonRequest&lt;T&gt;()` and CSRF headers use `csrfToken()`, both from `@/lib/http`. A request that never gets an answer throws `NETWORK_ERROR_MESSAGE` ("Could not reach the server. Try again.") from there, never the browser's raw "Failed to fetch", so a toast may show `e.message`; a `useHttp` `onNetworkError` callback shows the same constant. Never import them from a composable (`useAiChat` used to host `jsonRequest`) and never read the `csrf-token` meta tag directly.
 
 ## Confirm with useConfirm(), never the browser dialog
 Ask before a destructive or costly action with `const { confirm } = useConfirm(); if (!(await confirm({ title, description?, confirmLabel, destructive }))) return;` — one `ConfirmDialog` is mounted in the app layout. Pass `destructive: true` for deletes, removals, unlinks, declines and blocklists. Oxlint (the `lint` block in `vite.config.ts`) bans the global `confirm`, `window.confirm`, `globalThis.confirm` and `self.confirm`. Browser tests click `[data-confirm-accept]` / `[data-confirm-cancel]` instead of stubbing `window.confirm`.
