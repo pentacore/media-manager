@@ -16,7 +16,10 @@ const messages = computed(() => [
 <template>
     <div class="grid gap-2">
         <div
-            class="min-h-12 rounded-lg border border-border bg-bg-elev p-3 text-[13.5px] leading-relaxed whitespace-pre-wrap"
+            class="min-h-12 rounded-lg border border-border bg-bg-elev p-3 text-[13.5px] leading-relaxed whitespace-pre-wrap xl:overflow-y-auto"
+            role="region"
+            aria-label="Preview text"
+            tabindex="0"
             data-template-preview
         >
             <span

@@ -265,7 +265,10 @@ onMounted(() => {
         });
 });
 
-// Rows the left column fills; the sticky Preview spans them from the row below the heading.
+// Rows the left column fills, in DOM order:
+// name, message, [variables], toggles, [preset], [tool groups]
+// The sticky Preview spans them from the row below the heading, and the last
+// one is flexible so a tall Preview never stretches the blocks beside it.
 const leftBlockCount = computed(
     () =>
         2 +
@@ -274,6 +277,11 @@ const leftBlockCount = computed(
         (modelOptions.value ? 1 : 0) +
         (toolGroupOptions.value.length > 0 ? 1 : 0),
 );
+
+const gridStyle = computed(() => ({
+    '--preview-span': leftBlockCount.value,
+    gridTemplateRows: `${'auto '.repeat(leftBlockCount.value)}minmax(0, 1fr)`,
+}));
 
 function save(): void {
     if (props.template) {
@@ -291,7 +299,7 @@ function save(): void {
 
     <form
         class="max-w-[900px] space-y-6 p-6 xl:grid xl:max-w-none xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:space-y-0 xl:gap-x-8 xl:gap-y-6"
-        :style="{ '--preview-span': leftBlockCount }"
+        :style="gridStyle"
         data-template-editor
         @submit.prevent="save"
     >
@@ -302,14 +310,16 @@ function save(): void {
             <TemplateHelp :default-open="template === null" />
         </div>
 
-        <label class="grid gap-1.5 text-[12.5px] font-medium xl:col-start-1">
+        <label
+            class="grid gap-1.5 text-[12.5px] font-medium xl:col-start-1 xl:self-start"
+        >
             Name
             <Input v-model="form.name" class="h-9" data-template-name />
             <InputError :message="form.errors.name" />
         </label>
 
         <div
-            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:col-start-1 xl:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_280px]"
+            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:col-start-1 xl:grid-cols-1 xl:self-start 2xl:grid-cols-[minmax(0,1fr)_280px]"
         >
             <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
                 Message
@@ -335,7 +345,7 @@ function save(): void {
 
         <section
             v-if="form.variables.length > 0"
-            class="grid gap-2 xl:col-start-1"
+            class="grid gap-2 xl:col-start-1 xl:self-start"
         >
             <h2 class="text-[13px] font-semibold">Variables</h2>
             <VariableRow
@@ -348,8 +358,9 @@ function save(): void {
             />
         </section>
 
+        <!-- top-17 (4.25rem) is the sticky header's h-13 plus 1rem; max-h leaves the same gap below. -->
         <section
-            class="grid gap-2 xl:sticky xl:top-17 xl:col-start-2 xl:[grid-row:2/span_var(--preview-span)] xl:max-h-[calc(100vh-5.5rem)] xl:self-start xl:overflow-y-auto"
+            class="grid gap-2 xl:sticky xl:top-17 xl:col-start-2 xl:[grid-row:2/span_var(--preview-span)] xl:max-h-[calc(100vh-5.5rem)] xl:grid-rows-[auto_minmax(0,1fr)] xl:self-start"
             data-template-preview-section
         >
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -366,10 +377,11 @@ function save(): void {
                 :segments="previewSegments"
                 :errors="previewErrors"
                 :failed="previewFailed"
+                class="xl:min-h-0 xl:grid-rows-[minmax(0,1fr)_auto]"
             />
         </section>
 
-        <div class="grid gap-6 sm:grid-cols-2 xl:col-start-1">
+        <div class="grid gap-6 sm:grid-cols-2 xl:col-start-1 xl:self-start">
             <Field
                 for="template-auto-send"
                 label="Send right away"
@@ -404,7 +416,7 @@ function save(): void {
             label="Model preset"
             hint="Applied when this template starts a new conversation. Leave both on Conversation default to use the chat defaults."
             data-template-preset
-            class="xl:col-start-1"
+            class="xl:col-start-1 xl:self-start"
         >
             <div
                 role="group"
@@ -440,7 +452,7 @@ function save(): void {
             label="Tool groups"
             hint="Pinned to the chat when you use this template, on a new or an existing chat. Groups that are not available are skipped."
             data-template-tool-groups
-            class="xl:col-start-1"
+            class="xl:col-start-1 xl:self-start"
         >
             <div
                 role="group"

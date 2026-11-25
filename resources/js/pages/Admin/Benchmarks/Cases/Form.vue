@@ -211,16 +211,17 @@ const eventTypeMissing = computed(
 );
 
 // From xl the basics and Scoring stack on the right while the case inputs span
-// beside them (the last spanned row is flexible so the inputs never stretch
-// the basics or Scoring rows) and the fixtures span both columns below them.
+// both rows beside them. Scoring sits in the flexible row, so a tall inputs
+// column never grows the basics row or the gap above the fixtures (which span
+// both columns below).
 const gridStyle = computed(() => {
     const first = props.draftWarnings.length > 0 ? 3 : 2;
 
     return {
         '--basics-row': first,
         '--scoring-row': first + 1,
-        '--fixtures-row': first + 3,
-        gridTemplateRows: `${'auto '.repeat(first + 1)}minmax(0, 1fr) auto`,
+        '--fixtures-row': first + 2,
+        gridTemplateRows: `${'auto '.repeat(first)}minmax(0, 1fr) auto`,
     };
 });
 
@@ -487,7 +488,7 @@ const selectClass =
 
         <CaseInputFields
             v-model="form.input"
-            class="xl:col-start-1 xl:[grid-row:var(--basics-row)/span_3] xl:self-start"
+            class="xl:col-start-1 xl:[grid-row:var(--basics-row)/span_2] xl:self-start"
             data-benchmark-inputs
             :task="form.task"
             :event-keys="eventKeys"
@@ -500,7 +501,7 @@ const selectClass =
 
         <FixtureEditor
             v-model="form.fixtures"
-            class="xl:col-span-2 xl:col-start-1 xl:[grid-row:var(--fixtures-row)] xl:-mt-6"
+            class="xl:col-span-2 xl:col-start-1 xl:[grid-row:var(--fixtures-row)]"
             :errors="errors"
             @update:invalid="fixturesInvalid = $event"
         />

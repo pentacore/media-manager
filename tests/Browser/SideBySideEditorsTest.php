@@ -76,7 +76,7 @@ test('keeps the template preview stuck below the header while scrolling a tall e
         ->and(abs($after - 68))->toBeLessThan(2);
 });
 
-test('scrolls a preview taller than the viewport inside itself', function (): void {
+test('scrolls a preview taller than the viewport inside its own box', function (): void {
     $chatTemplate = sideBySideTemplate();
 
     $webpage = visit(route('ai.templates.edit', $chatTemplate, absolute: false))
@@ -84,20 +84,60 @@ test('scrolls a preview taller than the viewport inside itself', function (): vo
         ->fill('[data-template-body]', sideBySideLongBody())
         ->assertVisible('[data-variable-row="v20"]');
 
-    $webpage->script("new Promise((resolve) => { const poll = () => document.querySelector('[data-template-preview]').textContent.includes('v30') || document.querySelector('[data-template-preview]').textContent.includes('Line') && document.querySelector('[data-template-preview]').textContent.length > 200 ? resolve(true) : setTimeout(poll, 100); poll(); })");
+    $webpage->script("new Promise((resolve) => { const poll = () => { const el = document.querySelector('[data-template-preview]'); el.scrollHeight > el.clientHeight ? resolve(true) : setTimeout(poll, 100); }; poll(); })");
     $webpage->script('window.scrollTo(0, document.documentElement.scrollHeight)');
 
     $metrics = $webpage->script(<<<'JS'
         (() => {
-            const el = document.querySelector('[data-template-preview-section]');
+            const box = document.querySelector('[data-template-preview]');
+            const section = document.querySelector('[data-template-preview-section]');
 
-            return { scroll: el.scrollHeight, client: el.clientHeight, bottom: el.getBoundingClientRect().bottom, inner: window.innerHeight, overflow: getComputedStyle(el).overflowY };
+            return {
+                scroll: box.scrollHeight,
+                client: box.clientHeight,
+                overflow: getComputedStyle(box).overflowY,
+                tabindex: box.getAttribute('tabindex'),
+                label: box.getAttribute('aria-label'),
+                sectionBottom: section.getBoundingClientRect().bottom,
+                inner: window.innerHeight,
+            };
         })()
     JS);
 
     expect($metrics['scroll'])->toBeGreaterThan($metrics['client'])
-        ->and($metrics['bottom'])->toBeLessThanOrEqual($metrics['inner'])
-        ->and($metrics['overflow'])->toBe('auto');
+        ->and($metrics['sectionBottom'])->toBeLessThanOrEqual($metrics['inner'])
+        ->and($metrics['overflow'])->toBe('auto')
+        ->and($metrics['tabindex'])->toBe('0')
+        ->and($metrics['label'])->not->toBeEmpty();
+});
+
+test('does not stretch the left blocks when the preview is taller than they are', function (): void {
+    $chatTemplate = sideBySideTemplate('Short plain message');
+
+    $webpage = visit(route('ai.templates.edit', $chatTemplate, absolute: false))->resize(1440, 900);
+
+    $measure = <<<'JS'
+        (() => {
+            const label = document.querySelector('[data-template-name]').closest('label');
+            const message = document.querySelector('[data-template-body]').closest('label').parentElement;
+            const toggles = document.querySelector('[data-template-auto-send]').parentElement;
+
+            return {
+                nameLabel: label.getBoundingClientRect().height,
+                messageToToggles: toggles.getBoundingClientRect().top - message.getBoundingClientRect().bottom,
+            };
+        })()
+    JS;
+
+    $short = $webpage->script($measure);
+
+    $webpage->fill('[data-template-body]', implode("\n", array_map(fn (int $i): string => "Plain line {$i}", range(1, 70))));
+    $webpage->script("new Promise((resolve) => { const poll = () => document.querySelector('[data-template-preview]').scrollHeight > 800 ? resolve(true) : setTimeout(poll, 100); poll(); })");
+
+    $tall = $webpage->script($measure);
+
+    expect(abs($tall['nameLabel'] - $short['nameLabel']))->toBeLessThanOrEqual(1)
+        ->and(abs($tall['messageToToggles'] - 24))->toBeLessThanOrEqual(2);
 });
 
 test('shows preview errors in the right column', function (): void {
@@ -179,6 +219,23 @@ test('leaves one 24 px gap between the columns and the fixtures', function (): v
     $lowest = max($rects['[data-benchmark-inputs]']['bottom'], $rects['[data-benchmark-scoring]']['bottom']);
 
     expect(abs($rects['[data-fixture-editor]']['top'] - $lowest - 24))->toBeLessThanOrEqual(2);
+});
+
+test('keeps the 24 px gap above the fixtures when the case inputs are the taller column', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Chat)->judged()->create();
+
+    $webpage = visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->resize(1440, 900)
+        ->click('[data-benchmark-history-add]')
+        ->click('[data-benchmark-history-add]')
+        ->click('[data-benchmark-history-add]')
+        ->click('[data-benchmark-history-add]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-inputs]', '[data-benchmark-scoring]', '[data-fixture-editor]');
+
+    expect($rects['[data-benchmark-inputs]']['bottom'])->toBeGreaterThan($rects['[data-benchmark-scoring]']['bottom'] + 100)
+        ->and(abs($rects['[data-fixture-editor]']['top'] - $rects['[data-benchmark-inputs]']['bottom'] - 24))->toBeLessThanOrEqual(2);
 });
 
 test('keeps the draft warning full width above both columns', function (): void {
