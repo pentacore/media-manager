@@ -20,14 +20,14 @@ export type IndexedMovie = {
   status: string | null;
   monitored: boolean;
   has_file: boolean;
-  genres: unknown[] | null;
+  genres: string[] | null;
   overview: string | null;
   poster_url: string | null;
   arr_added_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  embedding: unknown[] | null;
-  serviceConnection?: ServiceConnection | null;
+  embedding: number[] | null;
+  service_connection?: ServiceConnection | null;
 };
 
 export type IndexedMovieCreate = {
@@ -43,11 +43,11 @@ export type IndexedMovieCreate = {
   status?: string | null;
   monitored?: boolean;
   has_file?: boolean;
-  genres?: unknown[] | null;
+  genres?: string[] | null;
   overview?: string | null;
   poster_url?: string | null;
   arr_added_at?: string | null;
-  embedding?: unknown[] | null;
+  embedding?: number[] | null;
 };
 
 export type IndexedMovieUpdate = {
@@ -63,9 +63,9 @@ export type IndexedMovieUpdate = {
   status?: string | null;
   monitored?: boolean;
   has_file?: boolean;
-  genres?: unknown[] | null;
+  genres?: string[] | null;
   overview?: string | null;
   poster_url?: string | null;
   arr_added_at?: string | null;
-  embedding?: unknown[] | null;
+  embedding?: number[] | null;
 };

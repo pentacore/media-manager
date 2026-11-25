@@ -17,7 +17,7 @@ export type BenchmarkCaseAttachment = {
   size: number;
   created_at: string | null;
   updated_at: string | null;
-  benchmarkCase?: BenchmarkCase | null;
+  benchmark_case?: BenchmarkCase | null;
 };
 
 export type BenchmarkCaseAttachmentCreate = {

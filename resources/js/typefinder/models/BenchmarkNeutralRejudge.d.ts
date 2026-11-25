@@ -10,13 +10,13 @@ import type { User } from './User';
 
 export type BenchmarkNeutralRejudge = {
   id: number;
-  run_ids: unknown[];
-  judge: unknown[];
+  run_ids: number[];
+  judge: Record<string, unknown>;
   judge_key: string;
   status: BenchmarkNeutralRejudgeStatus;
-  estimate_usd: number;
-  cost_cap_usd: number;
-  cost_usd: number;
+  estimate_usd: string;
+  cost_cap_usd: string;
+  cost_usd: string;
   created_by: number | null;
   started_at: string | null;
   finished_at: string | null;
@@ -27,26 +27,26 @@ export type BenchmarkNeutralRejudge = {
 };
 
 export type BenchmarkNeutralRejudgeCreate = {
-  run_ids: unknown[];
-  judge: unknown[];
+  run_ids: number[];
+  judge: Record<string, unknown>;
   judge_key: string;
   status?: BenchmarkNeutralRejudgeStatus;
-  estimate_usd?: number;
-  cost_cap_usd: number;
-  cost_usd?: number;
+  estimate_usd?: string;
+  cost_cap_usd: string;
+  cost_usd?: string;
   created_by?: number | null;
   started_at?: string | null;
   finished_at?: string | null;
 };
 
 export type BenchmarkNeutralRejudgeUpdate = {
-  run_ids?: unknown[];
-  judge?: unknown[];
+  run_ids?: number[];
+  judge?: Record<string, unknown>;
   judge_key?: string;
   status?: BenchmarkNeutralRejudgeStatus;
-  estimate_usd?: number;
-  cost_cap_usd?: number;
-  cost_usd?: number;
+  estimate_usd?: string;
+  cost_cap_usd?: string;
+  cost_usd?: string;
   created_by?: number | null;
   started_at?: string | null;
   finished_at?: string | null;

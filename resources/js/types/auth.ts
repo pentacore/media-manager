@@ -1,12 +1,19 @@
-import type { Ability, SharedUserResource } from '@/typefinder';
+import type {
+    Ability,
+    SharedPageProps,
+    SharedUserResource,
+} from '@/typefinder';
 
 export type { Ability };
 
 export type User = SharedUserResource;
 
-export type Auth = {
+/**
+ * The shared `auth` prop with `user` narrowed to non-null: it is null only
+ * for guests, and the layouts that read it render for signed-in users only.
+ */
+export type Auth = SharedPageProps['auth'] & {
     user: User;
-    can: Record<Ability, boolean>;
 };
 
 export type TwoFactorConfigContent = {

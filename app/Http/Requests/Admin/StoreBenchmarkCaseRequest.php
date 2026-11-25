@@ -10,6 +10,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Arr;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
+// The attachment maps are keyed by slot name; the `.*` rules alone type them as lists.
 #[TypefinderOverrides([
     'attachments' => 'Record<string, File[]> | null',
     'keep_attachment_ids' => 'Record<string, number[]> | null',

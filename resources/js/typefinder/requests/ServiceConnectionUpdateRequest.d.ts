@@ -22,7 +22,7 @@ export type ServiceConnectionUpdateRequest = {
     path: string;
     scope?: 'anime' | 'tv' | null;
   }[] | null;
-  subtitle_check_tags?: string[] | null;
+  subtitle_check_tags?: (string | null)[] | null;
   subtitle_audit_search_slots?: number | null;
   whisparr_version?: 'v2' | 'v3' | null;
 };

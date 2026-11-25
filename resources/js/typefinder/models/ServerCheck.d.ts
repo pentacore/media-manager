@@ -4,8 +4,7 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { HostCheckStatus } from '../enums';
-import type { HostCheckType } from '../enums';
+import type { HostCheckStatus, HostCheckType } from '../enums';
 import type { Server } from './Server';
 
 export type ServerCheck = {
@@ -13,11 +12,11 @@ export type ServerCheck = {
   uuid: string;
   server_id: number;
   type: HostCheckType;
-  params: unknown[];
+  params: Record<string, unknown>;
   is_enabled: boolean;
   last_status: HostCheckStatus | null;
   last_message: string | null;
-  last_observed: unknown[] | null;
+  last_observed: Record<string, unknown> | null;
   last_evaluated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -27,21 +26,21 @@ export type ServerCheck = {
 export type ServerCheckCreate = {
   server_id: number;
   type: HostCheckType;
-  params?: unknown[];
+  params?: Record<string, unknown>;
   is_enabled?: boolean;
   last_status?: HostCheckStatus | null;
   last_message?: string | null;
-  last_observed?: unknown[] | null;
+  last_observed?: Record<string, unknown> | null;
   last_evaluated_at?: string | null;
 };
 
 export type ServerCheckUpdate = {
   server_id?: number;
   type?: HostCheckType;
-  params?: unknown[];
+  params?: Record<string, unknown>;
   is_enabled?: boolean;
   last_status?: HostCheckStatus | null;
   last_message?: string | null;
-  last_observed?: unknown[] | null;
+  last_observed?: Record<string, unknown> | null;
   last_evaluated_at?: string | null;
 };

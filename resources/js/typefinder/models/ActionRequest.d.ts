@@ -18,20 +18,20 @@ export type ActionRequest = {
   status: ActionRequestStatus;
   requires_approval: boolean;
   approved_by: number | null;
-  payload: unknown[];
-  result: unknown[] | null;
+  payload: unknown[] | Record<string, unknown>;
+  result: unknown[] | Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   origin: string;
   title: string | null;
   description: string | null;
-  details: unknown[] | null;
+  details: { label: string; value: string }[] | null;
   description_verified: boolean;
   status_version: number;
-  second_opinion: unknown[] | null;
-  webhookEvent?: WebhookEvent | null;
-  approvedByUser?: User | null;
-  mediaReplacementAttempt?: MediaReplacementAttempt | null;
+  second_opinion: Record<string, unknown> | null;
+  webhook_event?: WebhookEvent | null;
+  approved_by_user?: User | null;
+  media_replacement_attempt?: MediaReplacementAttempt | null;
 };
 
 export type ActionRequestCreate = {
@@ -42,14 +42,14 @@ export type ActionRequestCreate = {
   status?: ActionRequestStatus;
   requires_approval?: boolean;
   approved_by?: number | null;
-  payload: unknown[];
-  result?: unknown[] | null;
+  payload: unknown[] | Record<string, unknown>;
+  result?: unknown[] | Record<string, unknown> | null;
   origin?: string;
   title?: string | null;
   description?: string | null;
-  details?: unknown[] | null;
+  details?: { label: string; value: string }[] | null;
   description_verified?: boolean;
-  second_opinion?: unknown[] | null;
+  second_opinion?: Record<string, unknown> | null;
 };
 
 export type ActionRequestUpdate = {
@@ -60,12 +60,12 @@ export type ActionRequestUpdate = {
   status?: ActionRequestStatus;
   requires_approval?: boolean;
   approved_by?: number | null;
-  payload?: unknown[];
-  result?: unknown[] | null;
+  payload?: unknown[] | Record<string, unknown>;
+  result?: unknown[] | Record<string, unknown> | null;
   origin?: string;
   title?: string | null;
   description?: string | null;
-  details?: unknown[] | null;
+  details?: { label: string; value: string }[] | null;
   description_verified?: boolean;
-  second_opinion?: unknown[] | null;
+  second_opinion?: Record<string, unknown> | null;
 };

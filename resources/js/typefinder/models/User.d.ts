@@ -22,36 +22,44 @@ export type User = {
   role: UserRole;
   avatar_url: string | null;
   invite_accepted_at: string | null;
-  preferences: unknown[] | null;
+  preferences: Record<string, unknown> | null;
   ntfy_topic: string | null;
   telegram_chat_id: string | null;
-  embyUserLinks?: EmbyUserLink[];
-  activityLogs?: ActivityLog[];
-  chatTemplates?: ChatTemplate[];
+  emby_user_links?: EmbyUserLink[];
+  activity_logs?: ActivityLog[];
+  chat_templates?: ChatTemplate[];
 };
 
 export type UserCreate = {
   name: string;
   email: string;
+  password?: string | null;
   sso_provider?: string | null;
   sso_id?: string | null;
   role?: UserRole;
   avatar_url?: string | null;
   invite_accepted_at?: string | null;
-  preferences?: unknown[] | null;
+  preferences?: Record<string, unknown> | null;
   ntfy_topic?: string | null;
+  discord_webhook_url?: string | null;
   telegram_chat_id?: string | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
 };
 
 export type UserUpdate = {
   name?: string;
   email?: string;
+  password?: string | null;
   sso_provider?: string | null;
   sso_id?: string | null;
   role?: UserRole;
   avatar_url?: string | null;
   invite_accepted_at?: string | null;
-  preferences?: unknown[] | null;
+  preferences?: Record<string, unknown> | null;
   ntfy_topic?: string | null;
+  discord_webhook_url?: string | null;
   telegram_chat_id?: string | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
 };

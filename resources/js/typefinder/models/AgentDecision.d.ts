@@ -15,11 +15,11 @@ export type AgentDecision = {
   status: AgentDecisionStatus;
   summary: string | null;
   actions_count: number;
-  action_request_ids: unknown[] | null;
+  action_request_ids: number[] | null;
   created_at: string | null;
   updated_at: string | null;
   invocation_id: string | null;
-  webhookEvent?: WebhookEvent | null;
+  webhook_event?: WebhookEvent | null;
 };
 
 export type AgentDecisionCreate = {
@@ -29,7 +29,7 @@ export type AgentDecisionCreate = {
   status: AgentDecisionStatus;
   summary?: string | null;
   actions_count?: number;
-  action_request_ids?: unknown[] | null;
+  action_request_ids?: number[] | null;
   invocation_id?: string | null;
 };
 
@@ -40,6 +40,6 @@ export type AgentDecisionUpdate = {
   status?: AgentDecisionStatus;
   summary?: string | null;
   actions_count?: number;
-  action_request_ids?: unknown[] | null;
+  action_request_ids?: number[] | null;
   invocation_id?: string | null;
 };

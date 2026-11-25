@@ -4,8 +4,7 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { IncidentSeverity } from '../enums';
-import type { IncidentStatus } from '../enums';
+import type { IncidentSeverity, IncidentStatus } from '../enums';
 import type { Server } from './Server';
 
 export type ServerIncident = {
@@ -16,7 +15,7 @@ export type ServerIncident = {
   status: IncidentStatus;
   title: string;
   detail: string | null;
-  context: unknown[];
+  context: Record<string, unknown>;
   opened_at: string;
   last_seen_at: string;
   clear_streak: number;
@@ -36,7 +35,7 @@ export type ServerIncidentCreate = {
   status?: IncidentStatus;
   title: string;
   detail?: string | null;
-  context?: unknown[];
+  context?: Record<string, unknown>;
   opened_at: string;
   last_seen_at: string;
   clear_streak?: number;
@@ -53,7 +52,7 @@ export type ServerIncidentUpdate = {
   status?: IncidentStatus;
   title?: string;
   detail?: string | null;
-  context?: unknown[];
+  context?: Record<string, unknown>;
   opened_at?: string;
   last_seen_at?: string;
   clear_streak?: number;

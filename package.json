@@ -15,7 +15,7 @@
     "devDependencies": {
         "@laravel/multiplex": "^0.4.5",
         "@laravel/vite-plugin-wayfinder": "^0.1.11",
-        "@pentacore/vite-plugin-laravel-typefinder": "^8.3.1",
+        "@pentacore/vite-plugin-laravel-typefinder": "^8.4.2",
         "@semantic-release/changelog": "^7.0.0",
         "@semantic-release/git": "^11.0.1",
         "@stylistic/eslint-plugin": "^6.0.1",

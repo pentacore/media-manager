@@ -14,5 +14,10 @@ export type UpdateDecisionAgentSettingsRequest = {
   run_time_limit?: number | null;
   second_opinion_engine: 'llm' | 'jev_then_llm' | 'jev';
   second_opinion_jev_threshold: number;
-  second_opinion_event_overrides?: Array<{ event_key: string; mode: string | null; engine: string | null; jev_threshold: number | null }>;
+  second_opinion_event_overrides?: {
+    event_key: 'sonarr:Grab' | 'sonarr:Download' | 'sonarr:Rename' | 'sonarr:SeriesAdd' | 'sonarr:SeriesDelete' | 'sonarr:EpisodeFileDelete' | 'sonarr:ManualInteractionRequired' | 'sonarr:Health' | 'sonarr:HealthRestored' | 'sonarr:ApplicationUpdate' | 'radarr:Grab' | 'radarr:Download' | 'radarr:Rename' | 'radarr:MovieAdded' | 'radarr:MovieDelete' | 'radarr:MovieFileDelete' | 'radarr:ManualInteractionRequired' | 'radarr:Health' | 'radarr:HealthRestored' | 'radarr:ApplicationUpdate' | 'whisparr:Grab' | 'whisparr:Download' | 'whisparr:Rename' | 'whisparr:MovieAdded' | 'whisparr:MovieDelete' | 'whisparr:MovieFileDelete' | 'whisparr:SeriesAdd' | 'whisparr:SeriesDelete' | 'whisparr:EpisodeFileDelete' | 'whisparr:ManualInteractionRequired' | 'whisparr:Health' | 'whisparr:HealthRestored' | 'whisparr:ApplicationUpdate' | 'seerr:MEDIA_PENDING' | 'seerr:MEDIA_APPROVED' | 'seerr:MEDIA_AUTO_APPROVED' | 'seerr:MEDIA_DECLINED' | 'seerr:MEDIA_AVAILABLE' | 'seerr:MEDIA_FAILED' | 'seerr:ISSUE_CREATED' | 'seerr:ISSUE_REOPENED';
+    mode?: 'off' | 'hold' | 'reject' | null;
+    jev_threshold?: number | null;
+    engine?: 'llm' | 'jev_then_llm' | 'jev' | null;
+  }[];
 };

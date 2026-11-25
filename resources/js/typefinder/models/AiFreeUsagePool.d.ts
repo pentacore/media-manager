@@ -5,8 +5,7 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { AiModelPrice } from './AiModelPrice';
-import type { FreePoolOverflowBehavior } from '../enums';
-import type { FreeUsagePeriod } from '../enums';
+import type { FreePoolOverflowBehavior, FreeUsagePeriod } from '../enums';
 
 export type AiFreeUsagePool = {
   id: number;

@@ -12,7 +12,7 @@ export type AiProposedWorkflow = {
   user_id: number;
   conversation_id: string | null;
   rationale: string;
-  steps: unknown[];
+  steps: Record<string, unknown>[];
   status: AiProposedWorkflowStatus;
   created_at: string | null;
   updated_at: string | null;
@@ -23,7 +23,7 @@ export type AiProposedWorkflowCreate = {
   user_id: number;
   conversation_id?: string | null;
   rationale: string;
-  steps: unknown[];
+  steps: Record<string, unknown>[];
   status: AiProposedWorkflowStatus;
 };
 
@@ -31,6 +31,6 @@ export type AiProposedWorkflowUpdate = {
   user_id?: number;
   conversation_id?: string | null;
   rationale?: string;
-  steps?: unknown[];
+  steps?: Record<string, unknown>[];
   status?: AiProposedWorkflowStatus;
 };

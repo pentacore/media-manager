@@ -23,7 +23,7 @@ use Override;
  * @property AgentDecisionStatus $status
  * @property string|null $summary
  * @property int $actions_count
- * @property array<array-key, mixed>|null $action_request_ids
+ * @property list<int>|null $action_request_ids
  * @property string|null $invocation_id
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at

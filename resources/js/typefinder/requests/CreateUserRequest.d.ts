@@ -9,4 +9,6 @@ export type CreateUserRequest = {
   email: string;
   role: 'admin' | 'member' | 'viewer';
   set_password?: boolean;
+  password?: string;
+  password_confirmation?: string;
 };

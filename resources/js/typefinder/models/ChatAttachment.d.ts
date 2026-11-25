@@ -15,7 +15,7 @@ export type ChatAttachment = {
   original_name: string;
   mime_type: string;
   size: number;
-  provider_file_ids: unknown[] | null;
+  provider_file_ids: Record<string, string> | null;
   created_at: string | null;
   updated_at: string | null;
   user?: User | null;
@@ -29,7 +29,7 @@ export type ChatAttachmentCreate = {
   original_name: string;
   mime_type: string;
   size: number;
-  provider_file_ids?: unknown[] | null;
+  provider_file_ids?: Record<string, string> | null;
 };
 
 export type ChatAttachmentUpdate = {
@@ -40,5 +40,5 @@ export type ChatAttachmentUpdate = {
   original_name?: string;
   mime_type?: string;
   size?: number;
-  provider_file_ids?: unknown[] | null;
+  provider_file_ids?: Record<string, string> | null;
 };

@@ -7,5 +7,5 @@
 export type PasswordUpdateRequest = {
   current_password: string;
   password: string;
-  password_confirmation?: string;
+  password_confirmation: string;
 };

@@ -19,7 +19,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Override;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
  * @property int $id
@@ -60,7 +59,6 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  */
 #[ObservedBy(ActivityLogObserver::class)]
 #[Fillable(['user_id', 'service_connection_id', 'webhook_event_id', 'category', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]
-#[TypefinderOverrides(['metadata' => 'Record<string|number, any> | null'])]
 class ActivityLog extends Model
 {
     /** @use HasFactory<ActivityLogFactory> */

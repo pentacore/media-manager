@@ -74,6 +74,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
+- **Retire a Typefinder workaround** once
+  [Laravel-Typefinder#239](https://github.com/pentacore/Laravel-Typefinder/issues/239)
+  ships: `HandleInertiaRequests::share()`'s `@typefinder-return` names
+  `\App\Enums\Ability` fully qualified so Rector keeps it; import it again.
 - **Statistics timezone minors**, found while fixing the watch heatmap's timezone:
     - Rollups that `statistics:aggregate` wrote on a non-UTC `APP_TIMEZONE`
       before the fix sit one offset late. Re-run `statistics:backfill` there once

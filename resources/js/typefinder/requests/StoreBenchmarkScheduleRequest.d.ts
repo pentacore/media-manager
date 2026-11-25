@@ -8,7 +8,11 @@ export type StoreBenchmarkScheduleRequest = {
   name: string;
   task: 'chat' | 'title' | 'decision' | 'decision_verifier' | 'file_inspector' | 'stuck_download_investigator' | 'price_updater';
   case_tags: string[];
-  judge: { provider: string; model: string; reasoning: string | null };
+  judge: {
+    provider: string;
+    model: string;
+    reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+  };
   cost_cap_usd: number;
   frequency: 'daily' | 'weekly' | 'monthly';
   time_of_day: string;

@@ -5,5 +5,72 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type UpdateMediaReplacementSettingsRequest = {
-  media_replacement: Record<string, unknown>;
+  media_replacement: {
+    automatic_selection_enabled: boolean;
+    automatic_selection_threshold: number;
+    global_languages: string[];
+    scoped_languages: {
+      anime?: string[] | null;
+      tv?: string[] | null;
+      movie?: string[] | null;
+    };
+    season_pack_policy: 'never' | 'approval_required' | 'automatic_above_threshold';
+    subtitle_check: {
+      enabled: boolean;
+      max_attempts_per_target: number;
+      cooldown_hours: number;
+    };
+    subtitle_audit: {
+      search_minutes_per_episode: number;
+      min_search_minutes: number;
+      max_search_minutes: number;
+      in_chat_wait_seconds: number;
+      watchdog_delay_seconds: number;
+      sweep_grace_minutes: number;
+    };
+    guidance: {
+      anime?: {
+        notes: string;
+        rules: {
+          name: string;
+          enabled: boolean;
+          strength: 'guarantee' | 'strong_evidence' | 'preference';
+          languages: string[];
+          conditions: {
+            field: 'release_group' | 'subgroup' | 'title' | 'custom_format';
+            value: string;
+          }[];
+          explanation?: string | null;
+        }[];
+      };
+      tv?: {
+        notes: string;
+        rules: {
+          name: string;
+          enabled: boolean;
+          strength: 'guarantee' | 'strong_evidence' | 'preference';
+          languages: string[];
+          conditions: {
+            field: 'release_group' | 'subgroup' | 'title' | 'custom_format';
+            value: string;
+          }[];
+          explanation?: string | null;
+        }[];
+      };
+      movie?: {
+        notes: string;
+        rules: {
+          name: string;
+          enabled: boolean;
+          strength: 'guarantee' | 'strong_evidence' | 'preference';
+          languages: string[];
+          conditions: {
+            field: 'release_group' | 'subgroup' | 'title' | 'custom_format';
+            value: string;
+          }[];
+          explanation?: string | null;
+        }[];
+      };
+    };
+  };
 };

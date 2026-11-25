@@ -25,14 +25,15 @@ export type SubtitleUpload = {
   created_at: string | null;
   updated_at: string | null;
   owner?: User | null;
-  subtitleCase?: SubtitleCase | null;
-  actionRequest?: ActionRequest | null;
+  subtitle_case?: SubtitleCase | null;
+  action_request?: ActionRequest | null;
 };
 
 export type SubtitleUploadCreate = {
   user_id?: number | null;
   subtitle_case_id: number;
   action_request_id?: number | null;
+  path: string;
   display_name: string;
   checksum: string;
   mime_type: string;
@@ -48,6 +49,7 @@ export type SubtitleUploadUpdate = {
   user_id?: number | null;
   subtitle_case_id?: number;
   action_request_id?: number | null;
+  path?: string;
   display_name?: string;
   checksum?: string;
   mime_type?: string;

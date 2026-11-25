@@ -14,7 +14,7 @@ export type StoreChatTemplateRequest = {
     label: string;
     type: 'text' | 'number' | 'choice' | 'series' | 'movie';
     default?: string | null;
-    options?: string[] | null;
+    options?: (string | null)[] | null;
   }[];
   auto_send: boolean;
   pinned: boolean;

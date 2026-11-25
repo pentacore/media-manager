@@ -14,22 +14,22 @@ export type WebhookEvent = {
   id: number;
   service_connection_id: number;
   event_type: string;
-  payload: unknown[];
+  payload: unknown[] | Record<string, unknown>;
   processed_at: string | null;
   created_at: string | null;
   updated_at: string | null;
   payload_hash: string | null;
   handling_status: WebhookHandlingStatus | null;
-  serviceConnection?: ServiceConnection | null;
-  actionRequests?: ActionRequest[];
-  agentDecision?: AgentDecision | null;
-  activityLogs?: ActivityLog[];
+  service_connection?: ServiceConnection | null;
+  action_requests?: ActionRequest[];
+  agent_decision?: AgentDecision | null;
+  activity_logs?: ActivityLog[];
 };
 
 export type WebhookEventCreate = {
   service_connection_id: number;
   event_type: string;
-  payload: unknown[];
+  payload: unknown[] | Record<string, unknown>;
   processed_at?: string | null;
   payload_hash?: string | null;
   handling_status?: WebhookHandlingStatus | null;
@@ -38,7 +38,7 @@ export type WebhookEventCreate = {
 export type WebhookEventUpdate = {
   service_connection_id?: number;
   event_type?: string;
-  payload?: unknown[];
+  payload?: unknown[] | Record<string, unknown>;
   processed_at?: string | null;
   payload_hash?: string | null;
   handling_status?: WebhookHandlingStatus | null;

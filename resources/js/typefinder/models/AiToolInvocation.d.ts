@@ -16,7 +16,7 @@ export type AiToolInvocation = {
   duration_ms: number | null;
   error_code: string | null;
   tool_name: string | null;
-  arguments: unknown[] | null;
+  arguments: Record<string, unknown> | null;
   result: string | null;
   io_truncated: boolean;
 };
@@ -30,7 +30,7 @@ export type AiToolInvocationCreate = {
   duration_ms?: number | null;
   error_code?: string | null;
   tool_name?: string | null;
-  arguments?: unknown[] | null;
+  arguments?: Record<string, unknown> | null;
   result?: string | null;
   io_truncated?: boolean;
 };
@@ -44,7 +44,7 @@ export type AiToolInvocationUpdate = {
   duration_ms?: number | null;
   error_code?: string | null;
   tool_name?: string | null;
-  arguments?: unknown[] | null;
+  arguments?: Record<string, unknown> | null;
   result?: string | null;
   io_truncated?: boolean;
 };

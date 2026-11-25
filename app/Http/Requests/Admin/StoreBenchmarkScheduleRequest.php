@@ -11,11 +11,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-#[TypefinderOverrides([
-    'judge' => '{ provider: string; model: string; reasoning: string | null }',
-])]
 class StoreBenchmarkScheduleRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;

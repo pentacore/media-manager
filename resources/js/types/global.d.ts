@@ -1,4 +1,5 @@
 import type Pusher from 'pusher-js';
+import type { SharedPageProps } from '@/typefinder';
 import type { Auth } from '@/types/auth';
 
 declare global {
@@ -20,33 +21,13 @@ declare module 'vite/client' {
     }
 }
 
+// Shared props are SharedPageProps, generated from the documented share() of
+// HandleInertiaRequests, with `auth` narrowed (see Auth); the index signature
+// covers each page's own props.
 declare module '@inertiajs/core' {
     export interface InertiaConfig {
-        sharedPageProps: {
-            name: string;
+        sharedPageProps: Omit<SharedPageProps, 'auth'> & {
             auth: Auth;
-            ai: { enabled: boolean; max_attachments: number };
-            integrations: {
-                seerr: boolean;
-                prowlarr: boolean;
-                whisparr: boolean;
-            };
-            nav: {
-                pendingActions: number;
-                pendingActionsVersion?: number;
-                activeSessions: number;
-                unreadNotifications: number;
-                libraryIntervention: number;
-                sabnzbdDownloads: { queued: number; completed: number };
-                replacementAttention: number;
-                wantedMissing: number;
-            };
-            sidebarOpen: boolean;
-            version: {
-                current: string;
-                latest: string | null;
-                updateAvailable: boolean;
-            } | null;
             [key: string]: unknown;
         };
     }

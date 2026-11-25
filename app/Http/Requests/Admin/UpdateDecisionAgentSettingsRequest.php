@@ -12,9 +12,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-#[TypefinderOverrides(['second_opinion_event_overrides' => 'Array<{ event_key: string; mode: string | null; engine: string | null; jev_threshold: number | null }>'])]
 class UpdateDecisionAgentSettingsRequest extends FormRequest
 {
     /**

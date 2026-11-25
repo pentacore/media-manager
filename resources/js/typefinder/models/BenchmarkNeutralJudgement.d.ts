@@ -13,12 +13,12 @@ export type BenchmarkNeutralJudgement = {
   benchmark_result_id: number;
   benchmark_neutral_rejudge_id: number | null;
   judge_key: string;
-  judge: unknown[];
+  judge: Record<string, unknown>;
   status: BenchmarkJudgeStatus;
   score: number | null;
   passed: boolean | null;
-  detail: unknown[] | null;
-  cost_usd: number;
+  detail: Record<string, unknown> | null;
+  cost_usd: string;
   created_at: string | null;
   updated_at: string | null;
   result?: BenchmarkResult | null;
@@ -29,22 +29,22 @@ export type BenchmarkNeutralJudgementCreate = {
   benchmark_result_id: number;
   benchmark_neutral_rejudge_id?: number | null;
   judge_key: string;
-  judge: unknown[];
+  judge: Record<string, unknown>;
   status?: BenchmarkJudgeStatus;
   score?: number | null;
   passed?: boolean | null;
-  detail?: unknown[] | null;
-  cost_usd?: number;
+  detail?: Record<string, unknown> | null;
+  cost_usd?: string;
 };
 
 export type BenchmarkNeutralJudgementUpdate = {
   benchmark_result_id?: number;
   benchmark_neutral_rejudge_id?: number | null;
   judge_key?: string;
-  judge?: unknown[];
+  judge?: Record<string, unknown>;
   status?: BenchmarkJudgeStatus;
   score?: number | null;
   passed?: boolean | null;
-  detail?: unknown[] | null;
-  cost_usd?: number;
+  detail?: Record<string, unknown> | null;
+  cost_usd?: string;
 };

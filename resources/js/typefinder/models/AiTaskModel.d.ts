@@ -4,8 +4,7 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { AiReasoningLevel } from '../enums';
-import type { AiTask } from '../enums';
+import type { AiReasoningLevel, AiTask } from '../enums';
 
 export type AiTaskModel = {
   id: number;

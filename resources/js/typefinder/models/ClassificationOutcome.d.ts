@@ -4,9 +4,7 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { ClassificationGate } from '../enums';
-import type { ClassificationOutcomeSource } from '../enums';
-import type { ClassificationVerdict } from '../enums';
+import type { ClassificationGate, ClassificationOutcomeSource, ClassificationVerdict } from '../enums';
 
 export type ClassificationOutcome = {
   id: number;

@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Override;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
  * A user's saved assistant prompt. `body` holds {{name}} / {{name:parts}}
@@ -23,7 +22,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property int $user_id
  * @property string $name
  * @property string $body
- * @property list<array{name: string, label: string, type: string, default: string|null, options: list<string>|null}> $variables
+ * @property list<array{name: string, label: string, type: 'text'|'number'|'choice'|'series'|'movie', default: string|null, options: list<string>|null}> $variables
  * @property bool $auto_send
  * @property bool $pinned
  * @property string|null $model_provider
@@ -53,9 +52,6 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
     'model',
     'reasoning',
     'tool_groups',
-])]
-#[TypefinderOverrides([
-    'variables' => "Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>",
 ])]
 class ChatTemplate extends Model
 {

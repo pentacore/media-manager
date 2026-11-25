@@ -19,14 +19,14 @@ export type IndexedSeries = {
   status: string | null;
   monitored: boolean;
   network: string | null;
-  genres: unknown[] | null;
+  genres: string[] | null;
   overview: string | null;
   poster_url: string | null;
   arr_added_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  embedding: unknown[] | null;
-  serviceConnection?: ServiceConnection | null;
+  embedding: number[] | null;
+  service_connection?: ServiceConnection | null;
 };
 
 export type IndexedSeriesCreate = {
@@ -41,11 +41,11 @@ export type IndexedSeriesCreate = {
   status?: string | null;
   monitored?: boolean;
   network?: string | null;
-  genres?: unknown[] | null;
+  genres?: string[] | null;
   overview?: string | null;
   poster_url?: string | null;
   arr_added_at?: string | null;
-  embedding?: unknown[] | null;
+  embedding?: number[] | null;
 };
 
 export type IndexedSeriesUpdate = {
@@ -60,9 +60,9 @@ export type IndexedSeriesUpdate = {
   status?: string | null;
   monitored?: boolean;
   network?: string | null;
-  genres?: unknown[] | null;
+  genres?: string[] | null;
   overview?: string | null;
   poster_url?: string | null;
   arr_added_at?: string | null;
-  embedding?: unknown[] | null;
+  embedding?: number[] | null;
 };

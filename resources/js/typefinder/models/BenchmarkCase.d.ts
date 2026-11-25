@@ -12,11 +12,11 @@ export type BenchmarkCase = {
   id: number;
   task: AiTask;
   name: string;
-  tags: unknown[];
+  tags: string[];
   notes: string | null;
-  input: unknown[];
-  fixtures: unknown[];
-  scoring: unknown[];
+  input: Record<string, unknown>;
+  fixtures: { tool: string; arguments: Record<string, unknown>; result: string }[];
+  scoring: Record<string, unknown>;
   source_invocation_id: string | null;
   source_prompt_tokens: number | null;
   source_completion_tokens: number | null;
@@ -30,11 +30,11 @@ export type BenchmarkCase = {
 export type BenchmarkCaseCreate = {
   task: AiTask;
   name: string;
-  tags?: unknown[];
+  tags?: string[];
   notes?: string | null;
-  input: unknown[];
-  fixtures?: unknown[];
-  scoring: unknown[];
+  input: Record<string, unknown>;
+  fixtures?: { tool: string; arguments: Record<string, unknown>; result: string }[];
+  scoring: Record<string, unknown>;
   source_invocation_id?: string | null;
   source_prompt_tokens?: number | null;
   source_completion_tokens?: number | null;
@@ -44,11 +44,11 @@ export type BenchmarkCaseCreate = {
 export type BenchmarkCaseUpdate = {
   task?: AiTask;
   name?: string;
-  tags?: unknown[];
+  tags?: string[];
   notes?: string | null;
-  input?: unknown[];
-  fixtures?: unknown[];
-  scoring?: unknown[];
+  input?: Record<string, unknown>;
+  fixtures?: { tool: string; arguments: Record<string, unknown>; result: string }[];
+  scoring?: Record<string, unknown>;
   source_invocation_id?: string | null;
   source_prompt_tokens?: number | null;
   source_completion_tokens?: number | null;

@@ -24,7 +24,7 @@ export type SubtitleAuditBatch = {
   created_at: string | null;
   updated_at: string | null;
   user?: User | null;
-  serviceConnection?: ServiceConnection | null;
+  service_connection?: ServiceConnection | null;
   episodes?: SubtitleAuditEpisode[];
 };
 
