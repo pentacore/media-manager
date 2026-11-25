@@ -9,13 +9,14 @@ use App\Models\ServerFilesystemSample;
 use App\Models\ServerMetricSample;
 
 /**
- * Files a report's host and filesystem figures as 60 s samples under its receive minute. A second report in the same minute overwrites the row.
+ * Files a report's host and filesystem figures as 60 s samples under its receive minute. A second report in the same minute
+ * overwrites the row. The minute is written as an instant, so the repeated hour of a DST fall-back night gets its own rows.
  */
 final readonly class MetricSampleWriter
 {
     public function write(Server $server, AgentReport $agentReport): void
     {
-        $recordedAt = $agentReport->minute();
+        $recordedAt = SampleClock::bind($agentReport->minute());
 
         ServerMetricSample::query()->upsert([[
             'server_id' => $server->id,

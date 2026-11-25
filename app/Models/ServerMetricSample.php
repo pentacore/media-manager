@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\ServerMetricSampleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
@@ -75,6 +76,25 @@ class ServerMetricSample extends Model
     }
 
     /**
+     * `recorded_at` is a `timestamptz`: write it with its offset, so Postgres does not read the app-timezone wall clock
+     * in the session's UTC (see SampleClock).
+     */
+    #[Override]
+    public function getDateFormat(): string
+    {
+        return 'Y-m-d H:i:sP';
+    }
+
+    /**
+     * Postgres answers a `timestamptz` in the session's UTC; hand it out on the app timezone like every other date.
+     */
+    #[Override]
+    protected function asDateTime($value): CarbonInterface
+    {
+        return parent::asDateTime($value)->setTimezone((string) config('app.timezone'));
+    }
+
+    /**
      * @return BelongsTo<Server, $this>
      */
     public function server(): BelongsTo
@@ -119,7 +139,7 @@ class ServerMetricSample extends Model
             foreach ($windows as $resolution => $days) {
                 $builder->orWhere(fn (Builder $window): Builder => $window
                     ->where('resolution', $resolution)
-                    ->where('recorded_at', '<', now()->subDays($days)));
+                    ->where('recorded_at', '<', now()->subDays($days)->toIso8601String()));
             }
         });
     }
