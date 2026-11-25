@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatModelOptionsController from '@/actions/App/Http/Controllers/AI/ChatModelOptionsController';
@@ -265,6 +265,16 @@ onMounted(() => {
         });
 });
 
+// Rows the left column fills; the sticky Preview spans them from the row below the heading.
+const leftBlockCount = computed(
+    () =>
+        2 +
+        (form.variables.length > 0 ? 1 : 0) +
+        1 +
+        (modelOptions.value ? 1 : 0) +
+        (toolGroupOptions.value.length > 0 ? 1 : 0),
+);
+
 function save(): void {
     if (props.template) {
         form.patch(ChatTemplateController.update.url(props.template.id));
@@ -279,21 +289,28 @@ function save(): void {
 <template>
     <Head :title="template ? 'Edit template' : 'New template'" />
 
-    <form class="max-w-[900px] space-y-6 p-6" @submit.prevent="save">
-        <div class="grid gap-3">
+    <form
+        class="max-w-[900px] space-y-6 p-6 xl:grid xl:max-w-none xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:space-y-0 xl:gap-x-8 xl:gap-y-6"
+        :style="{ '--preview-span': leftBlockCount }"
+        data-template-editor
+        @submit.prevent="save"
+    >
+        <div class="grid gap-3 xl:col-span-2">
             <h1 class="text-[20px] font-semibold">
                 {{ template ? 'Edit template' : 'New template' }}
             </h1>
             <TemplateHelp :default-open="template === null" />
         </div>
 
-        <label class="grid gap-1.5 text-[12.5px] font-medium">
+        <label class="grid gap-1.5 text-[12.5px] font-medium xl:col-start-1">
             Name
             <Input v-model="form.name" class="h-9" data-template-name />
             <InputError :message="form.errors.name" />
         </label>
 
-        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div
+            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:col-start-1"
+        >
             <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
                 Message
                 <textarea
@@ -316,7 +333,10 @@ function save(): void {
             />
         </div>
 
-        <section v-if="form.variables.length > 0" class="grid gap-2">
+        <section
+            v-if="form.variables.length > 0"
+            class="grid gap-2 xl:col-start-1"
+        >
             <h2 class="text-[13px] font-semibold">Variables</h2>
             <VariableRow
                 v-for="(variable, index) in form.variables"
@@ -328,7 +348,10 @@ function save(): void {
             />
         </section>
 
-        <section class="grid gap-2">
+        <section
+            class="grid gap-2 xl:sticky xl:top-17 xl:col-start-2 xl:[grid-row:2/span_var(--preview-span)] xl:max-h-[calc(100vh-5.5rem)] xl:self-start xl:overflow-y-auto"
+            data-template-preview-section
+        >
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <h2 class="text-[13px] font-semibold">Preview</h2>
                 <SegmentedControl
@@ -346,7 +369,7 @@ function save(): void {
             />
         </section>
 
-        <div class="grid gap-6 sm:grid-cols-2">
+        <div class="grid gap-6 sm:grid-cols-2 xl:col-start-1">
             <Field
                 for="template-auto-send"
                 label="Send right away"
@@ -381,6 +404,7 @@ function save(): void {
             label="Model preset"
             hint="Applied when this template starts a new conversation. Leave both on Conversation default to use the chat defaults."
             data-template-preset
+            class="xl:col-start-1"
         >
             <div
                 role="group"
@@ -416,6 +440,7 @@ function save(): void {
             label="Tool groups"
             hint="Pinned to the chat when you use this template, on a new or an existing chat. Groups that are not available are skipped."
             data-template-tool-groups
+            class="xl:col-start-1"
         >
             <div
                 role="group"
@@ -446,7 +471,7 @@ function save(): void {
             </div>
         </Field>
 
-        <div class="flex gap-2">
+        <div class="flex gap-2 xl:col-span-2">
             <Button type="submit" :disabled="form.processing" data-template-save
                 >Save template</Button
             >
