@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Models\AiModelPrice;
+use App\Models\ServiceConnection;
 use App\Models\User;
 
 beforeEach(function (): void {
@@ -40,6 +42,22 @@ function wideSettingsIdRowsScript(string ...$ids): string
     $list = implode(',', array_map(fn (string $id): string => "document.getElementById('{$id}')", $ids));
 
     return wideSettingsRowsScript("[{$list}]");
+}
+
+/**
+ * Returns the rounded top, left and width of every element an expression
+ * yields (a NodeList or array), as JSON. For grids whose children are plain
+ * field blocks rather than `SettingsRow`s.
+ */
+function wideSettingsBlocksScript(string $blocksExpression): string
+{
+    return <<<JS_WRAP
+    JSON.stringify([...({$blocksExpression})]
+        .map((element) => {
+            const box = element.getBoundingClientRect();
+            return [Math.round(box.top), Math.round(box.left), Math.round(box.width)];
+        }))
+    JS_WRAP;
 }
 
 test('lays AI Settings rows two across at 1440 px', function (): void {
@@ -266,3 +284,147 @@ test('keeps the blocks that are not a grid capped on the wide settings pages at 
             })()
             JS, true);
 })->with(['profile.edit', 'security.edit']);
+
+test('lays the connection form fields two across at 1440 px and in one column at 1024 px', function (string $route, array $parameters): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+
+    $url = route($route, $route === 'admin.connections.edit' ? ['serviceConnection' => $sonarr] : $parameters, absolute: false);
+
+    $webpage = visit($url)->resize(1440, 900)->assertNoSmoke();
+
+    // The service type and the display name.
+    /** @var list<array{0: int, 1: int, 2: int}> $blocks */
+    $blocks = json_decode((string) $webpage->script(wideSettingsBlocksScript(
+        "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+2)')",
+    )), true);
+
+    expect($blocks)->toHaveCount(2)
+        ->and($blocks[1][0])->toBe($blocks[0][0])
+        ->and($blocks[1][1])->toBeGreaterThan($blocks[0][1])
+        ->and($webpage->script('document.querySelector("[data-connection-cancel]").closest("form").getBoundingClientRect().width'))
+        ->toBeGreaterThan(672);
+
+    $webpage->resize(1024, 800);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $narrow */
+    $narrow = json_decode((string) $webpage->script(wideSettingsBlocksScript(
+        "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+2)')",
+    )), true);
+
+    expect($narrow[1][1])->toBe($narrow[0][1])
+        ->and($narrow[1][0])->toBeGreaterThan($narrow[0][0])
+        // The page keeps its max-w-2xl cap below xl (672 px plus the page padding).
+        ->and($webpage->script('document.querySelector("[data-connection-cancel]").closest("form").getBoundingClientRect().width'))
+        ->toBeLessThanOrEqual(672);
+})->with([
+    'create' => ['admin.connections.create', []],
+    'edit' => ['admin.connections.edit', []],
+]);
+
+test('keeps the connection blocks that are not fields capped on a wide edit page', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+
+    visit(route('admin.connections.edit', ['serviceConnection' => $sonarr], absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke()
+        ->assertScript(<<<'JS'
+            (() => {
+                const blocks = [...document.querySelectorAll('[data-settings-capped]')];
+                return blocks.length > 0
+                    && blocks.every((block) => block.getBoundingClientRect().width <= 672);
+            })()
+            JS, true);
+});
+
+test('lays the benchmark schedule form two across at 1440 px and in one column at 1024 px', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.benchmarks.schedules.create', absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke();
+
+    $firstTwo = "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+2)')";
+
+    /** @var list<array{0: int, 1: int, 2: int}> $blocks */
+    $blocks = json_decode((string) $webpage->script(wideSettingsBlocksScript($firstTwo)), true);
+
+    expect($blocks)->toHaveCount(2)
+        ->and($blocks[1][0])->toBe($blocks[0][0])
+        ->and($blocks[1][1])->toBeGreaterThan($blocks[0][1])
+        ->and($webpage->script('document.querySelector("[data-benchmark-schedule-save]").closest("form").getBoundingClientRect().width'))
+        ->toBeGreaterThan(896);
+
+    $webpage->resize(1024, 800);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $narrow */
+    $narrow = json_decode((string) $webpage->script(wideSettingsBlocksScript($firstTwo)), true);
+
+    expect($narrow[1][1])->toBe($narrow[0][1])
+        ->and($narrow[1][0])->toBeGreaterThan($narrow[0][0])
+        ->and($webpage->script('document.querySelector("[data-benchmark-schedule-save]").closest("form").getBoundingClientRect().width'))
+        ->toBeLessThanOrEqual(896);
+});
+
+test('lets the new benchmark run page use the width from 1280 px and keeps its cap below', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.benchmarks.runs.create', absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke();
+
+    $width = 'document.querySelector("[data-benchmark-estimate-button]").closest("div.flex.flex-col").getBoundingClientRect().width';
+
+    expect($webpage->script($width))->toBeGreaterThan(896);
+
+    $webpage->resize(1024, 800);
+
+    expect($webpage->script($width))->toBeLessThanOrEqual(896);
+});
+
+test('lays AI Models task rows two across at 1440 px and never three across at 1920 px', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-4.1']);
+    config()->set('ai.default', 'openai');
+    config()->set('ai.providers.openai.key', 'sk-test');
+    $this->actingAs(User::factory()->admin()->create());
+
+    $tasks = "document.querySelectorAll('form [data-settings-grid] > [data-task]')";
+
+    $webpage = visit(route('admin.ai-models.index', absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke();
+
+    /** @var list<array{0: int, 1: int, 2: int}> $rows */
+    $rows = json_decode((string) $webpage->script(wideSettingsBlocksScript($tasks)), true);
+
+    expect(count($rows))->toBeGreaterThan(3)
+        ->and($rows[1][0])->toBe($rows[0][0])
+        ->and($rows[1][1])->toBeGreaterThan($rows[0][1])
+        // The label sits above the control inside a column.
+        ->and($webpage->script("(() => { const row = document.querySelector('[data-task]'); const [label, control] = row.children; return label.getBoundingClientRect().bottom <= control.getBoundingClientRect().top; })()"))
+        ->toBeTrue();
+
+    $webpage->resize(1920, 1080);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $wide */
+    $wide = json_decode((string) $webpage->script(wideSettingsBlocksScript($tasks)), true);
+
+    expect(array_unique(array_column($wide, 1)))->toHaveCount(2);
+
+    $webpage->resize(1024, 800);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $narrow */
+    $narrow = json_decode((string) $webpage->script(wideSettingsBlocksScript($tasks)), true);
+
+    expect(array_unique(array_column($narrow, 1)))->toHaveCount(1)
+        // The old label-beside-control row and the max-w-3xl cap (768 px) stay.
+        ->and($webpage->script("(() => { const row = document.querySelector('[data-task]'); const [label, control] = row.children; return Math.abs(label.getBoundingClientRect().top - control.getBoundingClientRect().top) <= 2; })()"))
+        ->toBeTrue()
+        ->and($webpage->script('document.querySelector("form [data-settings-grid]").closest("form").getBoundingClientRect().width'))
+        ->toBeLessThanOrEqual(768);
+});

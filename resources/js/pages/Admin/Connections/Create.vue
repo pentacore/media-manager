@@ -16,6 +16,7 @@ import type {
     ServiceTypeOption,
 } from '@/components/connections';
 import InputError from '@/components/InputError.vue';
+import { SettingsGrid } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -102,7 +103,7 @@ const placeholders = computed(
 <template>
     <Head title="Add Connection" />
 
-    <div class="max-w-2xl p-6">
+    <div class="max-w-2xl p-6 xl:max-w-none">
         <Card>
             <CardHeader>
                 <CardTitle>Add Service Connection</CardTitle>
@@ -118,90 +119,95 @@ const placeholders = computed(
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
-                    <ServiceTypeSelect
-                        v-model="selectedType"
-                        :service-types="serviceTypes"
-                        :error="errors.type"
-                    />
-
-                    <BazarrConnectionMappings
-                        v-if="showBazarrMappings"
-                        v-model:sonarr-connection-id="
-                            selectedSonarrConnectionId
-                        "
-                        v-model:radarr-connection-id="
-                            selectedRadarrConnectionId
-                        "
-                        :arr-connections="arrConnections"
-                        :errors="errors"
-                    />
-
-                    <WhisparrVersionSelect
-                        v-if="showWhisparrVersion"
-                        v-model="whisparrVersion"
-                    />
-
-                    <div class="space-y-2">
-                        <Label for="name">Display Name</Label>
-                        <Input
-                            id="name"
-                            name="name"
-                            :placeholder="placeholders.name"
+                    <SettingsGrid class="gap-y-4">
+                        <ServiceTypeSelect
+                            v-model="selectedType"
+                            :service-types="serviceTypes"
+                            :error="errors.type"
                         />
-                        <InputError :message="errors.name" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="url">URL</Label>
-                        <Input
-                            id="url"
-                            v-model="serviceUrl"
-                            name="url"
-                            :placeholder="placeholders.url"
+                        <BazarrConnectionMappings
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="showBazarrMappings"
+                            v-model:sonarr-connection-id="
+                                selectedSonarrConnectionId
+                            "
+                            v-model:radarr-connection-id="
+                                selectedRadarrConnectionId
+                            "
+                            :arr-connections="arrConnections"
+                            :errors="errors"
                         />
-                        <InputError :message="errors.url" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="external_url">External URL</Label>
-                        <Input
-                            id="external_url"
-                            name="external_url"
-                            placeholder="https://service.example.com (optional)"
+                        <WhisparrVersionSelect
+                            v-if="showWhisparrVersion"
+                            v-model="whisparrVersion"
                         />
-                        <p class="text-sm text-muted-foreground">
-                            Used for user-facing links; falls back to URL.
-                        </p>
-                        <InputError :message="errors.external_url" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="api_key">API Key</Label>
-                        <Input
-                            id="api_key"
-                            v-model="apiKey"
-                            name="api_key"
-                            type="password"
-                            :placeholder="placeholders.apiKey"
+                        <div class="space-y-2">
+                            <Label for="name">Display Name</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                :placeholder="placeholders.name"
+                            />
+                            <InputError :message="errors.name" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="url">URL</Label>
+                            <Input
+                                id="url"
+                                v-model="serviceUrl"
+                                name="url"
+                                :placeholder="placeholders.url"
+                            />
+                            <InputError :message="errors.url" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="external_url">External URL</Label>
+                            <Input
+                                id="external_url"
+                                name="external_url"
+                                placeholder="https://service.example.com (optional)"
+                            />
+                            <p class="text-sm text-muted-foreground">
+                                Used for user-facing links; falls back to URL.
+                            </p>
+                            <InputError :message="errors.external_url" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="api_key">API Key</Label>
+                            <Input
+                                id="api_key"
+                                v-model="apiKey"
+                                name="api_key"
+                                type="password"
+                                :placeholder="placeholders.apiKey"
+                            />
+                            <InputError :message="errors.api_key" />
+                        </div>
+
+                        <ConnectionTestButton
+                            class="col-span-full"
+                            :type="selectedType"
+                            :url="serviceUrl"
+                            :api-key="apiKey"
                         />
-                        <InputError :message="errors.api_key" />
-                    </div>
 
-                    <ConnectionTestButton
-                        :type="selectedType"
-                        :url="serviceUrl"
-                        :api-key="apiKey"
-                    />
-
-                    <WebhookTokenField
-                        placeholder="Token for webhook authentication"
-                        :error="errors.webhook_token"
-                    >
-                        <p class="text-sm text-muted-foreground">
-                            Configure this token in the service's webhook
-                            settings as the X-Webhook-Token header.
-                        </p>
-                    </WebhookTokenField>
+                        <WebhookTokenField
+                            placeholder="Token for webhook authentication"
+                            :error="errors.webhook_token"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Configure this token in the service's webhook
+                                settings as the X-Webhook-Token header.
+                            </p>
+                        </WebhookTokenField>
+                    </SettingsGrid>
 
                     <div class="flex gap-2 pt-4">
                         <Button type="submit" :disabled="processing"

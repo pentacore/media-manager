@@ -15,7 +15,7 @@ import type {
     BenchmarkTaskOption,
 } from '@/components/benchmarks';
 import InputError from '@/components/InputError.vue';
-import { Toggle } from '@/components/mm';
+import { SettingsGrid, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -226,7 +226,10 @@ function setJudge(judge: BenchmarkSelectionForm): void {
         "
     />
 
-    <form class="flex max-w-4xl flex-col gap-6 p-5" @submit.prevent="submit">
+    <form
+        class="flex max-w-4xl flex-col gap-6 p-5 xl:max-w-none"
+        @submit.prevent="submit"
+    >
         <div>
             <h1 class="text-[20px] font-semibold">
                 {{ isEditing ? 'Edit schedule' : 'New schedule' }}
@@ -237,252 +240,259 @@ function setJudge(judge: BenchmarkSelectionForm): void {
             </p>
         </div>
 
-        <section class="grid gap-1.5">
-            <label class="text-[13px] font-semibold" for="schedule-name"
-                >Name</label
-            >
-            <Input
-                id="schedule-name"
-                v-model="form.name"
-                class="max-w-md"
-                placeholder="Weekly anime titles"
-                data-benchmark-schedule-name
-            />
-            <InputError :message="form.errors.name" />
-        </section>
-
-        <section class="grid gap-1.5">
-            <h2 class="text-[13px] font-semibold">Task</h2>
-            <Select :model-value="form.task" @update:model-value="changeTask">
-                <SelectTrigger
-                    class="h-8 max-w-[260px] text-sm"
-                    data-benchmark-schedule-task
+        <SettingsGrid class="gap-y-6">
+            <section class="grid gap-1.5">
+                <label class="text-[13px] font-semibold" for="schedule-name"
+                    >Name</label
                 >
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem
-                        v-for="task in tasks"
-                        :key="task.value"
-                        :value="task.value"
+                <Input
+                    id="schedule-name"
+                    v-model="form.name"
+                    class="max-w-md"
+                    placeholder="Weekly anime titles"
+                    data-benchmark-schedule-name
+                />
+                <InputError :message="form.errors.name" />
+            </section>
+
+            <section class="grid gap-1.5">
+                <h2 class="text-[13px] font-semibold">Task</h2>
+                <Select
+                    :model-value="form.task"
+                    @update:model-value="changeTask"
+                >
+                    <SelectTrigger
+                        class="h-8 max-w-[260px] text-sm"
+                        data-benchmark-schedule-task
                     >
-                        {{ task.name }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <InputError :message="form.errors.task" />
-        </section>
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem
+                            v-for="task in tasks"
+                            :key="task.value"
+                            :value="task.value"
+                        >
+                            {{ task.name }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                <InputError :message="form.errors.task" />
+            </section>
 
-        <section class="grid gap-2">
-            <h2 class="text-[13px] font-semibold">
-                Tags
-                <span class="font-normal text-muted-foreground"
-                    >(none selected means every case of the task)</span
+            <section class="grid gap-2">
+                <h2 class="text-[13px] font-semibold">
+                    Tags
+                    <span class="font-normal text-muted-foreground"
+                        >(none selected means every case of the task)</span
+                    >
+                </h2>
+                <div v-if="taskTags.length > 0" class="flex flex-wrap gap-1.5">
+                    <Button
+                        v-for="tag in taskTags"
+                        :key="tag"
+                        type="button"
+                        size="sm"
+                        :variant="
+                            form.case_tags.includes(tag) ? 'default' : 'outline'
+                        "
+                        :data-benchmark-schedule-tag="tag"
+                        @click="toggleTag(tag)"
+                    >
+                        {{ tag }}
+                    </Button>
+                </div>
+                <p
+                    class="text-[12.5px] text-muted-foreground"
+                    data-benchmark-schedule-case-count
                 >
-            </h2>
-            <div v-if="taskTags.length > 0" class="flex flex-wrap gap-1.5">
-                <Button
-                    v-for="tag in taskTags"
-                    :key="tag"
-                    type="button"
-                    size="sm"
-                    :variant="
-                        form.case_tags.includes(tag) ? 'default' : 'outline'
-                    "
-                    :data-benchmark-schedule-tag="tag"
-                    @click="toggleTag(tag)"
+                    {{ matchingCases.length }}
+                    {{ matchingCases.length === 1 ? 'case' : 'cases' }}
+                </p>
+                <InputError :message="form.errors.case_tags" />
+            </section>
+
+            <section class="col-span-full grid gap-2">
+                <h2 class="text-[13px] font-semibold">Judge</h2>
+                <SelectionRow
+                    :model-value="form.judge"
+                    :models="models"
+                    :reasoning-levels="reasoningLevels"
+                    :model-capabilities="modelCapabilities"
+                    :reasoning-providers="reasoningProviders"
+                    @update:model-value="setJudge"
+                />
+                <InputError
+                    :message="form.errors['judge.model'] ?? form.errors.judge"
+                />
+            </section>
+
+            <section class="grid gap-1.5">
+                <label class="text-[13px] font-semibold" for="schedule-cost-cap"
+                    >Cost cap (USD)</label
                 >
-                    {{ tag }}
-                </Button>
-            </div>
+                <Input
+                    id="schedule-cost-cap"
+                    v-model="form.cost_cap_usd"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="max-w-[160px]"
+                    data-benchmark-schedule-cap
+                />
+                <InputError :message="form.errors.cost_cap_usd" />
+            </section>
+
+            <ScheduleCandidatesPreview
+                class="col-span-full"
+                :candidates="candidates"
+                :estimate="estimate"
+                :cost-cap="costCapValue"
+                :estimating="estimating"
+                :can-estimate="canEstimate"
+                @estimate="runEstimate"
+            />
             <p
-                class="text-[12.5px] text-muted-foreground"
-                data-benchmark-schedule-case-count
+                v-if="estimateError"
+                class="col-span-full rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[12.5px] text-destructive"
             >
-                {{ matchingCases.length }}
-                {{ matchingCases.length === 1 ? 'case' : 'cases' }}
+                {{ estimateError }}
             </p>
-            <InputError :message="form.errors.case_tags" />
-        </section>
 
-        <section class="grid gap-2">
-            <h2 class="text-[13px] font-semibold">Judge</h2>
-            <SelectionRow
-                :model-value="form.judge"
-                :models="models"
-                :reasoning-levels="reasoningLevels"
-                :model-capabilities="modelCapabilities"
-                :reasoning-providers="reasoningProviders"
-                @update:model-value="setJudge"
-            />
-            <InputError
-                :message="form.errors['judge.model'] ?? form.errors.judge"
-            />
-        </section>
-
-        <section class="grid gap-1.5">
-            <label class="text-[13px] font-semibold" for="schedule-cost-cap"
-                >Cost cap (USD)</label
-            >
-            <Input
-                id="schedule-cost-cap"
-                v-model="form.cost_cap_usd"
-                type="number"
-                min="0"
-                step="0.01"
-                class="max-w-[160px]"
-                data-benchmark-schedule-cap
-            />
-            <InputError :message="form.errors.cost_cap_usd" />
-        </section>
-
-        <ScheduleCandidatesPreview
-            :candidates="candidates"
-            :estimate="estimate"
-            :cost-cap="costCapValue"
-            :estimating="estimating"
-            :can-estimate="canEstimate"
-            @estimate="runEstimate"
-        />
-        <p
-            v-if="estimateError"
-            class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[12.5px] text-destructive"
-        >
-            {{ estimateError }}
-        </p>
-
-        <section class="flex flex-wrap items-start gap-4">
-            <div class="grid gap-1.5">
-                <h2 class="text-[13px] font-semibold">Frequency</h2>
-                <Select v-model="form.frequency">
-                    <SelectTrigger
-                        class="h-8 w-[160px] text-sm"
-                        data-benchmark-schedule-frequency
-                    >
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem
-                            v-for="frequency in frequencies"
-                            :key="frequency.value"
-                            :value="frequency.value"
+            <section class="flex flex-wrap items-start gap-4">
+                <div class="grid gap-1.5">
+                    <h2 class="text-[13px] font-semibold">Frequency</h2>
+                    <Select v-model="form.frequency">
+                        <SelectTrigger
+                            class="h-8 w-[160px] text-sm"
+                            data-benchmark-schedule-frequency
                         >
-                            {{ frequency.label }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <InputError :message="form.errors.frequency" />
-            </div>
-            <div v-if="form.frequency === 'weekly'" class="grid gap-1.5">
-                <h2 class="text-[13px] font-semibold">Weekday</h2>
-                <Select v-model="form.weekday">
-                    <SelectTrigger
-                        class="h-8 w-[160px] text-sm"
-                        data-benchmark-schedule-weekday
-                    >
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem
-                            v-for="weekday in weekdays"
-                            :key="weekday.value"
-                            :value="weekday.value"
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="frequency in frequencies"
+                                :key="frequency.value"
+                                :value="frequency.value"
+                            >
+                                {{ frequency.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="form.errors.frequency" />
+                </div>
+                <div v-if="form.frequency === 'weekly'" class="grid gap-1.5">
+                    <h2 class="text-[13px] font-semibold">Weekday</h2>
+                    <Select v-model="form.weekday">
+                        <SelectTrigger
+                            class="h-8 w-[160px] text-sm"
+                            data-benchmark-schedule-weekday
                         >
-                            {{ weekday.label }}
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-                <InputError :message="form.errors.weekday" />
-            </div>
-            <div v-if="form.frequency === 'monthly'" class="grid gap-1.5">
-                <label
-                    class="text-[13px] font-semibold"
-                    for="schedule-day-of-month"
-                    >Day of month</label
-                >
-                <Input
-                    id="schedule-day-of-month"
-                    :model-value="form.day_of_month ?? undefined"
-                    @update:model-value="
-                        (value) => (form.day_of_month = Number(value))
-                    "
-                    type="number"
-                    min="1"
-                    max="28"
-                    class="w-[100px]"
-                    data-benchmark-schedule-day
-                />
-                <InputError :message="form.errors.day_of_month" />
-            </div>
-            <div class="grid gap-1.5">
-                <label class="text-[13px] font-semibold" for="schedule-time"
-                    >Time ({{ timezone }})</label
-                >
-                <Input
-                    id="schedule-time"
-                    v-model="form.time_of_day"
-                    type="time"
-                    class="w-[130px]"
-                    data-benchmark-schedule-time
-                />
-                <InputError :message="form.errors.time_of_day" />
-            </div>
-        </section>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                v-for="weekday in weekdays"
+                                :key="weekday.value"
+                                :value="weekday.value"
+                            >
+                                {{ weekday.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <InputError :message="form.errors.weekday" />
+                </div>
+                <div v-if="form.frequency === 'monthly'" class="grid gap-1.5">
+                    <label
+                        class="text-[13px] font-semibold"
+                        for="schedule-day-of-month"
+                        >Day of month</label
+                    >
+                    <Input
+                        id="schedule-day-of-month"
+                        :model-value="form.day_of_month ?? undefined"
+                        @update:model-value="
+                            (value) => (form.day_of_month = Number(value))
+                        "
+                        type="number"
+                        min="1"
+                        max="28"
+                        class="w-[100px]"
+                        data-benchmark-schedule-day
+                    />
+                    <InputError :message="form.errors.day_of_month" />
+                </div>
+                <div class="grid gap-1.5">
+                    <label class="text-[13px] font-semibold" for="schedule-time"
+                        >Time ({{ timezone }})</label
+                    >
+                    <Input
+                        id="schedule-time"
+                        v-model="form.time_of_day"
+                        type="time"
+                        class="w-[130px]"
+                        data-benchmark-schedule-time
+                    />
+                    <InputError :message="form.errors.time_of_day" />
+                </div>
+            </section>
 
-        <section class="grid gap-3">
-            <div class="grid gap-1.5">
-                <label
-                    class="text-[13px] font-semibold"
-                    for="schedule-pass-threshold"
-                    >Alert when pass rate (or error rate) moves more than …
-                    points</label
-                >
-                <Input
-                    id="schedule-pass-threshold"
-                    v-model="form.pass_rate_threshold"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    class="max-w-[160px]"
-                    data-benchmark-schedule-pass-threshold
-                />
-                <InputError :message="form.errors.pass_rate_threshold" />
-            </div>
-            <div class="grid gap-1.5">
-                <label
-                    class="text-[13px] font-semibold"
-                    for="schedule-score-threshold"
-                    >Alert when average score drops more than … points</label
-                >
-                <Input
-                    id="schedule-score-threshold"
-                    v-model="form.score_threshold"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    class="max-w-[160px]"
-                    data-benchmark-schedule-score-threshold
-                />
-                <InputError :message="form.errors.score_threshold" />
-            </div>
-        </section>
+            <section class="grid gap-3">
+                <div class="grid gap-1.5">
+                    <label
+                        class="text-[13px] font-semibold"
+                        for="schedule-pass-threshold"
+                        >Alert when pass rate (or error rate) moves more than …
+                        points</label
+                    >
+                    <Input
+                        id="schedule-pass-threshold"
+                        v-model="form.pass_rate_threshold"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        class="max-w-[160px]"
+                        data-benchmark-schedule-pass-threshold
+                    />
+                    <InputError :message="form.errors.pass_rate_threshold" />
+                </div>
+                <div class="grid gap-1.5">
+                    <label
+                        class="text-[13px] font-semibold"
+                        for="schedule-score-threshold"
+                        >Alert when average score drops more than …
+                        points</label
+                    >
+                    <Input
+                        id="schedule-score-threshold"
+                        v-model="form.score_threshold"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        class="max-w-[160px]"
+                        data-benchmark-schedule-score-threshold
+                    />
+                    <InputError :message="form.errors.score_threshold" />
+                </div>
+            </section>
 
-        <section class="grid gap-1.5" data-benchmark-schedule-enabled>
-            <h2
-                id="benchmark-schedule-enabled-label"
-                class="text-[13px] font-semibold"
-            >
-                Enabled
-            </h2>
-            <div>
-                <Toggle
-                    v-model="form.enabled"
-                    aria-labelledby="benchmark-schedule-enabled-label"
-                    :label="form.enabled ? 'Runs on schedule' : 'Paused'"
-                />
-            </div>
-            <InputError :message="form.errors.enabled" />
-        </section>
+            <section class="grid gap-1.5" data-benchmark-schedule-enabled>
+                <h2
+                    id="benchmark-schedule-enabled-label"
+                    class="text-[13px] font-semibold"
+                >
+                    Enabled
+                </h2>
+                <div>
+                    <Toggle
+                        v-model="form.enabled"
+                        aria-labelledby="benchmark-schedule-enabled-label"
+                        :label="form.enabled ? 'Runs on schedule' : 'Paused'"
+                    />
+                </div>
+                <InputError :message="form.errors.enabled" />
+            </section>
+        </SettingsGrid>
 
         <div class="flex gap-2">
             <Button

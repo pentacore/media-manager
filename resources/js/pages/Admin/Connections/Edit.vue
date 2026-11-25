@@ -29,6 +29,7 @@ import type {
     SonarrRootFolder,
 } from '@/components/connections';
 import InputError from '@/components/InputError.vue';
+import { SettingsGrid } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -103,7 +104,7 @@ const supportsSubtitleCheckTags = computed(
 <template>
     <Head title="Edit Connection" />
 
-    <div class="max-w-2xl p-6">
+    <div class="max-w-2xl p-6 xl:max-w-none">
         <Card>
             <CardHeader>
                 <CardTitle>Edit Connection</CardTitle>
@@ -121,159 +122,179 @@ const supportsSubtitleCheckTags = computed(
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
-                    <ServiceTypeSelect
-                        v-model="selectedType"
-                        :service-types="serviceTypes"
-                        :default-value="typeValue"
-                        :error="errors.type"
-                    />
-
-                    <BazarrConnectionMappings
-                        v-if="showBazarrMappings"
-                        v-model:sonarr-connection-id="
-                            selectedSonarrConnectionId
-                        "
-                        v-model:radarr-connection-id="
-                            selectedRadarrConnectionId
-                        "
-                        :arr-connections="arrConnections"
-                        :errors="errors"
-                    />
-
-                    <WhisparrVersionSelect
-                        v-if="showWhisparrVersion"
-                        v-model="whisparrVersion"
-                        :default-value="whisparrVersion"
-                    />
-
-                    <div class="space-y-2">
-                        <Label for="name">Display Name</Label>
-                        <Input
-                            id="name"
-                            name="name"
-                            :default-value="connection.name"
+                    <SettingsGrid class="gap-y-4">
+                        <ServiceTypeSelect
+                            v-model="selectedType"
+                            :service-types="serviceTypes"
+                            :default-value="typeValue"
+                            :error="errors.type"
                         />
-                        <InputError :message="errors.name" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="url">URL</Label>
-                        <Input
-                            id="url"
-                            v-model="serviceUrl"
-                            name="url"
-                            :default-value="connection.url"
+                        <BazarrConnectionMappings
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="showBazarrMappings"
+                            v-model:sonarr-connection-id="
+                                selectedSonarrConnectionId
+                            "
+                            v-model:radarr-connection-id="
+                                selectedRadarrConnectionId
+                            "
+                            :arr-connections="arrConnections"
+                            :errors="errors"
                         />
-                        <InputError :message="errors.url" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="external_url">External URL</Label>
-                        <Input
-                            id="external_url"
-                            name="external_url"
-                            :default-value="connection.external_url ?? ''"
-                            placeholder="https://service.example.com (optional)"
+                        <WhisparrVersionSelect
+                            v-if="showWhisparrVersion"
+                            v-model="whisparrVersion"
+                            :default-value="whisparrVersion"
                         />
-                        <p class="text-sm text-muted-foreground">
-                            Used for user-facing links; falls back to URL.
-                        </p>
-                        <InputError :message="errors.external_url" />
-                    </div>
 
-                    <div class="space-y-2">
-                        <Label for="api_key">API Key</Label>
-                        <Input
-                            id="api_key"
-                            v-model="apiKey"
-                            name="api_key"
-                            type="password"
-                            autocomplete="new-password"
+                        <div class="space-y-2">
+                            <Label for="name">Display Name</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                :default-value="connection.name"
+                            />
+                            <InputError :message="errors.name" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="url">URL</Label>
+                            <Input
+                                id="url"
+                                v-model="serviceUrl"
+                                name="url"
+                                :default-value="connection.url"
+                            />
+                            <InputError :message="errors.url" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="external_url">External URL</Label>
+                            <Input
+                                id="external_url"
+                                name="external_url"
+                                :default-value="connection.external_url ?? ''"
+                                placeholder="https://service.example.com (optional)"
+                            />
+                            <p class="text-sm text-muted-foreground">
+                                Used for user-facing links; falls back to URL.
+                            </p>
+                            <InputError :message="errors.external_url" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="api_key">API Key</Label>
+                            <Input
+                                id="api_key"
+                                v-model="apiKey"
+                                name="api_key"
+                                type="password"
+                                autocomplete="new-password"
+                                :placeholder="
+                                    connection.api_key_set
+                                        ? '•••••••• (set — leave blank to keep)'
+                                        : 'Enter API key'
+                                "
+                            />
+                            <p class="text-sm text-muted-foreground">
+                                Leave blank to keep the existing value.
+                            </p>
+                            <InputError :message="errors.api_key" />
+                        </div>
+
+                        <ConnectionTestButton
+                            class="col-span-full"
+                            :type="selectedType"
+                            :url="serviceUrl"
+                            :api-key="apiKey"
+                        >
+                            <p
+                                v-if="connection.api_key_set && !apiKey"
+                                class="text-sm text-muted-foreground"
+                            >
+                                Enter the API key above to test the connection.
+                            </p>
+                        </ConnectionTestButton>
+
+                        <WebhookTokenField
                             :placeholder="
-                                connection.api_key_set
+                                connection.webhook_token_set
                                     ? '•••••••• (set — leave blank to keep)'
-                                    : 'Enter API key'
+                                    : 'Enter webhook token'
+                            "
+                            autocomplete="new-password"
+                            :error="errors.webhook_token"
+                        >
+                            <p class="text-sm text-muted-foreground">
+                                Configure this token in the service's webhook
+                                settings as the X-Webhook-Token header — or use
+                                the URL below as-is, which appends ?token= for
+                                services (Sonarr/Radarr/Prowlarr) that don't
+                                support custom headers. Leave blank to keep the
+                                existing value.
+                            </p>
+                        </WebhookTokenField>
+
+                        <WebhookUrlField
+                            :connection-id="connection.id"
+                            :webhook-url="connection.webhook_url"
+                            :supports-configuration="
+                                connection.supports_webhook_configuration
                             "
                         />
-                        <p class="text-sm text-muted-foreground">
-                            Leave blank to keep the existing value.
-                        </p>
-                        <InputError :message="errors.api_key" />
-                    </div>
 
-                    <ConnectionTestButton
-                        :type="selectedType"
-                        :url="serviceUrl"
-                        :api-key="apiKey"
-                    >
-                        <p
-                            v-if="connection.api_key_set && !apiKey"
-                            class="text-sm text-muted-foreground"
-                        >
-                            Enter the API key above to test the connection.
-                        </p>
-                    </ConnectionTestButton>
+                        <DiskDisplayPicker
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="supportsDiskPicker"
+                            :disk="connection.disk"
+                            :available-disk-paths="availableDiskPaths"
+                        />
 
-                    <WebhookTokenField
-                        :placeholder="
-                            connection.webhook_token_set
-                                ? '•••••••• (set — leave blank to keep)'
-                                : 'Enter webhook token'
-                        "
-                        autocomplete="new-password"
-                        :error="errors.webhook_token"
-                    >
-                        <p class="text-sm text-muted-foreground">
-                            Configure this token in the service's webhook
-                            settings as the X-Webhook-Token header — or use the
-                            URL below as-is, which appends ?token= for services
-                            (Sonarr/Radarr/Prowlarr) that don't support custom
-                            headers. Leave blank to keep the existing value.
-                        </p>
-                    </WebhookTokenField>
+                        <SonarrLibraryTypes
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="supportsSonarrLibraryTypes"
+                            :root-folders="sonarrRootFolders"
+                            :errors="errors"
+                        />
 
-                    <WebhookUrlField
-                        :connection-id="connection.id"
-                        :webhook-url="connection.webhook_url"
-                        :supports-configuration="
-                            connection.supports_webhook_configuration
-                        "
-                    />
+                        <SubtitleCheckTags
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="supportsSubtitleCheckTags"
+                            :arr-tags="arrTags"
+                            :selected-tags="subtitleCheckTags"
+                        />
 
-                    <DiskDisplayPicker
-                        v-if="supportsDiskPicker"
-                        :disk="connection.disk"
-                        :available-disk-paths="availableDiskPaths"
-                    />
+                        <SubtitleAuditSearchSlots
+                            v-if="supportsSonarrLibraryTypes"
+                            :slots="
+                                connection.subtitle_audit_search_slots ?? null
+                            "
+                            :default-slots="defaultSubtitleAuditSearchSlots"
+                            :error="errors.subtitle_audit_search_slots"
+                        />
 
-                    <SonarrLibraryTypes
-                        v-if="supportsSonarrLibraryTypes"
-                        :root-folders="sonarrRootFolders"
-                        :errors="errors"
-                    />
+                        <SabnzbdHiddenCategories
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="supportsHiddenCategories"
+                            :initial-categories="
+                                connection.hidden_categories ?? []
+                            "
+                        />
 
-                    <SubtitleCheckTags
-                        v-if="supportsSubtitleCheckTags"
-                        :arr-tags="arrTags"
-                        :selected-tags="subtitleCheckTags"
-                    />
-
-                    <SubtitleAuditSearchSlots
-                        v-if="supportsSonarrLibraryTypes"
-                        :slots="connection.subtitle_audit_search_slots ?? null"
-                        :default-slots="defaultSubtitleAuditSearchSlots"
-                        :error="errors.subtitle_audit_search_slots"
-                    />
-
-                    <SabnzbdHiddenCategories
-                        v-if="supportsHiddenCategories"
-                        :initial-categories="connection.hidden_categories ?? []"
-                    />
-
-                    <SabnzbdNotificationScript
-                        v-if="connection.sabnzbd_webhook_script"
-                        :script="connection.sabnzbd_webhook_script"
-                    />
+                        <SabnzbdNotificationScript
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
+                            v-if="connection.sabnzbd_webhook_script"
+                            :script="connection.sabnzbd_webhook_script"
+                        />
+                    </SettingsGrid>
 
                     <div class="flex gap-2 pt-4">
                         <Button type="submit" :disabled="processing"
