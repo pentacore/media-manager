@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Enums\HealthStatus;
+use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -16,11 +17,11 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
  */
 #[TypefinderResource(shape: [
     'id' => 'number',
-    'type' => "'sonarr' | 'radarr' | 'bazarr' | 'emby' | 'seerr' | 'prowlarr' | 'sabnzbd' | 'whisparr'",
+    'type' => ServiceType::class,
     'name' => 'string',
     'url' => 'string',
     'is_active' => 'boolean',
-    'health_status' => "'healthy' | 'unhealthy' | 'unknown'",
+    'health_status' => HealthStatus::class,
     'health_message' => 'string | null',
     'version' => 'string | null',
     'latest_version' => 'string | null',

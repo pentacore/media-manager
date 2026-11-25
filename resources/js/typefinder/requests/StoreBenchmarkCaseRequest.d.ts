@@ -9,13 +9,61 @@ export type StoreBenchmarkCaseRequest = {
   name: string;
   tags?: string[] | null;
   notes?: string | null;
-  input: { prompt?: string | null; history?: Array<{ role: 'user' | 'assistant'; content: string }> | null; mode?: 'executive' | 'advisory' | null; conversation?: 'context' | 'scripted' | null; event_key?: string | null; event?: { service: string; event_type: string; payload_json: string } | null; action_kind?: 'library_change' | 'seerr_request' | 'media_server' | 'other' | null; providers?: string[]; verifier?: { action_type: string; action_label: string; title: string; description: string; details?: Array<{ label: string; value: string }> | null; verified: boolean; payload_json: string; rationale?: string | null; source_service: string; event_type?: string | null; event_payload_json: string } | null };
+  input: {
+    prompt?: string | null;
+    history?: {
+      role: 'user' | 'assistant';
+      content: string;
+    }[] | null;
+    mode?: 'executive' | 'advisory' | null;
+    conversation?: 'context' | 'scripted' | null;
+    event_key?: 'sonarr:Grab' | 'sonarr:Download' | 'sonarr:Rename' | 'sonarr:SeriesAdd' | 'sonarr:SeriesDelete' | 'sonarr:EpisodeFileDelete' | 'sonarr:ManualInteractionRequired' | 'sonarr:Health' | 'sonarr:HealthRestored' | 'sonarr:ApplicationUpdate' | 'radarr:Grab' | 'radarr:Download' | 'radarr:Rename' | 'radarr:MovieAdded' | 'radarr:MovieDelete' | 'radarr:MovieFileDelete' | 'radarr:ManualInteractionRequired' | 'radarr:Health' | 'radarr:HealthRestored' | 'radarr:ApplicationUpdate' | 'whisparr:Grab' | 'whisparr:Download' | 'whisparr:Rename' | 'whisparr:MovieAdded' | 'whisparr:MovieDelete' | 'whisparr:MovieFileDelete' | 'whisparr:SeriesAdd' | 'whisparr:SeriesDelete' | 'whisparr:EpisodeFileDelete' | 'whisparr:ManualInteractionRequired' | 'whisparr:Health' | 'whisparr:HealthRestored' | 'whisparr:ApplicationUpdate' | 'seerr:MEDIA_PENDING' | 'seerr:MEDIA_APPROVED' | 'seerr:MEDIA_AUTO_APPROVED' | 'seerr:MEDIA_DECLINED' | 'seerr:MEDIA_AVAILABLE' | 'seerr:MEDIA_FAILED' | 'seerr:ISSUE_CREATED' | 'seerr:ISSUE_REOPENED' | null;
+    event?: {
+      service?: 'sonarr' | 'radarr' | 'whisparr' | 'seerr';
+      event_type?: string;
+      payload_json?: string;
+    } | null;
+    verifier?: {
+      action_type?: string;
+      action_label?: string;
+      title?: string;
+      description?: string;
+      details?: {
+        label: string;
+        value: string;
+      }[] | null;
+      verified?: boolean;
+      payload_json?: string;
+      rationale?: string | null;
+      source_service?: string;
+      event_type?: string | null;
+      event_payload_json?: string;
+    } | null;
+    action_kind?: 'library_change' | 'seerr_request' | 'media_server' | 'other' | null;
+    providers?: string[];
+  };
   fixtures?: {
     tool: string;
     arguments?: unknown[] | Record<string, unknown> | null;
     result?: string | null;
   }[] | null;
-  scoring: { type: 'actions' | 'prices' | 'judge' | 'verdict'; expected?: Array<Record<string, unknown>> | null; expected_agrees?: boolean | null; tolerance_percent?: number | null; rubric_note?: string | null; pass_threshold?: number | null };
+  scoring: {
+    type: 'actions' | 'prices' | 'judge' | 'verdict';
+    expected?: {
+      tool?: string;
+      arguments?: unknown[] | Record<string, unknown> | null;
+      provider?: string;
+      model?: string;
+      input_per_mtok?: number;
+      output_per_mtok?: number;
+      cache_read_per_mtok?: number | null;
+      cache_write_per_mtok?: number | null;
+    }[] | null;
+    tolerance_percent?: number | null;
+    expected_agrees?: boolean | null;
+    rubric_note?: string | null;
+    pass_threshold?: number | null;
+  };
   source_invocation_id?: string | null;
   source_prompt_tokens?: number | null;
   source_completion_tokens?: number | null;

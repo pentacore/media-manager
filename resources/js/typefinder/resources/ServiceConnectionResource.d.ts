@@ -4,13 +4,16 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { HealthStatus } from '../enums';
+import type { ServiceType } from '../enums';
+
 export type ServiceConnectionResource = {
   id: number;
-  type: 'sonarr' | 'radarr' | 'bazarr' | 'emby' | 'seerr' | 'prowlarr' | 'sabnzbd' | 'whisparr';
+  type: ServiceType;
   name: string;
   url: string;
   is_active: boolean;
-  health_status: 'healthy' | 'unhealthy' | 'unknown';
+  health_status: HealthStatus;
   health_message: string | null;
   version: string | null;
   latest_version: string | null;

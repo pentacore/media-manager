@@ -17,7 +17,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
 #[TypefinderResource(shape: [
     'id' => 'number',
     'action' => 'string',
-    'category' => "'activity' | 'audit'",
+    'category' => ActivityLogCategory::class,
     'description' => 'string',
     'user_name' => 'string | null',
     'service_id' => 'number | null',

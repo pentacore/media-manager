@@ -4,6 +4,8 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { SecondOpinionMode } from '../enums';
+
 export type ActionTypeConfigResource = {
   id: number;
   type: string;
@@ -11,6 +13,6 @@ export type ActionTypeConfigResource = {
   description: string | null;
   requires_approval: boolean;
   is_enabled: boolean;
-  second_opinion: 'off' | 'hold' | 'reject';
+  second_opinion: SecondOpinionMode;
   second_opinion_supported: boolean;
 };

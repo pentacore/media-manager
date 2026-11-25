@@ -11,16 +11,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-/**
- * `tasks` and `event_overrides` are overridden because typefinder cannot render
- * the nested per-task tier lists; each event override names its event-scoped task.
- */
-#[TypefinderOverrides([
-    'tasks' => 'Record<string, { tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>',
-    'event_overrides' => "Array<{ task: 'decision' | 'decision_verifier'; event_key: string; tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>",
-])]
 class UpdateAiModelsRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;

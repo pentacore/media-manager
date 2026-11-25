@@ -11,10 +11,14 @@ import { defineConfig, lazyPlugins } from 'vite-plus';
 // regenerating types automatically.
 const skipTypeGeneration = process.env.SKIP_TYPE_GENERATION === '1';
 
-// resources/js/typefinder is committed and gated by tests/Feature/GeneratedTypesTest.php, so CI
-// builds use it as is: regenerating there would run against a database that is not migrated yet
-// and overwrite the committed files with column-less models. Local dev/build still regenerate.
-const skipTypefinder = skipTypeGeneration || process.env.CI === 'true';
+// CI migrates its database before building, so the build regenerates resources/js/typefinder like
+// a local build does. There --strict turns generator warnings into a failed build, and the workflow
+// then fails on any drift from the committed files.
+const typefinderOptions = skipTypeGeneration
+    ? { buildCommand: false as const }
+    : process.env.CI === 'true'
+      ? { buildCommand: 'php artisan typefinder:generate --json --strict' }
+      : {};
 
 const confirmMessage =
     'Ask with confirm() from useConfirm() (@/composables/useConfirm), not the browser dialog.';
@@ -64,7 +68,7 @@ export default defineConfig(({ command }) => ({
             // types are already on disk. Args still get appended; `:` ignores them.
             ...(skipTypeGeneration ? { command: ':' } : {}),
         }),
-        typefinder(skipTypefinder ? { buildCommand: false } : {}),
+        typefinder(typefinderOptions),
     ]),
     // Vite externalises every runtime dependency from the SSR build by default, leaving bare
     // `import ... from "vue"` specifiers that need node_modules on disk to resolve. The production

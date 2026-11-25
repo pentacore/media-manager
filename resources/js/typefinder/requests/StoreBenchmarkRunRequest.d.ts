@@ -7,8 +7,16 @@
 export type StoreBenchmarkRunRequest = {
   name: string;
   case_ids: number[];
-  candidates: Array<{ provider: string; model: string; reasoning: string | null }>;
-  judge: { provider: string; model: string; reasoning: string | null };
+  candidates: {
+    provider: string;
+    model: string;
+    reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+  }[];
+  judge: {
+    provider: string;
+    model: string;
+    reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+  };
   cost_cap_usd?: number | null;
   confirm_estimate_usd: number;
 };

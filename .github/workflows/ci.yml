@@ -324,13 +324,21 @@ jobs:
         if: matrix.suite == 'browser'
         run: pnpm exec playwright install --with-deps chromium
 
+      # The build regenerates resources/js/typefinder from the database
+      # (vite.config.ts), so migrate first: an empty database would give
+      # column-less models.
       - name: Prepare environment
         run: |
           cp .env.example .env
           php artisan key:generate
+          php artisan migrate --force --no-interaction
 
       - name: Build frontend assets
         run: pnpm run build
+
+      # The committed types must match what the build just generated.
+      - name: Check generated types are committed
+        run: git diff --exit-code --stat -- resources/js/typefinder || { echo '::error::resources/js/typefinder is stale; run `php artisan typefinder:generate` and commit the result.'; exit 1; }
 
       - name: Run Pest (unit & feature)
         if: matrix.suite == 'unit-feature'

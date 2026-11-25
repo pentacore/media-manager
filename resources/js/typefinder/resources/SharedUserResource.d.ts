@@ -4,12 +4,14 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { UserRole } from '../enums';
+
 export type SharedUserResource = {
   id: number;
   name: string;
   email: string;
   email_verified_at: string | null;
-  role: 'admin' | 'member' | 'viewer';
+  role: UserRole;
   avatar_url: string | null;
   preferences: { time_format: '12h' | '24h'; date_format: 'iso' | 'us' | 'eu' | 'long'; timezone: string; first_day_of_week: number; show_relative_time: boolean; whisparr_blur_posters: boolean };
 };

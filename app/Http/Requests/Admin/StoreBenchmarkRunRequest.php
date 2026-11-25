@@ -10,16 +10,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-/**
- * `candidates` and `judge` are overridden because typefinder cannot render
- * their wildcard rules.
- */
-#[TypefinderOverrides([
-    'candidates' => 'Array<{ provider: string; model: string; reasoning: string | null }>',
-    'judge' => '{ provider: string; model: string; reasoning: string | null }',
-])]
 class StoreBenchmarkRunRequest extends FormRequest
 {
     use AiModelSelectionValidationRules;
