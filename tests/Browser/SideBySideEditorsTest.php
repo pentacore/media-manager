@@ -144,10 +144,27 @@ test('shows Scoring beside the case inputs from 1280 px', function (): void {
 
     $rects = sideBySideRects($webpage, '[data-benchmark-inputs]', '[data-benchmark-basics]', '[data-fixture-editor]', '[data-benchmark-scoring]');
 
-    expect($rects['[data-benchmark-scoring]']['left'])->toBeGreaterThan($rects['[data-fixture-editor]']['right'])
+    expect($rects['[data-benchmark-scoring]']['left'])->toBeGreaterThan($rects['[data-benchmark-inputs]']['right'])
         ->and($rects['[data-benchmark-basics]']['left'])->toBeGreaterThan($rects['[data-benchmark-inputs]']['right'])
         ->and($rects['[data-benchmark-basics]']['bottom'])->toBeLessThanOrEqual($rects['[data-benchmark-scoring]']['top'] + 1)
         ->and(abs($rects['[data-benchmark-inputs]']['top'] - $rects['[data-benchmark-basics]']['top']))->toBeLessThanOrEqual(4);
+});
+
+test('spans the fixtures across both columns below them', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    $webpage = visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->resize(1440, 900)
+        ->assertVisible('[data-fixture-editor]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-case-form]', '[data-benchmark-inputs]', '[data-benchmark-scoring]', '[data-fixture-editor]');
+    $padding = $webpage->script("parseFloat(getComputedStyle(document.querySelector('[data-benchmark-case-form]')).paddingLeft)");
+    $contentWidth = $rects['[data-benchmark-case-form]']['width'] - 2 * $padding;
+
+    expect(abs($rects['[data-fixture-editor]']['width'] - $contentWidth))->toBeLessThan(2)
+        ->and($rects['[data-fixture-editor]']['top'])->toBeGreaterThanOrEqual($rects['[data-benchmark-inputs]']['bottom'] - 1)
+        ->and($rects['[data-fixture-editor]']['top'])->toBeGreaterThanOrEqual($rects['[data-benchmark-scoring]']['bottom'] - 1);
 });
 
 test('keeps the draft warning full width above both columns', function (): void {

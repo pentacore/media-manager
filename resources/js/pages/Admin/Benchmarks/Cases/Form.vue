@@ -212,7 +212,7 @@ const eventTypeMissing = computed(
 
 // From xl the basics and Scoring stack on the right while the case inputs span
 // beside them (the last spanned row is flexible so the inputs never stretch
-// the basics or Scoring rows) and the fixtures sit below the inputs.
+// the basics or Scoring rows) and the fixtures span both columns below them.
 const gridStyle = computed(() => {
     const first = props.draftWarnings.length > 0 ? 3 : 2;
 
@@ -500,7 +500,7 @@ const selectClass =
 
         <FixtureEditor
             v-model="form.fixtures"
-            class="xl:col-start-1 xl:[grid-row:var(--fixtures-row)]"
+            class="xl:col-span-2 xl:col-start-1 xl:[grid-row:var(--fixtures-row)]"
             :errors="errors"
             @update:invalid="fixturesInvalid = $event"
         />
