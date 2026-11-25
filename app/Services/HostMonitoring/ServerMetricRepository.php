@@ -14,8 +14,10 @@ use Illuminate\Support\Facades\DB;
  * Reads a server's chart series from the sample tier its range uses, averaged into at most 120 buckets.
  * The window starts on a bucket boundary 119 buckets before the one holding now, so it never spans a 121st bucket.
  * A series with any data has every bucket of the window; a bucket without samples (an outage, an unresponsive mount)
- * is null, so a gap stays visible instead of the neighbours closing over it. Buckets are instants (see SampleClock), so
- * the repeated hour of a DST fall-back night is two runs of points and a spring-forward night has no phantom hour.
+ * is null, so a gap stays visible instead of the neighbours closing over it. Buckets are cut as SampleClock::bucket() says:
+ * up to an hour they are instants, so the repeated hour of a DST fall-back night is two runs of points and a
+ * spring-forward night has no phantom hour; longer ones follow the app timezone's wall clock (six-hour buckets start at
+ * 00, 06, 12 and 18 local time all year).
  */
 final readonly class ServerMetricRepository
 {
@@ -28,10 +30,10 @@ final readonly class ServerMetricRepository
     public function series(Server $server, ServerMetricRange $serverMetricRange): array
     {
         $slots = $this->slots($serverMetricRange);
-        $bucket = [$serverMetricRange->bucketSeconds(), SampleClock::bind(SampleClock::origin())];
+        [$bucketSql, $bucketBindings] = SampleClock::bucket($serverMetricRange->bucketSeconds());
 
         $metricRows = $this->window(DB::table('server_metric_samples'), $server, $serverMetricRange, $slots[0])
-            ->selectRaw(sprintf('%s AS bucket', SampleClock::BUCKET), $bucket)
+            ->selectRaw($bucketSql.' AS bucket', $bucketBindings)
             ->selectRaw('avg(cpu_percent) AS cpu')
             ->selectRaw('avg(memory_used_bytes::float8 / NULLIF(memory_total_bytes, 0)) * 100 AS memory')
             ->groupBy('bucket')
@@ -39,7 +41,7 @@ final readonly class ServerMetricRepository
 
         $filesystemRows = $this->window(DB::table('server_filesystem_samples'), $server, $serverMetricRange, $slots[0])
             ->select('mount')
-            ->selectRaw(sprintf('%s AS bucket', SampleClock::BUCKET), $bucket)
+            ->selectRaw($bucketSql.' AS bucket', $bucketBindings)
             ->selectRaw('avg(used_bytes::float8 / NULLIF(used_bytes + available_bytes, 0)) * 100 AS used')
             ->groupBy('mount', 'bucket')
             ->orderBy('mount')
@@ -51,7 +53,7 @@ final readonly class ServerMetricRepository
         $memory = [];
 
         foreach ($metricRows as $metricRow) {
-            $at = $this->instant($metricRow->bucket);
+            $at = SampleClock::instant($metricRow->bucket);
 
             if ($metricRow->cpu !== null) {
                 $cpu[$at] = (float) $metricRow->cpu;
@@ -67,7 +69,7 @@ final readonly class ServerMetricRepository
 
         foreach ($filesystemRows as $filesystemRow) {
             if ($filesystemRow->used !== null) {
-                $filesystems[(string) $filesystemRow->mount][$this->instant($filesystemRow->bucket)] = (float) $filesystemRow->used;
+                $filesystems[(string) $filesystemRow->mount][SampleClock::instant($filesystemRow->bucket)] = (float) $filesystemRow->used;
             }
         }
 
@@ -89,21 +91,7 @@ final readonly class ServerMetricRepository
      */
     private function slots(ServerMetricRange $serverMetricRange): array
     {
-        $bucketSeconds = $serverMetricRange->bucketSeconds();
-        $current = SampleClock::floor(now(), $bucketSeconds)->getTimestamp();
-
-        return array_map(
-            static fn (int $earlier): int => $current - $earlier * $bucketSeconds,
-            range(self::EARLIER_BUCKETS, 0),
-        );
-    }
-
-    /**
-     * A bucket as Postgres returns it (a `timestamptz` string) as a Unix timestamp.
-     */
-    private function instant(mixed $bucket): int
-    {
-        return CarbonImmutable::parse((string) $bucket)->getTimestamp();
+        return SampleClock::starts(now(), $serverMetricRange->bucketSeconds(), self::EARLIER_BUCKETS);
     }
 
     private function window(Builder $builder, Server $server, ServerMetricRange $serverMetricRange, int $windowStart): Builder
