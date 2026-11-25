@@ -128,7 +128,7 @@
         "Tests\\Browser\\WantedTest": 2.978,
         "Tests\\Browser\\WhisparrLibraryTest": 16.88,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.6447,
-        "Tests\\Browser\\WideSettingsLayoutTest": 6.27
+        "Tests\\Browser\\WideSettingsLayoutTest": 28.3
     },
     "checksum": "715eceec3ee3341debf4df617f069dd2",
     "updated_at": "2026-11-24T10:26:22+00:00"

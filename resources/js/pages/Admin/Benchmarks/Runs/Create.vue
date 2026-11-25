@@ -198,7 +198,7 @@ const errorMessages = computed(() => Object.values(errors.value));
 <template>
     <Head title="New benchmark run" />
 
-    <div class="flex max-w-4xl flex-col gap-6 p-5">
+    <div class="flex max-w-4xl flex-col gap-6 p-5" data-benchmark-run-page>
         <div>
             <h1 class="text-[20px] font-semibold">New benchmark run</h1>
             <p class="mt-1 text-[12.5px] text-muted-foreground">

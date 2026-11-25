@@ -14,7 +14,7 @@ import TierListEditor from '@/components/ai/TierListEditor.vue';
 import type { ModelPool, TierForm } from '@/components/ai/TierListEditor.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill } from '@/components/mm';
+import { Field, Pill, SettingsGrid } from '@/components/mm';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -196,7 +196,7 @@ function submit(): void {
 <template>
     <Head title="AI Models" />
 
-    <div class="flex max-w-3xl flex-col gap-4 p-5">
+    <div class="flex max-w-3xl flex-col gap-4 p-5 xl:max-w-none">
         <!-- Hero -->
         <div>
             <div class="mb-1.5 text-[13px] text-muted-foreground">
@@ -229,157 +229,163 @@ function submit(): void {
             class="flex flex-col gap-5 rounded-xl border border-border bg-card p-6"
             @submit.prevent="submit"
         >
-            <template v-for="row in tasks" :key="row.task">
+            <SettingsGrid :max-columns="2">
+                <template v-for="row in tasks" :key="row.task">
+                    <div
+                        class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6 xl:grid-cols-1 xl:gap-3"
+                        :data-task="row.task"
+                    >
+                        <Field
+                            :label="row.label"
+                            :label-id="`ai-models-${row.task}-label`"
+                        />
+                        <div
+                            role="group"
+                            :aria-labelledby="`ai-models-${row.task}-label`"
+                            class="flex min-w-0 flex-col gap-2"
+                        >
+                            <TierListEditor
+                                v-model="form.tasks[row.task].tiers"
+                                :label="row.label"
+                                :models="models"
+                                :reasoning-levels="reasoningLevels"
+                                :model-capabilities="modelCapabilities"
+                                :reasoning-providers="reasoningProviders"
+                                :model-pools="modelPools"
+                                :inherited-provider="row.inherited.provider"
+                                :inherited-model="row.inherited.model"
+                                :inherit-label="modelSelectInheritLabel(row)"
+                                :has-reasoning="row.has_reasoning"
+                                :allow-auto="row.allow_auto"
+                                :allow-tiers="row.allow_tiers"
+                                :error-prefix="`tasks.${row.task}.tiers`"
+                                :errors="formErrors"
+                                @structure-change="
+                                    clearTierErrors(`tasks.${row.task}.tiers`)
+                                "
+                            />
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p
+                                    class="font-mono-tabular text-[12px] text-muted-foreground"
+                                    data-resolved
+                                >
+                                    → {{ row.resolved.provider }} ·
+                                    {{ row.resolved.model }} ·
+                                    {{ row.resolved.reasoning_label }}
+                                </p>
+                                <Pill
+                                    v-if="row.resolved.tier"
+                                    :title="
+                                        row.resolved.tier.reason ?? undefined
+                                    "
+                                    data-tier-live
+                                >
+                                    Live:
+                                    <template v-if="row.resolved.tier.via">
+                                        via {{ row.resolved.tier.via }} ·
+                                    </template>
+                                    tier {{ row.resolved.tier.position }} of
+                                    {{ row.resolved.tier.count }}
+                                </Pill>
+                            </div>
+                            <p
+                                v-if="row.warning"
+                                class="text-[12px] text-warning"
+                                data-task-warning
+                            >
+                                {{ row.warning }}
+                            </p>
+
+                            <EventOverridesSection
+                                v-if="row.accepts_event_scopes"
+                                v-model:overrides="form.event_overrides"
+                                :task="row.task"
+                                :task-label="row.label"
+                                :saved="savedOverrides(row.task)"
+                                :fallback-inherited="row.resolved"
+                                :allowlisted-events="allowlistedEvents"
+                                :models="models"
+                                :reasoning-levels="reasoningLevels"
+                                :model-capabilities="modelCapabilities"
+                                :reasoning-providers="reasoningProviders"
+                                :model-pools="modelPools"
+                                :errors="formErrors"
+                                @structure-change="clearTierErrors"
+                            />
+                        </div>
+                    </div>
+                    <Separator class="col-span-full xl:hidden" />
+                </template>
+
+                <!-- Failover -->
                 <div
-                    class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6"
-                    :data-task="row.task"
+                    class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6 xl:grid-cols-1 xl:gap-3"
+                    data-task="failover"
                 >
                     <Field
-                        :label="row.label"
-                        :label-id="`ai-models-${row.task}-label`"
+                        label-id="ai-models-failover-label"
+                        label="Failover"
+                        hint="Where a task goes when its provider fails. Uses the failing task's reasoning."
                     />
                     <div
                         role="group"
-                        :aria-labelledby="`ai-models-${row.task}-label`"
+                        aria-labelledby="ai-models-failover-label"
+                        aria-describedby="ai-models-failover-label-hint"
                         class="flex min-w-0 flex-col gap-2"
                     >
-                        <TierListEditor
-                            v-model="form.tasks[row.task].tiers"
-                            :label="row.label"
-                            :models="models"
-                            :reasoning-levels="reasoningLevels"
-                            :model-capabilities="modelCapabilities"
-                            :reasoning-providers="reasoningProviders"
-                            :model-pools="modelPools"
-                            :inherited-provider="row.inherited.provider"
-                            :inherited-model="row.inherited.model"
-                            :inherit-label="modelSelectInheritLabel(row)"
-                            :has-reasoning="row.has_reasoning"
-                            :allow-auto="row.allow_auto"
-                            :allow-tiers="row.allow_tiers"
-                            :error-prefix="`tasks.${row.task}.tiers`"
-                            :errors="formErrors"
-                            @structure-change="
-                                clearTierErrors(`tasks.${row.task}.tiers`)
-                            "
-                        />
-                        <div class="flex flex-wrap items-center gap-2">
-                            <p
-                                class="font-mono-tabular text-[12px] text-muted-foreground"
-                                data-resolved
+                        <Select
+                            :model-value="form.failover.provider ?? 'none'"
+                            @update:model-value="setFailoverProvider"
+                        >
+                            <SelectTrigger
+                                id="ai-models-failover-provider"
+                                aria-labelledby="ai-models-failover-label ai-models-failover-provider"
+                                class="h-8 max-w-[220px] text-sm"
+                                data-failover-provider
                             >
-                                → {{ row.resolved.provider }} ·
-                                {{ row.resolved.model }} ·
-                                {{ row.resolved.reasoning_label }}
-                            </p>
-                            <Pill
-                                v-if="row.resolved.tier"
-                                :title="row.resolved.tier.reason ?? undefined"
-                                data-tier-live
-                            >
-                                Live:
-                                <template v-if="row.resolved.tier.via">
-                                    via {{ row.resolved.tier.via }} ·
-                                </template>
-                                tier {{ row.resolved.tier.position }} of
-                                {{ row.resolved.tier.count }}
-                            </Pill>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none"
+                                    >No failover</SelectItem
+                                >
+                                <SelectItem
+                                    v-for="provider in providers"
+                                    :key="provider"
+                                    :value="provider"
+                                >
+                                    {{ provider }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div v-if="form.failover.provider" data-model-select>
+                            <ModelSelect
+                                :models="{
+                                    [form.failover.provider]:
+                                        models[form.failover.provider] ?? [],
+                                }"
+                                inherit-label="Provider default"
+                                aria-label="Failover model"
+                                :provider="
+                                    form.failover.model
+                                        ? form.failover.provider
+                                        : ''
+                                "
+                                :model="form.failover.model ?? ''"
+                                @update:model="
+                                    (value: string) =>
+                                        setModel(form.failover, value)
+                                "
+                            />
                         </div>
-                        <p
-                            v-if="row.warning"
-                            class="text-[12px] text-warning"
-                            data-task-warning
-                        >
-                            {{ row.warning }}
-                        </p>
-
-                        <EventOverridesSection
-                            v-if="row.accepts_event_scopes"
-                            v-model:overrides="form.event_overrides"
-                            :task="row.task"
-                            :task-label="row.label"
-                            :saved="savedOverrides(row.task)"
-                            :fallback-inherited="row.resolved"
-                            :allowlisted-events="allowlistedEvents"
-                            :models="models"
-                            :reasoning-levels="reasoningLevels"
-                            :model-capabilities="modelCapabilities"
-                            :reasoning-providers="reasoningProviders"
-                            :model-pools="modelPools"
-                            :errors="formErrors"
-                            @structure-change="clearTierErrors"
-                        />
-                    </div>
-                </div>
-                <Separator />
-            </template>
-
-            <!-- Failover -->
-            <div
-                class="grid items-start gap-3 md:grid-cols-[200px_1fr] md:gap-6"
-                data-task="failover"
-            >
-                <Field
-                    label-id="ai-models-failover-label"
-                    label="Failover"
-                    hint="Where a task goes when its provider fails. Uses the failing task's reasoning."
-                />
-                <div
-                    role="group"
-                    aria-labelledby="ai-models-failover-label"
-                    aria-describedby="ai-models-failover-label-hint"
-                    class="flex min-w-0 flex-col gap-2"
-                >
-                    <Select
-                        :model-value="form.failover.provider ?? 'none'"
-                        @update:model-value="setFailoverProvider"
-                    >
-                        <SelectTrigger
-                            id="ai-models-failover-provider"
-                            aria-labelledby="ai-models-failover-label ai-models-failover-provider"
-                            class="h-8 max-w-[220px] text-sm"
-                            data-failover-provider
-                        >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">No failover</SelectItem>
-                            <SelectItem
-                                v-for="provider in providers"
-                                :key="provider"
-                                :value="provider"
-                            >
-                                {{ provider }}
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <div v-if="form.failover.provider" data-model-select>
-                        <ModelSelect
-                            :models="{
-                                [form.failover.provider]:
-                                    models[form.failover.provider] ?? [],
-                            }"
-                            inherit-label="Provider default"
-                            aria-label="Failover model"
-                            :provider="
-                                form.failover.model
-                                    ? form.failover.provider
-                                    : ''
-                            "
-                            :model="form.failover.model ?? ''"
-                            @update:model="
-                                (value: string) =>
-                                    setModel(form.failover, value)
+                        <InputError
+                            :message="
+                                errorFor('failover.provider', 'failover.model')
                             "
                         />
                     </div>
-                    <InputError
-                        :message="
-                            errorFor('failover.provider', 'failover.model')
-                        "
-                    />
                 </div>
-            </div>
+            </SettingsGrid>
 
             <div class="flex justify-end">
                 <Button type="submit" :disabled="form.processing">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { cn } from '@/lib/utils';
 
 /**
@@ -6,11 +7,15 @@ import { cn } from '@/lib/utils';
  * `xl` (today's layout), two from `xl` (1280 px) and three from 1800 px
  * (`maxColumns` 2 stops at two). Rows fill left to right in source order and
  * align to the top of their line. A `SettingsRow` inside stacks its label
- * above the control from `xl` up; a `wide` row spans the whole grid.
+ * above the control from `xl` up; a `wide` row spans the whole grid. Any
+ * other child (a form field block) takes a column as it is; a list, table or
+ * action row takes `col-span-full`. `class` can set the row gap (`gap-y-4`)
+ * so a form keeps the spacing it had below `xl`.
  */
 const props = withDefaults(
     defineProps<{
         maxColumns?: 2 | 3;
+        class?: HTMLAttributes['class'];
     }>(),
     { maxColumns: 3 },
 );
@@ -27,6 +32,7 @@ defineSlots<{
             cn(
                 'grid grid-cols-1 items-start gap-x-8 gap-y-5 xl:grid-cols-2',
                 props.maxColumns === 3 && 'xl:min-[1800px]:grid-cols-3',
+                props.class,
             )
         "
     >

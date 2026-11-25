@@ -32,7 +32,9 @@ test('preferences, AI settings, decision agent and media replacement rows fit a 
 test('at desktop width a settings row keeps its 200 px label column', function (): void {
     $this->actingAs(User::factory()->member()->create());
 
+    // Below xl: from 1280 px a row inside a SettingsGrid stacks (WideSettingsLayoutTest).
     visit(route('profile.edit', absolute: false))
+        ->resize(1024, 800)
         ->assertNoSmoke()
         ->assertScript('(() => { const row = document.querySelector("[data-settings-row]"); const [label, control] = row.children; return Math.round(label.getBoundingClientRect().width) === 200 && Math.round(control.getBoundingClientRect().left - label.getBoundingClientRect().left) === 224; })()', true);
 });

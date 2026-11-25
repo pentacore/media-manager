@@ -3,7 +3,7 @@ import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import UserPreferencesController from '@/actions/App/Http/Controllers/Settings/UserPreferencesController';
 import InputError from '@/components/InputError.vue';
-import { Field, SettingsRow } from '@/components/mm';
+import { Field, SettingsGrid, SettingsRow } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -43,6 +43,7 @@ const { isAdmin } = useCan();
 
 defineOptions({
     layout: {
+        wide: true,
         breadcrumbs: [{ title: 'Display preferences', href: edit() }],
     },
 });
@@ -139,7 +140,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
             "
             class="rounded-xl border border-border bg-card p-6"
         >
-            <div class="flex flex-col gap-5">
+            <SettingsGrid>
                 <!-- Time format -->
                 <SettingsRow>
                     <template #label>
@@ -181,7 +182,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Date format -->
                 <SettingsRow>
@@ -224,7 +225,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Timezone -->
                 <SettingsRow>
@@ -295,7 +296,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- First day of week -->
                 <SettingsRow>
@@ -340,7 +341,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Relative time toggle -->
                 <SettingsRow>
@@ -378,7 +379,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                 </SettingsRow>
 
                 <template v-if="isAdmin">
-                    <Separator />
+                    <Separator class="col-span-full xl:hidden" />
 
                     <!-- Whisparr poster blur (Whisparr is admin-only) -->
                     <SettingsRow>
@@ -420,7 +421,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     </SettingsRow>
                 </template>
 
-                <div class="flex justify-end pt-2">
+                <div class="col-span-full flex justify-end pt-2">
                     <Button
                         size="sm"
                         type="submit"
@@ -431,7 +432,7 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         Save
                     </Button>
                 </div>
-            </div>
+            </SettingsGrid>
         </Form>
     </div>
 </template>
