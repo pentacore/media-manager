@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Enums\Ability;
 use App\Enums\ServiceType;
 use App\Http\Resources\SharedUserResource;
 use App\Models\EmbyActivity;
@@ -52,7 +53,21 @@ class HandleInertiaRequests extends Middleware
      *
      * @see https://inertiajs.com/shared-data
      *
-     * @return array<string, mixed>
+     * The shape is the serialised one: Typefinder turns it into SharedPageProps
+     * (pages.d.ts), which types usePage() through resources/js/types/global.d.ts.
+     * PHPStan checks the same tag against the PHP value (closures, the
+     * parent::share() spread) and cannot match it, hence the ignore
+     * (https://github.com/pentacore/Laravel-Typefinder/issues/237).
+     *
+     * @return array{
+     *     name: string,
+     *     auth: array{user: SharedUserResource|null, can: array<value-of<Ability>, bool>},
+     *     ai: array{enabled: bool, max_attachments: int},
+     *     integrations: array{seerr: bool, prowlarr: bool, whisparr: bool},
+     *     nav: array{pendingActions: int, pendingActionsVersion: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int},
+     *     version: array{current: string, latest: string|null, updateAvailable: bool}|null,
+     *     sidebarOpen: bool,
+     * }
      */
     #[Override]
     public function share(Request $request): array
@@ -60,7 +75,7 @@ class HandleInertiaRequests extends Middleware
         /** @var User|null $user */
         $user = $request->user();
 
-        return [
+        return [ // @phpstan-ignore return.type
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [

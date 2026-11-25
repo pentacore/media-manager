@@ -20,7 +20,7 @@ export type ServiceConnection = {
   is_active: boolean;
   last_seen_at: string | null;
   version: string | null;
-  settings: Record<string, unknown> | null;
+  settings: unknown[] | Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   health_status: HealthStatus | null;
@@ -44,7 +44,7 @@ export type ServiceConnectionCreate = {
   is_active?: boolean;
   last_seen_at?: string | null;
   version?: string | null;
-  settings?: Record<string, unknown> | null;
+  settings?: unknown[] | Record<string, unknown> | null;
   health_status?: HealthStatus | null;
   latest_version?: string | null;
   health_message?: string | null;
@@ -60,7 +60,7 @@ export type ServiceConnectionUpdate = {
   is_active?: boolean;
   last_seen_at?: string | null;
   version?: string | null;
-  settings?: Record<string, unknown> | null;
+  settings?: unknown[] | Record<string, unknown> | null;
   health_status?: HealthStatus | null;
   latest_version?: string | null;
   health_message?: string | null;

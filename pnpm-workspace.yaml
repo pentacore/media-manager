@@ -11,4 +11,4 @@ overrides:
     vite: 'npm:@voidzero-dev/vite-plus-core@8.3.8000'
 
 minimumReleaseAgeExclude:
-    - '@pentacore/vite-plugin-laravel-typefinder@8.4.0'
+    - '@pentacore/vite-plugin-laravel-typefinder@8.4.1'

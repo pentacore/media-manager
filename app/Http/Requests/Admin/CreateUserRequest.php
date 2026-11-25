@@ -26,10 +26,7 @@ class CreateUserRequest extends FormRequest
             'role' => ['required', 'string', UserRole::validationRule()],
             'set_password' => ['boolean'],
             // Rule::when() keeps the password in the generated request type
-            // (optional); an if around it fails `typefinder:generate --strict`
-            // with no override to silence it (pentacore/Laravel-Typefinder#233).
-            // The type still lacks password_confirmation
-            // (pentacore/Laravel-Typefinder#232).
+            // (optional), where an if around it would type only one branch.
             'password' => Rule::when($this->boolean('set_password'), $this->passwordRules()),
         ];
     }

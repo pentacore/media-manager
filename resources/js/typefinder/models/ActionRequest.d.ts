@@ -18,8 +18,8 @@ export type ActionRequest = {
   status: ActionRequestStatus;
   requires_approval: boolean;
   approved_by: number | null;
-  payload: Record<string, unknown>;
-  result: Record<string, unknown> | null;
+  payload: unknown[] | Record<string, unknown>;
+  result: unknown[] | Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   origin: string;
@@ -42,8 +42,8 @@ export type ActionRequestCreate = {
   status?: ActionRequestStatus;
   requires_approval?: boolean;
   approved_by?: number | null;
-  payload: Record<string, unknown>;
-  result?: Record<string, unknown> | null;
+  payload: unknown[] | Record<string, unknown>;
+  result?: unknown[] | Record<string, unknown> | null;
   origin?: string;
   title?: string | null;
   description?: string | null;
@@ -60,8 +60,8 @@ export type ActionRequestUpdate = {
   status?: ActionRequestStatus;
   requires_approval?: boolean;
   approved_by?: number | null;
-  payload?: Record<string, unknown>;
-  result?: Record<string, unknown> | null;
+  payload?: unknown[] | Record<string, unknown>;
+  result?: unknown[] | Record<string, unknown> | null;
   origin?: string;
   title?: string | null;
   description?: string | null;

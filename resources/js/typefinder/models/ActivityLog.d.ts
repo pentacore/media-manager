@@ -17,7 +17,7 @@ export type ActivityLog<T = unknown> = {
   subject_type: string | null;
   subject_id: number | null;
   description: string;
-  metadata: Record<string, unknown> | null;
+  metadata: unknown[] | Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   webhook_event_id: number | null;
@@ -35,7 +35,7 @@ export type ActivityLogCreate = {
   subject_type?: string | null;
   subject_id?: number | null;
   description: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: unknown[] | Record<string, unknown> | null;
   webhook_event_id?: number | null;
   category?: ActivityLogCategory;
 };
@@ -47,7 +47,7 @@ export type ActivityLogUpdate = {
   subject_type?: string | null;
   subject_id?: number | null;
   description?: string;
-  metadata?: Record<string, unknown> | null;
+  metadata?: unknown[] | Record<string, unknown> | null;
   webhook_event_id?: number | null;
   category?: ActivityLogCategory;
 };

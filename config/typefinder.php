@@ -11,4 +11,11 @@ return [
     // can gate drift (tests/Feature/GeneratedTypesTest.php). Without this the
     // generator re-adds the folder to .gitignore on every run.
     'gitignore_generated' => false,
+    // Enabled only for SharedPageProps (resources/js/types/global.d.ts types
+    // usePage() with it). No action carries #[TypefinderPage], so PageProps
+    // stays empty.
+    'inertia' => [
+        'enabled' => true,
+        'paths' => [app_path('Http/Controllers')],
+    ],
 ];

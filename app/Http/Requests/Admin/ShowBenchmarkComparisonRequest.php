@@ -11,18 +11,12 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 use Inertia\Inertia;
 use Override;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
  * The comparison URL: `runs` (comma-separated ids), an optional baseline,
  * manual pairs and score source. A bad URL lands on the runs list with the
  * reason as a toast.
- *
- * `baseline` is overridden for Typefinder: Rule::in() over the bound run ids is
- * empty when it calls rules(), and an empty in-list drops the integer type
- * (https://github.com/pentacore/Laravel-Typefinder/issues/230).
  */
-#[TypefinderOverrides(['baseline' => 'number | null'])]
 class ShowBenchmarkComparisonRequest extends FormRequest
 {
     use BenchmarkComparisonValidationRules;

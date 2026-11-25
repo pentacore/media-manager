@@ -9,7 +9,7 @@ export type StatRollup = {
   metric: string;
   period: string;
   bucket: string;
-  dimensions: Record<string, unknown>;
+  dimensions: unknown[] | Record<string, unknown>;
   count: number;
   sum: number | null;
   min: number | null;
@@ -22,7 +22,7 @@ export type StatRollupCreate = {
   metric: string;
   period: string;
   bucket: string;
-  dimensions?: Record<string, unknown>;
+  dimensions?: unknown[] | Record<string, unknown>;
   count?: number;
   sum?: number | null;
   min?: number | null;
@@ -33,7 +33,7 @@ export type StatRollupUpdate = {
   metric?: string;
   period?: string;
   bucket?: string;
-  dimensions?: Record<string, unknown>;
+  dimensions?: unknown[] | Record<string, unknown>;
   count?: number;
   sum?: number | null;
   min?: number | null;
