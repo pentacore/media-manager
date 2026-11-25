@@ -487,7 +487,7 @@ const selectClass =
 
         <CaseInputFields
             v-model="form.input"
-            class="xl:col-start-1 xl:[grid-row:var(--basics-row)/span_3]"
+            class="xl:col-start-1 xl:[grid-row:var(--basics-row)/span_3] xl:self-start"
             data-benchmark-inputs
             :task="form.task"
             :event-keys="eventKeys"
@@ -500,7 +500,7 @@ const selectClass =
 
         <FixtureEditor
             v-model="form.fixtures"
-            class="xl:col-span-2 xl:col-start-1 xl:[grid-row:var(--fixtures-row)]"
+            class="xl:col-span-2 xl:col-start-1 xl:[grid-row:var(--fixtures-row)] xl:-mt-6"
             :errors="errors"
             @update:invalid="fixturesInvalid = $event"
         />

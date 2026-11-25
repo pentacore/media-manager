@@ -167,6 +167,20 @@ test('spans the fixtures across both columns below them', function (): void {
         ->and($rects['[data-fixture-editor]']['top'])->toBeGreaterThanOrEqual($rects['[data-benchmark-scoring]']['bottom'] - 1);
 });
 
+test('leaves one 24 px gap between the columns and the fixtures', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    $webpage = visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->resize(1440, 900)
+        ->assertVisible('[data-fixture-editor]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-inputs]', '[data-benchmark-scoring]', '[data-fixture-editor]');
+    $lowest = max($rects['[data-benchmark-inputs]']['bottom'], $rects['[data-benchmark-scoring]']['bottom']);
+
+    expect(abs($rects['[data-fixture-editor]']['top'] - $lowest - 24))->toBeLessThanOrEqual(2);
+});
+
 test('keeps the draft warning full width above both columns', function (): void {
     test()->actingAs(User::factory()->admin()->create());
     $record = AiUsageRecord::factory()->create([
