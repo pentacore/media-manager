@@ -58,3 +58,14 @@ test('each gate count sits under its band label and bar, and a placeholder bar k
             JS, true)
         ->assertAttribute('[data-gate="decision_gate"] rect[data-bar-placeholder="true"]:nth-of-type(2)', 'vector-effect', 'non-scaling-stroke');
 });
+
+test('the calibration chart draws a visible bar for a resolved band that was never positive', function (): void {
+    ClassificationOutcome::factory()->gate(ClassificationGate::DecisionGate)->resolved(false)->create(['probability' => 0.75, 'verdict' => ClassificationVerdict::AuditRun]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-gate="decision_gate"] rect[data-bar-placeholder]:nth-of-type(8)', 'data-bar-zero', 'true')
+        ->assertScript("Number(document.querySelector('[data-gate=\"decision_gate\"] rect[data-bar-placeholder]:nth-of-type(8)').getAttribute('height')) > 0", true)
+        ->assertAttribute('[data-gate="decision_gate"] rect[data-bar-placeholder]:nth-of-type(2)', 'data-bar-zero', 'false');
+});
