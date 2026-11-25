@@ -358,7 +358,7 @@ function save(): void {
             />
         </section>
 
-        <!-- top-17 (4.25rem) is the sticky header's h-13 plus 1rem; max-h leaves the same gap below. -->
+        <!-- top-17 (4.25rem) is the sticky header's h-13 plus 1rem; max-h (100vh - 5.5rem) leaves 1.25rem below. -->
         <section
             class="grid gap-2 xl:sticky xl:top-17 xl:col-start-2 xl:[grid-row:2/span_var(--preview-span)] xl:max-h-[calc(100vh-5.5rem)] xl:grid-rows-[auto_minmax(0,1fr)] xl:self-start"
             data-template-preview-section
