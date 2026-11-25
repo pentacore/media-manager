@@ -23,11 +23,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Rule files per feature area** (brainstorm): one rule file each for the action
   queue, AI chat and tools, the *arr libraries and media replacement, each
   covering every layer. Migrate one area at a time, when it is touched.
-- **Typed Inertia pages** (brainstorm): Typefinder's page generation is off, so
-  the props of the 88 `Inertia::render()` calls are typed by hand in each page.
-  Turning it on and tagging the actions with `#[TypefinderPage]` would generate
-  them. Decide on rollout (all at once, or per area as it is touched) and how
-  pages consume the generated types.
 - **Inertia live props** (brainstorm): replace `useRealtimeReload`, used in 14
   files.
 - **AI runs and an MCP server** (brainstorm): the draft design covers AI runs, an
@@ -105,6 +100,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Not planned
 
+- Typed Inertia pages through `#[TypefinderPage]`. The attribute does not read
+  props from `Inertia::render()`: every prop type is still written by hand, as a
+  TypeScript string in PHP, and the drift check compares prop names only. Props
+  built from a resource already use its generated type.
 - qBittorrent and other torrent clients.
 - Jellyfin.
 - Translations (i18n).
