@@ -117,6 +117,7 @@
         "Tests\\Browser\\SettingsLabelTest": 14.4659,
         "Tests\\Browser\\SettingsRowTest": 4.5874,
         "Tests\\Browser\\SharedPagePropsTest": 2.0611,
+        "Tests\\Browser\\SideBySideEditorsTest": 10.27,
         "Tests\\Browser\\SidebarNavigationTest": 8.3368,
         "Tests\\Browser\\SmokeTest": 43.4652,
         "Tests\\Browser\\SsrHydrationTest": 1.7944,

@@ -25,10 +25,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   covering every layer. Migrate one area at a time, when it is touched.
 - **Inertia live props** (brainstorm): replace `useRealtimeReload`, used in 14
   files.
-- **Side-by-side editors** (brainstorm): the benchmark case form and the chat
-  template editor stay capped at 900 px on a wide screen because they are
-  composite editors with nothing to put beside them. A live preview next to the
-  editor would use the width; decide whether it is wanted.
 - **AI runs and an MCP server** (brainstorm): the draft design covers AI runs, an
   MCP foundation and AI management tools.
 - **AI features** (brainstorm):
