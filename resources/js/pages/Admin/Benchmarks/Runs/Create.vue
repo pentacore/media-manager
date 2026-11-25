@@ -16,7 +16,6 @@ import type {
     BenchmarkTaskOption,
 } from '@/components/benchmarks';
 import InputError from '@/components/InputError.vue';
-import { SettingsGrid } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/lib/http';
@@ -199,7 +198,7 @@ const errorMessages = computed(() => Object.values(errors.value));
 <template>
     <Head title="New benchmark run" />
 
-    <div class="flex max-w-4xl flex-col gap-6 p-5 xl:max-w-none">
+    <div class="flex max-w-4xl flex-col gap-6 p-5" data-benchmark-run-page>
         <div>
             <h1 class="text-[20px] font-semibold">New benchmark run</h1>
             <p class="mt-1 text-[12.5px] text-muted-foreground">
@@ -207,96 +206,84 @@ const errorMessages = computed(() => Object.values(errors.value));
             </p>
         </div>
 
-        <SettingsGrid class="gap-y-6">
-            <section class="grid gap-1.5">
-                <label
-                    class="text-[13px] font-semibold"
-                    for="benchmark-run-name"
-                    >Name</label
-                >
-                <Input
-                    id="benchmark-run-name"
-                    v-model="name"
-                    class="max-w-md"
-                    placeholder="Spring bake-off"
-                    data-benchmark-run-name
-                />
-                <InputError :message="errors.name" />
-            </section>
-
-            <CaseSelector
-                class="col-span-full"
-                v-model="selectedCaseIds"
-                :cases="cases"
-                :tasks="tasks"
-                :error="errors.case_ids"
+        <section class="grid gap-1.5">
+            <label class="text-[13px] font-semibold" for="benchmark-run-name"
+                >Name</label
+            >
+            <Input
+                id="benchmark-run-name"
+                v-model="name"
+                class="max-w-md"
+                placeholder="Spring bake-off"
+                data-benchmark-run-name
             />
+            <InputError :message="errors.name" />
+        </section>
 
-            <CandidateRows
-                class="col-span-full"
-                v-model="candidates"
+        <CaseSelector
+            v-model="selectedCaseIds"
+            :cases="cases"
+            :tasks="tasks"
+            :error="errors.case_ids"
+        />
+
+        <CandidateRows
+            v-model="candidates"
+            :models="models"
+            :reasoning-levels="reasoningLevels"
+            :model-capabilities="modelCapabilities"
+            :reasoning-providers="reasoningProviders"
+            :can-add-tiers="selectedTasks.length > 0"
+            :error="errors.candidates"
+            @add-tiers="addCurrentTiers"
+        />
+
+        <section class="grid gap-2" data-benchmark-judge-section>
+            <h2 class="text-[13px] font-semibold">Judge</h2>
+            <SelectionRow
+                v-model="judge"
                 :models="models"
                 :reasoning-levels="reasoningLevels"
                 :model-capabilities="modelCapabilities"
                 :reasoning-providers="reasoningProviders"
-                :can-add-tiers="selectedTasks.length > 0"
-                :error="errors.candidates"
-                @add-tiers="addCurrentTiers"
             />
+            <InputError :message="errors['judge.model'] ?? errors.judge" />
+        </section>
 
-            <section
-                class="col-span-full grid gap-2"
-                data-benchmark-judge-section
+        <section class="grid gap-1.5">
+            <label class="text-[13px] font-semibold" for="benchmark-cost-cap"
+                >Cost cap (USD, optional)</label
             >
-                <h2 class="text-[13px] font-semibold">Judge</h2>
-                <SelectionRow
-                    v-model="judge"
-                    :models="models"
-                    :reasoning-levels="reasoningLevels"
-                    :model-capabilities="modelCapabilities"
-                    :reasoning-providers="reasoningProviders"
-                />
-                <InputError :message="errors['judge.model'] ?? errors.judge" />
-            </section>
-
-            <section class="grid gap-1.5">
-                <label
-                    class="text-[13px] font-semibold"
-                    for="benchmark-cost-cap"
-                    >Cost cap (USD, optional)</label
-                >
-                <Input
-                    id="benchmark-cost-cap"
-                    v-model="costCap"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    class="max-w-[160px]"
-                    placeholder="No cap"
-                    data-benchmark-cost-cap
-                />
-                <InputError :message="errors.cost_cap_usd" />
-            </section>
-
-            <EstimateSummary
-                v-if="estimate"
-                class="col-span-full"
-                :estimate="estimate"
-                :candidates="candidates"
-                :cost-cap="costCapValue"
+            <Input
+                id="benchmark-cost-cap"
+                v-model="costCap"
+                type="number"
+                min="0"
+                step="0.01"
+                class="max-w-[160px]"
+                placeholder="No cap"
+                data-benchmark-cost-cap
             />
+            <InputError :message="errors.cost_cap_usd" />
+        </section>
 
-            <div
-                v-if="estimateError || errorMessages.length > 0"
-                class="col-span-full rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[12.5px] text-destructive"
-                data-benchmark-run-errors
-            >
-                <p v-if="estimateError">{{ estimateError }}</p>
-                <p v-for="message in errorMessages" :key="message">
-                    {{ message }}
-                </p>
-            </div>
-        </SettingsGrid>
+        <EstimateSummary
+            v-if="estimate"
+            :estimate="estimate"
+            :candidates="candidates"
+            :cost-cap="costCapValue"
+        />
+
+        <div
+            v-if="estimateError || errorMessages.length > 0"
+            class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[12.5px] text-destructive"
+            data-benchmark-run-errors
+        >
+            <p v-if="estimateError">{{ estimateError }}</p>
+            <p v-for="message in errorMessages" :key="message">
+                {{ message }}
+            </p>
+        </div>
 
         <div class="flex gap-2">
             <Button

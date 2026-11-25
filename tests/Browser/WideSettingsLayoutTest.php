@@ -369,23 +369,16 @@ test('lays the benchmark schedule form two across at 1440 px and in one column a
         ->toBeLessThanOrEqual(896);
 });
 
-test('lets the new benchmark run page use the width from 1280 px and keeps its cap below', function (): void {
+test('keeps the new benchmark run page capped at 896 px at every width', function (int $width): void {
     config()->set('ai.default', 'openai');
     config()->set('ai.providers.openai.key', 'sk-test');
     $this->actingAs(User::factory()->admin()->create());
 
-    $webpage = visit(route('admin.benchmarks.runs.create', absolute: false))
-        ->resize(1440, 900)
-        ->assertNoSmoke();
-
-    $width = 'document.querySelector("[data-benchmark-estimate-button]").closest("div.flex.flex-col").getBoundingClientRect().width';
-
-    expect($webpage->script($width))->toBeGreaterThan(896);
-
-    $webpage->resize(1024, 800);
-
-    expect($webpage->script($width))->toBeLessThanOrEqual(896);
-});
+    visit(route('admin.benchmarks.runs.create', absolute: false))
+        ->resize($width, 900)
+        ->assertNoSmoke()
+        ->assertScript('Math.round(document.querySelector("[data-benchmark-run-page]").getBoundingClientRect().width) <= 896', true);
+})->with([1024, 1440, 1920]);
 
 test('lays AI Models task rows two across at 1440 px and never three across at 1920 px', function (): void {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-4.1']);
