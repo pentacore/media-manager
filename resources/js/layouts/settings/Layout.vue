@@ -10,6 +10,11 @@ import { edit as editNotifications } from '@/routes/settings/notifications';
 import { edit as editPreferences } from '@/routes/settings/preferences';
 import type { NavLink } from '@/types';
 
+defineProps<{
+    // A page whose rows sit in a SettingsGrid lifts the section's cap from xl.
+    wide?: boolean;
+}>();
+
 const sidebarNavItems: NavLink[] = [
     { title: 'Profile', href: editProfile() },
     { title: 'Security', href: editSecurity() },
@@ -51,7 +56,10 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
 
             <Separator class="my-2 lg:hidden" />
 
-            <section class="max-w-2xl space-y-8 xl:max-w-none">
+            <section
+                data-settings-section
+                :class="cn('max-w-2xl space-y-8', wide && 'xl:max-w-none')"
+            >
                 <slot />
             </section>
         </div>

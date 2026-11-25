@@ -43,6 +43,7 @@ const { isAdmin } = useCan();
 
 defineOptions({
     layout: {
+        wide: true,
         breadcrumbs: [{ title: 'Display preferences', href: edit() }],
     },
 });

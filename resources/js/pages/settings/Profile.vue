@@ -37,6 +37,7 @@ defineProps<Props>();
 
 defineOptions({
     layout: {
+        wide: true,
         breadcrumbs: [
             {
                 title: 'Profile settings',
@@ -190,7 +191,10 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
             </p>
         </div>
 
-        <div class="space-y-4 rounded-xl border border-border bg-card p-6">
+        <div
+            class="max-w-2xl space-y-4 rounded-xl border border-border bg-card p-6"
+            data-settings-capped
+        >
             <div
                 v-for="link in embyLinks"
                 :key="link.id"
@@ -301,6 +305,8 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
             </Form>
         </div>
 
-        <DeleteUser />
+        <div class="max-w-2xl" data-settings-capped>
+            <DeleteUser />
+        </div>
     </div>
 </template>

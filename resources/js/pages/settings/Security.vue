@@ -28,6 +28,7 @@ withDefaults(defineProps<Props>(), {
 
 defineOptions({
     layout: {
+        wide: true,
         breadcrumbs: [
             {
                 title: 'Security settings',
@@ -184,7 +185,10 @@ onUnmounted(() => clearTwoFactorAuthData());
                 </p>
             </div>
 
-            <div class="rounded-xl border border-border bg-card p-6">
+            <div
+                class="max-w-2xl rounded-xl border border-border bg-card p-6"
+                data-settings-capped
+            >
                 <div class="mb-4 flex items-center gap-2">
                     <span class="text-[13px] font-medium">Status</span>
                     <Pill

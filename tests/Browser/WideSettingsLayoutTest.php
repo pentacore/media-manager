@@ -242,11 +242,27 @@ test('lays member settings two across, one column at 1024 px', function (string 
     'security' => ['security.edit', ['current_password', 'password']],
 ]);
 
-test('keeps the Appearance and Notifications settings capped at 1024 px', function (string $route): void {
+test('keeps the Appearance and Notifications settings capped at every width', function (string $route, int $width): void {
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route($route, absolute: false))
-        ->resize(1024, 800)
+        ->resize($width, 900)
         ->assertNoSmoke()
-        ->assertScript('document.querySelector("section.max-w-2xl").getBoundingClientRect().width <= 672', true);
-})->with(['appearance.edit', 'settings.notifications.edit']);
+        ->assertScript('document.querySelector("[data-settings-section]").getBoundingClientRect().width <= 672', true);
+})->with(['appearance.edit', 'settings.notifications.edit'])->with([1024, 1440, 1920]);
+
+test('keeps the blocks that are not a grid capped on the wide settings pages at 1440 px', function (string $route): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route($route, absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke()
+        ->assertScript(<<<'JS'
+            (() => {
+                const blocks = [...document.querySelectorAll('[data-settings-capped]')];
+                return blocks.length > 0
+                    && document.querySelector('[data-settings-section]').getBoundingClientRect().width > 672
+                    && blocks.every((block) => block.getBoundingClientRect().width <= 672);
+            })()
+            JS, true);
+})->with(['profile.edit', 'security.edit']);
