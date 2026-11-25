@@ -5,6 +5,7 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type { AdminSettingsRequest } from './AdminSettingsRequest';
+export type { AgentReportRequest } from './AgentReportRequest';
 export type { AssignAiUsagePriceRequest } from './AssignAiUsagePriceRequest';
 export type { AutomationSettingsRequest } from './AutomationSettingsRequest';
 export type { BazarrNotificationRequest } from './BazarrNotificationRequest';
@@ -25,6 +26,7 @@ export type { DestroyArrMediaRequest } from './DestroyArrMediaRequest';
 export type { DiscoverMediaRequest } from './DiscoverMediaRequest';
 export type { DraftChatTemplateRequest } from './DraftChatTemplateRequest';
 export type { EmbyLoginRequest } from './EmbyLoginRequest';
+export type { EnrollAgentRequest } from './EnrollAgentRequest';
 export type { EstimateBenchmarkRunRequest } from './EstimateBenchmarkRunRequest';
 export type { EstimateBenchmarkScheduleRequest } from './EstimateBenchmarkScheduleRequest';
 export type { EstimateNeutralRejudgeRequest } from './EstimateNeutralRejudgeRequest';
@@ -93,6 +95,7 @@ export type { UpdateAiFreeUsagePoolRequest } from './UpdateAiFreeUsagePoolReques
 export type { UpdateAiModelPriceRequest } from './UpdateAiModelPriceRequest';
 export type { UpdateAiModelsRequest } from './UpdateAiModelsRequest';
 export type { UpdateAiSettingsRequest } from './UpdateAiSettingsRequest';
+export type { UpdateChatTemplateRequest } from './UpdateChatTemplateRequest';
 export type { UpdateConversationModelRequest } from './UpdateConversationModelRequest';
 export type { UpdateConversationToolGroupsRequest } from './UpdateConversationToolGroupsRequest';
 export type { UpdateDecisionAgentSettingsRequest } from './UpdateDecisionAgentSettingsRequest';

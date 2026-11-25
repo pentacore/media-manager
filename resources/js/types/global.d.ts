@@ -20,6 +20,8 @@ declare module 'vite/client' {
     }
 }
 
+// Hand-written: Typefinder emits SharedPageProps only beside #[TypefinderPage]
+// pages, which this app does not use (https://github.com/pentacore/Laravel-Typefinder/issues/231).
 declare module '@inertiajs/core' {
     export interface InertiaConfig {
         sharedPageProps: {

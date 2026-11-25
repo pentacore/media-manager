@@ -22,17 +22,17 @@ export type AiPriceRefreshRun = {
   models_locked: number;
   models_rejected: number;
   models_tiered: number;
-  fallback_targets: unknown[] | null;
-  unverified_targets: unknown[] | null;
-  provider_results: unknown[] | null;
+  fallback_targets: string[] | null;
+  unverified_targets: string[] | null;
+  provider_results: Record<string, unknown> | null;
   error_message: string | null;
   started_at: string;
   completed_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  source_citations: unknown[] | null;
-  source_statuses: unknown[] | null;
-  triggeredBy?: User | null;
+  source_citations: { url: string; title: string | null }[] | null;
+  source_statuses: Record<string, string> | null;
+  triggered_by?: User | null;
 };
 
 export type AiPriceRefreshRunCreate = {
@@ -50,14 +50,14 @@ export type AiPriceRefreshRunCreate = {
   models_locked?: number;
   models_rejected?: number;
   models_tiered?: number;
-  fallback_targets?: unknown[] | null;
-  unverified_targets?: unknown[] | null;
-  provider_results?: unknown[] | null;
+  fallback_targets?: string[] | null;
+  unverified_targets?: string[] | null;
+  provider_results?: Record<string, unknown> | null;
   error_message?: string | null;
   started_at: string;
   completed_at?: string | null;
-  source_citations?: unknown[] | null;
-  source_statuses?: unknown[] | null;
+  source_citations?: { url: string; title: string | null }[] | null;
+  source_statuses?: Record<string, string> | null;
 };
 
 export type AiPriceRefreshRunUpdate = {
@@ -75,12 +75,12 @@ export type AiPriceRefreshRunUpdate = {
   models_locked?: number;
   models_rejected?: number;
   models_tiered?: number;
-  fallback_targets?: unknown[] | null;
-  unverified_targets?: unknown[] | null;
-  provider_results?: unknown[] | null;
+  fallback_targets?: string[] | null;
+  unverified_targets?: string[] | null;
+  provider_results?: Record<string, unknown> | null;
   error_message?: string | null;
   started_at?: string;
   completed_at?: string | null;
-  source_citations?: unknown[] | null;
-  source_statuses?: unknown[] | null;
+  source_citations?: { url: string; title: string | null }[] | null;
+  source_statuses?: Record<string, string> | null;
 };

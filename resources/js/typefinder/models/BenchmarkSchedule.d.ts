@@ -4,25 +4,23 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { AiTask } from '../enums';
+import type { AiTask, BenchmarkScheduleFrequency, BenchmarkScheduleOutcome } from '../enums';
 import type { BenchmarkRun } from './BenchmarkRun';
-import type { BenchmarkScheduleFrequency } from '../enums';
-import type { BenchmarkScheduleOutcome } from '../enums';
 import type { User } from './User';
 
 export type BenchmarkSchedule = {
   id: number;
   name: string;
   task: AiTask;
-  case_tags: unknown[];
-  judge: unknown[];
-  cost_cap_usd: number;
+  case_tags: string[];
+  judge: { provider: string; model: string; reasoning: string | null };
+  cost_cap_usd: string;
   frequency: BenchmarkScheduleFrequency;
   time_of_day: string;
   weekday: number | null;
   day_of_month: number | null;
-  pass_rate_threshold: number;
-  score_threshold: number;
+  pass_rate_threshold: string;
+  score_threshold: string;
   enabled: boolean;
   next_run_at: string | null;
   last_run_at: string | null;
@@ -33,21 +31,21 @@ export type BenchmarkSchedule = {
   updated_at: string | null;
   creator?: User | null;
   runs?: BenchmarkRun[];
-  latestRun?: BenchmarkRun | null;
+  latest_run?: BenchmarkRun | null;
 };
 
 export type BenchmarkScheduleCreate = {
   name: string;
   task: AiTask;
-  case_tags?: unknown[];
-  judge: unknown[];
-  cost_cap_usd: number;
+  case_tags?: string[];
+  judge: { provider: string; model: string; reasoning: string | null };
+  cost_cap_usd: string;
   frequency: BenchmarkScheduleFrequency;
   time_of_day: string;
   weekday?: number | null;
   day_of_month?: number | null;
-  pass_rate_threshold?: number;
-  score_threshold?: number;
+  pass_rate_threshold?: string;
+  score_threshold?: string;
   enabled?: boolean;
   next_run_at?: string | null;
   last_run_at?: string | null;
@@ -59,15 +57,15 @@ export type BenchmarkScheduleCreate = {
 export type BenchmarkScheduleUpdate = {
   name?: string;
   task?: AiTask;
-  case_tags?: unknown[];
-  judge?: unknown[];
-  cost_cap_usd?: number;
+  case_tags?: string[];
+  judge?: { provider: string; model: string; reasoning: string | null };
+  cost_cap_usd?: string;
   frequency?: BenchmarkScheduleFrequency;
   time_of_day?: string;
   weekday?: number | null;
   day_of_month?: number | null;
-  pass_rate_threshold?: number;
-  score_threshold?: number;
+  pass_rate_threshold?: string;
+  score_threshold?: string;
   enabled?: boolean;
   next_run_at?: string | null;
   last_run_at?: string | null;

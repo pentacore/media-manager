@@ -12,7 +12,7 @@ export type ChatTemplate = {
   user_id: number;
   name: string;
   body: string;
-  variables: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  variables: { name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }[];
   auto_send: boolean;
   pinned: boolean;
   last_used_at: string | null;
@@ -21,7 +21,7 @@ export type ChatTemplate = {
   model_provider: string | null;
   model: string | null;
   reasoning: AiReasoningLevel | null;
-  tool_groups: unknown[] | null;
+  tool_groups: string[] | null;
   user?: User | null;
 };
 
@@ -29,24 +29,24 @@ export type ChatTemplateCreate = {
   user_id: number;
   name: string;
   body: string;
-  variables: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  variables: { name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }[];
   auto_send?: boolean;
   pinned?: boolean;
   model_provider?: string | null;
   model?: string | null;
   reasoning?: AiReasoningLevel | null;
-  tool_groups?: unknown[] | null;
+  tool_groups?: string[] | null;
 };
 
 export type ChatTemplateUpdate = {
   user_id?: number;
   name?: string;
   body?: string;
-  variables?: Array<{ name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }>;
+  variables?: { name: string; label: string; type: 'text' | 'number' | 'choice' | 'series' | 'movie'; default: string | null; options: string[] | null }[];
   auto_send?: boolean;
   pinned?: boolean;
   model_provider?: string | null;
   model?: string | null;
   reasoning?: AiReasoningLevel | null;
-  tool_groups?: unknown[] | null;
+  tool_groups?: string[] | null;
 };

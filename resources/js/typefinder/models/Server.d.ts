@@ -19,7 +19,7 @@ export type Server = {
   enrollment_expires_at: string | null;
   enrolled_at: string | null;
   last_report_at: string | null;
-  last_report: unknown[] | null;
+  last_report: Record<string, unknown> | null;
   config_version: number;
   report_interval_seconds: number;
   created_at: string | null;
@@ -37,10 +37,13 @@ export type ServerCreate = {
   kernel?: string | null;
   arch?: string | null;
   agent_version?: string | null;
+  token_hash?: string | null;
+  enrollment_token_hash?: string | null;
   enrollment_expires_at?: string | null;
   enrolled_at?: string | null;
   last_report_at?: string | null;
-  last_report?: unknown[] | null;
+  last_report?: Record<string, unknown> | null;
+  rule_state?: Record<string, unknown>;
   config_version?: number;
   report_interval_seconds?: number;
   last_report_error?: string | null;
@@ -54,10 +57,13 @@ export type ServerUpdate = {
   kernel?: string | null;
   arch?: string | null;
   agent_version?: string | null;
+  token_hash?: string | null;
+  enrollment_token_hash?: string | null;
   enrollment_expires_at?: string | null;
   enrolled_at?: string | null;
   last_report_at?: string | null;
-  last_report?: unknown[] | null;
+  last_report?: Record<string, unknown> | null;
+  rule_state?: Record<string, unknown>;
   config_version?: number;
   report_interval_seconds?: number;
   last_report_error?: string | null;

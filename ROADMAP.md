@@ -74,6 +74,15 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
+- **Retire Typefinder workarounds** as upstream fixes ship (filed against 8.4.0):
+    - `ShowBenchmarkComparisonRequest`'s `baseline` override
+      ([Laravel-Typefinder#230](https://github.com/pentacore/Laravel-Typefinder/issues/230)).
+    - The hand-written `sharedPageProps` in `resources/js/types/global.d.ts`:
+      switch to the generated `SharedPageProps` once it is emitted without
+      `#[TypefinderPage]` pages
+      ([Laravel-Typefinder#231](https://github.com/pentacore/Laravel-Typefinder/issues/231)).
+    - `CreateUserRequest`'s type lacks `password_confirmation`
+      ([Laravel-Typefinder#232](https://github.com/pentacore/Laravel-Typefinder/issues/232)).
 - **Statistics timezone minors**, found while fixing the watch heatmap's timezone:
     - Rollups that `statistics:aggregate` wrote on a non-UTC `APP_TIMEZONE`
       before the fix sit one offset late. Re-run `statistics:backfill` there once

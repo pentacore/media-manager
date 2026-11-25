@@ -9,13 +9,12 @@ use App\Models\ChatTemplate;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
 /**
- * Typefinder skips it: the rules depend on the bound template, so there is
- * no static request type.
+ * The bound template only decides which row the unique name check ignores,
+ * so the rules have the same shape with or without one (Typefinder calls
+ * rules() with no route bound).
  */
-#[TypefinderIgnore]
 class UpdateChatTemplateRequest extends FormRequest
 {
     use ChatTemplateValidationRules;
@@ -38,7 +37,14 @@ class UpdateChatTemplateRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->chatTemplateRules($this->chatTemplate());
+        return $this->chatTemplateRules($this->boundChatTemplate());
+    }
+
+    private function boundChatTemplate(): ?ChatTemplate
+    {
+        $chatTemplate = $this->route('chatTemplate');
+
+        return $chatTemplate instanceof ChatTemplate ? $chatTemplate : null;
     }
 
     private function chatTemplate(): ChatTemplate

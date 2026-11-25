@@ -15,12 +15,12 @@ export type MediaReplacementAttempt = {
   service_connection_id: number | null;
   status: MediaReplacementStatus;
   scope: string;
-  target: unknown[];
+  target: Record<string, unknown>;
   candidate_fingerprint: string;
-  candidate: unknown[];
-  required_languages: unknown[];
+  candidate: Record<string, unknown>;
+  required_languages: Record<string, unknown>;
   download_id: string | null;
-  verification: unknown[] | null;
+  verification: Record<string, unknown> | null;
   failure_reason: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -33,9 +33,9 @@ export type MediaReplacementAttempt = {
   grab_attempted_at: string | null;
   acknowledged_at: string | null;
   acknowledged_by: number | null;
-  actionRequest?: ActionRequest | null;
-  serviceConnection?: ServiceConnection | null;
-  acknowledgedBy?: User | null;
+  action_request?: ActionRequest | null;
+  service_connection?: ServiceConnection | null;
+  acknowledged_by?: User | null;
 };
 
 export type MediaReplacementAttemptCreate = {
@@ -43,12 +43,12 @@ export type MediaReplacementAttemptCreate = {
   service_connection_id?: number | null;
   status: MediaReplacementStatus;
   scope: string;
-  target: unknown[];
+  target: Record<string, unknown>;
   candidate_fingerprint: string;
-  candidate: unknown[];
-  required_languages: unknown[];
+  candidate: Record<string, unknown>;
+  required_languages: Record<string, unknown>;
   download_id?: string | null;
-  verification?: unknown[] | null;
+  verification?: Record<string, unknown> | null;
   failure_reason?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -66,12 +66,12 @@ export type MediaReplacementAttemptUpdate = {
   service_connection_id?: number | null;
   status?: MediaReplacementStatus;
   scope?: string;
-  target?: unknown[];
+  target?: Record<string, unknown>;
   candidate_fingerprint?: string;
-  candidate?: unknown[];
-  required_languages?: unknown[];
+  candidate?: Record<string, unknown>;
+  required_languages?: Record<string, unknown>;
   download_id?: string | null;
-  verification?: unknown[] | null;
+  verification?: Record<string, unknown> | null;
   failure_reason?: string | null;
   started_at?: string | null;
   completed_at?: string | null;

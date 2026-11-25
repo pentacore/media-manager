@@ -14,8 +14,8 @@ export type BazarrServiceLink = {
   role: BazarrServiceRole;
   created_at: string | null;
   updated_at: string | null;
-  bazarrConnection?: ServiceConnection | null;
-  relatedConnection?: ServiceConnection | null;
+  bazarr_connection?: ServiceConnection | null;
+  related_connection?: ServiceConnection | null;
 };
 
 export type BazarrServiceLinkCreate = {

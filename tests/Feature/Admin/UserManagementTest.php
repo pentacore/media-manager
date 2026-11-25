@@ -196,6 +196,23 @@ test('set_password requires password fields', function (): void {
         ->assertSessionHasErrors('password');
 });
 
+test('an invite ignores a posted password without set_password', function (): void {
+    Mail::fake();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [
+            'name' => 'Invited',
+            'email' => 'invited@example.com',
+            'role' => 'viewer',
+            'password' => 'short',
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(User::where('email', 'invited@example.com')->sole()->password)->toBeNull();
+    Mail::assertSent(UserInvitation::class);
+});
+
 test('non-admin cannot invite users', function (): void {
     $member = User::factory()->member()->create();
 

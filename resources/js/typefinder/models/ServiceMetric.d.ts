@@ -14,7 +14,7 @@ export type ServiceMetric = {
   latency_ms: number | null;
   message: string | null;
   recorded_at: string;
-  serviceConnection?: ServiceConnection | null;
+  service_connection?: ServiceConnection | null;
 };
 
 export type ServiceMetricCreate = {

@@ -11,13 +11,11 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Override;
-use Pentacore\Typefinder\Attributes\TypefinderIgnore;
 
 /**
  * The agent's minute report (see the host agent contract). Keys without a rule are dropped by validated(), so newer agents can add fields.
  * A rejected report is remembered on the server (ReportRejection) before the 422 goes out.
  */
-#[TypefinderIgnore]
 class AgentReportRequest extends FormRequest
 {
     /**

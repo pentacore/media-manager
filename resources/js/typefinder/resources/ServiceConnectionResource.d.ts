@@ -4,8 +4,7 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
-import type { HealthStatus } from '../enums';
-import type { ServiceType } from '../enums';
+import type { HealthStatus, ServiceType } from '../enums';
 
 export type ServiceConnectionResource = {
   id: number;

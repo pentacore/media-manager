@@ -5,8 +5,7 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { AiModelPrice } from './AiModelPrice';
-import type { RateLimitMetric } from '../enums';
-import type { RateLimitPeriod } from '../enums';
+import type { RateLimitMetric, RateLimitPeriod } from '../enums';
 
 export type AiModelRateLimit = {
   id: number;

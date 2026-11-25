@@ -5,9 +5,8 @@
 // ───────────────────────────────────────────────────────────────────────
 
 import type { BenchmarkCase } from './BenchmarkCase';
-import type { BenchmarkJudgeStatus } from '../enums';
+import type { BenchmarkJudgeStatus, BenchmarkResultStatus } from '../enums';
 import type { BenchmarkNeutralJudgement } from './BenchmarkNeutralJudgement';
-import type { BenchmarkResultStatus } from '../enums';
 import type { BenchmarkRun } from './BenchmarkRun';
 
 export type BenchmarkResult = {
@@ -19,24 +18,24 @@ export type BenchmarkResult = {
   candidate_index: number;
   status: BenchmarkResultStatus;
   output: string | null;
-  intended_actions: unknown[];
+  intended_actions: Record<string, unknown>[];
   prompt_tokens: number;
   completion_tokens: number;
-  cost_usd: number;
+  cost_usd: string;
   latency_ms: number | null;
   tool_calls: number;
   tool_misses: number;
   error: string | null;
   score: number | null;
   passed: boolean | null;
-  score_detail: unknown[] | null;
+  score_detail: Record<string, unknown> | null;
   judge_status: BenchmarkJudgeStatus;
-  judge_cost_usd: number;
+  judge_cost_usd: string;
   created_at: string | null;
   updated_at: string | null;
-  neutralJudgements?: BenchmarkNeutralJudgement[];
+  neutral_judgements?: BenchmarkNeutralJudgement[];
   run?: BenchmarkRun | null;
-  benchmarkCase?: BenchmarkCase | null;
+  benchmark_case?: BenchmarkCase | null;
 };
 
 export type BenchmarkResultCreate = {
@@ -47,19 +46,19 @@ export type BenchmarkResultCreate = {
   candidate_index: number;
   status?: BenchmarkResultStatus;
   output?: string | null;
-  intended_actions?: unknown[];
+  intended_actions?: Record<string, unknown>[];
   prompt_tokens?: number;
   completion_tokens?: number;
-  cost_usd?: number;
+  cost_usd?: string;
   latency_ms?: number | null;
   tool_calls?: number;
   tool_misses?: number;
   error?: string | null;
   score?: number | null;
   passed?: boolean | null;
-  score_detail?: unknown[] | null;
+  score_detail?: Record<string, unknown> | null;
   judge_status?: BenchmarkJudgeStatus;
-  judge_cost_usd?: number;
+  judge_cost_usd?: string;
 };
 
 export type BenchmarkResultUpdate = {
@@ -70,17 +69,17 @@ export type BenchmarkResultUpdate = {
   candidate_index?: number;
   status?: BenchmarkResultStatus;
   output?: string | null;
-  intended_actions?: unknown[];
+  intended_actions?: Record<string, unknown>[];
   prompt_tokens?: number;
   completion_tokens?: number;
-  cost_usd?: number;
+  cost_usd?: string;
   latency_ms?: number | null;
   tool_calls?: number;
   tool_misses?: number;
   error?: string | null;
   score?: number | null;
   passed?: boolean | null;
-  score_detail?: unknown[] | null;
+  score_detail?: Record<string, unknown> | null;
   judge_status?: BenchmarkJudgeStatus;
-  judge_cost_usd?: number;
+  judge_cost_usd?: string;
 };

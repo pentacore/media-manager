@@ -14,7 +14,7 @@ export type SubtitleAuditEpisode = {
   episode_id: number;
   season_number: number;
   episode_number: number;
-  missing_languages: unknown[];
+  missing_languages: string[];
   outcome: SubtitleAuditEpisodeOutcome;
   action_request_id: number | null;
   release_title: string | null;
@@ -22,7 +22,7 @@ export type SubtitleAuditEpisode = {
   created_at: string | null;
   updated_at: string | null;
   batch?: SubtitleAuditBatch | null;
-  actionRequest?: ActionRequest | null;
+  action_request?: ActionRequest | null;
 };
 
 export type SubtitleAuditEpisodeCreate = {
@@ -30,7 +30,7 @@ export type SubtitleAuditEpisodeCreate = {
   episode_id: number;
   season_number: number;
   episode_number: number;
-  missing_languages: unknown[];
+  missing_languages: string[];
   outcome?: SubtitleAuditEpisodeOutcome;
   action_request_id?: number | null;
   release_title?: string | null;
@@ -42,7 +42,7 @@ export type SubtitleAuditEpisodeUpdate = {
   episode_id?: number;
   season_number?: number;
   episode_number?: number;
-  missing_languages?: unknown[];
+  missing_languages?: string[];
   outcome?: SubtitleAuditEpisodeOutcome;
   action_request_id?: number | null;
   release_title?: string | null;

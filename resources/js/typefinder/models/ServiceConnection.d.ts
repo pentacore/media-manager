@@ -6,8 +6,7 @@
 
 import type { ActivityLog } from './ActivityLog';
 import type { BazarrServiceLink } from './BazarrServiceLink';
-import type { HealthStatus } from '../enums';
-import type { ServiceType } from '../enums';
+import type { HealthStatus, ServiceType } from '../enums';
 import type { SubtitleCase } from './SubtitleCase';
 import type { WebhookEvent } from './WebhookEvent';
 
@@ -21,19 +20,19 @@ export type ServiceConnection = {
   is_active: boolean;
   last_seen_at: string | null;
   version: string | null;
-  settings: unknown[] | null;
+  settings: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   health_status: HealthStatus | null;
   latest_version: string | null;
   health_message: string | null;
   external_url: string | null;
-  webhookEvents?: WebhookEvent[];
-  activityLogs?: ActivityLog[];
-  bazarrServiceLinks?: BazarrServiceLink[];
-  incomingBazarrServiceLinks?: BazarrServiceLink[];
-  bazarrSubtitleCases?: SubtitleCase[];
-  managedSubtitleCases?: SubtitleCase[];
+  webhook_events?: WebhookEvent[];
+  activity_logs?: ActivityLog[];
+  bazarr_service_links?: BazarrServiceLink[];
+  incoming_bazarr_service_links?: BazarrServiceLink[];
+  bazarr_subtitle_cases?: SubtitleCase[];
+  managed_subtitle_cases?: SubtitleCase[];
 };
 
 export type ServiceConnectionCreate = {
@@ -45,7 +44,7 @@ export type ServiceConnectionCreate = {
   is_active?: boolean;
   last_seen_at?: string | null;
   version?: string | null;
-  settings?: unknown[] | null;
+  settings?: Record<string, unknown> | null;
   health_status?: HealthStatus | null;
   latest_version?: string | null;
   health_message?: string | null;
@@ -61,7 +60,7 @@ export type ServiceConnectionUpdate = {
   is_active?: boolean;
   last_seen_at?: string | null;
   version?: string | null;
-  settings?: unknown[] | null;
+  settings?: Record<string, unknown> | null;
   health_status?: HealthStatus | null;
   latest_version?: string | null;
   health_message?: string | null;

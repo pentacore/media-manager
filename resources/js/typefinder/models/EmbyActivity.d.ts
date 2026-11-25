@@ -19,7 +19,7 @@ export type EmbyActivity = {
   created_at: string | null;
   updated_at: string | null;
   play_session_id: string | null;
-  embyUserLink?: EmbyUserLink | null;
+  emby_user_link?: EmbyUserLink | null;
 };
 
 export type EmbyActivityCreate = {
