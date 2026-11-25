@@ -4,10 +4,12 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { ActivityLogCategory } from '../enums';
+
 export type ActivityLogResource = {
   id: number;
   action: string;
-  category: 'activity' | 'audit';
+  category: ActivityLogCategory;
   description: string;
   user_name: string | null;
   service_id: number | null;

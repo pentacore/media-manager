@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\Bazarr;
 
+use App\Enums\MediaReplacementScope;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Override;
@@ -14,7 +15,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'media_id' => 'number',
     'series_id' => 'number | undefined',
     'target_fingerprint' => 'string',
-    'scope' => "'anime' | 'tv' | 'movie' | undefined",
+    'scope' => MediaReplacementScope::class.' | undefined',
     'title' => 'string',
     'subtitle_tracks' => "Array<{ fingerprint: string; language: string; display_name: string; kind: 'embedded' | 'external'; forced: boolean; hearing_impaired: boolean }>",
     'required_languages' => 'string[]',

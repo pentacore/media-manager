@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,7 +25,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'name' => 'string',
     'email' => 'string',
     'email_verified_at' => 'string | null',
-    'role' => "'admin' | 'member' | 'viewer'",
+    'role' => UserRole::class,
     'avatar_url' => 'string | null',
     'preferences' => "{ time_format: '12h' | '24h'; date_format: 'iso' | 'us' | 'eu' | 'long'; timezone: string; first_day_of_week: number; show_relative_time: boolean; whisparr_blur_posters: boolean }",
 ])]

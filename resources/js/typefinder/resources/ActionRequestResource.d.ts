@@ -4,6 +4,8 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { ActionRequestStatus } from '../enums';
+
 export type ActionRequestResource = {
   id: number;
   type: string;
@@ -16,7 +18,7 @@ export type ActionRequestResource = {
   second_opinion: { engine: 'llm' | 'jev'; mode: 'hold' | 'reject'; agrees: boolean; failed: boolean; confidence: number | null; reason: string | null; override_event: string | null } | { skipped: true; override_event: string | null } | null;
   source_service: string;
   target_service: string;
-  status: 'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected';
+  status: ActionRequestStatus;
   status_version: number;
   requires_approval: boolean;
   payload: Record<string, unknown>;

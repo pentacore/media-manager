@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Http\Request;
@@ -26,7 +27,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'second_opinion' => "{ engine: 'llm' | 'jev'; mode: 'hold' | 'reject'; agrees: boolean; failed: boolean; confidence: number | null; reason: string | null; override_event: string | null } | { skipped: true; override_event: string | null } | null",
     'source_service' => 'string',
     'target_service' => 'string',
-    'status' => "'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected'",
+    'status' => ActionRequestStatus::class,
     'status_version' => 'number',
     'requires_approval' => 'boolean',
     'payload' => 'Record<string, unknown>',

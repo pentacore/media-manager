@@ -4,12 +4,14 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { MediaReplacementScope } from '../enums';
+
 export type SubtitleItemResource = {
   media_type: 'episode' | 'movie';
   media_id: number;
   series_id: number | undefined;
   target_fingerprint: string;
-  scope: 'anime' | 'tv' | 'movie' | undefined;
+  scope: MediaReplacementScope | undefined;
   title: string;
   subtitle_tracks: Array<{ fingerprint: string; language: string; display_name: string; kind: 'embedded' | 'external'; forced: boolean; hearing_impaired: boolean }>;
   required_languages: string[];
