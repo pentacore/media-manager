@@ -112,6 +112,12 @@ class SeriesIndexer
         return is_numeric($value) ? (int) $value : null;
     }
 
+    /**
+     * The *arr "added" string is an instant (ISO 8601 with Z). It is moved to
+     * the app timezone because Eloquent writes the zoneless column as the
+     * Carbon's own wall clock, and every other zoneless column holds the app
+     * timezone wall clock.
+     */
     private function parseDate(mixed $value): ?CarbonImmutable
     {
         if (! is_string($value) || $value === '') {
@@ -119,7 +125,7 @@ class SeriesIndexer
         }
 
         try {
-            return CarbonImmutable::parse($value);
+            return CarbonImmutable::parse($value)->setTimezone(config()->string('app.timezone'));
         } catch (Throwable) {
             return null;
         }

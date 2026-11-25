@@ -245,19 +245,46 @@ it('files a play just after local midnight under the previous UTC day', function
         ->and($day->count)->toBe(1);
 });
 
-it('keeps reading arr_added_at as UTC, which the indexers store it in', function (): void {
+it('reads arr_added_at on the app timezone wall clock like the other event columns', function (): void {
     config()->set('app.timezone', 'Europe/Stockholm');
     date_default_timezone_set('Europe/Stockholm');
 
-    // The indexers parse the *arr "added" ISO string (with Z) and Eloquent
-    // writes that UTC wall clock unchanged.
-    IndexedMovie::factory()->create(['arr_added_at' => CarbonImmutable::parse('2026-07-06T12:10:00Z')]);
+    // The indexers store the *arr "added" instant on the app clock: 12:10 UTC
+    // is 14:10 in Stockholm (UTC+2 in July).
+    IndexedMovie::factory()->create(['arr_added_at' => CarbonImmutable::parse('2026-07-06T12:10:00Z')->setTimezone('Europe/Stockholm')]);
+    // 00:30 in Stockholm on the 6th is 22:30 UTC on the 5th, outside the window.
+    IndexedSeries::factory()->create(['arr_added_at' => CarbonImmutable::parse('2026-07-06 00:30:00', 'Europe/Stockholm')]);
 
     resolve(StatisticsAggregator::class)->aggregate(
         CarbonImmutable::parse('2026-07-06 12:00:00', 'UTC'),
         CarbonImmutable::parse('2026-07-06 13:00:00', 'UTC'),
     );
 
-    expect(StatRollup::query()->where(['metric' => 'library.added', 'period' => 'hour'])->sole()->bucket->utc()->toDateTimeString())
-        ->toBe('2026-07-06 12:00:00');
+    $hour = StatRollup::query()->where(['metric' => 'library.added', 'period' => 'hour'])->sole();
+    $movieDay = StatRollup::query()->where(['metric' => 'library.added', 'period' => 'day'])->where('dimensions->kind', 'movie')->sole();
+
+    expect($hour->bucket->utc()->toDateTimeString())->toBe('2026-07-06 12:00:00')
+        ->and($hour->count)->toBe(1)
+        ->and($movieDay->bucket->utc()->toDateTimeString())->toBe('2026-07-06 00:00:00')
+        ->and(StatRollup::query()->where(['metric' => 'library.added', 'period' => 'day'])->where('dimensions->kind', 'series')->exists())->toBeFalse();
+});
+
+it('files a library addition just after local midnight under the previous UTC day', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+
+    // 00:30 in Stockholm on the 6th is 22:30 UTC on the 5th.
+    IndexedSeries::factory()->create(['arr_added_at' => CarbonImmutable::parse('2026-07-06 00:30:00', 'Europe/Stockholm')]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-05 22:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-05 23:00:00', 'UTC'),
+    );
+
+    $hour = StatRollup::query()->where(['metric' => 'library.added', 'period' => 'hour'])->sole();
+    $day = StatRollup::query()->where(['metric' => 'library.added', 'period' => 'day'])->sole();
+
+    expect($hour->bucket->utc()->toDateTimeString())->toBe('2026-07-05 22:00:00')
+        ->and($day->bucket->utc()->toDateTimeString())->toBe('2026-07-05 00:00:00')
+        ->and($day->count)->toBe(1);
 });

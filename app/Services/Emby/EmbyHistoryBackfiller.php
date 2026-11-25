@@ -98,8 +98,10 @@ final readonly class EmbyHistoryBackfiller
         }
 
         $lastPlayed = $userData['LastPlayedDate'] ?? null;
+        // LastPlayedDate is an instant (ISO 8601 with Z); created_at holds the
+        // app timezone wall clock, so move it there before Eloquent writes it.
         $timestamp = is_string($lastPlayed) && $lastPlayed !== ''
-            ? CarbonImmutable::parse($lastPlayed)
+            ? CarbonImmutable::parse($lastPlayed)->setTimezone(config()->string('app.timezone'))
             : CarbonImmutable::now();
 
         $itemId = (string) ($item['Id'] ?? '');

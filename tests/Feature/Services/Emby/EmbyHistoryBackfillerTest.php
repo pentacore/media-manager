@@ -9,6 +9,7 @@ use App\Services\Emby\EmbyClient;
 use App\Services\Emby\EmbyHistoryBackfiller;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -163,6 +164,33 @@ test('writes LastPlayedDate verbatim into created_at and updated_at', function (
     $activity = EmbyActivity::where('emby_item_id', 'item-5')->firstOrFail();
     expect($activity->created_at->equalTo(CarbonImmutable::parse('2024-06-15T14:30:00.000Z')))->toBeTrue();
     expect($activity->updated_at->equalTo(CarbonImmutable::parse('2024-06-15T14:30:00.000Z')))->toBeTrue();
+});
+
+test('stores LastPlayedDate on the app timezone wall clock', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+
+    Http::fake([
+        'emby.local:8096/Users/emby-user-1/Items*' => Http::response(fakeEmbyItemsResponse([
+            [
+                'Id' => 'item-8',
+                'Type' => 'Movie',
+                'Name' => 'Zoned',
+                'UserData' => [
+                    'Played' => true,
+                    'LastPlayedDate' => '2024-06-15T14:30:00.000Z',
+                ],
+            ],
+        ])),
+    ]);
+
+    $this->backfiller->backfillUser($this->link);
+
+    // 14:30 UTC is 16:30 in Stockholm (UTC+2 in June), the clock every other
+    // emby_activities row is written on.
+    $activity = EmbyActivity::where('emby_item_id', 'item-8')->firstOrFail();
+    expect(DB::table('emby_activities')->where('id', $activity->id)->value('created_at'))->toBe('2024-06-15 16:30:00')
+        ->and($activity->created_at->equalTo(CarbonImmutable::parse('2024-06-15T14:30:00.000Z')))->toBeTrue();
 });
 
 test('falls back to now when LastPlayedDate is missing', function (): void {

@@ -176,14 +176,11 @@ class StatisticsAggregator
         foreach (['hour', 'day'] as $period) {
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
 
-            // arr_added_at is the one UTC wall clock here: the indexers store
-            // the *arr "added" ISO string (with Z) unconverted, so it buckets
-            // as-is against the UTC window.
             foreach (['movie' => 'indexed_movies', 'series' => 'indexed_series'] as $kind => $table) {
                 $rows = DB::table($table)
                     ->whereNotNull('arr_added_at')
-                    ->where('arr_added_at', '>=', $lo)->where('arr_added_at', '<', $hi)
-                    ->selectRaw('date_trunc(?, arr_added_at) AS bucket, COUNT(*) AS count', [$period])
+                    ->where('arr_added_at', '>=', $this->wallClock($lo))->where('arr_added_at', '<', $this->wallClock($hi))
+                    ->selectRaw('date_trunc(?, arr_added_at AT TIME ZONE ?, ?) AS bucket, COUNT(*) AS count', $this->bucketBindings($period))
                     ->groupBy('bucket')
                     ->get();
 
