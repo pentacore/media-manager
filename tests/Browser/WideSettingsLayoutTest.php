@@ -348,6 +348,18 @@ test('keeps the Media Replacement guidance blocks and the Decision Agent overrid
             })()
             JS, true);
 
+    // Below xl the guidance blocks keep the page's own width: the cap starts at xl.
+    visit(route('admin.media-replacement.index', absolute: false))
+        ->resize(1279, 800)
+        ->assertNoSmoke()
+        ->assertScript(<<<'JS'
+            (() => {
+                const block = document.querySelector('[data-settings-capped]');
+                return block !== null
+                    && Math.round(block.getBoundingClientRect().width) === Math.round(block.parentElement.getBoundingClientRect().width);
+            })()
+            JS, true);
+
     visit(route('admin.decision-agent.index', absolute: false))
         ->resize(1920, 1080)
         ->assertNoSmoke()
