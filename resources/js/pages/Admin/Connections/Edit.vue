@@ -122,7 +122,7 @@ const supportsSubtitleCheckTags = computed(
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
-                    <SettingsGrid class="gap-y-4">
+                    <SettingsGrid :max-columns="2" class="gap-y-4">
                         <ServiceTypeSelect
                             v-model="selectedType"
                             :service-types="serviceTypes"
@@ -271,6 +271,8 @@ const supportsSubtitleCheckTags = computed(
                         />
 
                         <SubtitleAuditSearchSlots
+                            class="col-span-full max-w-2xl"
+                            data-settings-capped
                             v-if="supportsSonarrLibraryTypes"
                             :slots="
                                 connection.subtitle_audit_search_slots ?? null

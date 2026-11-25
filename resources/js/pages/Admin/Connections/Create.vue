@@ -119,7 +119,7 @@ const placeholders = computed(
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
-                    <SettingsGrid class="gap-y-4">
+                    <SettingsGrid :max-columns="2" class="gap-y-4">
                         <ServiceTypeSelect
                             v-model="selectedType"
                             :service-types="serviceTypes"

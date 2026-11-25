@@ -260,6 +260,37 @@ test('lays member settings two across, one column at 1024 px', function (string 
     'security' => ['security.edit', ['current_password', 'password']],
 ]);
 
+test('spans the Save row across the grid and hides the dividers at xl', function (string $route): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route($route, absolute: false))
+        ->resize(1440, 900)
+        ->assertNoSmoke();
+
+    // The Save row is the last child of the grid and as wide as the grid; every
+    // divider the grid holds is hidden from xl.
+    $webpage->assertScript(<<<'JS'
+        (() => {
+            const grid = document.querySelector('[data-settings-grid]');
+            const save = grid.lastElementChild;
+            const dividers = [...grid.querySelectorAll(':scope > [data-slot="separator"]')];
+            return save.querySelector('button[type="submit"]') !== null
+                && Math.round(save.getBoundingClientRect().width) === Math.round(grid.getBoundingClientRect().width)
+                && dividers.length > 0
+                && dividers.every((divider) => getComputedStyle(divider).display === 'none');
+        })()
+        JS, true);
+
+    $webpage->resize(1024, 800)->assertScript(<<<'JS'
+        (() => {
+            const grid = document.querySelector('[data-settings-grid]');
+            const dividers = [...grid.querySelectorAll(':scope > [data-slot="separator"]')];
+            return dividers.length > 0
+                && dividers.every((divider) => divider.getBoundingClientRect().height > 0);
+        })()
+        JS, true);
+})->with(['profile.edit', 'settings.preferences.edit', 'security.edit']);
+
 test('keeps the Appearance and Notifications settings capped at every width', function (string $route, int $width): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -285,55 +316,63 @@ test('keeps the blocks that are not a grid capped on the wide settings pages at 
             JS, true);
 })->with(['profile.edit', 'security.edit']);
 
-test('lays the connection form fields two across at 1440 px and in one column at 1024 px', function (string $route, array $parameters): void {
+test('lays the connection form fields two across at 1440 px and 1920 px and in one column at 1024 px', function (string $route): void {
     $this->actingAs(User::factory()->admin()->create());
     $sonarr = ServiceConnection::factory()->sonarr()->create();
 
-    $url = route($route, $route === 'admin.connections.edit' ? ['serviceConnection' => $sonarr] : $parameters, absolute: false);
+    $url = route($route, $route === 'admin.connections.edit' ? ['serviceConnection' => $sonarr] : [], absolute: false);
+
+    // The service type, the display name and the URL.
+    $firstThree = "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+3)')";
+    $formWidth = 'document.querySelector("[data-connection-cancel]").closest("form").getBoundingClientRect().width';
 
     $webpage = visit($url)->resize(1440, 900)->assertNoSmoke();
 
-    // The service type and the display name.
     /** @var list<array{0: int, 1: int, 2: int}> $blocks */
-    $blocks = json_decode((string) $webpage->script(wideSettingsBlocksScript(
-        "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+2)')",
-    )), true);
+    $blocks = json_decode((string) $webpage->script(wideSettingsBlocksScript($firstThree)), true);
 
-    expect($blocks)->toHaveCount(2)
+    expect($blocks)->toHaveCount(3)
         ->and($blocks[1][0])->toBe($blocks[0][0])
         ->and($blocks[1][1])->toBeGreaterThan($blocks[0][1])
-        ->and($webpage->script('document.querySelector("[data-connection-cancel]").closest("form").getBoundingClientRect().width'))
-        ->toBeGreaterThan(672);
+        ->and($webpage->script($formWidth))->toBeGreaterThan(672);
+
+    // A short form stops at two columns: the URL starts the next line.
+    $webpage->resize(1920, 1080);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $wide */
+    $wide = json_decode((string) $webpage->script(wideSettingsBlocksScript($firstThree)), true);
+
+    expect($wide[1][0])->toBe($wide[0][0])
+        ->and($wide[1][1])->toBeGreaterThan($wide[0][1])
+        ->and($wide[2][0])->toBeGreaterThan($wide[0][0])
+        ->and($wide[2][1])->toBe($wide[0][1]);
 
     $webpage->resize(1024, 800);
 
     /** @var list<array{0: int, 1: int, 2: int}> $narrow */
-    $narrow = json_decode((string) $webpage->script(wideSettingsBlocksScript(
-        "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+2)')",
-    )), true);
+    $narrow = json_decode((string) $webpage->script(wideSettingsBlocksScript($firstThree)), true);
 
     expect($narrow[1][1])->toBe($narrow[0][1])
         ->and($narrow[1][0])->toBeGreaterThan($narrow[0][0])
         // The page keeps its max-w-2xl cap below xl (672 px plus the page padding).
-        ->and($webpage->script('document.querySelector("[data-connection-cancel]").closest("form").getBoundingClientRect().width'))
-        ->toBeLessThanOrEqual(672);
-})->with([
-    'create' => ['admin.connections.create', []],
-    'edit' => ['admin.connections.edit', []],
-]);
+        ->and($webpage->script($formWidth))->toBeLessThanOrEqual(672);
+})->with(['admin.connections.create', 'admin.connections.edit']);
 
 test('keeps the connection blocks that are not fields capped on a wide edit page', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $sonarr = ServiceConnection::factory()->sonarr()->create();
 
     visit(route('admin.connections.edit', ['serviceConnection' => $sonarr], absolute: false))
-        ->resize(1440, 900)
+        ->resize(1920, 1080)
         ->assertNoSmoke()
         ->assertScript(<<<'JS'
             (() => {
                 const blocks = [...document.querySelectorAll('[data-settings-capped]')];
+                const slots = document.querySelector('[data-subtitle-audit-search-slots]');
                 return blocks.length > 0
-                    && blocks.every((block) => block.getBoundingClientRect().width <= 672);
+                    && blocks.every((block) => block.getBoundingClientRect().width <= 672)
+                    // The repair-searches help text is a long paragraph: it keeps the cap too.
+                    && blocks.includes(slots);
             })()
             JS, true);
 });
@@ -357,6 +396,17 @@ test('lays the benchmark schedule form two across at 1440 px and in one column a
         ->and($blocks[1][1])->toBeGreaterThan($blocks[0][1])
         ->and($webpage->script('document.querySelector("[data-benchmark-schedule-save]").closest("form").getBoundingClientRect().width'))
         ->toBeGreaterThan(896);
+
+    // Name, task and tags fill the first line at 1800 px and wider.
+    $webpage->resize(1920, 1080);
+
+    /** @var list<array{0: int, 1: int, 2: int}> $three */
+    $three = json_decode((string) $webpage->script(wideSettingsBlocksScript(
+        "document.querySelector('[data-settings-grid]').querySelectorAll(':scope > :nth-child(-n+3)')",
+    )), true);
+
+    expect(array_unique(array_column($three, 0)))->toHaveCount(1)
+        ->and(array_unique(array_column($three, 1)))->toHaveCount(3);
 
     $webpage->resize(1024, 800);
 
