@@ -67,9 +67,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
           saved attachments link to their file, because a chat file belongs to
           the user who uploaded it.
     - Agreement and gate charts:
-        - Classification gates: a 0 % band with resolved events draws a
-          zero-height bar. Pass `show-zero` to its `BarChart`, as the agreement
-          chart does.
         - Agreement "All" window: verdicts are read in chunks now, so memory is
           bounded, but the time still grows with retention. Aggregate in SQL if
           it gets slow.

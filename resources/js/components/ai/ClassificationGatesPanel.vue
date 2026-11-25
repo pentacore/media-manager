@@ -107,6 +107,7 @@ function summaryLine(gate: GateSummary): string {
                     :height="90"
                     :marker-at="gate.threshold"
                     :max="100"
+                    show-zero
                 />
                 <div
                     class="flex text-[10px] text-muted-foreground tabular-nums"
