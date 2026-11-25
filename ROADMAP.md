@@ -66,11 +66,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
         - Agreement "All" window: verdicts are read in chunks now, so memory is
           bounded, but the time still grows with retention. Aggregate in SQL if
           it gets slow.
-- **Host monitoring minors**:
-    - Platform:
-        - The 30-day server chart's 6 h buckets start at 01, 07, 13 and 19
-          during summer time, because buckets are cut on instants from a
-          winter-time origin. Align them to local midnight if that matters.
 - **Watch heatmap timezone**: `StatisticsRepository::watchHeatmap()` reads
   `emby_activities.created_at` as UTC and shifts it to the app timezone, but
   Eloquent stores it as app-timezone wall clock, so with a non-UTC
