@@ -6,7 +6,7 @@ import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admi
 import { SecondOpinionEventOverrides } from '@/components/decision-agent';
 import type { SecondOpinionEventOverride } from '@/components/decision-agent';
 import InputError from '@/components/InputError.vue';
-import { Field, SettingsRow, Toggle } from '@/components/mm';
+import { Field, SettingsGrid, SettingsRow, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -125,7 +125,10 @@ function submit(): void {
 <template>
     <Head title="Decision Agent" />
 
-    <div class="flex max-w-3xl flex-col gap-4 p-5">
+    <div
+        class="flex max-w-3xl flex-col gap-4 p-5 xl:max-w-none"
+        data-decision-agent-page
+    >
         <!-- Hero -->
         <div>
             <div class="mb-1.5 text-[13px] text-muted-foreground">
@@ -157,7 +160,7 @@ function submit(): void {
             class="rounded-xl border border-border bg-card p-6"
             @submit.prevent="submit"
         >
-            <div class="flex flex-col gap-5">
+            <SettingsGrid>
                 <!-- Enabled -->
                 <SettingsRow data-decision-agent-enabled-row>
                     <template #label>
@@ -186,10 +189,10 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Event allowlist -->
-                <SettingsRow>
+                <SettingsRow wide>
                     <template #label>
                         <Field
                             label-id="decision-agent-event-allowlist-label"
@@ -249,7 +252,7 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Manual import capability -->
                 <SettingsRow>
@@ -282,7 +285,7 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Notifications -->
                 <SettingsRow>
@@ -327,7 +330,7 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Per-run cap -->
                 <SettingsRow>
@@ -385,10 +388,10 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <!-- Second opinion -->
-                <SettingsRow>
+                <SettingsRow wide>
                     <template #label>
                         <Field
                             label-id="decision-agent-second-opinion-label"
@@ -487,7 +490,7 @@ function submit(): void {
                     </div>
                 </SettingsRow>
 
-                <div class="flex justify-end pt-2">
+                <div class="col-span-full flex justify-end pt-2">
                     <Button
                         size="sm"
                         type="submit"
@@ -497,7 +500,7 @@ function submit(): void {
                         Save settings
                     </Button>
                 </div>
-            </div>
+            </SettingsGrid>
         </form>
     </div>
 </template>

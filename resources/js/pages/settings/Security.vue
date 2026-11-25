@@ -4,7 +4,7 @@ import { ShieldCheck } from '@lucide/vue';
 import { onUnmounted, ref } from 'vue';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill, SettingsRow } from '@/components/mm';
+import { Field, Pill, SettingsGrid, SettingsRow } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TwoFactorRecoveryCodes from '@/components/TwoFactorRecoveryCodes.vue';
 import TwoFactorSetupModal from '@/components/TwoFactorSetupModal.vue';
@@ -75,7 +75,7 @@ onUnmounted(() => clearTwoFactorAuthData());
             v-slot="{ errors, processing }"
             class="rounded-xl border border-border bg-card p-6"
         >
-            <div class="flex flex-col gap-5">
+            <SettingsGrid>
                 <SettingsRow>
                     <template #label>
                         <Field
@@ -103,7 +103,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <SettingsRow>
                     <template #label>
@@ -129,7 +129,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <SettingsRow>
                     <template #label>
@@ -158,7 +158,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                     </div>
                 </SettingsRow>
 
-                <div class="flex justify-end pt-2">
+                <div class="col-span-full flex justify-end pt-2">
                     <Button
                         size="sm"
                         type="submit"
@@ -169,7 +169,7 @@ onUnmounted(() => clearTwoFactorAuthData());
                         Save password
                     </Button>
                 </div>
-            </div>
+            </SettingsGrid>
         </Form>
 
         <template v-if="canManageTwoFactor">

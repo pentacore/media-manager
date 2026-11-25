@@ -51,7 +51,7 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
 
             <Separator class="my-2 lg:hidden" />
 
-            <section class="max-w-2xl space-y-8">
+            <section class="max-w-2xl space-y-8 xl:max-w-none">
                 <slot />
             </section>
         </div>

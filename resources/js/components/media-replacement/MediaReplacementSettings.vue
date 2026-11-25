@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, toRaw } from 'vue';
 import InputError from '@/components/InputError.vue';
-import { Field, SettingsRow } from '@/components/mm';
+import { Field, SettingsGrid, SettingsRow } from '@/components/mm';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -204,116 +204,120 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </p>
         </div>
 
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-automatic-selection"
-                    label="Automatic selection"
-                    hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
-                >
-                    <span />
-                </Field>
-            </template>
-            <label class="flex items-center gap-2 text-sm touch:min-h-10">
-                <input
-                    id="media-replacement-automatic-selection"
-                    aria-labelledby="media-replacement-automatic-selection-label"
-                    aria-describedby="media-replacement-automatic-selection-description media-replacement-automatic-selection-hint"
-                    v-model="state.automatic_selection_enabled"
-                    type="checkbox"
+        <SettingsGrid>
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-automatic-selection"
+                        label="Automatic selection"
+                        hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <label class="flex items-center gap-2 text-sm touch:min-h-10">
+                    <input
+                        id="media-replacement-automatic-selection"
+                        aria-labelledby="media-replacement-automatic-selection-label"
+                        aria-describedby="media-replacement-automatic-selection-description media-replacement-automatic-selection-hint"
+                        v-model="state.automatic_selection_enabled"
+                        type="checkbox"
+                    />
+                    <span id="media-replacement-automatic-selection-description"
+                        >Enable automatic candidate selection</span
+                    >
+                </label>
+            </SettingsRow>
+
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-confidence-threshold"
+                        label="Confidence threshold"
+                        hint="Minimum subtitle confidence (0–100) required before a candidate can be selected automatically."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <Input
+                    id="media-replacement-confidence-threshold"
+                    aria-describedby="media-replacement-confidence-threshold-hint"
+                    v-model.number="state.automatic_selection_threshold"
+                    type="number"
+                    min="0"
+                    max="100"
+                    class="h-8 max-w-[120px] text-sm"
                 />
-                <span id="media-replacement-automatic-selection-description"
-                    >Enable automatic candidate selection</span
-                >
-            </label>
-        </SettingsRow>
+            </SettingsRow>
 
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-confidence-threshold"
-                    label="Confidence threshold"
-                    hint="Minimum subtitle confidence (0–100) required before a candidate can be selected automatically."
-                >
-                    <span />
-                </Field>
-            </template>
-            <Input
-                id="media-replacement-confidence-threshold"
-                aria-describedby="media-replacement-confidence-threshold-hint"
-                v-model.number="state.automatic_selection_threshold"
-                type="number"
-                min="0"
-                max="100"
-                class="h-8 max-w-[120px] text-sm"
-            />
-        </SettingsRow>
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-subtitle-check"
+                        label="Automatic subtitle check"
+                        hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <label class="flex items-center gap-2 text-sm touch:min-h-10">
+                    <input
+                        id="media-replacement-subtitle-check"
+                        aria-labelledby="media-replacement-subtitle-check-label"
+                        aria-describedby="media-replacement-subtitle-check-description media-replacement-subtitle-check-hint"
+                        v-model="state.subtitle_check.enabled"
+                        type="checkbox"
+                    />
+                    <span id="media-replacement-subtitle-check-description"
+                        >Check tagged imports for missing subtitles</span
+                    >
+                </label>
+            </SettingsRow>
 
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-subtitle-check"
-                    label="Automatic subtitle check"
-                    hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
-                >
-                    <span />
-                </Field>
-            </template>
-            <label class="flex items-center gap-2 text-sm touch:min-h-10">
-                <input
-                    id="media-replacement-subtitle-check"
-                    aria-labelledby="media-replacement-subtitle-check-label"
-                    aria-describedby="media-replacement-subtitle-check-description media-replacement-subtitle-check-hint"
-                    v-model="state.subtitle_check.enabled"
-                    type="checkbox"
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-attempts-per-item"
+                        label="Attempts per item"
+                        hint="How many replacements the automatic check may request for the same item inside the cooldown window."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <Input
+                    id="media-replacement-attempts-per-item"
+                    aria-describedby="media-replacement-attempts-per-item-hint"
+                    v-model.number="
+                        state.subtitle_check.max_attempts_per_target
+                    "
+                    type="number"
+                    min="1"
+                    max="10"
+                    class="h-8 max-w-[120px] text-sm"
                 />
-                <span id="media-replacement-subtitle-check-description"
-                    >Check tagged imports for missing subtitles</span
-                >
-            </label>
-        </SettingsRow>
+            </SettingsRow>
 
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-attempts-per-item"
-                    label="Attempts per item"
-                    hint="How many replacements the automatic check may request for the same item inside the cooldown window."
-                >
-                    <span />
-                </Field>
-            </template>
-            <Input
-                id="media-replacement-attempts-per-item"
-                aria-describedby="media-replacement-attempts-per-item-hint"
-                v-model.number="state.subtitle_check.max_attempts_per_target"
-                type="number"
-                min="1"
-                max="10"
-                class="h-8 max-w-[120px] text-sm"
-            />
-        </SettingsRow>
-
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-cooldown-hours"
-                    label="Cooldown (hours)"
-                    hint="Window over which the attempts-per-item limit is counted."
-                >
-                    <span />
-                </Field>
-            </template>
-            <Input
-                id="media-replacement-cooldown-hours"
-                aria-describedby="media-replacement-cooldown-hours-hint"
-                v-model.number="state.subtitle_check.cooldown_hours"
-                type="number"
-                min="1"
-                max="720"
-                class="h-8 max-w-[120px] text-sm"
-            />
-        </SettingsRow>
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-cooldown-hours"
+                        label="Cooldown (hours)"
+                        hint="Window over which the attempts-per-item limit is counted."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <Input
+                    id="media-replacement-cooldown-hours"
+                    aria-describedby="media-replacement-cooldown-hours-hint"
+                    v-model.number="state.subtitle_check.cooldown_hours"
+                    type="number"
+                    min="1"
+                    max="720"
+                    class="h-8 max-w-[120px] text-sm"
+                />
+            </SettingsRow>
+        </SettingsGrid>
 
         <Separator />
         <div>
@@ -325,99 +329,105 @@ function setScopeLanguages(scope: Scope, value: string): void {
             </p>
         </div>
 
-        <SettingsRow v-for="field in subtitleAuditFields" :key="field.key">
-            <template #label>
-                <Field
-                    :for="`media-replacement-subtitle-audit-${field.key}`"
-                    :label="field.label"
-                    :hint="field.hint"
-                >
-                    <span />
-                </Field>
-            </template>
-            <div class="space-y-1">
-                <Input
-                    :id="`media-replacement-subtitle-audit-${field.key}`"
-                    :aria-describedby="`media-replacement-subtitle-audit-${field.key}-hint`"
-                    v-model.number="state.subtitle_audit[field.key]"
-                    type="number"
-                    :min="field.min"
-                    :max="field.max"
-                    class="h-8 max-w-[120px] text-sm"
-                />
-                <p
-                    v-if="
-                        field.key === 'watchdog_delay_seconds' &&
-                        watchdogDelayClamped
-                    "
-                    class="text-xs text-warning"
-                    data-subtitle-audit-watchdog-effective
-                >
-                    The saved delay is not past the request time limit, so the
-                    watchdog runs after
-                    {{ effectiveWatchdogDelaySeconds }} s.
-                </p>
-                <InputError
-                    :message="
-                        errors[`media_replacement.subtitle_audit.${field.key}`]
-                    "
-                />
-            </div>
-        </SettingsRow>
+        <SettingsGrid>
+            <SettingsRow v-for="field in subtitleAuditFields" :key="field.key">
+                <template #label>
+                    <Field
+                        :for="`media-replacement-subtitle-audit-${field.key}`"
+                        :label="field.label"
+                        :hint="field.hint"
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <div class="space-y-1">
+                    <Input
+                        :id="`media-replacement-subtitle-audit-${field.key}`"
+                        :aria-describedby="`media-replacement-subtitle-audit-${field.key}-hint`"
+                        v-model.number="state.subtitle_audit[field.key]"
+                        type="number"
+                        :min="field.min"
+                        :max="field.max"
+                        class="h-8 max-w-[120px] text-sm"
+                    />
+                    <p
+                        v-if="
+                            field.key === 'watchdog_delay_seconds' &&
+                            watchdogDelayClamped
+                        "
+                        class="text-xs text-warning"
+                        data-subtitle-audit-watchdog-effective
+                    >
+                        The saved delay is not past the request time limit, so
+                        the watchdog runs after
+                        {{ effectiveWatchdogDelaySeconds }} s.
+                    </p>
+                    <InputError
+                        :message="
+                            errors[
+                                `media_replacement.subtitle_audit.${field.key}`
+                            ]
+                        "
+                    />
+                </div>
+            </SettingsRow>
+        </SettingsGrid>
 
         <Separator />
 
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-languages"
-                    label="Preferred subtitle languages"
-                    hint="Global comma-separated list of required subtitle languages. Scopes inherit this unless overridden."
-                >
-                    <span />
-                </Field>
-            </template>
-            <Input
-                id="media-replacement-languages"
-                aria-describedby="media-replacement-languages-hint"
-                :model-value="languagesToText(state.global_languages)"
-                type="text"
-                placeholder="English, Swedish"
-                class="h-8 max-w-[320px] text-sm"
-                @update:model-value="setGlobalLanguages(String($event))"
-            />
-        </SettingsRow>
-
-        <SettingsRow>
-            <template #label>
-                <Field
-                    for="media-replacement-season-pack-policy"
-                    label="Season-pack policy"
-                    hint="Controls whether a season pack may replace an individual episode, and whether it forces approval."
-                >
-                    <span />
-                </Field>
-            </template>
-            <Select v-model="state.season_pack_policy">
-                <SelectTrigger
-                    id="media-replacement-season-pack-policy"
-                    aria-describedby="media-replacement-season-pack-policy-hint"
-                    aria-labelledby="media-replacement-season-pack-policy-label media-replacement-season-pack-policy"
-                    class="h-8 max-w-[320px] text-sm"
-                >
-                    <SelectValue placeholder="Select a policy" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem
-                        v-for="policy in seasonPackPolicies"
-                        :key="policy.value"
-                        :value="policy.value"
+        <SettingsGrid>
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-languages"
+                        label="Preferred subtitle languages"
+                        hint="Global comma-separated list of required subtitle languages. Scopes inherit this unless overridden."
                     >
-                        {{ policy.label }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-        </SettingsRow>
+                        <span />
+                    </Field>
+                </template>
+                <Input
+                    id="media-replacement-languages"
+                    aria-describedby="media-replacement-languages-hint"
+                    :model-value="languagesToText(state.global_languages)"
+                    type="text"
+                    placeholder="English, Swedish"
+                    class="h-8 max-w-[320px] text-sm"
+                    @update:model-value="setGlobalLanguages(String($event))"
+                />
+            </SettingsRow>
+
+            <SettingsRow>
+                <template #label>
+                    <Field
+                        for="media-replacement-season-pack-policy"
+                        label="Season-pack policy"
+                        hint="Controls whether a season pack may replace an individual episode, and whether it forces approval."
+                    >
+                        <span />
+                    </Field>
+                </template>
+                <Select v-model="state.season_pack_policy">
+                    <SelectTrigger
+                        id="media-replacement-season-pack-policy"
+                        aria-describedby="media-replacement-season-pack-policy-hint"
+                        aria-labelledby="media-replacement-season-pack-policy-label media-replacement-season-pack-policy"
+                        class="h-8 max-w-[320px] text-sm"
+                    >
+                        <SelectValue placeholder="Select a policy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem
+                            v-for="policy in seasonPackPolicies"
+                            :key="policy.value"
+                            :value="policy.value"
+                        >
+                            {{ policy.label }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+            </SettingsRow>
+        </SettingsGrid>
 
         <template v-for="scope in scopes" :key="scope.key">
             <Separator />

@@ -6,7 +6,13 @@ import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkCont
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
 import InputError from '@/components/InputError.vue';
-import { Field, Pill, SettingsRow, SvcChip } from '@/components/mm';
+import {
+    Field,
+    Pill,
+    SettingsGrid,
+    SettingsRow,
+    SvcChip,
+} from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,7 +91,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
             v-slot="{ errors, processing }"
             class="rounded-xl border border-border bg-card p-6"
         >
-            <div class="flex flex-col gap-5">
+            <SettingsGrid>
                 <SettingsRow>
                     <template #label>
                         <Field
@@ -111,7 +117,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     </div>
                 </SettingsRow>
 
-                <Separator />
+                <Separator class="col-span-full xl:hidden" />
 
                 <SettingsRow>
                     <template #label>
@@ -160,7 +166,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                     </div>
                 </SettingsRow>
 
-                <div class="flex justify-end pt-2">
+                <div class="col-span-full flex justify-end pt-2">
                     <Button
                         size="sm"
                         type="submit"
@@ -171,7 +177,7 @@ async function unlinkEmby(link: EmbyLink): Promise<void> {
                         Save
                     </Button>
                 </div>
-            </div>
+            </SettingsGrid>
         </Form>
 
         <div>

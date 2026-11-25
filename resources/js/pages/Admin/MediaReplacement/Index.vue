@@ -40,7 +40,10 @@ defineOptions({
 <template>
     <Head title="Media Replacement" />
 
-    <div class="flex max-w-3xl flex-col gap-4 p-5">
+    <div
+        class="flex max-w-3xl flex-col gap-4 p-5 xl:max-w-none"
+        data-media-replacement-settings-page
+    >
         <!-- Hero -->
         <div>
             <div class="mb-1.5 text-[13px] text-muted-foreground">
