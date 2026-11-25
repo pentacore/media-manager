@@ -9,7 +9,7 @@ import type { ServiceConnection } from './ServiceConnection';
 import type { User } from './User';
 import type { WebhookEvent } from './WebhookEvent';
 
-export type ActivityLog = {
+export type ActivityLog<T = unknown> = {
   id: number;
   user_id: number | null;
   service_connection_id: number | null;
