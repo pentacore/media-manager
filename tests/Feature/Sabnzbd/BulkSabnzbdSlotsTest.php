@@ -253,6 +253,7 @@ test('a malformed nzo_id is refused and nothing reaches SABnzbd', function (stri
 })->with([
     'parameter smuggling' => ['SABnzbd_nzo_aaa&mode=shutdown'],
     'not an nzo id' => ['../../etc'],
+    'a uuid with smuggled parameters' => ['6e802af1-4897-450d-8efe-80aee6fd927f&mode=shutdown'],
     'empty' => [''],
 ]);
 
@@ -265,8 +266,22 @@ test('the nzo_id rule refuses a trailing newline on its own', function (string $
     expect(Validator::make(['ids' => [$nzoId], 'action' => 'pause'], $rules)->passes())->toBe($passes);
 })->with([
     'a plain nzo_id' => ['SABnzbd_nzo_aaa', true],
+    'a uuid nzo_id' => ['6e802af1-4897-450d-8efe-80aee6fd927f', true],
     'a trailing newline' => ["SABnzbd_nzo_aaa\n", false],
+    'a uuid with a trailing newline' => ["6e802af1-4897-450d-8efe-80aee6fd927f\n", false],
 ]);
+
+// Newer SABnzbd builds hand out bare UUIDs as nzo_ids instead of the
+// `SABnzbd_nzo_` tempfile names.
+test('a bulk delete accepts uuid nzo_ids', function (): void {
+    fakeSabnzbdBulk();
+    $ids = ['6e802af1-4897-450d-8efe-80aee6fd927f', 'ed27e720-34f4-4180-8495-098e5b2cdce4'];
+
+    $this->actingAs($this->admin)
+        ->postJson(route('sabnzbd.queue.bulk'), ['ids' => $ids, 'action' => 'delete'])
+        ->assertOk()
+        ->assertJsonPath('toast.message', '2 deleted');
+});
 
 test('an invalid bulk payload is refused before SABnzbd is called', function (array $ids, string $action): void {
     fakeSabnzbdBulk();

@@ -139,7 +139,7 @@ test('a smuggled nzo_id is refused before SABnzbd is called', function (string $
     // treats a value that breaks the constraint.
     $validUrl = route($routeName, ['nzoId' => 'SABnzbd_nzo_placeholder']);
 
-    foreach (['SABnzbd_nzo_x%26mode%3Dshutdown', 'NZO-9', 'SABnzbd_nzo_'] as $forgedId) {
+    foreach (['SABnzbd_nzo_x%26mode%3Dshutdown', 'NZO-9', 'SABnzbd_nzo_', '6e802af1-4897-450d-8efe-80aee6fd927f%26mode%3Dshutdown', '6e802af1-4897'] as $forgedId) {
         $this->actingAs($this->admin)
             ->call($method, str_replace('SABnzbd_nzo_placeholder', $forgedId, $validUrl), ['priority' => 1, 'with_files' => false])
             ->assertNotFound();
@@ -154,6 +154,15 @@ test('a smuggled nzo_id is refused before SABnzbd is called', function (string $
     'slot delete' => ['DELETE', 'sabnzbd.queue.slot.delete'],
     'slot priority' => ['PATCH', 'sabnzbd.queue.slot.priority'],
 ]);
+
+test('a uuid nzo_id reaches the single slot delete route', function (): void {
+    sabnzbdAdminAccepts();
+
+    $this->actingAs($this->admin)
+        ->from(route('sabnzbd.queue.index'))
+        ->delete(route('sabnzbd.queue.slot.delete', ['nzoId' => '6e802af1-4897-450d-8efe-80aee6fd927f']))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+});
 
 test('deleting a queue slot is audited for the member who did it', function (): void {
     sabnzbdAdminAccepts();

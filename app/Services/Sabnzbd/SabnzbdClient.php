@@ -27,11 +27,12 @@ use Throwable;
 class SabnzbdClient
 {
     /**
-     * SABnzbd job ids: `SABnzbd_nzo_` plus a tempfile-style suffix. Every
-     * route taking an nzo_id is constrained by this so nothing else can ride
-     * into the API query string.
+     * SABnzbd job ids: `SABnzbd_nzo_` plus a tempfile-style suffix, or a bare
+     * UUID (what newer SABnzbd builds hand out). Every route taking an nzo_id
+     * is constrained by this so nothing else can ride into the API query
+     * string. Grouped, so a caller can anchor it with `^…$`.
      */
-    public const string NZO_ID_PATTERN = 'SABnzbd_nzo_[A-Za-z0-9_]{1,64}';
+    public const string NZO_ID_PATTERN = '(?:SABnzbd_nzo_[A-Za-z0-9_]{1,64}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})';
 
     public function __construct(
         protected ServiceConnection $connection,
