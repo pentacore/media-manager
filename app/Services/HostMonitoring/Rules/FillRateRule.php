@@ -10,6 +10,7 @@ use App\Models\ServerFilesystemSample;
 use App\Models\ServerMetricSample;
 use App\Services\HostMonitoring\AgentReport;
 use App\Services\HostMonitoring\IgnoredMounts;
+use App\Services\HostMonitoring\SampleClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Number;
 
@@ -72,7 +73,7 @@ final readonly class FillRateRule implements ReportRule
             ->where('server_id', $server->id)
             ->where('resolution', ServerMetricSample::MINUTE)
             ->whereIn('mount', $mounts)
-            ->where('recorded_at', '>=', $receivedAt->subMinutes((int) config('mediamanager.monitoring.fill_rate.window_minutes')))
+            ->where('recorded_at', '>=', SampleClock::bind($receivedAt->subMinutes((int) config('mediamanager.monitoring.fill_rate.window_minutes'))))
             ->oldest('recorded_at')
             ->get(['mount', 'recorded_at', 'available_bytes']);
         $samplesByMount = [];

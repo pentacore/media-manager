@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\ServerFilesystemSampleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
@@ -61,6 +62,25 @@ class ServerFilesystemSample extends Model
         return [
             'recorded_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * `recorded_at` is a `timestamptz`: write it with its offset, so Postgres does not read the app-timezone wall clock
+     * in the session's UTC (see SampleClock).
+     */
+    #[Override]
+    public function getDateFormat(): string
+    {
+        return 'Y-m-d H:i:sP';
+    }
+
+    /**
+     * Postgres answers a `timestamptz` in the session's UTC; hand it out on the app timezone like every other date.
+     */
+    #[Override]
+    protected function asDateTime($value): CarbonInterface
+    {
+        return parent::asDateTime($value)->setTimezone((string) config('app.timezone'));
     }
 
     /**

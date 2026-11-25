@@ -8,6 +8,7 @@ use App\Enums\IncidentSeverity;
 use App\Models\Server;
 use App\Models\ServerMetricSample;
 use App\Services\HostMonitoring\AgentReport;
+use App\Services\HostMonitoring\SampleClock;
 use Illuminate\Support\Number;
 
 /**
@@ -48,7 +49,7 @@ final readonly class MemoryPressureRule implements ReportRule
         $samples = ServerMetricSample::query()
             ->where('server_id', $server->id)
             ->where('resolution', ServerMetricSample::MINUTE)
-            ->where('recorded_at', '>=', $agentReport->receivedAt->subMinutes($windowMinutes))
+            ->where('recorded_at', '>=', SampleClock::bind($agentReport->receivedAt->subMinutes($windowMinutes)))
             ->where('memory_total_bytes', '>', 0)
             ->get(['memory_used_bytes', 'memory_total_bytes']);
 

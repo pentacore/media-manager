@@ -16,8 +16,8 @@ use InvalidArgumentException;
  * is idempotent and picks up late samples. A bucket averages whichever source rows it has: a mount with no
  * 60 s rows (unresponsive) simply contributes none.
  *
- * Samples are stored as app-timezone wall clock without a zone, so the window is computed on that wall clock too
- * (as ServerMetricRepository does), not on UTC.
+ * Samples are instants (see SampleClock), so the window and the buckets are instants too: the two 02:00–03:00 hours
+ * of a DST fall-back night roll up into two buckets.
  */
 final readonly class ServerMetricRollup
 {
@@ -40,30 +40,19 @@ final readonly class ServerMetricRollup
             sprintf('Cannot roll up to a %d s resolution; expected 300 or 3600.', $targetResolution),
         );
 
-        $to = $this->floorToBucket(now()->toImmutable(), $targetResolution);
+        $to = SampleClock::floor(now(), $targetResolution);
         $from = $to->subHours($tier['lookbackHours']);
 
         return DB::transaction(fn (): int => $this->rollupMetrics($targetResolution, $tier['source'], $from, $to)
             + $this->rollupFilesystems($targetResolution, $tier['source'], $from, $to));
     }
 
-    /**
-     * Floors the app-timezone wall clock to the bucket, reading it as UTC the way Postgres reads a timestamp without a
-     * zone. The `date_bin` origin (2000-01-01) is a multiple of both bucket sizes from the epoch, so this matches it.
-     */
-    private function floorToBucket(CarbonImmutable $moment, int $seconds): CarbonImmutable
-    {
-        $wallClock = CarbonImmutable::parse($moment->toDateTimeString(), 'UTC');
-
-        return $wallClock->subSeconds($wallClock->getTimestamp() % $seconds);
-    }
-
     private function rollupMetrics(int $target, int $source, CarbonImmutable $from, CarbonImmutable $to): int
     {
-        return DB::affectingStatement(
+        return DB::affectingStatement(sprintf(
             <<<'SQL'
                 INSERT INTO server_metric_samples (server_id, resolution, recorded_at, cpu_percent, load1, memory_used_bytes, memory_total_bytes, swap_used_bytes, swap_total_bytes)
-                SELECT server_id, CAST(? AS smallint), date_bin(make_interval(secs => CAST(? AS integer)), recorded_at, TIMESTAMP '2000-01-01') AS bucket,
+                SELECT server_id, CAST(? AS smallint), %s AS bucket,
                        avg(cpu_percent), avg(load1), avg(memory_used_bytes)::bigint, max(memory_total_bytes),
                        avg(swap_used_bytes)::bigint, max(swap_total_bytes)
                 FROM server_metric_samples
@@ -77,16 +66,18 @@ final readonly class ServerMetricRollup
                     swap_used_bytes = EXCLUDED.swap_used_bytes,
                     swap_total_bytes = EXCLUDED.swap_total_bytes
                 SQL,
-            [$target, $target, $source, $from->toDateTimeString(), $to->toDateTimeString()],
+            SampleClock::BUCKET,
+        ),
+            [$target, $target, SampleClock::bind(SampleClock::origin()), $source, SampleClock::bind($from), SampleClock::bind($to)],
         );
     }
 
     private function rollupFilesystems(int $target, int $source, CarbonImmutable $from, CarbonImmutable $to): int
     {
-        return DB::affectingStatement(
+        return DB::affectingStatement(sprintf(
             <<<'SQL'
                 INSERT INTO server_filesystem_samples (server_id, resolution, recorded_at, mount, fstype, total_bytes, used_bytes, available_bytes)
-                SELECT server_id, CAST(? AS smallint), date_bin(make_interval(secs => CAST(? AS integer)), recorded_at, TIMESTAMP '2000-01-01') AS bucket,
+                SELECT server_id, CAST(? AS smallint), %s AS bucket,
                        mount, max(fstype), max(total_bytes), avg(used_bytes)::bigint, avg(available_bytes)::bigint
                 FROM server_filesystem_samples
                 WHERE resolution = ? AND recorded_at >= ? AND recorded_at < ?
@@ -97,7 +88,9 @@ final readonly class ServerMetricRollup
                     used_bytes = EXCLUDED.used_bytes,
                     available_bytes = EXCLUDED.available_bytes
                 SQL,
-            [$target, $target, $source, $from->toDateTimeString(), $to->toDateTimeString()],
+            SampleClock::BUCKET,
+        ),
+            [$target, $target, SampleClock::bind(SampleClock::origin()), $source, SampleClock::bind($from), SampleClock::bind($to)],
         );
     }
 }

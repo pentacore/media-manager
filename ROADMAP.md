@@ -75,8 +75,13 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
           it gets slow.
 - **Host monitoring minors**:
     - Platform:
-        - The DST fall-back hour overwrites itself (samples are stored as
-          zoneless app-timezone wall clock).
+        - The 30-day server chart's 6 h buckets start at 01, 07, 13 and 19
+          during summer time, because buckets are cut on instants from a
+          winter-time origin. Align them to local midnight if that matters.
+- **Watch heatmap timezone**: `StatisticsRepository::watchHeatmap()` reads
+  `emby_activities.created_at` as UTC and shifts it to the app timezone, but
+  Eloquent stores it as app-timezone wall clock, so with a non-UTC
+  `APP_TIMEZONE` the heatmap looks shifted by the UTC offset. Check and fix.
 - **AI batch requests (shelved 2026-11-24).** Provider batch APIs (about 50% off,
   results within 24 h) don't pay off yet: AI spend has been about $1/month since
   October, so batching everything that can wait saves at most about $0.50/month.

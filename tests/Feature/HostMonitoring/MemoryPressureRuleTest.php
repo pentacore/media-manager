@@ -59,6 +59,18 @@ test('memory low for the whole window opens an incident by the configured thresh
     '4% available' => [4, IncidentSeverity::Critical],
 ]);
 
+test('the window reads the stored instants on a non-UTC app timezone', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+    $this->travelTo(CarbonImmutable::parse('2026-10-22 12:00:30', 'Europe/Stockholm'));
+    $server = Server::factory()->enrolled()->create();
+    memoryRuleSamples($server, 4, 4);
+
+    memoryRuleReport($server, 4);
+
+    expect(ServerIncident::query()->open()->where('key', 'memory')->sole()->context['samples'])->toBe(5);
+});
+
 test('the title, detail and context describe the latest reading', function (): void {
     $server = Server::factory()->enrolled()->create();
     memoryRuleSamples($server, 4, 9);
