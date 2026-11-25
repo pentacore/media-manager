@@ -205,7 +205,7 @@ final readonly class CaseDraftFromUsage
      * in, and the still-stored attachments of every kept user turn and the
      * captured one, with warnings for the ones left out.
      *
-     * @return array{conversation: array{history: list<array{role: string, content: string}>, historyRows: list<MessageRow>, captured: MessageRow|null, reply: MessageRow|null}, replyMode: AiMode|null, attachments: list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int}>, warnings: list<string>}
+     * @return array{conversation: array{history: list<array{role: string, content: string}>, historyRows: list<MessageRow>, captured: MessageRow|null, reply: MessageRow|null}, replyMode: AiMode|null, attachments: list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int, url: string}>, warnings: list<string>}
      */
     private function chatTurns(AiUsageRecord $aiUsageRecord, string $prompt, bool $hadAttachments): array
     {
@@ -229,7 +229,7 @@ final readonly class CaseDraftFromUsage
         $capturedFound = 0;
 
         foreach ($turns as [$turn, $row]) {
-            $found = $this->attachmentsOf($row, $turn, $missing);
+            $found = $this->attachmentsOf($aiUsageRecord, $row, $turn, $missing);
             array_push($attachments, ...$found);
 
             if ($turn === null) {
@@ -369,12 +369,13 @@ final readonly class CaseDraftFromUsage
     }
 
     /**
-     * The chat attachments of one stored message that still have a file.
+     * The chat attachments of one stored message that still have a file,
+     * each with its admin preview through the captured usage row.
      *
      * @param  MessageRow  $message
-     * @return list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int}>
+     * @return list<array{chat_attachment_id: int, turn: int|null, name: string, mime_type: string, size: int, url: string}>
      */
-    private function attachmentsOf(object $message, ?int $turn, int &$missing): array
+    private function attachmentsOf(AiUsageRecord $aiUsageRecord, object $message, ?int $turn, int &$missing): array
     {
         $stored = $this->storedEntries($message);
 
@@ -403,6 +404,7 @@ final readonly class CaseDraftFromUsage
                 'name' => $row->original_name,
                 'mime_type' => $row->mime_type,
                 'size' => $row->size,
+                'url' => route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $row]),
             ];
         }
 

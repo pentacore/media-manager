@@ -69,12 +69,20 @@ export type BenchmarkDraftAttachment = {
     name: string;
     mime_type: string;
     size: number;
+    /** The admin preview, through the usage row the case is drafted from. */
+    url: string;
 };
 
 /** One row of a turn's attachment list in the form. */
 export type BenchmarkAttachmentEntry =
     | { kind: 'saved'; id: number; name: string; size: number; url: string }
-    | { kind: 'draft'; chatAttachmentId: number; name: string; size: number }
+    | {
+          kind: 'draft';
+          chatAttachmentId: number;
+          name: string;
+          size: number;
+          url: string;
+      }
     | { kind: 'new'; file: File; name: string; size: number };
 
 export type BenchmarkHistoryTurnForm = BenchmarkHistoryTurn & {

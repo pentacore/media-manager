@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Enums\AiTask;
 use App\Enums\AiUsageKind;
+use App\Enums\UserRole;
 use App\Models\AiUsageRecord;
 use App\Models\BenchmarkCase;
 use App\Models\BenchmarkCaseAttachment;
@@ -387,4 +388,68 @@ test('the edit page links each saved attachment to its preview', function (): vo
 
     $this->get(route('admin.benchmarks.cases.edit', $benchmarkCase))
         ->assertInertia(fn ($page) => $page->where('case.attachments.0.url', route('admin.benchmarks.cases.attachments.show', [$benchmarkCase, $image])));
+});
+
+test('a drafted chat attachment of another user can be previewed through the usage row it was captured from', function (): void {
+    [$invocationId, [$image]] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+    $log = ChatAttachment::factory()->create(['conversation_id' => $image->conversation_id, 'path' => 'chat-attachments/1/download.log', 'original_name' => 'download.log', 'mime_type' => 'text/plain']);
+    DB::table('agent_conversation_messages')->where('conversation_id', $image->conversation_id)->update(['attachments' => json_encode([
+        ['type' => 'stored-image', 'name' => null, 'path' => $image->path, 'disk' => 'local'],
+        ['type' => 'stored-document', 'name' => null, 'path' => $log->path, 'disk' => 'local'],
+    ])]);
+
+    expect($image->user_id)->not->toBe(auth()->id());
+
+    $imageResponse = $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $image]))->assertOk();
+    $logResponse = $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $log]))->assertOk();
+
+    expect($imageResponse->headers->get('Content-Disposition'))->toStartWith('inline')
+        ->and($imageResponse->headers->get('X-Content-Type-Options'))->toBe('nosniff')
+        ->and($imageResponse->streamedContent())->toBe('png-bytes')
+        ->and($logResponse->headers->get('Content-Disposition'))->toStartWith('attachment')
+        ->and($logResponse->headers->get('Content-Security-Policy'))->toContain('sandbox');
+});
+
+test('a chat file the usage row did not draft cannot be previewed through it', function (): void {
+    [$invocationId] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+    [, [$elsewhere]] = chatCaseCapturedAttachments();
+    $unattached = ChatAttachment::factory()->create(['conversation_id' => $aiUsageRecord->conversation_id, 'path' => 'chat-attachments/1/unsent.png']);
+
+    $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $elsewhere]))->assertNotFound();
+    $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $unattached]))->assertNotFound();
+});
+
+test('a drafted chat attachment is not previewed through a usage row that cannot be captured', function (): void {
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+    $aiUsageRecord->update(['is_benchmark' => true]);
+
+    $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $chatAttachment]))->assertNotFound();
+});
+
+test('a drafted chat attachment whose file is gone is a 404', function (): void {
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+    Storage::disk('local')->delete($chatAttachment->path);
+
+    $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $chatAttachment]))->assertNotFound();
+});
+
+test('members cannot preview drafted chat attachments, not even their own', function (): void {
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+    $chatAttachment->user->update(['role' => UserRole::Member]);
+    $this->actingAs($chatAttachment->user->refresh());
+
+    $this->get(route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $chatAttachment]))->assertForbidden();
+});
+
+test('the create page links each drafted attachment to its preview', function (): void {
+    [$invocationId, [$chatAttachment]] = chatCaseCapturedAttachments();
+    $aiUsageRecord = AiUsageRecord::query()->where('invocation_id', $invocationId)->sole();
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertInertia(fn ($page) => $page->where('draft.draft_attachments.0.url', route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $chatAttachment])));
 });
