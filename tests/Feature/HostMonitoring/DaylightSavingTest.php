@@ -128,3 +128,80 @@ test('retention prunes by the stored instant on a non-UTC clock', function (): v
 
     expect(ServerMetricSample::query()->sole()->recorded_at->toIso8601String())->toBe('2026-10-20T12:30:00+02:00');
 });
+
+/**
+ * The local hours of a series' bucket starts.
+ *
+ * @param  list<array{at: string, value: ?float}>  $points
+ * @return list<string>
+ */
+function daylightSavingHours(array $points): array
+{
+    return array_values(array_unique(array_map(
+        static fn (array $point): string => CarbonImmutable::parse($point['at'])->setTimezone('Europe/Stockholm')->format('H:i'),
+        $points,
+    )));
+}
+
+test('the 30-day chart cuts its six-hour buckets on local wall-clock hours in summer', function (): void {
+    daylightSavingStockholm();
+    $server = Server::factory()->create();
+    // 11:55 and 12:10 CEST fall either side of the local 12:00 boundary.
+    foreach (['2026-07-15 11:55:00' => 10.0, '2026-07-15 12:10:00' => 70.0] as $local => $cpu) {
+        ServerMetricSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse($local, 'Europe/Stockholm'))->create(['cpu_percent' => $cpu]);
+    }
+
+    $this->travelTo(CarbonImmutable::parse('2026-07-15 14:30:00', 'Europe/Stockholm'));
+    $cpu = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::ThirtyDays)['cpu'];
+    $values = array_filter(array_column($cpu, 'value', 'at'), static fn (?float $value): bool => $value !== null);
+
+    expect($cpu)->toHaveCount(120)
+        ->and(daylightSavingHours($cpu))->toEqualCanonicalizing(['00:00', '06:00', '12:00', '18:00'])
+        ->and(array_last($cpu)['at'])->toBe('2026-07-15T12:00:00+02:00')
+        ->and($values)->toBe(['2026-07-15T06:00:00+02:00' => 10.0, '2026-07-15T12:00:00+02:00' => 70.0]);
+});
+
+test('a six-hour bucket spans seven real hours on the fall-back night and five on the spring-forward night', function (): void {
+    daylightSavingStockholm();
+    $server = Server::factory()->create();
+    // 00:10 CEST, both 02:30s, and 05:50 CET all fall in the local 00:00–06:00 bucket; 06:10 CET does not.
+    foreach (['2026-10-24 22:10:00' => 10.0, '2026-10-25 00:30:00' => 20.0, '2026-10-25 01:30:00' => 30.0, '2026-10-25 04:50:00' => 40.0, '2026-10-25 05:10:00' => 90.0] as $utc => $cpu) {
+        ServerMetricSample::factory()->for($server)->resolution(300)->at(CarbonImmutable::parse($utc, 'UTC'))->create(['cpu_percent' => $cpu]);
+    }
+
+    $this->travelTo(CarbonImmutable::parse('2026-10-25 07:00:00', 'Europe/Stockholm'));
+    $cpu = resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::ThirtyDays)['cpu'];
+    $values = array_filter(array_column($cpu, 'value', 'at'), static fn (?float $value): bool => $value !== null);
+    $at = array_column($cpu, 'at');
+
+    expect($cpu)->toHaveCount(120)
+        ->and(array_unique($at))->toHaveCount(120)
+        ->and(daylightSavingHours($cpu))->toEqualCanonicalizing(['00:00', '06:00', '12:00', '18:00'])
+        ->and(array_slice($at, -2))->toBe(['2026-10-25T00:00:00+02:00', '2026-10-25T06:00:00+01:00'])
+        ->and($values)->toBe(['2026-10-25T00:00:00+02:00' => 25.0, '2026-10-25T06:00:00+01:00' => 90.0]);
+
+    // Spring forward: 00:00 CET to 06:00 CEST is five real hours, and no bucket starts at a time that never happened.
+    $this->travelTo(CarbonImmutable::parse('2026-03-29 07:00:00', 'Europe/Stockholm'));
+    $spring = array_column(resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::ThirtyDays)['cpu'], 'at');
+
+    expect(array_slice($spring, -2))->toBe(['2026-03-29T00:00:00+01:00', '2026-03-29T06:00:00+02:00'])
+        ->and(array_unique($spring))->toHaveCount(120);
+});
+
+test('the yearly chart keeps its 73-hour buckets on the same wall-clock grid across summer time', function (): void {
+    daylightSavingStockholm();
+    $server = Server::factory()->create();
+    ServerMetricSample::factory()->for($server)->resolution(3600)->at(CarbonImmutable::parse('2026-07-15 12:00:00', 'Europe/Stockholm'))->create();
+
+    $this->travelTo(CarbonImmutable::parse('2026-11-20 12:00:00', 'Europe/Stockholm'));
+    $at = array_column(resolve(ServerMetricRepository::class)->series($server, ServerMetricRange::OneYear)['cpu'], 'at');
+    // Each start read as wall clock: consecutive starts are 73 wall-clock hours apart, winter and summer alike.
+    $wallClock = array_map(static fn (string $start): int => CarbonImmutable::parse(
+        CarbonImmutable::parse($start)->setTimezone('Europe/Stockholm')->toDateTimeString(),
+        'UTC',
+    )->getTimestamp(), $at);
+    $steps = array_map(static fn (int $later, int $earlier): int => $later - $earlier, array_slice($wallClock, 1), array_slice($wallClock, 0, -1));
+
+    expect($at)->toHaveCount(120)
+        ->and(array_values(array_unique($steps)))->toBe([73 * 3600]);
+});
