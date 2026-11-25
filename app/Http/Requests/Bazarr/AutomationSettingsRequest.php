@@ -7,11 +7,7 @@ namespace App\Http\Requests\Bazarr;
 use App\Enums\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
-#[TypefinderOverrides([
-    'automation' => '{ enabled: boolean; reconciliation_interval_minutes: number; grace_hours: { anime: number; tv: number; movie: number }; probe_spacing_hours: number; empty_probe_threshold: number; max_cases_per_cycle: number; max_probes_per_cycle: number; max_advisor_escalations_per_cycle: number; advisor_concurrency: number; upload_max_kilobytes: number; upload_expiry_hours: number }',
-])]
 final class AutomationSettingsRequest extends FormRequest
 {
     public function authorize(): bool

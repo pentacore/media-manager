@@ -5,10 +5,93 @@
 // ───────────────────────────────────────────────────────────────────────
 
 export type UpdateAiModelsRequest = {
-  tasks: Record<string, { tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>;
+  tasks: {
+    chat: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    title: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    decision: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    decision_verifier: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    file_inspector: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    stuck_download_investigator: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    price_updater: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+    benchmark_judge: {
+      tiers: {
+        provider?: string | null;
+        model?: string | null;
+        reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+        min_pool_percent?: number | null;
+        min_pool_tokens?: number | null;
+      }[];
+    };
+  };
   failover: {
     provider?: string | null;
     model?: string | null;
   };
-  event_overrides: Array<{ task: 'decision' | 'decision_verifier'; event_key: string; tiers: Array<{ provider: string | null; model: string | null; reasoning: string | null; min_pool_percent: number | null; min_pool_tokens: number | null }> }>;
+  event_overrides: {
+    task: 'decision' | 'decision_verifier';
+    event_key: 'sonarr:Grab' | 'sonarr:Download' | 'sonarr:Rename' | 'sonarr:SeriesAdd' | 'sonarr:SeriesDelete' | 'sonarr:EpisodeFileDelete' | 'sonarr:ManualInteractionRequired' | 'sonarr:Health' | 'sonarr:HealthRestored' | 'sonarr:ApplicationUpdate' | 'radarr:Grab' | 'radarr:Download' | 'radarr:Rename' | 'radarr:MovieAdded' | 'radarr:MovieDelete' | 'radarr:MovieFileDelete' | 'radarr:ManualInteractionRequired' | 'radarr:Health' | 'radarr:HealthRestored' | 'radarr:ApplicationUpdate' | 'whisparr:Grab' | 'whisparr:Download' | 'whisparr:Rename' | 'whisparr:MovieAdded' | 'whisparr:MovieDelete' | 'whisparr:MovieFileDelete' | 'whisparr:SeriesAdd' | 'whisparr:SeriesDelete' | 'whisparr:EpisodeFileDelete' | 'whisparr:ManualInteractionRequired' | 'whisparr:Health' | 'whisparr:HealthRestored' | 'whisparr:ApplicationUpdate' | 'seerr:MEDIA_PENDING' | 'seerr:MEDIA_APPROVED' | 'seerr:MEDIA_AUTO_APPROVED' | 'seerr:MEDIA_DECLINED' | 'seerr:MEDIA_AVAILABLE' | 'seerr:MEDIA_FAILED' | 'seerr:ISSUE_CREATED' | 'seerr:ISSUE_REOPENED';
+    tiers: {
+      provider?: string | null;
+      model?: string | null;
+      reasoning?: 'provider_default' | 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+      min_pool_percent?: number | null;
+      min_pool_tokens?: number | null;
+    }[];
+  }[];
 };
