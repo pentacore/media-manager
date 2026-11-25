@@ -1,20 +1,8 @@
-import type { Ability } from '@/typefinder';
-import type { UserPreferences } from './preferences';
+import type { Ability, SharedUserResource } from '@/typefinder';
 
 export type { Ability };
 
-export type User = {
-    id: number;
-    name: string;
-    email: string;
-    avatar?: string;
-    role: { value: string } | string;
-    email_verified_at: string | null;
-    created_at: string;
-    updated_at: string;
-    preferences?: UserPreferences;
-    [key: string]: unknown;
-};
+export type User = SharedUserResource;
 
 export type Auth = {
     user: User;
