@@ -14,14 +14,6 @@ use Illuminate\Support\Str;
  */
 final readonly class SecondOpinionCase
 {
-    /**
-     * An opening or closing fence tag in any encoding fenced() neutralises:
-     * the "<" (plain, "&lt;", "&#60;", "&#x3c;" or "\u003c") is replaced and
-     * what follows it up to "untrusted_" (the "/" in any encoding, any run of
-     * backslashes, whitespace) is kept in group 1.
-     */
-    private const string FENCE_TAG = '~(?:<|&lt;?|&#0*60;?|&#x0*3c;?|\\\\*u003c)(\s*\\\\*(?:/|&#0*47;?|&#x0*2f;?|&sol;?|u002f)?\s*)untrusted_~i';
-
     private const int PAYLOAD_CHARS = 6000;
 
     private const int ACTION_PAYLOAD_CHARS = 2000;
@@ -53,13 +45,13 @@ final readonly class SecondOpinionCase
      * Everything a model or a third party could have written sits inside an
      * <untrusted_...> fence: the action details, the action payload, an
      * unverified target title, the rationale and the webhook payload.
-     * Embedded text cannot close a fence early (see fenced()).
+     * Embedded text cannot close a fence early (see UntrustedFence::neutralise()).
      */
     public function toPrompt(): string
     {
         $verified = $this->actionDescription->verified;
         $details = implode("\n", array_map(
-            fn (array $detail): string => sprintf('- %s: %s', $this->fenced($detail['label']), $this->fenced($detail['value'])),
+            fn (array $detail): string => sprintf('- %s: %s', UntrustedFence::neutralise($detail['label']), UntrustedFence::neutralise($detail['value'])),
             $this->actionDescription->details,
         ));
 
@@ -91,15 +83,15 @@ PROMPT,
             $this->actionType,
             $this->actionLabel,
             $verified
-                ? sprintf('%s (name verified by the server)', $this->fenced($this->actionDescription->title))
+                ? sprintf('%s (name verified by the server)', UntrustedFence::neutralise($this->actionDescription->title))
                 : "name NOT verified by the server; the proposer's title is in the proposed payload below",
-            $this->fenced($this->actionDescription->description),
+            UntrustedFence::neutralise($this->actionDescription->description),
             $details === '' ? '' : sprintf("<untrusted_action_details>\nDetails:\n%s\n</untrusted_action_details>", $details),
-            $verified ? '' : sprintf("Proposed title: %s\n", $this->fenced($this->actionDescription->title)),
+            $verified ? '' : sprintf("Proposed title: %s\n", UntrustedFence::neutralise($this->actionDescription->title)),
             $this->json($this->payload, self::ACTION_PAYLOAD_CHARS),
-            $this->fenced($this->rationale),
-            $this->fenced($this->sourceService),
-            $this->fenced($this->eventType ?? 'unknown'),
+            UntrustedFence::neutralise($this->rationale),
+            UntrustedFence::neutralise($this->sourceService),
+            UntrustedFence::neutralise($this->eventType ?? 'unknown'),
             $this->json($this->eventPayload, self::PAYLOAD_CHARS),
         );
     }
@@ -120,7 +112,7 @@ PROMPT,
             'effect' => $this->actionDescription->description,
             'rationale' => Str::limit($this->rationale, 1000),
             'event' => sprintf('%s %s', $this->sourceService, $this->eventType ?? 'unknown'),
-            'payload' => $this->fenced(Str::limit($payload === false ? '{}' : $payload, self::CLASSIFICATION_PAYLOAD_CHARS)),
+            'payload' => UntrustedFence::neutralise(Str::limit($payload === false ? '{}' : $payload, self::CLASSIFICATION_PAYLOAD_CHARS)),
         ];
     }
 
@@ -134,19 +126,6 @@ PROMPT,
     {
         $json = json_encode($value, JSON_PRETTY_PRINT | self::JSON_FLAGS);
 
-        return $json === false ? '{}' : $this->fenced(Str::limit($json, $limit, "\n… (truncated)"));
-    }
-
-    /**
-     * Neutralise any opening or closing <untrusted_...> tag in embedded text,
-     * so it can neither end its own fence early nor open a fake one. The "<"
-     * and "/" may be written plainly, JSON-escaped ("<\/", any run of
-     * backslashes, "\u003c", "\u002f") or as an HTML entity ("&lt;", "&#60;",
-     * "&#x3c;", "&sol;", with or without the semicolon), since a model reads
-     * every one of them as the tag.
-     */
-    private function fenced(string $text): string
-    {
-        return (string) preg_replace(self::FENCE_TAG, '[$1untrusted_', $text);
+        return $json === false ? '{}' : UntrustedFence::neutralise(Str::limit($json, $limit, "\n… (truncated)"));
     }
 }

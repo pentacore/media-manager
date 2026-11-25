@@ -22,12 +22,14 @@ final class DecisionPrompt
     public static function build(string $service, string $eventType, array $payload): string
     {
         $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-        $json = $json === false ? '{}' : Str::limit($json, self::MAX_PAYLOAD_CHARS, "\n… (payload truncated)");
+        $json = $json === false ? '{}' : UntrustedFence::neutralise(Str::limit($json, self::MAX_PAYLOAD_CHARS, "\n… (payload truncated)"));
 
         // Payload text (titles, request notes, release names) is authored by
         // third parties. Delimit it and tell the model it is data, not
         // instructions — defense in depth on top of the forced-approval and
-        // subject-binding checks in ProposeActionTool.
+        // subject-binding checks in ProposeActionTool. A fence tag inside the
+        // payload (in any encoding) is neutralised so it cannot end the fence
+        // early or open a fake one.
         return <<<PROMPT
 A webhook event was received and needs your decision.
 
@@ -92,7 +94,9 @@ PROMPT;
 
     /**
      * The service, event type and payload text of a prompt built by build();
-     * null for any other text.
+     * null for any other text. The payload text is what the model saw: a
+     * fence tag the payload held comes back neutralised, and building a
+     * prompt from it gives the same prompt again.
      *
      * @return array{service: string, event_type: string, payload_json: string}|null
      */

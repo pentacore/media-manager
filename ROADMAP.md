@@ -61,11 +61,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
-- **Decision prompt fence**: `DecisionPrompt::build()` leaves fence tags in the
-  webhook payload as they are, so a payload string holding
-  `</untrusted_webhook_payload>` (plain or entity-encoded) closes the fence early.
-  Neutralise it as `SecondOpinionCase` does, and keep `DecisionPrompt::parse()`
-  (benchmark capture) reading the payload back.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Chat cases:
         - Preview a drafted attachment in the case form before it is saved: only
