@@ -4,12 +4,13 @@
 // https://github.com/pentacore/laravel-typefinder
 // ───────────────────────────────────────────────────────────────────────
 
+import type { Ability } from './enums';
 import type { SharedUserResource } from './resources';
 
 export type SharedPageProps = {
   errors: Record<string, string>;
   name: string;
-  auth: { user: SharedUserResource | null; can: Record<string, boolean> };
+  auth: { user: SharedUserResource | null; can: Partial<Record<Ability, boolean>> };
   ai: { enabled: boolean; max_attachments: number };
   integrations: { seerr: boolean; prowlarr: boolean; whisparr: boolean };
   nav: { pendingActions: number; pendingActionsVersion: number; activeSessions: number; unreadNotifications: number; libraryIntervention: number; sabnzbdDownloads: { queued: number; completed: number }; replacementAttention: number; wantedMissing: number };
