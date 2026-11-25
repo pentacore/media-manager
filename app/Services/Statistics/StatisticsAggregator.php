@@ -101,8 +101,8 @@ class StatisticsAggregator
 
             $plays = DB::table('emby_activities')
                 ->where('action', 'played')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw('date_trunc(?, created_at) AS bucket, media_type, COUNT(*) AS count', [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, media_type, COUNT(*) AS count', $this->bucketBindings($period))
                 ->groupBy('bucket', 'media_type')
                 ->get();
 
@@ -118,8 +118,8 @@ class StatisticsAggregator
 
             $finishes = DB::table('emby_activities')
                 ->where('action', 'finished')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw('date_trunc(?, created_at) AS bucket, media_type, COUNT(*) AS count', [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, media_type, COUNT(*) AS count', $this->bucketBindings($period))
                 ->groupBy('bucket', 'media_type')
                 ->get();
 
@@ -136,8 +136,8 @@ class StatisticsAggregator
             $seconds = DB::table('emby_activities')
                 ->whereIn('action', ['stopped', 'finished'])
                 ->whereNotNull('play_position')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw('date_trunc(?, created_at) AS bucket, emby_user_link_id, COUNT(*) AS count, SUM(play_position) / '.self::EMBY_TICKS_PER_SECOND.' AS seconds', [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, emby_user_link_id, COUNT(*) AS count, SUM(play_position) / '.self::EMBY_TICKS_PER_SECOND.' AS seconds', $this->bucketBindings($period))
                 ->groupBy('bucket', 'emby_user_link_id')
                 ->get();
 
@@ -154,8 +154,8 @@ class StatisticsAggregator
 
             $userPlays = DB::table('emby_activities')
                 ->where('action', 'played')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw('date_trunc(?, created_at) AS bucket, emby_user_link_id, COUNT(*) AS count', [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, emby_user_link_id, COUNT(*) AS count', $this->bucketBindings($period))
                 ->groupBy('bucket', 'emby_user_link_id')
                 ->get();
 
@@ -176,6 +176,9 @@ class StatisticsAggregator
         foreach (['hour', 'day'] as $period) {
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
 
+            // arr_added_at is the one UTC wall clock here: the indexers store
+            // the *arr "added" ISO string (with Z) unconverted, so it buckets
+            // as-is against the UTC window.
             foreach (['movie' => 'indexed_movies', 'series' => 'indexed_series'] as $kind => $table) {
                 $rows = DB::table($table)
                     ->whereNotNull('arr_added_at')
@@ -203,8 +206,8 @@ class StatisticsAggregator
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
 
             $rows = DB::table('action_requests')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw("date_trunc(?, created_at) AS bucket, status, type, COALESCE(origin, 'system') AS origin, COUNT(*) AS count", [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw("date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, status, type, COALESCE(origin, 'system') AS origin, COUNT(*) AS count", $this->bucketBindings($period))
                 ->groupBy('bucket', 'status', 'type', 'origin')
                 ->get();
 
@@ -226,8 +229,8 @@ class StatisticsAggregator
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
 
             $rows = DB::table('agent_decisions')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
-                ->selectRaw('date_trunc(?, created_at) AS bucket, status, service, COUNT(*) AS count, COALESCE(SUM(actions_count), 0) AS sum', [$period])
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket, status, service, COUNT(*) AS count, COALESCE(SUM(actions_count), 0) AS sum', $this->bucketBindings($period))
                 ->groupBy('bucket', 'status', 'service')
                 ->get();
 
@@ -258,15 +261,15 @@ class StatisticsAggregator
                     $join->on('ai_usage_records.provider', '=', 'ai_model_prices.provider')
                         ->whereRaw($baseModel.' = ai_model_prices.model');
                 })
-                ->where('ai_usage_records.created_at', '>=', $lo)->where('ai_usage_records.created_at', '<', $hi)
+                ->where('ai_usage_records.created_at', '>=', $this->wallClock($lo))->where('ai_usage_records.created_at', '<', $this->wallClock($hi))
                 ->selectRaw("
-                    date_trunc(?, ai_usage_records.created_at) AS bucket,
+                    date_trunc(?, ai_usage_records.created_at AT TIME ZONE ?, ?) AS bucket,
                     ai_usage_records.provider,
                     {$baseModel} AS base_model,
                     ai_usage_records.agent_class,
                     COUNT(*) AS count,
                     COALESCE(SUM({$cost}), 0) AS cost
-                ", [$period])
+                ", $this->bucketBindings($period))
                 ->groupByRaw('bucket, ai_usage_records.provider, base_model, ai_usage_records.agent_class')
                 ->get();
 
@@ -286,14 +289,14 @@ class StatisticsAggregator
             }
 
             $tokens = DB::table('ai_usage_records')
-                ->where('created_at', '>=', $lo)->where('created_at', '<', $hi)
+                ->where('created_at', '>=', $this->wallClock($lo))->where('created_at', '<', $this->wallClock($hi))
                 ->selectRaw("
-                    date_trunc(?, created_at) AS bucket,
+                    date_trunc(?, created_at AT TIME ZONE ?, ?) AS bucket,
                     provider,
                     {$baseModel} AS base_model,
                     COUNT(*) AS count,
                     COALESCE(SUM({$tokenSum}), 0) AS sum
-                ", [$period])
+                ", $this->bucketBindings($period))
                 ->groupByRaw('bucket, provider, base_model')
                 ->get();
 
@@ -319,8 +322,8 @@ class StatisticsAggregator
 
             $latency = DB::table('service_metrics')
                 ->whereNotNull('latency_ms')
-                ->where('recorded_at', '>=', $lo)->where('recorded_at', '<', $hi)
-                ->selectRaw('date_trunc(?, recorded_at) AS bucket, service_connection_id, COUNT(*) AS count, SUM(latency_ms) AS sum, MIN(latency_ms) AS min, MAX(latency_ms) AS max', [$period])
+                ->where('recorded_at', '>=', $this->wallClock($lo))->where('recorded_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, recorded_at AT TIME ZONE ?, ?) AS bucket, service_connection_id, COUNT(*) AS count, SUM(latency_ms) AS sum, MIN(latency_ms) AS min, MAX(latency_ms) AS max', $this->bucketBindings($period))
                 ->groupBy('bucket', 'service_connection_id')
                 ->get();
 
@@ -338,8 +341,8 @@ class StatisticsAggregator
             }
 
             $uptime = DB::table('service_metrics')
-                ->where('recorded_at', '>=', $lo)->where('recorded_at', '<', $hi)
-                ->selectRaw('date_trunc(?, recorded_at) AS bucket, service_connection_id, COUNT(*) AS count, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS sum', [$period, $healthy])
+                ->where('recorded_at', '>=', $this->wallClock($lo))->where('recorded_at', '<', $this->wallClock($hi))
+                ->selectRaw('date_trunc(?, recorded_at AT TIME ZONE ?, ?) AS bucket, service_connection_id, COUNT(*) AS count, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS sum', [...$this->bucketBindings($period), $healthy])
                 ->groupBy('bucket', 'service_connection_id')
                 ->get();
 
@@ -354,6 +357,29 @@ class StatisticsAggregator
                 );
             }
         }
+    }
+
+    /**
+     * Bindings for `date_trunc(?, <column> AT TIME ZONE ?, ?)`. The event
+     * columns are zoneless timestamps holding the app-timezone wall clock
+     * Eloquent writes, so each value is first read as an instant on that
+     * timezone and then truncated on the UTC clock the rollup buckets use.
+     *
+     * @return array{string, string, string}
+     */
+    private function bucketBindings(string $period): array
+    {
+        return [$period, (string) config('app.timezone', 'UTC'), 'UTC'];
+    }
+
+    /**
+     * A UTC window bound expressed on the app-timezone wall clock, so it
+     * compares like for like against the zoneless event columns (the query
+     * builder binds a date without converting its timezone).
+     */
+    private function wallClock(CarbonImmutable $instant): CarbonImmutable
+    {
+        return $instant->setTimezone((string) config('app.timezone', 'UTC'));
     }
 
     private function bucket(mixed $raw): CarbonImmutable

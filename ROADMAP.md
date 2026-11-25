@@ -86,6 +86,16 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
+- **Statistics timezone minors**, found while fixing the watch heatmap's timezone:
+    - `indexed_movies.arr_added_at` and `indexed_series.arr_added_at` hold the
+      UTC wall clock (the indexers store the *arr "added" string unconverted),
+      while every other zoneless column holds the app-timezone wall clock. With a
+      non-UTC `APP_TIMEZONE`, reading them through Eloquent shifts them by the
+      offset. Store them on the app clock (with a data migration) or document the
+      exception on the models.
+    - Rollups that `statistics:aggregate` wrote on a non-UTC `APP_TIMEZONE`
+      before the fix sit one offset late. Re-run `statistics:backfill` there once
+      (it overwrites the buckets).
 
 ## Held dependency updates
 

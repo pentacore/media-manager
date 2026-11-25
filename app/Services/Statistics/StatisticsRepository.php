@@ -215,16 +215,15 @@ class StatisticsRepository
     /**
      * 7×24 matrix of play counts indexed by ISO weekday (1=Mon .. 7=Sun)
      * then hour-of-day (0..23), in the application timezone. Computed live
-     * from `emby_activities` (played actions only); `created_at` is stored
-     * as UTC and shifted into the app timezone before extraction so the
-     * heatmap lines up with how the operator experiences the clock.
+     * from `emby_activities` (played actions only). `created_at` is a
+     * zoneless timestamp holding the app-timezone wall clock Eloquent
+     * writes, so the weekday and hour are read straight off it.
      *
      * @return array<int, array<int, int>>
      */
     public function watchHeatmap(TimeWindow $timeWindow): array
     {
         $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
-        $appTimezone = config('app.timezone', 'UTC');
 
         $matrix = [];
 
@@ -232,18 +231,10 @@ class StatisticsRepository
             $matrix[$weekday] = array_fill(0, 24, 0);
         }
 
-        $localTimestamp = "created_at AT TIME ZONE 'UTC' AT TIME ZONE ?";
-
-        // Group by the SELECT ordinals so the timezone-shifted expression
-        // is evaluated once per row rather than re-bound in GROUP BY (which
-        // Postgres treats as a distinct parameter and rejects).
         $rows = DB::table('emby_activities')
             ->where('action', 'played')
             ->where('created_at', '>=', $since)
-            ->selectRaw(
-                sprintf('EXTRACT(isodow FROM %s)::int AS weekday, EXTRACT(hour FROM %s)::int AS hour, COUNT(*) AS plays', $localTimestamp, $localTimestamp),
-                [$appTimezone, $appTimezone],
-            )
+            ->selectRaw('EXTRACT(isodow FROM created_at)::int AS weekday, EXTRACT(hour FROM created_at)::int AS hour, COUNT(*) AS plays')
             ->groupByRaw('1, 2')
             ->get();
 

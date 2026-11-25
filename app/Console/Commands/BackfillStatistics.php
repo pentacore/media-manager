@@ -54,6 +54,8 @@ class BackfillStatistics extends Command
             return null;
         }
 
-        return CarbonImmutable::parse(min($candidates), 'UTC')->startOfDay();
+        // The event columns hold the app-timezone wall clock; start on the
+        // UTC day that instant falls in, which the aggregator's buckets use.
+        return CarbonImmutable::parse(min($candidates), (string) config('app.timezone', 'UTC'))->utc()->startOfDay();
     }
 }
