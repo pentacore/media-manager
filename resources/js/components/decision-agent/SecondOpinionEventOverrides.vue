@@ -116,7 +116,7 @@ function setThreshold(
 
 <template>
     <div
-        class="flex flex-col gap-3 rounded-lg border border-border p-3"
+        class="flex max-w-3xl flex-col gap-3 rounded-lg border border-border p-3"
         data-second-opinion-event-overrides
     >
         <div class="text-[12px] font-semibold text-muted-foreground">

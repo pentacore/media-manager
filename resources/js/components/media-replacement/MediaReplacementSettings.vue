@@ -197,7 +197,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
             <h2 class="text-[15px] font-semibold tracking-tight">
                 Media replacement
             </h2>
-            <p class="mt-1 text-[13px] text-muted-foreground">
+            <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                 Let Media Advisor replace an imported episode or movie whose
                 subtitles are missing or wrong, using deterministic release
                 evidence you configure here.
@@ -322,7 +322,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
         <Separator />
         <div>
             <h3 class="text-sm font-semibold">Series subtitle repair</h3>
-            <p class="mt-1 text-[13px] text-muted-foreground">
+            <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                 Limits for the batch the chat starts when it repairs the missing
                 subtitles of a whole series. How many searches run at once is
                 set per Sonarr connection.
@@ -431,7 +431,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
 
         <template v-for="scope in scopes" :key="scope.key">
             <Separator />
-            <div class="space-y-3">
+            <div class="max-w-2xl space-y-3" data-settings-capped>
                 <h3 class="text-sm font-semibold">{{ scope.label }}</h3>
 
                 <label class="flex items-center gap-2 text-xs touch:min-h-10">
