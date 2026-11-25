@@ -398,14 +398,19 @@ const selectClass =
 <template>
     <Head :title="editing ? 'Edit benchmark case' : 'New benchmark case'" />
 
-    <form class="max-w-[900px] space-y-6 p-6" @submit.prevent="save">
-        <h1 class="text-[20px] font-semibold">
+    <form
+        class="max-w-[900px] space-y-6 p-6 xl:grid xl:max-w-none xl:grid-cols-2 xl:space-y-0 xl:gap-x-8 xl:gap-y-6"
+        :style="{ '--scoring-row': draftWarnings.length > 0 ? 3 : 2 }"
+        data-benchmark-case-form
+        @submit.prevent="save"
+    >
+        <h1 class="text-[20px] font-semibold xl:col-span-2">
             {{ editing ? 'Edit benchmark case' : 'New benchmark case' }}
         </h1>
 
         <div
             v-if="draftWarnings.length > 0"
-            class="grid gap-1.5 rounded-lg border border-warning/30 bg-warning/10 p-3 text-[12.5px] text-warning"
+            class="grid gap-1.5 rounded-lg border border-warning/30 bg-warning/10 p-3 text-[12.5px] text-warning xl:col-span-2"
             data-benchmark-draft-warnings
         >
             <p class="flex items-center gap-1.5 font-medium">
@@ -422,7 +427,7 @@ const selectClass =
             </ul>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 sm:grid-cols-2 xl:col-start-1">
             <label class="grid gap-1.5 text-[12.5px] font-medium">
                 Task
                 <select
@@ -465,6 +470,7 @@ const selectClass =
 
         <CaseInputFields
             v-model="form.input"
+            class="xl:col-start-1"
             :task="form.task"
             :event-keys="eventKeys"
             :decision-services="decisionServices"
@@ -476,11 +482,15 @@ const selectClass =
 
         <FixtureEditor
             v-model="form.fixtures"
+            class="xl:col-start-1"
             :errors="errors"
             @update:invalid="fixturesInvalid = $event"
         />
 
-        <section class="grid gap-3" data-benchmark-scoring>
+        <section
+            class="grid gap-3 xl:col-start-2 xl:[grid-row:var(--scoring-row)/span_3] xl:self-start"
+            data-benchmark-scoring
+        >
             <h2 class="text-[13px] font-semibold">Scoring</h2>
 
             <ExpectedActionsEditor
@@ -516,13 +526,13 @@ const selectClass =
 
         <p
             v-if="showBlocked"
-            class="text-sm text-destructive"
+            class="text-sm text-destructive xl:col-span-2"
             data-benchmark-blocked
         >
             Fix the errors above before saving.
         </p>
 
-        <div class="flex gap-2">
+        <div class="flex gap-2 xl:col-span-2">
             <Button
                 type="submit"
                 :disabled="form.processing"

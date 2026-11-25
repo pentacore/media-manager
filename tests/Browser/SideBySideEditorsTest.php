@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Ai\Agents\MediaAgent;
+use App\Enums\AiTask;
+use App\Enums\AiUsageKind;
+use App\Models\AiToolInvocation;
+use App\Models\AiUsageRecord;
+use App\Models\BenchmarkCase;
 use App\Models\ChatTemplate;
 use App\Models\User;
 
@@ -126,6 +132,62 @@ test('keeps the template editor in one 900 px column below 1280 px', function ()
 
     expect($rects['[data-template-editor]']['width'])->toBeLessThanOrEqual(900)
         ->and($rects['[data-template-preview-section]']['top'])->toBeGreaterThan($rects['[data-template-body]']['bottom']);
+});
+
+test('shows Scoring beside the case inputs from 1280 px', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    $webpage = visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->resize(1440, 900)
+        ->assertVisible('[data-benchmark-scoring]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-case-form]', '[data-benchmark-name]', '[data-fixture-editor]', '[data-benchmark-scoring]');
+
+    expect($rects['[data-benchmark-scoring]']['left'])->toBeGreaterThan($rects['[data-fixture-editor]']['right'])
+        ->and($rects['[data-benchmark-scoring]']['top'])->toBeLessThanOrEqual($rects['[data-benchmark-name]']['top'] + 200);
+});
+
+test('keeps the draft warning full width above both columns', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $record = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class,
+        'kind' => AiUsageKind::Text,
+        'prompt_text' => 'Find Dune on my server',
+    ]);
+    AiToolInvocation::factory()->create([
+        'invocation_id' => $record->invocation_id,
+        'tool_class' => 'SearchMediaTool',
+        'tool_name' => 'SearchMediaTool',
+        'arguments' => ['query' => 'Dune'],
+        'result' => '{"hits":1}',
+        'io_truncated' => true,
+    ]);
+
+    $webpage = visit(route('admin.benchmarks.cases.create', ['from_usage' => $record->id], absolute: false))
+        ->resize(1440, 900)
+        ->assertVisible('[data-benchmark-draft-warnings]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-case-form]', '[data-benchmark-draft-warnings]', '[data-benchmark-scoring]');
+    $padding = $webpage->script("parseFloat(getComputedStyle(document.querySelector('[data-benchmark-case-form]')).paddingLeft)");
+    $contentWidth = $rects['[data-benchmark-case-form]']['width'] - 2 * $padding;
+
+    expect(abs($rects['[data-benchmark-draft-warnings]']['width'] - $contentWidth))->toBeLessThan(2)
+        ->and($rects['[data-benchmark-draft-warnings]']['bottom'])->toBeLessThanOrEqual($rects['[data-benchmark-scoring]']['top'] + 1);
+});
+
+test('keeps the case form in one 900 px column below 1280 px', function (): void {
+    test()->actingAs(User::factory()->admin()->create());
+    $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::Title)->judged()->create();
+
+    $webpage = visit(route('admin.benchmarks.cases.edit', $benchmarkCase, absolute: false))
+        ->resize(1279, 800)
+        ->assertVisible('[data-benchmark-scoring]');
+
+    $rects = sideBySideRects($webpage, '[data-benchmark-case-form]', '[data-fixture-editor]', '[data-benchmark-scoring]');
+
+    expect($rects['[data-benchmark-case-form]']['width'])->toBeLessThanOrEqual(900)
+        ->and($rects['[data-benchmark-scoring]']['top'])->toBeGreaterThan($rects['[data-fixture-editor]']['bottom']);
 });
 
 function sideBySideLongBody(): string
