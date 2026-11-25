@@ -304,27 +304,43 @@ test('a saved attachment links to its file and each turn takes as many files as 
         ->assertMissing('[data-benchmark-attachments="final"] [data-benchmark-attachment-input]')
         ->attach('[data-benchmark-attachments="0"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/stuck-log.txt'))
         ->assertSeeIn('[data-benchmark-attachments="0"] [data-benchmark-attachment]', 'stuck-log.txt')
-        ->assertMissing('[data-benchmark-attachments="0"] [data-benchmark-attachment-open]')
         ->assertMissing('[data-benchmark-attachments="0"] [data-benchmark-attachment-input]');
+});
+
+test('a drafted attachment links to its admin preview and a newly picked file to a local preview', function (): void {
+    Storage::fake('local');
+    $this->actingAs(User::factory()->admin()->create());
+    [$record, $chatAttachment] = benchmarkBrowserCapturedChatTurn();
+    $preview = route('admin.benchmarks.cases.draft-attachments.show', [$record, $chatAttachment]);
+    $openLog = '[data-benchmark-attachments="final"] [data-benchmark-attachment]:nth-child(2) [data-benchmark-attachment-open]';
+    $openImage = '[data-benchmark-attachments="final"] [data-benchmark-attachment]:nth-child(3) [data-benchmark-attachment-open]';
+
+    $page = visit(route('admin.benchmarks.cases.create', ['from_usage' => $record->id], absolute: false))
+        ->assertNoSmoke()
+        ->assertAttribute('[data-benchmark-attachments="final"] [data-benchmark-attachment]:first-child [data-benchmark-attachment-open]', 'href', $preview)
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment]:first-child [data-benchmark-attachment-open]', 'screenshot.png')
+        ->assertSeeIn('[data-benchmark-attachments="final"] [data-benchmark-attachment-pending]', 'copied on save')
+        ->assertScript(sprintf("fetch(%s).then((response) => response.status + ' ' + response.headers.get('content-type'))", json_encode($preview)), '200 image/png')
+        ->attach('[data-benchmark-attachments="final"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/stuck-log.txt'))
+        ->attach('[data-benchmark-attachments="final"] [data-benchmark-attachment-input]', base_path('tests/Fixtures/screenshot.png'))
+        ->assertSeeIn($openLog, 'stuck-log.txt')
+        ->assertSeeIn($openImage, 'screenshot.png')
+        ->assertScript(sprintf("document.querySelector('%s').href.startsWith('blob:')", $openLog), true)
+        ->assertAttribute($openLog, 'download', 'stuck-log.txt')
+        ->assertAttributeMissing($openImage, 'download')
+        ->assertScript(sprintf("fetch(document.querySelector('%s').href).then((response) => response.text()).then((text) => text.length > 0)", $openLog), true);
+
+    $logUrl = $page->script(sprintf("document.querySelector('%s').href", $openLog));
+
+    $page->click('[data-benchmark-attachments="final"] [data-benchmark-attachment]:nth-child(2) [data-benchmark-attachment-remove]')
+        ->assertMissing($openImage)
+        ->assertScript(sprintf("fetch(%s).then(() => 'still open', () => 'revoked')", json_encode($logUrl)), 'revoked');
 });
 
 test('a captured chat turn shows its attachment as a pending copy and copies it on save', function (): void {
     Storage::fake('local');
     $this->actingAs(User::factory()->admin()->create());
-    $conversationId = (string) Str::uuid();
-    $turnAt = now()->startOfSecond()->subMinute();
-    $chatAttachment = ChatAttachment::factory()->create(['conversation_id' => $conversationId]);
-    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => $turnAt, 'updated_at' => $turnAt]);
-    DB::table('agent_conversation_messages')->insert([
-        'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
-        'role' => 'user', 'content' => 'What does this error mean?', 'steps' => '[]', 'usage' => '[]', 'meta' => '[]',
-        'attachments' => json_encode([['type' => 'stored-image', 'name' => null, 'path' => $chatAttachment->path, 'disk' => 'local']]),
-        'created_at' => $turnAt, 'updated_at' => $turnAt,
-    ]);
-    $record = AiUsageRecord::factory()->create([
-        'agent_class' => MediaAgent::class, 'kind' => AiUsageKind::Text, 'conversation_id' => $conversationId, 'created_at' => $turnAt,
-        'prompt_text' => "What does this error mean?\n\nAttachments: screenshot.png",
-    ]);
+    [$record] = benchmarkBrowserCapturedChatTurn();
 
     visit(route('admin.benchmarks.cases.create', ['from_usage' => $record->id], absolute: false))
         ->assertNoSmoke()
@@ -475,3 +491,28 @@ test('switching an off-catalog event case to free text saves without an event ke
 
     expect($benchmarkCase->fresh()->input)->not->toHaveKey('event');
 });
+
+/**
+ * A captured chat turn whose stored screenshot a case drafted from its usage row copies in.
+ *
+ * @return array{0: AiUsageRecord, 1: ChatAttachment}
+ */
+function benchmarkBrowserCapturedChatTurn(): array
+{
+    $conversationId = (string) Str::uuid();
+    $turnAt = now()->startOfSecond()->subMinute();
+    $chatAttachment = ChatAttachment::factory()->create(['conversation_id' => $conversationId]);
+    DB::table('agent_conversations')->insert(['id' => $conversationId, 'title' => 'T', 'created_at' => $turnAt, 'updated_at' => $turnAt]);
+    DB::table('agent_conversation_messages')->insert([
+        'id' => (string) Str::uuid7(), 'conversation_id' => $conversationId, 'agent' => MediaAgent::class,
+        'role' => 'user', 'content' => 'What does this error mean?', 'steps' => '[]', 'usage' => '[]', 'meta' => '[]',
+        'attachments' => json_encode([['type' => 'stored-image', 'name' => null, 'path' => $chatAttachment->path, 'disk' => 'local']]),
+        'created_at' => $turnAt, 'updated_at' => $turnAt,
+    ]);
+    $record = AiUsageRecord::factory()->create([
+        'agent_class' => MediaAgent::class, 'kind' => AiUsageKind::Text, 'conversation_id' => $conversationId, 'created_at' => $turnAt,
+        'prompt_text' => "What does this error mean?\n\nAttachments: screenshot.png",
+    ]);
+
+    return [$record, $chatAttachment];
+}

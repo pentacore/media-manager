@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Paperclip, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,13 @@ import { formatBytes } from '@/lib/format';
 import type { BenchmarkAttachmentEntry } from './types';
 
 const ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.txt,.log,.json,.pdf';
+
+/**
+ * Raster formats a preview may open in a tab; anything else is downloaded,
+ * as the server does for stored files, so a picked file never renders on
+ * the app origin.
+ */
+const INLINE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 const props = defineProps<{
     /** `final` for the last prompt, otherwise the history index. */
@@ -19,6 +26,58 @@ const props = defineProps<{
 
 const entries = defineModel<BenchmarkAttachmentEntry[]>({ required: true });
 const overflow = ref(0);
+
+/** Object URLs of the files picked but not saved yet, revoked once removed. */
+const localUrls = ref(new Map<File, string>());
+
+watch(
+    entries,
+    (current) => {
+        const files = new Set(
+            current.flatMap((entry) =>
+                entry.kind === 'new' ? [entry.file] : [],
+            ),
+        );
+        const next = new Map<File, string>();
+
+        for (const [file, url] of localUrls.value) {
+            if (files.has(file)) {
+                next.set(file, url);
+            } else {
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        for (const file of files) {
+            if (!next.has(file)) {
+                next.set(file, URL.createObjectURL(file));
+            }
+        }
+
+        localUrls.value = next;
+    },
+    { immediate: true },
+);
+
+onBeforeUnmount(() => {
+    for (const url of localUrls.value.values()) {
+        URL.revokeObjectURL(url);
+    }
+
+    localUrls.value = new Map();
+});
+
+/** Where a row's name links: the stored file, the draft's source, or the picked file. */
+function previewUrl(entry: BenchmarkAttachmentEntry): string | undefined {
+    return entry.kind === 'new' ? localUrls.value.get(entry.file) : entry.url;
+}
+
+/** A picked file that is not a raster image downloads instead of opening. */
+function downloadName(entry: BenchmarkAttachmentEntry): string | undefined {
+    return entry.kind === 'new' && !INLINE_TYPES.includes(entry.file.type)
+        ? entry.name
+        : undefined;
+}
 
 function onPick(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -55,8 +114,9 @@ function removeEntry(index: number): void {
             data-benchmark-attachment
         >
             <a
-                v-if="entry.kind === 'saved'"
-                :href="entry.url"
+                v-if="previewUrl(entry)"
+                :href="previewUrl(entry)"
+                :download="downloadName(entry)"
                 target="_blank"
                 rel="noopener"
                 class="min-w-0 flex-1 truncate underline decoration-muted-foreground/40 underline-offset-2 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"

@@ -852,8 +852,8 @@ test('a chat capture drafts the attachments of every kept user turn and strips t
             ->where('draft.input.mode', 'advisory')
             ->where('draft.input.conversation', 'context')
             ->where('draft.draft_attachments', [
-                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64],
-                ['chat_attachment_id' => $screenshot->id, 'turn' => null, 'name' => 'screenshot.png', 'mime_type' => 'image/png', 'size' => 1024],
+                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64, 'url' => route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $log])],
+                ['chat_attachment_id' => $screenshot->id, 'turn' => null, 'name' => 'screenshot.png', 'mime_type' => 'image/png', 'size' => 1024, 'url' => route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $screenshot])],
             ])
             ->where('draft.source_truncated', false)
             ->where('draftWarnings', []));
@@ -869,7 +869,7 @@ test('a captured attachment whose file is gone is left out with a warning', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('draft.draft_attachments', [
-                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64],
+                ['chat_attachment_id' => $log->id, 'turn' => 0, 'name' => 'download.log', 'mime_type' => 'text/plain', 'size' => 64, 'url' => route('admin.benchmarks.cases.draft-attachments.show', [$aiUsageRecord, $log])],
             ])
             ->where('draft.source_truncated', true)
             ->where('draftWarnings', ['Some attachments of this conversation are no longer stored and were left out.']));

@@ -105,6 +105,7 @@ function turnEntries(turn: number | null): BenchmarkAttachmentEntry[] {
                 chatAttachmentId: attachment.chat_attachment_id,
                 name: attachment.name,
                 size: attachment.size,
+                url: attachment.url,
             })),
     ];
 }

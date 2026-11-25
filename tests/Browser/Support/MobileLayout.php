@@ -1068,6 +1068,7 @@ function mobileLayoutExcludedRouteNames(): array
         'ai.chat.pending-workflow' => 'JSON for the chat workflow resume',
         'ai.chat.attachments.show' => 'a chat attachment file download',
         'admin.benchmarks.cases.attachments.show' => 'a benchmark case attachment file download',
+        'admin.benchmarks.cases.draft-attachments.show' => 'a drafted benchmark case attachment file download',
         'ai.chat.model-options' => 'JSON for the chat model picker',
         'ai.chat.tool-groups' => 'JSON for the chat tool-group picker',
         'ai.chat.subtitle-audit-batches.show' => 'JSON for a chat subtitle-audit batch card',

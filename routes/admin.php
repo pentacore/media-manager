@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\BenchmarkCaseAttachmentController;
 use App\Http\Controllers\Admin\BenchmarkCaseController;
+use App\Http\Controllers\Admin\BenchmarkCaseDraftAttachmentController;
 use App\Http\Controllers\Admin\BenchmarkComparisonController;
 use App\Http\Controllers\Admin\BenchmarkDecisionPromptController;
 use App\Http\Controllers\Admin\BenchmarkRunController;
@@ -96,6 +97,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
                 ->whereNumber(['benchmarkCase', 'attachment'])
                 ->scopeBindings()
                 ->name('attachments.show');
+            Route::get('drafts/{aiUsageRecord}/attachments/{chatAttachment}', BenchmarkCaseDraftAttachmentController::class)
+                ->whereNumber(['aiUsageRecord', 'chatAttachment'])
+                ->name('draft-attachments.show');
         });
 
         Route::prefix('benchmarks/compare')->name('benchmarks.compare.')->group(function (): void {

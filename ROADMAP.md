@@ -62,10 +62,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 ## Ready to pick up
 
 - **AI routing minors**, from the review of each AI routing pull request.
-    - Chat cases:
-        - Preview a drafted attachment in the case form before it is saved: only
-          saved attachments link to their file, because a chat file belongs to
-          the user who uploaded it.
     - Agreement and gate charts:
         - Agreement "All" window: verdicts are read in chunks now, so memory is
           bounded, but the time still grows with retention. Aggregate in SQL if

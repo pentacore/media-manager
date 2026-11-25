@@ -75,6 +75,13 @@ test('only the owner can download an attachment', function (): void {
     $this->actingAs(User::factory()->admin()->create())->get(route('ai.chat.attachments.show', $attachment))->assertForbidden();
 });
 
+test('an attachment whose file is gone is a 404 for its owner', function (): void {
+    $attachment = ChatAttachment::factory()->create();
+    Storage::disk('local')->delete($attachment->path);
+
+    $this->actingAs($attachment->user)->get(route('ai.chat.attachments.show', $attachment))->assertNotFound();
+});
+
 test('raster images are served inline and everything else as a hardened download', function (string $mime, string $name, string $disposition): void {
     $attachment = ChatAttachment::factory()->create(['mime_type' => $mime, 'original_name' => $name]);
 
