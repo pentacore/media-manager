@@ -142,10 +142,12 @@ test('shows Scoring beside the case inputs from 1280 px', function (): void {
         ->resize(1440, 900)
         ->assertVisible('[data-benchmark-scoring]');
 
-    $rects = sideBySideRects($webpage, '[data-benchmark-case-form]', '[data-benchmark-name]', '[data-fixture-editor]', '[data-benchmark-scoring]');
+    $rects = sideBySideRects($webpage, '[data-benchmark-inputs]', '[data-benchmark-basics]', '[data-fixture-editor]', '[data-benchmark-scoring]');
 
     expect($rects['[data-benchmark-scoring]']['left'])->toBeGreaterThan($rects['[data-fixture-editor]']['right'])
-        ->and($rects['[data-benchmark-scoring]']['top'])->toBeLessThanOrEqual($rects['[data-benchmark-name]']['top'] + 200);
+        ->and($rects['[data-benchmark-basics]']['left'])->toBeGreaterThan($rects['[data-benchmark-inputs]']['right'])
+        ->and($rects['[data-benchmark-basics]']['bottom'])->toBeLessThanOrEqual($rects['[data-benchmark-scoring]']['top'] + 1)
+        ->and(abs($rects['[data-benchmark-inputs]']['top'] - $rects['[data-benchmark-basics]']['top']))->toBeLessThanOrEqual(4);
 });
 
 test('keeps the draft warning full width above both columns', function (): void {

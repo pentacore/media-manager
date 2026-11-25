@@ -210,6 +210,20 @@ const eventTypeMissing = computed(
         form.input.event.event_type.trim() === '',
 );
 
+// From xl the basics and Scoring stack on the right while the case inputs span
+// beside them (the last spanned row is flexible so the inputs never stretch
+// the basics or Scoring rows) and the fixtures sit below the inputs.
+const gridStyle = computed(() => {
+    const first = props.draftWarnings.length > 0 ? 3 : 2;
+
+    return {
+        '--basics-row': first,
+        '--scoring-row': first + 1,
+        '--fixtures-row': first + 3,
+        gridTemplateRows: `${'auto '.repeat(first + 1)}minmax(0, 1fr) auto`,
+    };
+});
+
 const showBlocked = computed(
     () =>
         blocked.value &&
@@ -400,7 +414,7 @@ const selectClass =
 
     <form
         class="max-w-[900px] space-y-6 p-6 xl:grid xl:max-w-none xl:grid-cols-2 xl:space-y-0 xl:gap-x-8 xl:gap-y-6"
-        :style="{ '--scoring-row': draftWarnings.length > 0 ? 3 : 2 }"
+        :style="gridStyle"
         data-benchmark-case-form
         @submit.prevent="save"
     >
@@ -427,7 +441,10 @@ const selectClass =
             </ul>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2 xl:col-start-1">
+        <div
+            class="grid gap-4 sm:grid-cols-2 xl:col-start-2 xl:[grid-row:var(--basics-row)] xl:self-start"
+            data-benchmark-basics
+        >
             <label class="grid gap-1.5 text-[12.5px] font-medium">
                 Task
                 <select
@@ -470,7 +487,8 @@ const selectClass =
 
         <CaseInputFields
             v-model="form.input"
-            class="xl:col-start-1"
+            class="xl:col-start-1 xl:[grid-row:var(--basics-row)/span_3]"
+            data-benchmark-inputs
             :task="form.task"
             :event-keys="eventKeys"
             :decision-services="decisionServices"
@@ -482,13 +500,13 @@ const selectClass =
 
         <FixtureEditor
             v-model="form.fixtures"
-            class="xl:col-start-1"
+            class="xl:col-start-1 xl:[grid-row:var(--fixtures-row)]"
             :errors="errors"
             @update:invalid="fixturesInvalid = $event"
         />
 
         <section
-            class="grid gap-3 xl:col-start-2 xl:[grid-row:var(--scoring-row)/span_3] xl:self-start"
+            class="grid gap-3 xl:col-start-2 xl:[grid-row:var(--scoring-row)] xl:self-start"
             data-benchmark-scoring
         >
             <h2 class="text-[13px] font-semibold">Scoring</h2>
