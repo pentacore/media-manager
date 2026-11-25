@@ -309,7 +309,7 @@ function save(): void {
         </label>
 
         <div
-            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:col-start-1"
+            class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] xl:col-start-1 xl:grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_280px]"
         >
             <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
                 Message
