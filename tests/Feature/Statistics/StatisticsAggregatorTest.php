@@ -197,3 +197,67 @@ it('computes uptime and latency stats from service metrics', function (): void {
     expect($statRollup->count)->toBe(2)->and($statRollup->sum)->toBe(1.0)
         ->and($latency->min)->toBe(100.0)->and($latency->max)->toBe(300.0);
 });
+
+it('reads event timestamps on the app timezone wall clock and stores UTC buckets', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-06 15:00:00', 'Europe/Stockholm'));
+
+    // 14:10 in Stockholm (UTC+2 in July) is 12:10 UTC.
+    $localAt = CarbonImmutable::parse('2026-07-06 14:10:00', 'Europe/Stockholm');
+    EmbyActivity::factory()->create(['action' => 'played', 'media_type' => 'Movie', 'created_at' => $localAt]);
+    ActionRequest::factory()->create(['status' => 'completed', 'type' => 'delete_series', 'origin' => 'agent', 'created_at' => $localAt]);
+    AgentDecision::factory()->completed(1)->create(['service' => 'sonarr', 'created_at' => $localAt]);
+    AiUsageRecord::factory()->create(['created_at' => $localAt]);
+    ServiceMetric::factory()->create(['status' => HealthStatus::Healthy, 'latency_ms' => 100, 'recorded_at' => $localAt]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 12:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 13:00:00', 'UTC'),
+    );
+
+    foreach (['watch.plays', 'watch.user_plays', 'actions.by_status', 'agent.decisions', 'ai.usage', 'ai.tokens', 'service.latency_ms', 'service.uptime_pct'] as $metric) {
+        $hour = StatRollup::query()->where(['metric' => $metric, 'period' => 'hour'])->sole();
+        $day = StatRollup::query()->where(['metric' => $metric, 'period' => 'day'])->sole();
+
+        expect($hour->bucket->utc()->toDateTimeString())->toBe('2026-07-06 12:00:00', $metric)
+            ->and($hour->count)->toBe(1, $metric)
+            ->and($day->bucket->utc()->toDateTimeString())->toBe('2026-07-06 00:00:00', $metric);
+    }
+});
+
+it('files a play just after local midnight under the previous UTC day', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-06 03:00:00', 'Europe/Stockholm'));
+
+    // 00:30 in Stockholm on the 6th is 22:30 UTC on the 5th.
+    EmbyActivity::factory()->create(['action' => 'played', 'media_type' => 'Movie', 'created_at' => CarbonImmutable::parse('2026-07-06 00:30:00', 'Europe/Stockholm')]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-05 22:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-05 23:00:00', 'UTC'),
+    );
+
+    $day = StatRollup::query()->where(['metric' => 'watch.plays', 'period' => 'day'])->sole();
+
+    expect($day->bucket->utc()->toDateTimeString())->toBe('2026-07-05 00:00:00')
+        ->and($day->count)->toBe(1);
+});
+
+it('keeps reading arr_added_at as UTC, which the indexers store it in', function (): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+
+    // The indexers parse the *arr "added" ISO string (with Z) and Eloquent
+    // writes that UTC wall clock unchanged.
+    IndexedMovie::factory()->create(['arr_added_at' => CarbonImmutable::parse('2026-07-06T12:10:00Z')]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 12:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 13:00:00', 'UTC'),
+    );
+
+    expect(StatRollup::query()->where(['metric' => 'library.added', 'period' => 'hour'])->sole()->bucket->utc()->toDateTimeString())
+        ->toBe('2026-07-06 12:00:00');
+});

@@ -227,3 +227,19 @@ it('builds a 7x24 watch heatmap in the app timezone', function (): void {
         ->and($heatmap[1][13])->toBe(0)
         ->and($heatmap[2][14])->toBe(0);
 });
+
+it('buckets the watch heatmap on the app timezone wall clock created_at is stored in', function (string $localPlayedAt, int $weekday, int $hour): void {
+    config()->set('app.timezone', 'Europe/Stockholm');
+    date_default_timezone_set('Europe/Stockholm');
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-08 12:00:00', 'Europe/Stockholm'));
+
+    EmbyActivity::factory()->create(['action' => 'played', 'created_at' => CarbonImmutable::parse($localPlayedAt, 'Europe/Stockholm')]);
+
+    $heatmap = $this->repo->watchHeatmap(TimeWindow::Last7d);
+
+    expect($heatmap[$weekday][$hour])->toBe(1)
+        ->and(collect($heatmap)->flatten()->sum())->toBe(1);
+})->with([
+    'Monday evening' => ['2026-07-06 21:30:00', 1, 21],
+    'Sunday just before midnight' => ['2026-07-05 23:30:00', 7, 23],
+]);
