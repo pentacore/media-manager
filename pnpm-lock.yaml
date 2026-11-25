@@ -250,8 +250,8 @@ importers:
         specifier: ^0.1.11
         version: 0.1.11
       '@pentacore/vite-plugin-laravel-typefinder':
-        specifier: ^8.3.0
-        version: 8.3.0
+        specifier: ^8.3.1
+        version: 8.3.1
       '@semantic-release/changelog':
         specifier: ^7.0.0
         version: 7.0.0(semantic-release@26.0.1(supports-color@10.2.2))
@@ -811,8 +811,8 @@ packages:
     resolution: {integrity: sha512-YT6htikBOBQ00XDxZpRZLZ0anEDo7h9s4+YvjRU0/Ng/cLd0D6SZQ3tsms4g/GDer/z8UKlegC5iptEfyRXJcw==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@pentacore/vite-plugin-laravel-typefinder@8.3.0':
-    resolution: {integrity: sha512-hdWZDkfZAQvod7nd+xmjQnW1xpeRd4WNo53a72aR4h3H3rTMUYzmYt5osfBssdxJCF54J+dQwDwfcXTal3JhLA==}
+  '@pentacore/vite-plugin-laravel-typefinder@8.3.1':
+    resolution: {integrity: sha512-6+Hl3j+UxVFwIH5zQGeGsW92XlV6grLcpib6nwdNF70CBZb5LebX3shUpljy60jm+Q57UL+I1b+c8xRPx5jLNA==}
 
   '@pnpm/config.env-replace@1.1.0':
     resolution: {integrity: sha512-htyl8TWnKL7K/ESFa1oW2UB5lVDxuF5DpM7tBi6Hu2LNL3mWkIzNLG6N4zoCUP1lCKNxWy/3iu8mS8MvToGd6w==}
@@ -3640,7 +3640,7 @@ snapshots:
 
   '@oxlint/plugins@1.94.0': {}
 
-  '@pentacore/vite-plugin-laravel-typefinder@8.3.0':
+  '@pentacore/vite-plugin-laravel-typefinder@8.3.1':
     dependencies:
       picomatch: 4.0.7
 

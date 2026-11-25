@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "85d2c5790edcd26b6458b8729214403a",
+    "content-hash": "fdfb91c00de5da18e5812288379636d0",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -3776,7 +3776,8 @@
                 "issues": "https://github.com/nikic/PHP-Parser/issues",
                 "source": "https://github.com/nikic/PHP-Parser/tree/v5.9.0"
             },
-            "time": "2026-09-13T18:51:52+00:00"
+            "time": "2026-09-13T18:51:52+00:00",
+            "published-time": "2026-09-13T18:53:16+00:00"
         },
         {
             "name": "nunomaduro/termwind",
@@ -4014,16 +4015,16 @@
         },
         {
             "name": "pentacore/laravel-typefinder",
-            "version": "8.3.0",
+            "version": "8.3.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pentacore/Laravel-Typefinder.git",
-                "reference": "699745f36e47e1ed7d8f61a639f3d842bf579c76"
+                "reference": "1460d3c617be50842883623dc0deecc1c8005276"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/699745f36e47e1ed7d8f61a639f3d842bf579c76",
-                "reference": "699745f36e47e1ed7d8f61a639f3d842bf579c76",
+                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/1460d3c617be50842883623dc0deecc1c8005276",
+                "reference": "1460d3c617be50842883623dc0deecc1c8005276",
                 "shasum": ""
             },
             "require": {
@@ -4080,7 +4081,8 @@
                 "issues": "https://github.com/pentacore/laravel-typefinder/issues",
                 "source": "https://github.com/pentacore/laravel-typefinder"
             },
-            "time": "2026-11-23T07:55:43+00:00"
+            "time": "2026-11-25T08:20:17+00:00",
+            "published-time": "2026-11-25T08:20:24+00:00"
         },
         {
             "name": "php-http/client-common",
@@ -4823,7 +4825,8 @@
                 "issues": "https://github.com/phpstan/phpdoc-parser/issues",
                 "source": "https://github.com/phpstan/phpdoc-parser/tree/2.4.1"
             },
-            "time": "2026-10-30T19:36:28+00:00"
+            "time": "2026-10-30T19:36:28+00:00",
+            "published-time": "2026-10-30T19:37:11+00:00"
         },
         {
             "name": "pragmarx/google2fa",
@@ -14652,7 +14655,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-19T10:31:11+00:00"
+            "time": "2026-11-19T10:31:11+00:00",
+            "published-time": "2026-11-19T10:31:27+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -16544,5 +16548,5 @@
         "php": "^8.5"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }
