@@ -19,17 +19,20 @@ type ToolGroupOptions = {
     groups: ToolGroupOption[];
 };
 
-/** The options request, shared by every panel; cleared when it fails. */
+/**
+ * The options request in flight, shared by panels that ask at the same time.
+ * It is dropped once it settles, so the next panel mount, sheet open or
+ * template pin reads the current availability (an integration may have been
+ * added or removed since) instead of a copy from earlier in the session.
+ */
 let optionsRequest: Promise<ToolGroupOptions> | null = null;
 
 function fetchOptions(): Promise<ToolGroupOptions> {
     optionsRequest ??= jsonRequest<ToolGroupOptions>(
         'GET',
         ChatToolGroupsController.url(),
-    ).catch((e: unknown) => {
+    ).finally(() => {
         optionsRequest = null;
-
-        throw e;
     });
 
     return optionsRequest;
@@ -96,14 +99,20 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
         }
 
         try {
-            const data = await fetchOptions();
-            routingEnabled.value = data.routing_enabled;
-            options.value = data.groups;
-            loaded.value = true;
+            applyOptions(await fetchOptions());
         } catch {
             // No strip; turns still run.
         }
     });
+
+    /** Shows freshly fetched options in the strip. */
+    function applyOptions(data: ToolGroupOptions): ToolGroupOptions {
+        routingEnabled.value = data.routing_enabled;
+        options.value = data.groups;
+        loaded.value = true;
+
+        return data;
+    }
 
     function toggleTurnLines(): void {
         showTurnLines.value = !showTurnLines.value;
@@ -175,14 +184,14 @@ export function useChatToolGroups(): UseChatToolGroupsReturn {
             return;
         }
 
-        let known = options.value;
+        // Read availability now, not from the panel's mount: a template may
+        // name a group whose integration was added (or removed) since.
+        let known: ToolGroupOption[];
 
-        if (!loaded.value) {
-            try {
-                known = (await fetchOptions()).groups;
-            } catch {
-                return;
-            }
+        try {
+            known = applyOptions(await fetchOptions()).groups;
+        } catch {
+            return;
         }
 
         const additions = values.filter(

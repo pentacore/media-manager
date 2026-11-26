@@ -373,3 +373,47 @@ test('using a template in an existing conversation adds its tool groups and keep
 
     expect(json_decode((string) DB::table('agent_conversations')->where('id', $conversationId)->value('pinned_tool_groups'), true))->toBe(['downloads', 'indexers']);
 });
+
+test('a group whose integration is added shows as available the next time the chat sheet opens', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = chatToolGroupsConversation($admin, ['indexers']);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-sidebar-ai-chat-open]')
+        ->click('[data-slot="sheet-content"] [data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertPresent('[data-slot="sheet-content"] [data-tool-chip="indexers"][data-tool-unavailable]')
+        ->click('[data-slot="sheet-content"] [data-sheet-close]');
+    $webpage->script(confirmDialogWaitUntilScript('!document.querySelector("[data-chat-input]")'));
+
+    ServiceConnection::factory()->prowlarr()->create();
+
+    $webpage->click('[data-sidebar-ai-chat-open]')
+        ->assertPresent('[data-slot="sheet-content"] [data-tool-chip="indexers"]')
+        ->assertMissing('[data-slot="sheet-content"] [data-tool-chip="indexers"][data-tool-unavailable]');
+});
+
+test('a template pins a group whose integration was added after the chat opened', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = chatToolGroupsConversation($admin, []);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Indexer check', 'tool_groups' => ['indexers']]);
+    $this->actingAs($admin);
+
+    $webpage = visit(route('ai.chat', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->click('[data-conversation-picker]')
+        ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
+        ->assertPresent('[data-tool-add]');
+
+    ServiceConnection::factory()->prowlarr()->create();
+
+    $webpage->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertPresent('[data-tool-chip="indexers"][data-tool-source="pinned"]');
+
+    $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-tool-unpin=\"indexers\"]')?.disabled === false"));
+
+    expect(json_decode((string) DB::table('agent_conversations')->where('id', $conversationId)->value('pinned_tool_groups'), true))->toBe(['indexers']);
+});
