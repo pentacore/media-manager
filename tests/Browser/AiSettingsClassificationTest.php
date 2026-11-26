@@ -47,16 +47,18 @@ test('the AI settings page flags a classification provider without an API key', 
 });
 
 test('the AI settings page shows which advanced tools the provider chain allows', function (): void {
+    // Tool search needs only the primary (OpenAI); code execution needs the
+    // whole chain, and the OpenRouter failover lacks it.
     config()->set('ai.default', 'openai');
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
-    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'openrouter'])->create();
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-settings.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-advanced-tool="tool_search"]', 'inactive')
-        ->assertSeeIn('[data-advanced-tool="code_execution"]', 'active')
-        ->assertDontSeeIn('[data-advanced-tool="code_execution"]', 'inactive');
+        ->assertSeeIn('[data-advanced-tool="tool_search"]', 'active')
+        ->assertDontSeeIn('[data-advanced-tool="tool_search"]', 'inactive')
+        ->assertSeeIn('[data-advanced-tool="code_execution"]', 'inactive');
 });
 
 test('admin can switch the reranking provider and model', function (): void {
