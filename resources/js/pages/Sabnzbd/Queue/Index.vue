@@ -354,7 +354,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
 </script>
 
 <template>
-    <Head title="SABnzbd Queue" />
+    <Head title="Downloads" />
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->

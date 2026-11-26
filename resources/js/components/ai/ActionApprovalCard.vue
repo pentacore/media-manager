@@ -58,7 +58,9 @@ const variant = computed(
                 {{
                     card.status === 'changed'
                         ? 'Changed elsewhere'
-                        : card.status
+                        : card.status === 'rejected'
+                          ? 'declined'
+                          : card.status
                 }}
             </Pill>
         </div>
@@ -81,7 +83,7 @@ const variant = computed(
                     data-action-reject
                     @click="emit('reject')"
                 >
-                    Reject
+                    Decline
                 </Button>
             </template>
             <Link

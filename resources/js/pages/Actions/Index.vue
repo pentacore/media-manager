@@ -420,7 +420,7 @@ function goToPage(url: string | null): void {
                     data-bulk-reject
                     @click="rejectDialogOpen = true"
                 >
-                    Reject…
+                    Decline…
                 </Button>
             </template>
             <template #primary="{ disabled }">
@@ -448,7 +448,7 @@ function goToPage(url: string | null): void {
                     data-bulk-menu-item="reject"
                     @select="rejectDialogOpen = true"
                 >
-                    Reject…
+                    Decline…
                 </DropdownMenuItem>
             </template>
         </BulkActionBar>

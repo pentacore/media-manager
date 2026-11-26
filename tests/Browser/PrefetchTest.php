@@ -130,7 +130,7 @@ test('the Downloads link never prefetches because its page reads SABnzbd live', 
         ->and($webpage->script(prefetchCountScript($downloadsPath, true)))->toBe(0);
 });
 
-test('the Subtitles link never prefetches because its overview reads Bazarr live, uncached on failure', function (): void {
+test('the Subtitle Center link never prefetches because its overview reads Bazarr live, uncached on failure', function (): void {
     $this->actingAs(User::factory()->member()->create());
     $subtitlesPath = route('bazarr.overview', absolute: false);
     $actionQueuePath = route('actions.requests.index', absolute: false);
@@ -138,7 +138,7 @@ test('the Subtitles link never prefetches because its overview reads Bazarr live
     $webpage = visit(route('dashboard', absolute: false))->assertNoSmoke();
     $webpage->script(prefetchRecorderScript());
 
-    $webpage->hover('[data-nav-item="Subtitles"]');
+    $webpage->hover('[data-nav-item="Subtitle Center"]');
     $webpage->hover('[data-nav-item="Action Queue"]');
     $webpage->script(prefetchWaitForScript($actionQueuePath));
 

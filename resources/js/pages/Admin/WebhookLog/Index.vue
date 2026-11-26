@@ -230,7 +230,7 @@ function handlingLabel(
             <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Every incoming webhook with its raw payload — useful for
-                    debugging integrations and auditing what services are
+                    debugging connections and auditing what services are
                     actually sending.
                 </p>
             </template>

@@ -11,7 +11,7 @@ use App\Enums\SecondOpinionMode;
 test('second opinion modes carry their labels', function (): void {
     expect(SecondOpinionMode::Off->label())->toBe('Off')
         ->and(SecondOpinionMode::Hold->label())->toBe('Hold if it disagrees')
-        ->and(SecondOpinionMode::Reject->label())->toBe('Reject if it disagrees')
+        ->and(SecondOpinionMode::Reject->label())->toBe('Decline if it disagrees')
         ->and(SecondOpinionMode::values())->toBe(['off', 'hold', 'reject']);
 });
 
@@ -32,7 +32,7 @@ test('every engine but jev decides can ask the llm', function (): void {
 
 test('the decision verifier task follows chat, takes tiers and is benchmarked by verdict', function (): void {
     expect(AiTask::DecisionVerifier->value)->toBe('decision_verifier')
-        ->and(AiTask::DecisionVerifier->label())->toBe('Decision verifier')
+        ->and(AiTask::DecisionVerifier->label())->toBe('Second opinion')
         ->and(AiTask::DecisionVerifier->inheritsChatModel())->toBeTrue()
         ->and(AiTask::DecisionVerifier->allowsTiers())->toBeTrue()
         ->and(AiTask::DecisionVerifier->hasReasoning())->toBeTrue()

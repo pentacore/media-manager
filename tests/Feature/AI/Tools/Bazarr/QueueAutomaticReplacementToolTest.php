@@ -90,7 +90,7 @@ test('it queues the unique automatic candidate and records the action in the run
     $payload = $actionRequest->payload;
 
     expect($actionRequest->origin)->toBe('agent')
-        ->and($actionRequest->description)->toStartWith(sprintf('Queued by the subtitle advisor for subtitle case #%d.', $this->case->id));
+        ->and($actionRequest->description)->toStartWith(sprintf('Queued by the Media Advisor for subtitle case #%d.', $this->case->id));
 
     expect($payload)
         ->toMatchArray([

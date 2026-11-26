@@ -132,7 +132,7 @@ defineOptions({
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
             {
-                title: 'Library activity',
+                title: 'Grab queue',
                 href: LibraryActivityController.queue.url(),
             },
         ],
@@ -344,7 +344,7 @@ async function removeQueueItem(
                   onCloseAutoFocus,
               }
             : {
-                  title: `Remove "${title}" from the queue?`,
+                  title: `Remove "${title}" from the grab queue?`,
                   confirmLabel: 'Remove',
                   destructive: true,
                   onCloseAutoFocus,
@@ -703,7 +703,7 @@ async function runQueueBulk(): Promise<void> {
 </script>
 
 <template>
-    <Head title="Library activity" />
+    <Head title="Grab queue" />
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
@@ -712,7 +712,7 @@ async function runQueueBulk(): Promise<void> {
                 <h1
                     class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
-                    Library activity
+                    Grab queue
                 </h1>
             </template>
             <template #description>
@@ -823,8 +823,8 @@ async function runQueueBulk(): Promise<void> {
                     No active Sonarr or Radarr connection configured.
                 </template>
                 <template v-else>
-                    Nothing in the queue right now — both services are caught
-                    up.
+                    Nothing in the grab queue right now — both services are
+                    caught up.
                 </template>
             </div>
 
@@ -1009,7 +1009,7 @@ async function runQueueBulk(): Promise<void> {
                 <PhoneCardList
                     :items="filteredRows"
                     :item-key="(row) => `${row.service}-${row.id}`"
-                    label="Download queue"
+                    label="Grab queue"
                     data-queue-cards
                 >
                     <template #card="{ item: row }">
@@ -1197,14 +1197,14 @@ async function runQueueBulk(): Promise<void> {
                             {{
                                 queueBulkConfirm === 'blocklist'
                                     ? `Remove and blocklist ${selectedQueueCount} ${selectedQueueCount === 1 ? 'release' : 'releases'}?`
-                                    : `Remove ${selectedQueueCount} ${selectedQueueCount === 1 ? 'item' : 'items'} from the queue?`
+                                    : `Remove ${selectedQueueCount} ${selectedQueueCount === 1 ? 'item' : 'items'} from the grab queue?`
                             }}
                         </DialogTitle>
                         <DialogDescription>
                             {{
                                 queueBulkConfirm === 'blocklist'
                                     ? 'Each release is blocklisted and a fresh search runs for it.'
-                                    : 'Each item is removed from the queue and the download client.'
+                                    : 'Each item is removed from the grab queue and the download client.'
                             }}
                         </DialogDescription>
                     </DialogHeader>

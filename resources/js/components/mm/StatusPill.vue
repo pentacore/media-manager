@@ -47,8 +47,10 @@ const meta = computed(() => {
                     props.status.charAt(0).toUpperCase() +
                     props.status.slice(1),
             };
-        case 'failed':
         case 'rejected':
+            // An action request's stored `rejected` status reads as Declined.
+            return { variant: 'danger' as const, label: 'Declined' };
+        case 'failed':
         case 'declined':
         case 'down':
             return {

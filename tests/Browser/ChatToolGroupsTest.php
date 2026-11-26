@@ -202,7 +202,7 @@ test('a pinned group whose integration is gone shows as unavailable', function (
     $webpage->click('[data-conversation-picker]')
         ->click(sprintf('[data-conversation-id="%s"]', $conversationId))
         ->assertPresent('[data-tool-chip="indexers"][data-tool-unavailable]')
-        ->assertAttribute('[data-tool-chip="indexers"]', 'title', "Not available — its integration isn't configured")
+        ->assertAttribute('[data-tool-chip="indexers"]', 'title', 'Not available — its service has no active connection')
         ->click('[data-tool-unpin="indexers"]')
         ->assertMissing('[data-tool-chip="indexers"]');
 });

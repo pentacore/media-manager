@@ -120,7 +120,7 @@ test('a request a reviewer rejected shows who rejected it', function (): void {
     visit(route('actions.requests.index', absolute: false))
         ->assertNoSmoke()
         ->click(sprintf('[data-action-row="%d"]', $actionRequest->id))
-        ->assertSeeIn('[data-action-rejected-by]', 'Rejected by')
+        ->assertSeeIn('[data-action-rejected-by]', 'Declined by')
         ->assertSeeIn('[data-action-rejected-by]', 'Rhea Reviewer')
         ->assertMissing('[data-action-approved-by]');
 });

@@ -171,7 +171,7 @@ function canBenchmark(row: ActionRequestRow): boolean {
                 </Field>
                 <Field
                     v-if="rejectedBy(selected)"
-                    label="Rejected by"
+                    label="Declined by"
                     data-action-rejected-by
                 >
                     <div class="flex items-center gap-2">
@@ -192,7 +192,7 @@ function canBenchmark(row: ActionRequestRow): boolean {
                         selected.status === 'rejected' &&
                         rejectionReason(selected)
                     "
-                    label="Rejection reason"
+                    label="Reason for declining"
                 >
                     <span
                         class="text-[13px] whitespace-pre-line"

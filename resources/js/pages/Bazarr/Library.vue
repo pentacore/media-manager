@@ -85,7 +85,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
-            { title: 'Subtitles', href: OverviewController.url() },
+            { title: 'Subtitle Center', href: OverviewController.url() },
             { title: 'Library', href: LibraryController.url() },
         ],
     },

@@ -224,7 +224,7 @@ test('the page lists stored per-event overrides and the second opinion modes', f
         ->assertInertia(fn ($page) => $page->component('Admin/DecisionAgent/Index')
             ->where('settings.second_opinion_event_overrides', [decisionAgentEventOverride('sonarr:Download', ['mode' => 'reject', 'jev_threshold' => 0.6])])
             ->where('secondOpinionModes.0', ['value' => 'off', 'label' => 'Off'])
-            ->where('secondOpinionModes.2', ['value' => 'reject', 'label' => 'Reject if it disagrees']));
+            ->where('secondOpinionModes.2', ['value' => 'reject', 'label' => 'Decline if it disagrees']));
 });
 
 test('an admin saves per-event overrides and an all-inherit entry is dropped', function (): void {

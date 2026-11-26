@@ -75,7 +75,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
-            { title: 'Subtitles', href: AdminController.index.url() },
+            { title: 'Subtitle Center', href: AdminController.index.url() },
             { title: 'Administration', href: AdminController.index.url() },
         ],
     },
@@ -146,13 +146,13 @@ const numericAutomationFields: {
     },
     {
         key: 'max_advisor_escalations_per_cycle',
-        label: 'Advisor escalations',
+        label: 'Media Advisor runs',
         min: 0,
         max: 25,
     },
     {
         key: 'advisor_concurrency',
-        label: 'Advisor concurrency',
+        label: 'Media Advisor concurrency',
         min: 1,
         max: 5,
     },

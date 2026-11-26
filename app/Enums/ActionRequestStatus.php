@@ -25,7 +25,7 @@ enum ActionRequestStatus: string
             self::Executing => 'Executing',
             self::Completed => 'Completed',
             self::Failed => 'Failed',
-            self::Rejected => 'Rejected',
+            self::Rejected => 'Declined',
         };
     }
 

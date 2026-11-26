@@ -729,7 +729,7 @@ const budgetState = computed<{
                             <template #label>
                                 <Field
                                     label-id="ai-settings-subtitle-triage-label"
-                                    label="Subtitle escalation triage"
+                                    label="Media Advisor triage"
                                     hint="Sends cases unlikely to benefit from an automatic replacement straight to review."
                                 >
                                     <span />
@@ -1218,7 +1218,7 @@ const budgetState = computed<{
                         <template #label>
                             <Field
                                 label="Advanced tools"
-                                hint="Provider-hosted tools register only when every provider the chat (tool search) or price updater (code execution) may reach supports them."
+                                hint="Provider-hosted tools register only when every provider the chat (tool search) or price refresh (code execution) may reach supports them."
                             >
                                 <span />
                             </Field>
@@ -1247,7 +1247,7 @@ const budgetState = computed<{
                                 gets every tool inline
                             </div>
                             <div data-advanced-tool="code_execution">
-                                Code execution (price verifier):
+                                Code execution (price refresh):
                                 <Pill
                                     :variant="
                                         advancedTools.code_execution
@@ -1451,7 +1451,7 @@ const budgetState = computed<{
                                 <Field
                                     for="ai-settings-models-dev-pricing"
                                     label="Models.dev feed"
-                                    hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the first-party verifier agent only."
+                                    hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the price refresh agent only."
                                 >
                                     <span />
                                 </Field>
@@ -1486,7 +1486,7 @@ const budgetState = computed<{
                                 <Field
                                     for="ai-settings-litellm-pricing"
                                     label="LiteLLM cross-check"
-                                    hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
+                                    hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the price refresh agent."
                                 >
                                     <span />
                                 </Field>

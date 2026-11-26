@@ -17,7 +17,7 @@ enum ActionQueueBulkAction: string
     {
         return match ($this) {
             self::Approve => 'Approve',
-            self::Reject => 'Reject',
+            self::Reject => 'Decline',
         };
     }
 
@@ -26,7 +26,7 @@ enum ActionQueueBulkAction: string
     {
         return match ($this) {
             self::Approve => 'approved',
-            self::Reject => 'rejected',
+            self::Reject => 'declined',
         };
     }
 }

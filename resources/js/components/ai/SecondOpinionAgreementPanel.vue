@@ -44,7 +44,7 @@ const breakdown = computed<{
             return { heading: 'Action', rows: props.agreement.by_action_type };
         case 'answered_by':
             return {
-                heading: 'Verifier',
+                heading: 'Second opinion',
                 rows: props.agreement.by_answered_by,
             };
         default:
@@ -56,7 +56,7 @@ const countsLine = computed(() => {
     const parts = [
         countOf(totals.value.verdicts, 'verdict'),
         `${formatCount(totals.value.failed)} failed`,
-        `${formatCount(totals.value.rejected_by_verifier)} rejected by the verifier`,
+        `${formatCount(totals.value.rejected_by_verifier)} declined by the second opinion`,
         `${formatCount(totals.value.awaiting_review)} awaiting review`,
         `${formatCount(totals.value.auto_run)} ran automatically`,
         `${formatCount(totals.value.skipped)} skipped by a per-event rule`,
@@ -138,7 +138,7 @@ const headerClass =
                 <StatCard
                     label="Misses"
                     :value="formatCount(totals.agreed_rejected)"
-                    hint="agreed, person rejected"
+                    hint="agreed, person declined"
                     :class="
                         totals.agreed_rejected > 0 ? 'text-destructive' : ''
                     "
@@ -178,7 +178,7 @@ const headerClass =
                                     Person approved
                                 </th>
                                 <th :class="[headerClass, 'text-right']">
-                                    Person rejected
+                                    Person declined
                                 </th>
                             </tr>
                         </thead>
@@ -188,7 +188,7 @@ const headerClass =
                                     scope="row"
                                     class="px-3 py-2 text-left font-medium"
                                 >
-                                    Verifier agreed
+                                    Second opinion agreed
                                 </th>
                                 <td
                                     class="px-3 py-2 text-right tabular-nums"
@@ -219,7 +219,7 @@ const headerClass =
                                     scope="row"
                                     class="px-3 py-2 text-left font-medium"
                                 >
-                                    Verifier disagreed
+                                    Second opinion disagreed
                                 </th>
                                 <td
                                     class="px-3 py-2 text-right tabular-nums"

@@ -61,7 +61,7 @@ const secondOpinionOptions: Array<{
 }> = [
     { value: 'off', label: 'Off' },
     { value: 'hold', label: 'Hold' },
-    { value: 'reject', label: 'Reject' },
+    { value: 'reject', label: 'Decline' },
 ];
 
 function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
@@ -87,7 +87,7 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
                 orchestrator. Approval-gated actions wait for an admin/member to
                 confirm. Second opinion asks an independent check before an
                 automated decision-agent proposal runs: Hold queues a
-                disagreement for approval, Reject drops it. A failed check
+                disagreement for approval, Decline drops it. A failed check
                 always holds.
             </p>
         </div>
