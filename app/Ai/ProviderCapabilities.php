@@ -39,13 +39,7 @@ final readonly class ProviderCapabilities
      */
     public function everyProviderSupports(string $contract, ModelSelection $modelSelection): bool
     {
-        foreach ($this->chain($modelSelection) as $provider) {
-            if (! $this->supports($provider, $contract)) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all($this->chain($modelSelection), fn (string $provider): bool => $this->supports($provider, $contract));
     }
 
     /**

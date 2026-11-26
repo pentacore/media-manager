@@ -52,7 +52,7 @@ test('a viewer in chat sees only their own activity rows and no audit rows', fun
     expect(queryActivitySystemIds())->toBe([$own->id]);
 });
 
-test('a member in chat sees every user\'s activity rows and no audit rows', function (): void {
+test("a member in chat sees every user's activity rows and no audit rows", function (): void {
     $activity = ActivityLog::factory()->count(2)->create();
     ActivityLog::factory()->audit()->create();
 
