@@ -55,8 +55,8 @@ class HandleInertiaRequests extends Middleware
      * The `@typefinder-return` shape is the serialised one (closures resolved):
      * Typefinder turns it into SharedPageProps (pages.d.ts), which types
      * usePage() through resources/js/types/global.d.ts. No analyser checks it.
-     * Classes only used here are fully qualified: Rector drops their imports
-     * (https://github.com/pentacore/Laravel-Typefinder/issues/239).
+     * Classes only used here are fully qualified, as Typefinder's docs say:
+     * Rector drops imports that only a @typefinder-return tag uses.
      *
      * @typefinder-return array{
      *     name: string,
