@@ -17,12 +17,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 - **Frontend unit tests** (brainstorm): Vitest, `@vue/test-utils` and jsdom. For
   example, the `inferChoices` unit cases are covered only by browser tests today.
-- **Project knowledge files** (brainstorm): `GLOSSARY.md` (domain terms and words
-  to avoid), `docs/adr/` for decisions that are hard to reverse, and a rule to
-  keep them current. When this lands, retire `TODO.md`.
-- **Rule files per feature area** (brainstorm): one rule file each for the action
-  queue, AI chat and tools, the *arr libraries and media replacement, each
-  covering every layer. Migrate one area at a time, when it is touched.
 - **Inertia live props** (brainstorm): replace `useRealtimeReload`, used in 14
   files.
 - **AI runs and an MCP server** (brainstorm): the draft design covers AI runs, an
@@ -44,6 +38,11 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
+- **Use the glossary's words**: `GLOSSARY.md` lists words to avoid, but the
+  existing UI copy, README and rules still use some of them (the README's
+  "subtitle advisor", the "Subtitle escalations" page, the "Library activity"
+  page title, "Rejected" beside a Decline button). Rename them to the glossary's
+  words, one area at a time.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Agreement and gate charts:
         - Agreement "All" window: verdicts are read in chunks now, so memory is
