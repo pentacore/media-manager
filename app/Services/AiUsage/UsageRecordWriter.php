@@ -8,6 +8,7 @@ use App\Models\AiUsageRecord;
 use App\Services\AiBudget\AiBudgetGuard;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The one write path for ai_usage_records: agent runs (success and failed),
@@ -37,13 +38,15 @@ final readonly class UsageRecordWriter
         $snapshot = $this->modelPriceLookup->snapshotFor($attributes['provider'] ?? null, $attributes['model'] ?? null, $isBatch);
 
         try {
-            AiUsageRecord::create([
+            // Its own transaction, so a rejected insert inside a caller's
+            // transaction rolls back to a savepoint instead of aborting it.
+            DB::transaction(static fn (): AiUsageRecord => AiUsageRecord::create([
                 'status' => 'success',
                 ...$attributes,
                 ...($snapshot ?? []),
                 'is_batch' => $isBatch,
                 'price_source' => $snapshot === null ? null : 'live',
-            ]);
+            ]));
         } catch (UniqueConstraintViolationException) {
             // A concurrent dispatch for the same invocation won the insert race.
             return false;

@@ -7,6 +7,7 @@ namespace App\Listeners\Ai;
 use App\Ai\AiRunAttribution;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\AiUsageCaller;
+use App\Services\AiUsage\TelemetryGuard;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
 use App\Services\AiUsage\UsageText;
@@ -21,16 +22,18 @@ class RecordClassificationUsage
 {
     public function handle(Classified $classified): void
     {
-        resolve(UsageRecordWriter::class)->record([
-            'invocation_id' => $classified->invocationId,
-            'kind' => AiUsageKind::Classification,
-            'agent_class' => resolve(AiUsageCaller::class)->current() ?? 'classification',
-            'provider' => $classified->provider->name(),
-            'model' => $classified->model,
-            ...UsageColumns::fromText($classified->response->usage),
-            'prompt_text' => UsageText::classificationInput($classified->prompt),
-            'response_text' => UsageText::classificationOutput($classified->response),
-            'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
-        ]);
+        TelemetryGuard::run(function () use ($classified): void {
+            resolve(UsageRecordWriter::class)->record([
+                'invocation_id' => $classified->invocationId,
+                'kind' => AiUsageKind::Classification,
+                'agent_class' => resolve(AiUsageCaller::class)->current() ?? 'classification',
+                'provider' => $classified->provider->name(),
+                'model' => $classified->model,
+                ...UsageColumns::fromText($classified->response->usage),
+                'prompt_text' => UsageText::classificationInput($classified->prompt),
+                'response_text' => UsageText::classificationOutput($classified->response),
+                'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
+            ]);
+        });
     }
 }

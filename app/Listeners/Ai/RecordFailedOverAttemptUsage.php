@@ -8,6 +8,7 @@ use App\Ai\AiRunAttribution;
 use App\Ai\FailureCode;
 use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
+use App\Services\AiUsage\TelemetryGuard;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
 use App\Support\UpstreamErrorText;
@@ -30,26 +31,28 @@ class RecordFailedOverAttemptUsage
         $invocationId = $agentFailedOver->invocationId;
         $textUsage = $runUsageAccumulator->usage($invocationId);
 
-        if ($textUsage !== null) {
-            $provider = $runUsageAccumulator->provider($invocationId) ?? $agentFailedOver->provider->name();
-            $model = $runUsageAccumulator->model($invocationId) ?? $agentFailedOver->model;
+        TelemetryGuard::run(function () use ($agentFailedOver, $runUsageAccumulator, $invocationId, $textUsage): void {
+            if ($textUsage !== null) {
+                $provider = $runUsageAccumulator->provider($invocationId) ?? $agentFailedOver->provider->name();
+                $model = $runUsageAccumulator->model($invocationId) ?? $agentFailedOver->model;
 
-            resolve(UsageRecordWriter::class)->record([
-                // The run's own id stays free for the attempt that ends it.
-                'invocation_id' => sprintf('%s:failover:%s:%s', $invocationId, $provider, $model),
-                'kind' => AiUsageKind::Text,
-                'agent_class' => $agentFailedOver->agent::class,
-                'provider' => $provider,
-                'model' => $model,
-                ...UsageColumns::fromText($textUsage),
-                'parent_invocation_id' => ParentInvocation::current()[0] ?? null,
-                'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
-                'status' => 'failed',
-                'error_message' => UpstreamErrorText::sanitize($agentFailedOver->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
-                'error_code' => FailureCode::for($agentFailedOver->exception),
-                'failed_step' => $runUsageAccumulator->failedStep($invocationId),
-            ]);
-        }
+                resolve(UsageRecordWriter::class)->record([
+                    // The run's own id stays free for the attempt that ends it.
+                    'invocation_id' => sprintf('%s:failover:%s:%s', $invocationId, $provider, $model),
+                    'kind' => AiUsageKind::Text,
+                    'agent_class' => $agentFailedOver->agent::class,
+                    'provider' => $provider,
+                    'model' => $model,
+                    ...UsageColumns::fromText($textUsage),
+                    'parent_invocation_id' => ParentInvocation::current()[0] ?? null,
+                    'user_id' => resolve(AiRunAttribution::class)->user()->id ?? Auth::id(),
+                    'status' => 'failed',
+                    'error_message' => UpstreamErrorText::sanitize($agentFailedOver->exception->getMessage(), 2000, UpstreamErrorText::AGENT_EMPTY_FALLBACK),
+                    'error_code' => FailureCode::for($agentFailedOver->exception),
+                    'failed_step' => $runUsageAccumulator->failedStep($invocationId),
+                ]);
+            }
+        });
 
         $runUsageAccumulator->forget($invocationId);
     }
