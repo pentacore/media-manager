@@ -77,10 +77,14 @@ final readonly class CaseDraftFromUsage
         $fixtures = [];
 
         foreach ($invocations as $invocation) {
-            $fixtures[] = [
+            $call = LegacyStuckImportCall::current([
                 'tool' => $invocation->tool_name ?? class_basename($invocation->tool_class),
                 'arguments' => $invocation->arguments ?? [],
                 'result' => $invocation->result ?? '',
+            ]);
+
+            $fixtures[] = [
+                ...$call,
                 'writes' => $this->writes($invocation->tool_class),
                 'tool_class' => $invocation->tool_class,
             ];

@@ -11,6 +11,8 @@ use App\Ai\Decision\DecisionPrompt;
 use App\Ai\Decision\SecondOpinionCase;
 use App\Ai\Decision\SecondOpinionVerifier;
 use App\Ai\Tools\Arr\SearchMediaTool;
+use App\Ai\Tools\Arr\StuckImportVerdictTool;
+use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Enums\AiTask;
@@ -296,6 +298,28 @@ test('a decision draft expects the write tool calls', function (): void {
             ->has('draft.scoring.expected', 1)
             ->where('draft.scoring.expected.0.tool', 'ProposeActionTool')
             ->where('draft.scoring.expected.0.arguments.action', 'retry'));
+});
+
+test('a decision draft rewrites an old single-download stuck-import call to the current call and answer', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $aiUsageRecord = benchmarkTextUsage(DecisionAgent::class, 'Webhook: import failed');
+    $inspection = ['ok' => true, 'service' => 'sonarr', 'download_id' => 'SABnzbd_nzo_abc', 'total' => 1, 'importable' => 1, 'fully_mapped' => true, 'files' => []];
+    $failure = '{"ok":false,"reason":"lookup_failed","message":"Could not enumerate import candidates."}';
+    $current = ['tool' => 'InspectStuckImportTool', 'arguments' => ['service' => 'sonarr', 'download_ids' => ['a', 'b']], 'result' => '{"ok":true,"service":"sonarr","downloads":[]}'];
+    benchmarkToolCall($aiUsageRecord, InspectStuckImportTool::class, 'InspectStuckImportTool', ['arguments' => ['service' => 'sonarr', 'download_id' => 'SABnzbd_nzo_abc'], 'result' => json_encode($inspection)]);
+    benchmarkToolCall($aiUsageRecord, InspectStuckImportTool::class, 'InspectStuckImportTool', ['arguments' => ['service' => 'radarr', 'download_id' => 'x1'], 'result' => $failure]);
+    benchmarkToolCall($aiUsageRecord, InspectStuckImportTool::class, 'InspectStuckImportTool', ['arguments' => $current['arguments'], 'result' => $current['result']]);
+    benchmarkToolCall($aiUsageRecord, StuckImportVerdictTool::class, 'StuckImportVerdictTool', ['arguments' => ['service' => 'sonarr', 'download_id' => 'v1']]);
+
+    $this->get(route('admin.benchmarks.cases.create', ['from_usage' => $aiUsageRecord->id]))
+        ->assertInertia(fn ($page) => $page
+            ->where('draft.fixtures.0.arguments', ['service' => 'sonarr', 'download_ids' => ['SABnzbd_nzo_abc']])
+            ->where('draft.fixtures.0.result', fn (string $result): bool => json_decode($result, true) === ['ok' => true, 'service' => 'sonarr', 'downloads' => [$inspection]])
+            ->where('draft.fixtures.1.arguments', ['service' => 'radarr', 'download_ids' => ['x1']])
+            ->where('draft.fixtures.1.result', $failure)
+            ->where('draft.fixtures.2.arguments', $current['arguments'])
+            ->where('draft.fixtures.2.result', $current['result'])
+            ->where('draft.fixtures.3.arguments', ['service' => 'sonarr', 'download_id' => 'v1']));
 });
 
 test('a price updater draft takes providers from the prompt and prices from upsert calls', function (): void {

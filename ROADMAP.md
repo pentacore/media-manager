@@ -59,11 +59,10 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
-- **Old stuck-import calls in drafted benchmark cases**: the fixture migration
-  rewrote stored cases' single `download_id` `InspectStuckImportTool` calls to
-  `download_ids`, but a case drafted from a tool invocation recorded before
-  2026-10-16 (kept up to 90 days) still gets the old call. Rewrite it in
-  `CaseDraftFromUsage` too, or let those invocations age out (mid-January 2027).
+- **Drop `LegacyStuckImportCall`** once no AI tool invocation recorded before
+  2026-10-16 is left (they are kept up to 90 days, so mid-January 2027): it
+  rewrites those old single `download_id` `InspectStuckImportTool` calls when a
+  benchmark case is drafted from them. The fixture migration keeps its own copy.
 - **Statistics timezone minors**, found while fixing the watch heatmap's timezone:
     - Rollups that `statistics:aggregate` wrote on a non-UTC `APP_TIMEZONE`
       before the fix sit one offset late. Re-run `statistics:backfill` there once
