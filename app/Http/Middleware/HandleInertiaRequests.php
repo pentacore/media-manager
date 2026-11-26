@@ -55,12 +55,13 @@ class HandleInertiaRequests extends Middleware
      * The `@typefinder-return` shape is the serialised one (closures resolved):
      * Typefinder turns it into SharedPageProps (pages.d.ts), which types
      * usePage() through resources/js/types/global.d.ts. No analyser checks it.
-     * Classes only used here are fully qualified, as Typefinder's docs say:
-     * Rector drops imports that only a @typefinder-return tag uses.
+     * Class names in the tag are fully qualified, and Typefinder's
+     * QualifyTypefinderReturnRector keeps them that way: Rector drops imports
+     * that only a @typefinder-return tag uses.
      *
      * @typefinder-return array{
      *     name: string,
-     *     auth: array{user: SharedUserResource|null, can: array<value-of<\App\Enums\Ability>, bool>},
+     *     auth: array{user: \App\Http\Resources\SharedUserResource|null, can: array<value-of<\App\Enums\Ability>, bool>},
      *     ai: array{enabled: bool, max_attachments: int},
      *     integrations: array{seerr: bool, prowlarr: bool, whisparr: bool},
      *     nav: array{pendingActions: int, pendingActionsVersion: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int},

@@ -250,8 +250,8 @@ importers:
         specifier: ^0.1.11
         version: 0.1.11
       '@pentacore/vite-plugin-laravel-typefinder':
-        specifier: ^8.4.2
-        version: 8.4.2(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.11)(jiti@2.7.0)(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3)))
+        specifier: ^8.5.0
+        version: 8.5.0(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.11)(jiti@2.7.0)(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3)))
       '@semantic-release/changelog':
         specifier: ^7.0.0
         version: 7.0.0(semantic-release@26.0.1(supports-color@10.2.2))
@@ -811,8 +811,8 @@ packages:
     resolution: {integrity: sha512-YT6htikBOBQ00XDxZpRZLZ0anEDo7h9s4+YvjRU0/Ng/cLd0D6SZQ3tsms4g/GDer/z8UKlegC5iptEfyRXJcw==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@pentacore/vite-plugin-laravel-typefinder@8.4.2':
-    resolution: {integrity: sha512-ELZICsujXAfvHH7W7D5tna5ICN1ok4cqnJbhyKgP0czKkxWGuItMTLDl44VfYCTzI8D5oqwJYbnXKYvC95hOwg==}
+  '@pentacore/vite-plugin-laravel-typefinder@8.5.0':
+    resolution: {integrity: sha512-EXQYfeJGEXTV4NHlhb9wsw1zitzXQGiMEkLEgkx3eip+0prcXr8EnAIenXMF+2TwCQw95aXHPJBko5HHfjP/EQ==}
     peerDependencies:
       vite: ^6.0.0 || ^7.0.0 || ^8.0.0
 
@@ -3642,7 +3642,7 @@ snapshots:
 
   '@oxlint/plugins@1.94.0': {}
 
-  '@pentacore/vite-plugin-laravel-typefinder@8.4.2(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.11)(jiti@2.7.0)(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3)))':
+  '@pentacore/vite-plugin-laravel-typefinder@8.5.0(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.11)(jiti@2.7.0)(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3)))':
     dependencies:
       vite: '@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(@volar/typescript@2.4.28(typescript@6.0.3))(@vue/language-core@3.3.11)(jiti@2.7.0)(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3))'
 

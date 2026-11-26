@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Pentacore\Typefinder\Rector\SyncSharedPropsShapeRector;
+use Pentacore\Typefinder\Rector\TypefinderSetList;
 use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
@@ -46,8 +48,15 @@ return RectorConfig::configure()
             LaravelSetList::LARAVEL_FACTORIES,
             LaravelSetList::LARAVEL_ARRAYACCESS_TO_METHOD_CALL,
             LaravelSetList::LARAVEL_ARRAY_STR_FUNCTION_TO_STATIC_CALL,
+            TypefinderSetList::TYPEFINDER,
         ]
     )
+    // Only the shared-props rule from Typefinder's INERTIA set: pages are not
+    // tagged with #[TypefinderPage] (ROADMAP "Typed Inertia pages" is Not
+    // planned), so AddTypefinderPageRector stays out.
+    ->withRules([
+        SyncSharedPropsShapeRector::class,
+    ])
     ->withConfiguredRule(
         RouteActionCallableRector::class,
         [

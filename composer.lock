@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "39b089ac458e73434dbc10ec70d4035c",
+    "content-hash": "8c4640652a45b9c7c9fdcb3ca3c835a1",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -4015,16 +4015,16 @@
         },
         {
             "name": "pentacore/laravel-typefinder",
-            "version": "8.4.2",
+            "version": "8.5.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pentacore/Laravel-Typefinder.git",
-                "reference": "30abb2f8c524952d775da9e3a777c49937787dfc"
+                "reference": "d5c00174351910b75477ad0ad749d57764fb708a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/30abb2f8c524952d775da9e3a777c49937787dfc",
-                "reference": "30abb2f8c524952d775da9e3a777c49937787dfc",
+                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/d5c00174351910b75477ad0ad749d57764fb708a",
+                "reference": "d5c00174351910b75477ad0ad749d57764fb708a",
                 "shasum": ""
             },
             "require": {
@@ -4043,8 +4043,11 @@
                 "orchestra/testbench": "^10.1|^11.0",
                 "phpstan/phpstan": "^2.3",
                 "phpunit/phpunit": "^13.0",
-                "rector/rector": "^2.0",
+                "rector/rector": "^2.8",
                 "symfony/translation": "^6.4.8|^7.0|^8.0"
+            },
+            "suggest": {
+                "rector/rector": "Run Typefinder's Rector rules (Pentacore\\Typefinder\\Rector\\TypefinderSetList) (^2.8)"
             },
             "type": "library",
             "extra": {
@@ -4083,8 +4086,8 @@
                 "issues": "https://github.com/pentacore/laravel-typefinder/issues",
                 "source": "https://github.com/pentacore/laravel-typefinder"
             },
-            "time": "2026-11-25T21:12:46+00:00",
-            "published-time": "2026-11-25T21:12:51+00:00"
+            "time": "2026-11-26T07:56:11+00:00",
+            "published-time": "2026-11-26T07:56:23+00:00"
         },
         {
             "name": "php-http/client-common",
