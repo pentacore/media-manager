@@ -136,9 +136,20 @@ test('index exposes classification settings, provider keys and advanced tool ava
             ->has('rerankingProviders', 3)
             ->where('providerKeys.typesafe', false)
             ->where('providerKeys.cohere', true)
-            ->where('advancedTools.tool_search', false)
+            ->where('advancedTools.tool_search', true)
             ->where('advancedTools.code_execution', true)
         );
+});
+
+test('tool search shows inactive when the chat primary lacks it, even with a tool-search fallback', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => 'anthropic'])->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('advancedTools.tool_search', false));
 });
 
 test('admin saves the Jev usage settings', function (): void {

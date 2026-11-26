@@ -255,6 +255,11 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
 
     /**
      * Whether every provider the run may reach supports hosted code execution.
+     * Gated chain-wide, unlike ToolSearch (primary only): laravel/ai silently
+     * drops a CodeExecution the reached provider lacks instead of inlining a
+     * substitute, and the instructions promise the tool once it is
+     * registered, so a fallback without it would be told to use a tool it
+     * does not have.
      */
     private function codeExecutionAvailable(): bool
     {

@@ -31,16 +31,29 @@ test('an all-OpenAI/Anthropic chain defers non-core tools behind one ToolSearch'
         ->and($searches[0]->tools)->toHaveCount(count($tools) - count(ToolGroup::core()));
 });
 
-test('a chain reaching a provider without tool search gets plain tools', function (): void {
+test('a tool-search primary defers non-core tools even when the fallback lacks tool search', function (): void {
+    // The SDK inlines the ToolSearch's tools on the fallback (pinned in
+    // ProviderToolSupportCharacterizationTest), so only the primary decides.
     config()->set('ai.default', 'openai');
     AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Gemini->value])->create();
+
+    $tools = [...(new MediaAgent)->tools()];
+    $payload = resolve(ToolPayload::class)->build($tools);
+
+    expect(collect($payload)->filter(fn (object $tool): bool => $tool instanceof ToolSearch))->toHaveCount(1);
+});
+
+test('a primary without tool search gets plain tools even when the fallback has it', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Chat)->selecting('openrouter', 'anthropic/claude-sonnet-5')->create();
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
 
     $tools = [...(new MediaAgent)->tools()];
 
     expect(resolve(ToolPayload::class)->build($tools))->toBe($tools);
 });
 
-test('a streamed chat turn on a mixed chain never sends a ToolSearch wrapper', function (): void {
+test('a streamed chat turn with a tool-search primary and a fallback without it sends one ToolSearch wrapper', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
 
@@ -52,8 +65,7 @@ test('a streamed chat turn on a mixed chain never sends a ToolSearch wrapper', f
         ->assertOk()
         ->streamedContent();
 
-    MediaAgent::assertPrompted(fn ($prompt): bool => $prompt->tools !== null
-        && collect($prompt->tools)->doesntContain(fn (object $tool): bool => $tool instanceof ToolSearch));
+    MediaAgent::assertPrompted(fn ($prompt): bool => collect($prompt->tools ?? [])->filter(fn (object $tool): bool => $tool instanceof ToolSearch)->count() === 1);
 });
 
 test('a streamed chat turn on a tool-search chain defers non-core tools', function (): void {

@@ -1242,8 +1242,9 @@ const budgetState = computed<{
                                             : 'inactive'
                                     }}
                                 </Pill>
-                                — needs every provider in the failover chain to
-                                be OpenAI or Anthropic
+                                — needs the chat model's provider to be OpenAI
+                                or Anthropic; a failover provider without it
+                                gets every tool inline
                             </div>
                             <div data-advanced-tool="code_execution">
                                 Code execution (price verifier):

@@ -42,6 +42,20 @@ test('an OpenAI to Anthropic chain supports tool search', function (): void {
         ->and(resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsToolSearch::class, $selection))->toBeTrue();
 });
 
+test('the primary provider decides primarySupports, whatever the fallback', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Gemini->value])->create();
+
+    expect(resolve(ProviderCapabilities::class)->primarySupports(SupportsToolSearch::class, new ModelSelection('openai', 'gpt-5-mini')))->toBeTrue()
+        ->and(resolve(ProviderCapabilities::class)->primarySupports(SupportsToolSearch::class, new ModelSelection('openrouter', 'anthropic/claude-sonnet-5')))->toBeFalse();
+});
+
+test('a primary provider that cannot be resolved counts as unsupported', function (): void {
+    config()->set('ai.providers.openai.driver', 'not-a-driver');
+
+    expect(resolve(ProviderCapabilities::class)->primarySupports(SupportsToolSearch::class, new ModelSelection('openai', 'gpt-5-mini')))->toBeFalse();
+});
+
 test('a provider that cannot be resolved counts as unsupported', function (): void {
     config()->set('ai.providers.anthropic.driver', 'not-a-driver');
     AiTaskModel::factory()->task(AiTask::Failover)->state(['provider' => Lab::Anthropic->value])->create();
