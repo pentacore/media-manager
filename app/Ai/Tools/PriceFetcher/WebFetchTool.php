@@ -6,6 +6,7 @@ namespace App\Ai\Tools\PriceFetcher;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\PricingSourceHosts;
 use GuzzleHttp\Psr7\Uri;
@@ -30,6 +31,15 @@ class WebFetchTool extends BaseTool
      * against the host allowlist.
      */
     public const int MAX_REDIRECTS = 5;
+
+    /** Seconds one request (each redirect hop) may take. */
+    public const int TIMEOUT_SECONDS = 15;
+
+    /** What a fetch answers once the price refresh time box no longer fits it. */
+    private const array OUT_OF_TIME = [
+        'error' => 'out_of_time',
+        'message' => 'The price refresh is out of time for more page fetches. Do not fetch again: write the prices you already have, then finish.',
+    ];
 
     /**
      * Hosts the agent is allowed to fetch from. Pricing pages only. Sourced
@@ -92,7 +102,7 @@ class WebFetchTool extends BaseTool
 
     public function description(): Stringable|string
     {
-        return 'Fetch a single provider pricing page and return its text content (HTML stripped) for parsing. Allowed hosts: '.implode(', ', self::allowedHosts()).'. Use this to read current model prices off the provider documentation.';
+        return 'Fetch a single provider pricing page and return its text content (HTML stripped) for parsing. Allowed hosts: '.implode(', ', self::allowedHosts()).'. Use this to read current model prices off the provider documentation. If it answers out_of_time, stop fetching and write the prices you already have.';
     }
 
     public function risk(): Risk
@@ -120,7 +130,14 @@ class WebFetchTool extends BaseTool
                 return $rejection;
             }
 
-            $response = Http::timeout(15)
+            // A step may fetch many pages in parallel, more than the step
+            // reserve (PriceRefreshTimeBox::AGENT_STEP_SECONDS) accounts for,
+            // so every request checks the queued refresh's time box itself.
+            if (! resolve(PriceRefreshTimeBox::class)->hasRoomFor(PriceRefreshTimeBox::WEB_FETCH_SECONDS)) {
+                return self::OUT_OF_TIME;
+            }
+
+            $response = Http::timeout(self::TIMEOUT_SECONDS)
                 ->connectTimeout(5)
                 ->withUserAgent('Mozilla/5.0 MediaManager-PriceFetcher/1.0')
                 ->withHeaders(['Accept' => 'text/html,application/xhtml+xml'])

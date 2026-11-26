@@ -197,6 +197,40 @@ test('the price verifier keeps going while a step still fits, and when no time b
     expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
 });
 
+test('the price verifier step timeout is cut to the time left in the box', function (?int $timeout, int $boxSeconds, int $expected): void {
+    $this->freezeTime();
+    resolve(PriceRefreshTimeBox::class)->open($boxSeconds);
+    $seen = null;
+
+    (new StopWhenPriceRefreshOutOfTime)->handle(
+        new PendingStep(...[...get_object_vars(stepMiddlewarePendingStep(2, false)), 'timeout' => $timeout]),
+        function (PendingStep $step) use (&$seen): string {
+            $seen = $step;
+
+            return 'ran';
+        },
+    );
+
+    expect($seen->timeout)->toBe($expected);
+})->with([
+    'an explicit timeout longer than the time left' => [200, 120, 120],
+    'an explicit timeout that fits' => [30, 120, 30],
+    'no timeout takes the SDK default, which fits' => [null, 120, PriceRefreshTimeBox::MODEL_CALL_SECONDS],
+    'no timeout with exactly one step left' => [null, PriceRefreshTimeBox::AGENT_STEP_SECONDS, PriceRefreshTimeBox::MODEL_CALL_SECONDS],
+]);
+
+test('the price verifier step timeout is left alone when no time box was opened', function (): void {
+    $seen = null;
+
+    (new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(2, false), function (PendingStep $step) use (&$seen): string {
+        $seen = $step;
+
+        return 'ran';
+    });
+
+    expect($seen->timeout)->toBeNull();
+});
+
 function stepMiddlewareDecisionRun(?int $secondsLeft): void
 {
     app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', deadline: $secondsLeft === null ? null : now()->addSeconds($secondsLeft)));

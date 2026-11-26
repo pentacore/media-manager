@@ -232,7 +232,10 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, Has
         if (config('mediamanager.ai.price_fetcher_provider_webfetch', false)) {
             // Provider-native fetch: the model provider performs the fetch, so
             // there is no local receipt to record. The write tool falls back to
-            // host-allowlist + scheme validation for provenance.
+            // host-allowlist + scheme validation for provenance. Its fetches
+            // run inside the model call, so the price refresh time box bounds
+            // them only through the step timeout StopWhenPriceRefreshOutOfTime
+            // clamps, not per fetch as WebFetchTool does.
             $webFetch = (new WebFetch)->allow(WebFetchTool::allowedHosts())->max(20);
         } else {
             // Custom fetch tool: every fetch is performed and recorded locally,
