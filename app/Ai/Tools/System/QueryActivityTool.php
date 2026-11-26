@@ -8,6 +8,8 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
+use App\Models\User;
+use App\Support\Abilities;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
@@ -42,9 +44,15 @@ class QueryActivityTool extends BaseTool
 
         if ($scope === 'system') {
             // Audit rows never reach a model: chat transcripts go to an AI
-            // provider and the decision agent runs without a user.
+            // provider, so even an admin's chat is read as a non-admin
+            // (visibleTo() would hand an admin every audit row). A chat user
+            // without manage-library sees only their own rows, as on the
+            // activity page; without a user (the decision agent) every
+            // activity row.
+            $user = auth()->user();
+
             $logs = ActivityLog::query()
-                ->visibleTo(null)
+                ->visibleTo($user instanceof User && ! $user->can(Abilities::ADMIN) ? $user : null)
                 ->with('user:id,name', 'serviceConnection:id,name,type')
                 ->where('created_at', '>=', $since)
                 ->latest()
