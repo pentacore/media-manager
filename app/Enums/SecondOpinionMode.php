@@ -23,7 +23,7 @@ enum SecondOpinionMode: string
         return match ($this) {
             self::Off => 'Off',
             self::Hold => 'Hold if it disagrees',
-            self::Reject => 'Reject if it disagrees',
+            self::Reject => 'Decline if it disagrees',
         };
     }
 }

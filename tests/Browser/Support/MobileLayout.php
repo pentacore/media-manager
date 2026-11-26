@@ -1451,7 +1451,7 @@ function mobileLayoutGateTests(string $viewport, string $scheme): void
 
         $webpage = mobileLayoutVisit(route('bazarr.escalations', absolute: false), $viewport, $scheme)->assertNoSmoke();
         $webpage->script(appHydratedScript());
-        mobileLayoutAssertPage($webpage, '[data-test="escalation-filters"]', 'main:has([data-test^="investigate-subtitle-case-"]):has(nav[aria-label="Escalation pages"])');
+        mobileLayoutAssertPage($webpage, '[data-test="escalation-filters"]', 'main:has([data-test^="investigate-subtitle-case-"]):has(nav[aria-label="Needs review pages"])');
 
         if ($viewport === 'phone') {
             $webpage->assertScript(phoneSmallTargetsScript(), '');

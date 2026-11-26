@@ -31,10 +31,10 @@ enum AiTask: string
             self::Chat => 'Chat',
             self::Title => 'Conversation titles',
             self::Decision => 'Decision agent',
-            self::DecisionVerifier => 'Decision verifier',
+            self::DecisionVerifier => 'Second opinion',
             self::FileInspector => 'File inspector',
             self::StuckDownloadInvestigator => 'Stuck download investigator',
-            self::PriceUpdater => 'Price updater',
+            self::PriceUpdater => 'Price refresh',
             self::BenchmarkJudge => 'Benchmark judge',
             self::Failover => 'Failover',
         };

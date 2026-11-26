@@ -78,7 +78,7 @@ const pinnable = computed(() =>
                 ]"
                 :title="
                     chip.unavailable
-                        ? 'Not available — its integration isn\'t configured'
+                        ? 'Not available — its service has no active connection'
                         : undefined
                 "
                 :data-tool-chip="chip.value"

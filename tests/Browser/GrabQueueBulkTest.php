@@ -59,7 +59,7 @@ test('an admin removes two Sonarr queue items in bulk', function (): void {
         ->click('[data-bulk-select="42"]')
         ->assertSeeIn('[data-bulk-count]', '2 selected')
         ->click('[data-bulk-queue-action="remove"]')
-        ->assertSee('Remove 2 items from the queue?')
+        ->assertSee('Remove 2 items from the grab queue?')
         ->assertSeeIn('[data-bulk-queue-confirm]', 'Confirm')
         ->click('[data-bulk-queue-confirm]')
         ->assertSee('2 removed')
@@ -205,7 +205,7 @@ test('an admin removes one queue item from its row menu', function (): void {
 
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-remove="remove"]')
-        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the queue?')
+        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the grab queue?')
         ->click('[data-confirm-accept]')
         ->assertSee('Removed from queue.')
         ->assertNoSmoke();
@@ -226,7 +226,7 @@ test('a row removal whose connection was deactivated after the page loaded is re
 
     $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
         ->click('[data-queue-remove="remove"]')
-        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the queue?')
+        ->assertSeeIn('[data-confirm-dialog] [data-slot="dialog-title"]', 'from the grab queue?')
         ->click('[data-confirm-accept]')
         ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
 
@@ -455,7 +455,7 @@ test("Cancel on a row menu's question or manual import returns focus to that row
 
     $webpage->click($menu)
         ->click('[data-queue-remove="remove"]')
-        ->assertSeeIn('[data-confirm-dialog]', 'from the queue?')
+        ->assertSeeIn('[data-confirm-dialog]', 'from the grab queue?')
         ->click('[data-confirm-cancel]');
     $webpage->script(confirmDialogGoneScript());
     $webpage->assertScript(focusLandsOnScript($menu), true);
@@ -553,7 +553,7 @@ test("on a phone a queue card menu's Cancel returns focus to it and a confirmed 
 
     $webpage->click($menu)
         ->click('[data-queue-remove="remove"]')
-        ->assertSeeIn('[data-confirm-dialog]', 'from the queue?')
+        ->assertSeeIn('[data-confirm-dialog]', 'from the grab queue?')
         ->click('[data-confirm-cancel]');
     $webpage->script(confirmDialogGoneScript());
     $webpage->assertScript(focusLandsOnScript($menu), true);

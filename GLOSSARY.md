@@ -30,7 +30,7 @@ The words this project uses for its domain, and the words to avoid. Use these wo
 | Replacement candidate | A release ranked as a possible replacement. | `ReplacementCandidateFinder`, `ReleaseCandidateRanker` |
 | Subtitle case | One media file's subtitle problem, tracked until it is resolved. | `SubtitleCase`, `SubtitleCaseStatus` |
 | Subtitle audit | A check of every episode of a series for subtitles, with one batch repair. | `SubtitleAuditBatch`, `SeriesSubtitleAuditor` |
-| Media Advisor | The code that decides an escalated subtitle case: queue a replacement or send it to review. | `RunSubtitleAdvisor`, `SubtitleAdvisorDecider` |
+| Media Advisor | The code that decides a subtitle case Bazarr could not fix: queue a replacement or send it to review. | `RunSubtitleAdvisor`, `SubtitleAdvisorDecider` |
 | Stuck import | A finished download that the *arr could not import. | `StuckImportChoice`, `InspectStuckImportTool` |
 | AI mode | Executive (the AI acts) or advisory (the AI only suggests). | `AiMode` |
 | AI task | A workload with its own model choice: chat, title, decision and others. | `AiTask`, `AiTaskModel` |
@@ -52,14 +52,14 @@ The words this project uses for its domain, and the words to avoid. Use these wo
 
 | Avoid | Say instead | Why |
 | --- | --- | --- |
-| "subtitle advisor" | "Media Advisor" | The UI and messages say Media Advisor; the README says subtitle advisor. Classes keep `SubtitleAdvisor`. |
-| "reject" in UI copy | "decline" | The Action Queue button says Decline, the status label says Rejected. The stored status stays `rejected`. |
-| "escalation" | "needs review" | The status is `needs_review` and the notification says "needs review"; the page says "Subtitle escalations". |
-| "verifier" on its own | "second opinion" (decision check), "price refresh" (pricing) | It names two unrelated agents: the decision verifier and the price verifier. |
-| "price verifier", "price updater", "price fetcher" | "price refresh" | One feature has four names: `AiTask::PriceUpdater`, `PriceFetcherAgent`, "price verifier" in AI Settings, `RefreshAiPricesJob`. |
+| "subtitle advisor" | "Media Advisor" | The UI, messages and README say Media Advisor. Classes keep `SubtitleAdvisor`. |
+| "reject" in UI copy | "decline" | The Action Queue says Decline and Declined. The stored status stays `rejected`, and so do `ActionQueueBulkAction::Reject` and `SecondOpinionMode::Reject`. |
+| "escalation" | "needs review" | The status is `needs_review`; the Subtitle Center tab says "Needs review". Classes and routes keep `Escalation` (`EscalationController`, `bazarr.escalations`). A server incident still "escalates" when its severity rises. |
+| "verifier" on its own | "second opinion" (decision check), "price refresh" (pricing) | It names two unrelated agents: the decision verifier and the price verifier. Classes keep `DecisionVerifierAgent` and `AiTask::DecisionVerifier`. |
+| "price verifier", "price updater", "price fetcher" | "price refresh" | One feature had four names. The UI says price refresh; code keeps `AiTask::PriceUpdater`, `PriceFetcherAgent` and `RefreshAiPricesJob`. |
 | "queue" on its own | "Action Queue", "Downloads" (SABnzbd), "grab queue" (*arr), "queue lane" (jobs) | Four different queues. |
-| "library activity" | "grab queue" | The sidebar says Grab queue, the page title says Library activity. "Activity" is the activity log. |
-| "Subtitles" for the Bazarr section | "Subtitle Center" | The sidebar says Subtitles, the page title says Subtitle Center. |
+| "library activity" | "grab queue" | The sidebar and page say Grab queue. "Activity" is the activity log. Code keeps `LibraryActivityController`. |
+| "Subtitles" for the Bazarr section | "Subtitle Center" | The sidebar, breadcrumbs and page title say Subtitle Center. |
 | "action type config" in prose | "approval rule" | The page and sidebar say Approval rules; the model is `ActionTypeConfig`. |
 | "show" for a TV series | "series" | "Show" is also the detail page (`Show.vue`, a controller's `show()`). Say "detail page" for that. |
 | "request" on its own | "Seerr request", "action request" or "form request" | Three kinds of request share the word. |

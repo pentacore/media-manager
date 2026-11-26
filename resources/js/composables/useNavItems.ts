@@ -231,7 +231,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         prefetch: false,
                     },
                     {
-                        title: 'Subtitles',
+                        title: 'Subtitle Center',
                         href: BazarrOverviewController.url(),
                         icon: Captions,
                         ability: 'manage-library',

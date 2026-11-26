@@ -154,12 +154,12 @@ class ActionRequestController extends Controller
     public function reject(Request $request, ActionRequest $actionRequest, ActionRequestReviewer $actionRequestReviewer): RedirectResponse
     {
         if (! $actionRequestReviewer->reject($actionRequest, $request->user())) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Only pending requests can be rejected.')]);
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Only pending action requests can be declined.')]);
 
             return back();
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Action rejected.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Action declined.')]);
 
         return back();
     }

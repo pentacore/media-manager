@@ -38,11 +38,23 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
-- **Use the glossary's words**: `GLOSSARY.md` lists words to avoid, but the
-  existing UI copy, README and rules still use some of them (the README's
-  "subtitle advisor", the "Subtitle escalations" page, the "Library activity"
-  page title, "Rejected" beside a Decline button). Rename them to the glossary's
-  words, one area at a time.
+- **Glossary words still left**, after the first rename pass:
+    - "Action Rules": the page and sidebar say Approval rules, but the
+      "disabled in Action Rules" messages (controllers, `ManualActionOutcome`,
+      AI tool results), the Bazarr admin's "Configure Action Rules" button and
+      the README still use the old name. Add "action rules" to the glossary's
+      words to avoid and rename them together, tool results included.
+    - "Requests" and "My requests" (sidebar, page titles) say "request" on its
+      own; the glossary wants "Seerr requests".
+    - Stored and model-read text still says rejected or verifier: the
+      `rejection_reason` "Rejected by second opinion: …", the decision summary
+      "The second opinion rejected it", `ClassificationOutcomeSource::Llm`'s
+      "LLM verifier" label, and the agent and verifier prompts. Changing it
+      changes what models read and leaves old rows worded differently, so
+      decide whether it is worth it.
+    - Code comments, log lines and exception messages still say "subtitle
+      advisor" and "price verifier" (`QueueAutomaticReplacementTool`,
+      `SubtitleAdvisorRunContext`, `StopWhenPriceRefreshOutOfTime`, …).
 - **AI routing minors**, from the review of each AI routing pull request.
     - Agreement and gate charts:
         - Agreement "All" window: verdicts are read in chunks now, so memory is

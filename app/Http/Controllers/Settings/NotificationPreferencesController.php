@@ -61,7 +61,7 @@ class NotificationPreferencesController extends Controller
         ],
         SubtitleCaseNeedsReview::class => [
             'label' => 'Subtitle case needs review',
-            'description' => 'When a subtitle case is escalated and needs a human decision.',
+            'description' => 'When a subtitle case needs review and a human decision.',
         ],
         ScheduledBenchmarkAlert::class => [
             'label' => 'Scheduled benchmark alerts',

@@ -87,7 +87,7 @@ class DecisionAgentActed extends Notification
             return $this->summary;
         }
 
-        return sprintf("%s\nSecond opinion: %d held, %d rejected.", $this->summary, $this->heldBySecondOpinion, $this->rejectedBySecondOpinion);
+        return sprintf("%s\nSecond opinion: %d held, %d declined.", $this->summary, $this->heldBySecondOpinion, $this->rejectedBySecondOpinion);
     }
 
     private function title(): string

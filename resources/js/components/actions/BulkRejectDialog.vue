@@ -35,13 +35,13 @@ const emit = defineEmits<{
         >
             <DialogHeader>
                 <DialogTitle
-                    >Reject {{ count }}
+                    >Decline {{ count }} action
                     {{ count === 1 ? 'request' : 'requests' }}?</DialogTitle
                 >
                 <DialogDescription>
-                    One reason is saved on every rejected request and in the
-                    activity log. Requests that are no longer pending are
-                    skipped.
+                    One reason is saved on every declined action request and in
+                    the activity log. Action requests that are no longer pending
+                    are skipped.
                 </DialogDescription>
             </DialogHeader>
             <textarea
@@ -59,7 +59,7 @@ const emit = defineEmits<{
                     :disabled="busy"
                     data-bulk-reject-confirm
                     @click="emit('confirm')"
-                    >Reject {{ count }}</Button
+                    >Decline {{ count }}</Button
                 >
             </DialogFooter>
         </DialogContent>

@@ -51,7 +51,7 @@ test('the second opinion panel shows agreement with reviewers', function (): voi
         ->assertSeeIn('[data-agreement-stat="misses"]', '1')
         ->assertAttributeContains('[data-agreement-stat="misses"]', 'class', 'text-destructive')
         ->assertSeeIn('[data-agreement-stat="coverage"]', 'of 10 verdicts')
-        ->assertSeeIn('[data-agreement-counts]', '10 verdicts · 1 failed · 1 rejected by the verifier · 1 awaiting review · 1 ran automatically · 1 skipped by a per-event rule')
+        ->assertSeeIn('[data-agreement-counts]', '10 verdicts · 1 failed · 1 declined by the second opinion · 1 awaiting review · 1 ran automatically · 1 skipped by a per-event rule')
         ->assertSeeIn('[data-agreement-cell="agreed_approved"]', '3')
         ->assertSeeIn('[data-agreement-cell="agreed_rejected"]', '1')
         ->assertSeeIn('[data-agreement-cell="disagreed_approved"]', '1')

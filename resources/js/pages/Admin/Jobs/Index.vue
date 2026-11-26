@@ -144,7 +144,7 @@ function batchStatusVariant(
             </template>
             <template #description>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
-                    Read-only view of the queue, recent failures, and the
+                    Read-only view of the queued jobs, recent failures, and the
                     scheduled-command catalogue. Use this to verify that the
                     Laravel scheduler is alive and that nothing has piled up.
                 </p>
@@ -192,7 +192,7 @@ function batchStatusVariant(
                             <th
                                 v-for="header in [
                                     'ID',
-                                    'Queue',
+                                    'Queue lane',
                                     'Class',
                                     'Attempts',
                                     'Reserved',
@@ -389,7 +389,7 @@ function batchStatusVariant(
                             <th
                                 v-for="header in [
                                     'Class',
-                                    'Queue',
+                                    'Queue lane',
                                     'Exception',
                                     'Failed at',
                                 ]"

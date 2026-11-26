@@ -1155,8 +1155,8 @@ test('a queued action card rejects the pending request inline', function (): voi
         ->click("[data-conversation-id=\"{$conversationId}\"]")
         ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'pending')
         ->click('[data-action-reject]')
-        ->assertSee('1 rejected')
-        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'rejected')
+        ->assertSee('1 declined')
+        ->assertSeeIn('[data-action-approval-card] [data-action-status]', 'declined')
         ->assertMissing('[data-action-approve]')
         ->assertMissing('[data-action-reject]')
         ->assertNoJavaScriptErrors();
@@ -1388,10 +1388,10 @@ test('declining the batch asks first and rejects every pending replacement', fun
         ->click('[data-subtitle-audit-decline]')
         ->assertSee('Decline 2 subtitle replacements?')
         ->click('[data-confirm-accept]')
-        ->assertSee('2 rejected')
+        ->assertSee('2 declined')
         ->assertMissing('[data-subtitle-audit-approve]')
         ->assertMissing('[data-subtitle-audit-decline]')
-        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['rejected', 'rejected'])
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['declined', 'declined'])
         ->assertNoJavaScriptErrors();
 
     expect(array_map(fn (ActionRequest $actionRequest): ActionRequestStatus => $actionRequest->fresh()->status, $requests))
@@ -1484,7 +1484,7 @@ test('a batch review that loses a race shows every replacement status from the s
     $webpage->click('[data-subtitle-audit-approve]')
         ->assertSee('1 skipped')
         ->assertMissing('[data-subtitle-audit-approve]')
-        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['rejected', 'approved'])
+        ->assertScript("Array.from(document.querySelectorAll('[data-subtitle-audit-action-status]')).map((pill) => pill.textContent.trim())", ['declined', 'approved'])
         ->assertDontSeeIn('[data-subtitle-audit-card]', 'Changed elsewhere')
         ->assertNoJavaScriptErrors();
 
@@ -1551,7 +1551,7 @@ test('a multi-chunk batch review shows the true statuses of a partial chunk befo
     $webpage->click('[data-subtitle-audit-approve]');
     $webpage->script(confirmDialogWaitUntilScript('window.__mmHeldBulk.length === 1'));
 
-    $webpage->assertSeeIn('[data-subtitle-audit-episode]:nth-child(1) [data-subtitle-audit-action-status]', 'rejected')
+    $webpage->assertSeeIn('[data-subtitle-audit-episode]:nth-child(1) [data-subtitle-audit-action-status]', 'declined')
         ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(2) [data-subtitle-audit-action-status]', 'approved')
         ->assertDontSeeIn('[data-subtitle-audit-card]', 'Changed elsewhere')
         ->assertSeeIn('[data-subtitle-audit-episode]:nth-child(101) [data-subtitle-audit-action-status]', 'pending');

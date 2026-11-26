@@ -64,8 +64,8 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
-            { title: 'Subtitles', href: OverviewController.url() },
-            { title: 'Escalations', href: EscalationController.url() },
+            { title: 'Subtitle Center', href: OverviewController.url() },
+            { title: 'Needs review', href: EscalationController.url() },
         ],
     },
 });
@@ -200,7 +200,7 @@ function paginationLabel(label: string): string {
 
 <template>
     <div class="space-y-6 p-4 sm:p-6">
-        <Head title="Subtitle escalations" />
+        <Head title="Subtitles needing review" />
         <SubtitleTabs
             active="escalations"
             :connections="connections"
@@ -213,7 +213,7 @@ function paginationLabel(label: string): string {
             <div>
                 <div class="flex items-center gap-2">
                     <AlertTriangle class="size-5 text-warning" />
-                    <h2 class="font-semibold">Subtitle escalations</h2>
+                    <h2 class="font-semibold">Subtitles needing review</h2>
                 </div>
                 <p class="mt-1 text-sm text-muted-foreground">
                     Cases that exhausted Bazarr searching or need a recorded
@@ -251,7 +251,7 @@ function paginationLabel(label: string): string {
                         :value="filters.status"
                         @change="updateStatus"
                     >
-                        <option value="">All escalation states</option>
+                        <option value="">All statuses</option>
                         <option
                             v-for="status in filter_options.statuses"
                             :key="status.value"
@@ -268,7 +268,8 @@ function paginationLabel(label: string): string {
             v-if="requires_connection_selection"
             class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
         >
-            Select a Bazarr connection to inspect escalation cases.
+            Select a Bazarr connection to inspect the subtitle cases that need
+            review.
         </div>
 
         <section
@@ -276,7 +277,7 @@ function paginationLabel(label: string): string {
             class="rounded-xl border border-border bg-card p-10 text-center"
         >
             <Search class="mx-auto mb-3 size-6 text-muted-foreground" />
-            <p class="font-medium">No subtitle escalations found</p>
+            <p class="font-medium">No subtitle cases need review</p>
             <p class="text-sm text-muted-foreground">
                 Cases will appear after Bazarr searches are exhausted.
             </p>
@@ -377,7 +378,7 @@ function paginationLabel(label: string): string {
 
         <nav
             v-if="cases.links.length > 3"
-            aria-label="Escalation pages"
+            aria-label="Needs review pages"
             class="flex flex-wrap justify-center gap-1"
         >
             <Link

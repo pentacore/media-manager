@@ -154,7 +154,7 @@ test('the Search link is hidden on desktop and shown on mobile', function (): vo
     // the mobile-only nav entry rendered or not.
     //
     // The link counts pin the whole visible taxonomy in one number — 16 leaf
-    // links at desktop (3 Overview + 7 Media, including Subtitles, Calendar
+    // links at desktop (3 Overview + 7 Media, including Subtitle Center, Calendar
     // and Wanted + 6 Activity) and 17 at mobile where `Search` joins them.
     // Admin sub-group children are not counted at either width: their
     // parents are CollapsibleTrigger buttons and the closed
@@ -162,7 +162,7 @@ test('the Search link is hidden on desktop and shown on mobile', function (): vo
     visit('/dashboard')
         ->assertNoSmoke()
         ->assertDontSeeIn('[data-sidebar="content"]', 'Search')
-        ->assertSeeIn('[data-sidebar="content"]', 'Subtitles')
+        ->assertSeeIn('[data-sidebar="content"]', 'Subtitle Center')
         ->assertCount('[data-sidebar="content"] a', 16)
         ->resize(390, 844)
         ->click('[data-sidebar="trigger"]')

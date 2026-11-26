@@ -15,7 +15,7 @@ Inject collaborators through the constructor as `private readonly` promoted prop
 Read configuration with the `config()` helper and resolve from the container with `resolve()` — never the `Config` facade or `app()`. Use facades (`Log`, `DB`, `Cache`, `Http`, `Notification`) for other framework services, and prefer the `event()`/`dispatch()`/`to_route()`/`response()` helpers. In controllers use `$request->user()` over `Auth::user()`.
 
 ## Namespace layout
-Add a new integration as a subfolder named after it under `app/Services`, mirroring the same name under `app/Ai/Tools`, `app/Http/Controllers`, and `app/Http/Requests` as needed. Declare interfaces beside their implementations (no `Contracts` folder) and co-locate custom exceptions with the domain that throws them (all `extend RuntimeException`). No `app/Domain`, `app/Modules`, `app/DTOs`, or `app/Traits`.
+Add a new service as a subfolder named after it under `app/Services`, mirroring the same name under `app/Ai/Tools`, `app/Http/Controllers`, and `app/Http/Requests` as needed. Declare interfaces beside their implementations (no `Contracts` folder) and co-locate custom exceptions with the domain that throws them (all `extend RuntimeException`). No `app/Domain`, `app/Modules`, `app/DTOs`, or `app/Traits`.
 
 ## Use DB::transaction() closures, never manual transaction control
 Wrap multi-statement writes in `DB::transaction(function (): T { ... })` with an explicit closure return type; never call `beginTransaction`/`commit`/`rollBack`. Guard contended rows with `lockForUpdate()` inside the closure and defer events and job dispatch past commit with `DB::afterCommit()` or `->afterCommit()`.

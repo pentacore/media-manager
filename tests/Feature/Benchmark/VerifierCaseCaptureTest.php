@@ -81,7 +81,7 @@ test('a verifier usage row linked to its action request captures the structured 
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('draft.task', 'decision_verifier')
-            ->where('draft.name', 'Decision verifier: Delete series "Severance (2022)"')
+            ->where('draft.name', 'Second opinion: Delete series "Severance (2022)"')
             ->where('draft.input.verifier', verifierCaptureFields())
             ->where('draft.input.prompt', VerifierCaseInput::prompt(verifierCaptureFields()))
             ->where('draft.scoring', ['type' => 'verdict', 'expected_agrees' => true])

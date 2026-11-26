@@ -9,7 +9,7 @@ test('the notification names held and rejected second opinions', function (): vo
     $decisionAgentActed = new DecisionAgentActed('suggested', 2, 'Queued a monitor.', 'sonarr SeriesAdd', heldBySecondOpinion: 1, rejectedBySecondOpinion: 1);
 
     expect($decisionAgentActed->toArray(User::factory()->admin()->create())['message'])
-        ->toBe("Queued a monitor.\nSecond opinion: 1 held, 1 rejected.");
+        ->toBe("Queued a monitor.\nSecond opinion: 1 held, 1 declined.");
 });
 
 test('the notification message is the summary when no second opinion intervened', function (): void {
@@ -20,7 +20,7 @@ test('the push body carries the second-opinion line', function (): void {
     $decisionAgentActed = new DecisionAgentActed('acted', 1, 'Monitored.', rejectedBySecondOpinion: 2);
 
     expect($decisionAgentActed->toPush(User::factory()->admin()->create())->body)
-        ->toBe("Monitored.\nSecond opinion: 0 held, 2 rejected.");
+        ->toBe("Monitored.\nSecond opinion: 0 held, 2 declined.");
 });
 
 test('a notification about one action request deep-links to it', function (): void {

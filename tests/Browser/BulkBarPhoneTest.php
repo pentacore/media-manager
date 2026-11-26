@@ -111,7 +111,7 @@ test('the phone bar menu rejects with a reason, and clears a selection', functio
         ->click('[data-bulk-menu] [data-bulk-menu-item="reject"]')
         ->fill('[data-bulk-reject-reason]', 'Not wanted')
         ->click('[data-bulk-reject-confirm]')
-        ->assertSee('2 rejected');
+        ->assertSee('2 declined');
 
     foreach ($pending as $actionRequest) {
         expect($actionRequest->fresh()->result)->toBe(['rejection_reason' => 'Not wanted']);

@@ -41,7 +41,7 @@ test('an admin rejects in bulk with one shared reason', function (): void {
         ->click('[data-bulk-reject]')
         ->fill('[data-bulk-reject-reason]', 'Not wanted')
         ->click('[data-bulk-reject-confirm]')
-        ->assertSee('2 rejected');
+        ->assertSee('2 declined');
 
     foreach ($pending as $actionRequest) {
         expect($actionRequest->fresh()->result)->toBe(['rejection_reason' => 'Not wanted']);
@@ -128,7 +128,7 @@ test('a confirmed bulk reject hands focus to select all, not the page body', fun
         ->click('[data-bulk-reject]')
         ->fill('[data-bulk-reject-reason]', 'Not wanted')
         ->click('[data-bulk-reject-confirm]')
-        ->assertSee('2 rejected');
+        ->assertSee('2 declined');
 
     // Assert only after the dialog has left the DOM and Reka's restore
     // (a zero-delay timer scheduled at unmount) has run.
@@ -155,7 +155,7 @@ test('a bulk reject that resolves with focus still in the dialog hands focus to 
         document.querySelector('[data-bulk-reject-confirm]').click();
         document.querySelector('[data-bulk-reject-reason]').focus();
     JS);
-    $webpage->assertSee('1 rejected');
+    $webpage->assertSee('1 declined');
 
     // Assert only after the dialog has left the DOM and Reka's restore
     // (a zero-delay timer scheduled at unmount) has run.

@@ -15,7 +15,7 @@ MediaManager ingests webhooks from every service, normalises them into an activi
 - **Seerr** — list media requests, approve / decline / retry / delete (admin only for the last two)
 - **Prowlarr** — indexer search from the unified Search page, per-indexer test + stats on the connection admin page
 - **SABnzbd** — live download queue ("Downloads" page): pause/resume globally or per item, delete, reprioritise; history polling and sidebar badges
-- **Bazarr** — full **Subtitle Center** (Overview / Missing / Library / History / Escalations tabs) plus opt-in automated subtitle repair (see below)
+- **Bazarr** — full **Subtitle Center** (Overview / Missing / Library / History / Needs review tabs) plus opt-in automated subtitle repair (see below)
 - **Seasonal Anime** — browse a broadcast season from AniList or Jikan/MAL, overlaid with owned/requested state, and request titles through Seerr (id mapping via the Fribb anime-lists dataset, with user-confirmable fuzzy matches)
 
 ### Cross-cutting
@@ -24,14 +24,14 @@ MediaManager ingests webhooks from every service, normalises them into an activi
 - **Action pipeline** — `ActionRequest` state machine (pending → approved → executing → completed/failed) with per-type approval rules (24 seeded action types)
 - **Cross-service orchestration** — Emby delete cascades to Sonarr/Radarr; *arr downloads/deletes trigger Emby library scans; Seerr "media available" refreshes Emby
 - **Media replacement** — grab-before-delete replacement of an already-imported episode/movie with a better release, verified end-to-end via webhooks (see [Media replacement](#media-replacement--subtitle-automation))
-- **Subtitle automation** — Bazarr-driven subtitle cases with grace periods, probes, and AI-advisor escalation
+- **Subtitle automation** — Bazarr-driven subtitle cases with grace periods, probes, and a Media Advisor for the cases that need review
 - **Real-time dashboard** — Reverb + Echo private channels for service health, Emby playback, action requests, downloads, subtitles, and dashboard stats
 - **Notifications** — per-user, per-severity channel matrix (in-app, broadcast, mail, ntfy push) with a notification inbox
 - **Statistics** — pre-aggregated rollups powering a user statistics page (plays, watch hours, downloads, request funnel, leaderboards) and an admin operations view (webhooks, actions, queue depth, disk, AI cost); optional Prometheus scrape endpoint
 - **Scheduled monitoring** — health pings every 5 minutes; daily upstream GitHub release checks for "update available" badges; nightly retention pruning
 - **Authentication** — local email/password via Fortify (with 2FA), optional Authentik SSO, optional Emby-credential login, plus an invite flow with password set on first visit
 - **Role model** — `admin` / `member` / `viewer` with hierarchical checks (`isAtLeast`)
-- **Optional AI layer** — chat assistant, autonomous per-webhook decision agent, subtitle advisor, and price-verification agent, all routed through the same approval pipeline, with cost accounting, budgets, and a maintained model-price catalog
+- **Optional AI layer** — chat assistant, autonomous per-webhook decision agent, Media Advisor, and price refresh agent, all routed through the same approval pipeline, with cost accounting, budgets, and a maintained model-price catalog
 
 ## Requirements
 
@@ -133,7 +133,7 @@ Every page carries `X-Frame-Options: SAMEORIGIN` and `Content-Security-Policy: f
 
 ### Queue workers
 
-Jobs run on five named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) then `maintenance` (long housekeeping — bulk Seerr request clears, search index reconcile, anime mapping sync) so a slow model call or a long-running job never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all five queues by default — add the `queue-ai` service to split them.
+Jobs run on five named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, Media Advisor, embeddings, conversation titles, price refresh) then `maintenance` (long housekeeping — bulk Seerr request clears, search index reconcile, anime mapping sync) so a slow model call or a long-running job never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all five queues by default — add the `queue-ai` service to split them.
 
 Each worker container runs one job at a time and holds about 100 MB. Scale them with `QUEUE_REPLICAS` and `QUEUE_AI_REPLICAS` in `.env` (both default to 1); raise `QUEUE_AI_REPLICAS` when several model calls should wait in parallel. The web container's Octane worker count is `OCTANE_WORKERS` (default 8, about 10 MB each); a streaming AI chat holds one worker for its whole turn.
 
@@ -313,7 +313,7 @@ Four agents live under `app/Ai/Agents/`:
 - **`PriceFetcherAgent`** — re-verifies model prices against first-party pricing pages.
 - **`TitleAgent`** — names chat conversations.
 
-Subtitle escalations are decided in code, not by an agent: `SubtitleAdvisorDecider` (see [subtitle automation](#media-replacement--subtitle-automation)) queues the case's unique automatic replacement candidate when one exists, at no model cost.
+Subtitle cases sent to the Media Advisor are decided in code, not by an agent: `SubtitleAdvisorDecider` (see [subtitle automation](#media-replacement--subtitle-automation)) queues the case's unique automatic replacement candidate when one exists, at no model cost.
 
 Every tool declares a `Risk` tier:
 
@@ -351,11 +351,11 @@ Three things can propose a replacement:
 
 1. **The AI chat assistant** — inspect a file, list ranked candidates, replace (manually picked or automatic candidate).
 2. **The automatic subtitle check** — on every Sonarr/Radarr import webhook, items carrying a configured *arr tag are audited against the required subtitle languages; a miss dispatches a replacement request. Configure under **Admin → AI Settings → Media replacement** (global + per-scope languages, confidence threshold, season-pack policy, attempt limits/cooldown, per-scope guidance rules like "this release group guarantees subs") and per-connection (subtitle-check tags, Sonarr root-folder scopes for anime/tv classification).
-3. **The subtitle advisor** — see below.
+3. **The Media Advisor** — see below.
 
-**Bazarr subtitle cases** close the loop for media whose subtitles Bazarr should be able to fetch. Opt-in under **Subtitles → Admin → Subtitle automation** (`enabled` is off by default). The reconciler (every 5 minutes, plus Bazarr Apprise notifications for instant nudges) discovers media missing required subtitles and tracks each as a `SubtitleCase`: a grace period first (Bazarr usually fixes things itself), then spaced provider probes that queue `bazarr_download_best` action requests for eligible candidates, and — after repeated empty probes — escalation to **`SubtitleAdvisorDecider`**, which inspects the case and queues a media replacement when the automatic-selection rules offer a unique candidate, or parks the case as `needs_review` and notifies admins. Cycle sizes, grace hours per scope, probe spacing, escalation thresholds, and advisor concurrency are all tunable on the same page.
+**Bazarr subtitle cases** close the loop for media whose subtitles Bazarr should be able to fetch. Opt-in under **Subtitle Center → Admin → Subtitle automation** (`enabled` is off by default). The reconciler (every 5 minutes, plus Bazarr Apprise notifications for instant nudges) discovers media missing required subtitles and tracks each as a `SubtitleCase`: a grace period first (Bazarr usually fixes things itself), then spaced provider probes that queue `bazarr_download_best` action requests for eligible candidates, and — after repeated empty probes — the Media Advisor (**`SubtitleAdvisorDecider`**), which inspects the case and queues a media replacement when the automatic-selection rules offer a unique candidate, or parks the case as `needs_review` and notifies admins. Cycle sizes, grace hours per scope, probe spacing, the empty-probe threshold, Media Advisor runs per cycle, and Media Advisor concurrency are all tunable on the same page.
 
-The **Subtitle Center** (`/subtitles`, sidebar "Subtitles") is viewer-visible: Overview, Missing, Library, and History tabs project Bazarr's inventory; the Escalations tab lists cases (members can re-run the advisor; admins can filter by status). Members can request manual subtitle operations (download best/exact, upload, delete, sync, translate, scan) — each becomes a `bazarr_*` action request gated by Action Rules and by Bazarr's advertised capabilities, and carries a file fingerprint so a stale page can't act on a replaced file.
+The **Subtitle Center** (`/subtitles`) is viewer-visible: Overview, Missing, Library, and History tabs project Bazarr's inventory; the Needs review tab lists the cases past Bazarr's own searching (members can re-run the Media Advisor; admins can filter by status). Members can request manual subtitle operations (download best/exact, upload, delete, sync, translate, scan) — each becomes a `bazarr_*` action request gated by Action Rules and by Bazarr's advertised capabilities, and carries a file fingerprint so a stale page can't act on a replaced file.
 
 ## External-API caching
 
@@ -375,7 +375,7 @@ Replace `{service}` with `sonarr`, `radarr`, `whisparr`, `prowlarr`, `sabnzbd`, 
 Two services deliver differently:
 
 - **SABnzbd** has no native HTTP webhook — the connection edit page generates a Python notification script (stdlib only, token embedded) to drop into SABnzbd's `scripts/` folder and select under Settings → Notifications.
-- **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitles → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
+- **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitle Center → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
 
 Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, the Sail `queue` service or `vendor/bin/sail artisan queue:listen --queue=actions,webhooks,default,ai,maintenance`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
 

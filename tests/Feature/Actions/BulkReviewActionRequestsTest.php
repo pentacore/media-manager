@@ -55,13 +55,13 @@ test('a shared reason is stored on every rejected request and on its activity ro
     $this->actingAs($this->admin)
         ->postJson(route('actions.requests.bulk'), ['ids' => $pending->pluck('id')->all(), 'action' => 'reject', 'reason' => '  Duplicate request  '])
         ->assertJsonPath('started', 2)
-        ->assertJsonPath('toast.message', '2 rejected');
+        ->assertJsonPath('toast.message', '2 declined');
 
     foreach ($pending as $actionRequest) {
         expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Rejected)
             ->and($actionRequest->fresh()->result)->toBe(['rejection_reason' => 'Duplicate request']);
         expect(ActivityLog::query()->where('action', 'action_request.rejected')->where('subject_id', $actionRequest->id)->sole()->description)
-            ->toBe(sprintf('Action #%d rejected by Ada: Duplicate request', $actionRequest->id));
+            ->toBe(sprintf('Action #%d declined by Ada: Duplicate request', $actionRequest->id));
     }
 
     Queue::assertNotPushed(ExecuteActionRequest::class);

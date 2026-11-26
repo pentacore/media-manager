@@ -125,7 +125,7 @@ final class QueueAutomaticReplacementTool extends BaseTool
             'force_requires_approval' => $built['force_requires_approval'],
             'defer_execution' => true,
             'payload' => $built['payload'],
-            'description' => $built['description']->because(sprintf('Queued by the subtitle advisor for subtitle case #%d.', $subtitleCase->id)),
+            'description' => $built['description']->because(sprintf('Queued by the Media Advisor for subtitle case #%d.', $subtitleCase->id)),
             'origin' => 'agent',
         ];
     }

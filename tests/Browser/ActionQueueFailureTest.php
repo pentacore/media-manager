@@ -517,7 +517,7 @@ test("an admin's review of a pending row is not undone by a status remembered fr
     expect($actionRequest->fresh()->status)->toBe($status);
 })->with([
     'approve' => ['[data-action-approve]', 'Action approved and queued.', ActionRequestStatus::Approved],
-    'decline' => ['[data-action-decline]', 'Action rejected.', ActionRequestStatus::Rejected],
+    'decline' => ['[data-action-decline]', 'Action declined.', ActionRequestStatus::Rejected],
 ]);
 
 test("an admin's bulk review is not undone by a status remembered from a live event", function (): void {

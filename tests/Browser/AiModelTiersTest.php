@@ -318,5 +318,5 @@ test('the model pickers of event overrides are named by task and event', functio
         ->click('[data-decision-verifier-add-event-override] button')
         ->click('[data-decision-verifier-event-option="sonarr:Download"]')
         ->assertPresent('[data-event-override="sonarr:Download"] [data-select-name="Decision agent sonarr:Download model"]')
-        ->assertPresent('[data-decision-verifier-event-override="sonarr:Download"] [data-select-name="Decision verifier sonarr:Download model"]');
+        ->assertPresent('[data-decision-verifier-event-override="sonarr:Download"] [data-select-name="Second opinion sonarr:Download model"]');
 });

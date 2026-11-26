@@ -60,7 +60,7 @@ const tabs = computed(() => [
     },
     {
         name: 'escalations' as const,
-        label: 'Escalations',
+        label: 'Needs review',
         icon: AlertTriangle,
         route: EscalationController,
     },

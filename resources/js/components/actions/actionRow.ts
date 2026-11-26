@@ -10,7 +10,7 @@ export const ACTION_TABS: { id: string; label: string }[] = [
     { id: 'executing', label: 'Executing' },
     { id: 'completed', label: 'Completed' },
     { id: 'failed', label: 'Failed' },
-    { id: 'rejected', label: 'Rejected' },
+    { id: 'rejected', label: 'Declined' },
 ];
 
 export function isDestructive(type: string | null | undefined): boolean {

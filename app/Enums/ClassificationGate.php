@@ -26,7 +26,7 @@ enum ClassificationGate: string
             self::DecisionGate => 'Webhook decision gate',
             self::ActionKind => 'Webhook tool scoping',
             self::StuckImport => 'Stuck-import fast path',
-            self::SubtitleTriage => 'Subtitle escalation triage',
+            self::SubtitleTriage => 'Media Advisor triage',
             self::ChatRouting => 'Chat tool routing',
             self::SecondOpinion => 'Decision second opinion',
         };

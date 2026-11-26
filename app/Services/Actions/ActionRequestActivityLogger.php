@@ -65,8 +65,8 @@ final readonly class ActionRequestActivityLogger
         $approver = $actionRequest->approvedByUser?->name;
         $reason = $actionRequest->result['rejection_reason'] ?? null;
         $description = $approver !== null
-            ? sprintf('Action #%d rejected by %s', $actionRequest->id, $approver)
-            : sprintf('Action #%d rejected', $actionRequest->id);
+            ? sprintf('Action #%d declined by %s', $actionRequest->id, $approver)
+            : sprintf('Action #%d declined', $actionRequest->id);
 
         $this->writeLog(
             $actionRequest,

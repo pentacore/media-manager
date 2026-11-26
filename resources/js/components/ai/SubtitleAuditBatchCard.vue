@@ -190,7 +190,9 @@ async function declineAll(): Promise<void> {
                     {{
                         episode.action_status === 'changed'
                             ? 'Changed elsewhere'
-                            : episode.action_status
+                            : episode.action_status === 'rejected'
+                              ? 'declined'
+                              : episode.action_status
                     }}
                 </Pill>
             </li>
