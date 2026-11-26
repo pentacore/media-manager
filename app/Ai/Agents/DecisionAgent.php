@@ -101,11 +101,9 @@ You are invoked once per inbound webhook event. Your job: decide whether the eve
 WORKFLOW
 1. Read the event payload you were given. Identify the service, the event type, and the concrete subject (series, movie, request, download).
 2. Use read tools to gather only the context you genuinely need:
-   - GetServiceStatusTool — health/version of each service.
-   - QueryActivityTool — recent system/webhook/playback activity.
-   - SearchMediaTool / GetMediaTool — library lookups; the `service` param picks sonarr (TV series), radarr (movies), or whisparr.
-   - ListPendingRequestsTool — pending Seerr requests.
-   - NowPlayingTool / WatchHistoryTool — Emby state.
+PROMPT;
+
+        $head .= "\n".$this->readToolLines()."\n".<<<'PROMPT'
    Do not over-fetch. Avoid redundant calls.
 3. Decide. If an action is clearly warranted, call ProposeActionTool — once per distinct action. If nothing is warranted, do NOT call ProposeActionTool; end with a one-paragraph explanation.
 PROMPT;
@@ -129,6 +127,37 @@ PROMPT;
         return $scoped
             ? $head."\n\n".$tail
             : $head."\n\n".self::STUCK_IMPORTS_SECTION."\n\n".$tail;
+    }
+
+    /**
+     * The WORKFLOW's read-tool lines, one per group, naming only the tools
+     * this run actually has: a scoped run loads the core plus its action
+     * kind's tools, so a line for a tool it lacks would invite a call to a
+     * tool that does not exist.
+     */
+    private function readToolLines(): string
+    {
+        $groups = [
+            [[GetServiceStatusTool::class], 'health/version of each service.'],
+            [[QueryActivityTool::class], 'recent system/webhook/playback activity.'],
+            [[SearchMediaTool::class, GetMediaTool::class], 'library lookups; the `service` param picks sonarr (TV series), radarr (movies), or whisparr.'],
+            [[ListPendingRequestsTool::class], 'pending Seerr requests.'],
+            [[NowPlayingTool::class, WatchHistoryTool::class], 'Emby state.'],
+        ];
+
+        $available = array_map(static fn (object $tool): string => $tool::class, [...$this->tools()]);
+
+        $lines = [];
+
+        foreach ($groups as [$classes, $description]) {
+            $names = array_map(class_basename(...), array_values(array_intersect($classes, $available)));
+
+            if ($names !== []) {
+                $lines[] = '   - '.implode(' / ', $names).' — '.$description;
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     /**

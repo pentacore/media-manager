@@ -111,8 +111,11 @@ class AiSettingsController extends Controller
             'providerKeys' => collect(['openrouter', 'typesafe', 'cohere', 'jina'])
                 ->mapWithKeys(fn (string $provider): array => [$provider => filled(config(sprintf('ai.providers.%s.key', $provider)))])
                 ->all(),
+            // Mirrors the gates: ToolPayload checks the chat primary only (the
+            // SDK inlines a ToolSearch on a fallback without it), while
+            // PriceFetcherAgent needs code execution on the whole chain.
             'advancedTools' => [
-                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $taskModelResolver->resolve(AiTask::Chat)->modelSelection()),
+                'tool_search' => $providerCapabilities->primarySupports(SupportsToolSearch::class, $taskModelResolver->resolve(AiTask::Chat)->modelSelection()),
                 'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class, $taskModelResolver->resolve(AiTask::PriceUpdater)->modelSelection()),
             ],
         ]);

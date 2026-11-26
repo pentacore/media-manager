@@ -11,8 +11,10 @@ use Laravel\Ai\Providers\Tools\ToolSearch;
 
 /**
  * Hosted tool search keeps rarely-needed tool definitions out of every
- * request — but only when the whole failover chain supports it; the SDK
- * otherwise inlines every deferred tool on a provider that lacks it.
+ * request. It is gated on the chain's primary provider only: on a failover
+ * to a provider without tool search, laravel/ai (1.4.1,
+ * TextGenerationLoop::toolsSupportedBy) inlines every deferred tool, so the
+ * fallback loses no tool, it only sends the larger payload.
  */
 final readonly class ToolPayload
 {
@@ -23,7 +25,8 @@ final readonly class ToolPayload
 
     /**
      * Core tools stay first-class; every other tool is deferred behind one
-     * ToolSearch when the chain supports it. Otherwise the tools pass through.
+     * ToolSearch when the primary provider supports it. Otherwise the tools
+     * pass through.
      *
      * @template TTool of object
      *
@@ -32,7 +35,7 @@ final readonly class ToolPayload
      */
     public function build(array $tools): array
     {
-        if (! $this->providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $this->aiSettings->chatSelection())) {
+        if (! $this->providerCapabilities->primarySupports(SupportsToolSearch::class, $this->aiSettings->chatSelection())) {
             return $tools;
         }
 

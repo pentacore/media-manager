@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Risk;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Services\AiUsage\Pricing\PriceRefreshTimeBox;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Tools\Request;
@@ -166,6 +167,46 @@ test('a failed fetch records no receipt', function (): void {
     );
 
     expect($run->hasReceipt('https://openai.com/pricing'))->toBeFalse();
+});
+
+test('a fetch that no longer fits the price refresh time box is not sent and says to write what the agent has', function (): void {
+    $this->freezeTime();
+    Http::fake(['openai.com/pricing' => Http::response('<html><body>gpt-5-mini pricing</body></html>', 200)]);
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::WEB_FETCH_SECONDS - 1);
+
+    $result = json_decode((new WebFetchTool)->handle(new Request(['url' => 'https://openai.com/pricing'])), true);
+
+    expect($result['error'])->toBe('out_of_time')
+        ->and($result['message'])->toContain('write the prices you already have');
+    Http::assertNothingSent();
+});
+
+test('a fetch that still fits the price refresh time box is sent', function (): void {
+    $this->freezeTime();
+    Http::fake(['openai.com/pricing' => Http::response('<html><body>gpt-5-mini pricing</body></html>', 200)]);
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::WEB_FETCH_SECONDS);
+
+    $result = json_decode((new WebFetchTool)->handle(new Request(['url' => 'https://openai.com/pricing'])), true);
+
+    expect($result['content'])->toContain('gpt-5-mini');
+});
+
+test('a redirect hop that no longer fits the price refresh time box is not followed', function (): void {
+    $this->freezeTime();
+    resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::WEB_FETCH_SECONDS + 10);
+    Http::fake([
+        'openai.com/pricing' => function () {
+            $this->travel(PriceRefreshTimeBox::WEB_FETCH_SECONDS)->seconds();
+
+            return Http::response('', 301, ['Location' => 'https://platform.openai.com/docs/pricing']);
+        },
+        'platform.openai.com/*' => Http::response('<html><body>gpt-5-mini pricing</body></html>', 200),
+    ]);
+
+    $result = json_decode((new WebFetchTool)->handle(new Request(['url' => 'https://openai.com/pricing'])), true);
+
+    expect($result['error'])->toBe('out_of_time');
+    Http::assertSentCount(1);
 });
 
 test('allowsUrl gates scheme, port, and host', function (): void {

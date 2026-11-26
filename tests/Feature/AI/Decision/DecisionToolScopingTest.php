@@ -90,6 +90,38 @@ test('a scoped run leaves the stuck-import section out of the instructions', fun
     expect($captured->instructions)->not->toContain('STUCK IMPORTS');
 });
 
+test('a scoped run names only the read tools it has in the workflow', function (): void {
+    $captured = captureDecisionAgentRun();
+    Classification::fake([['action_kind' => kindAnswer('seerr_request', 0.9)]]);
+
+    runScopedJob();
+
+    expect($captured->instructions)
+        ->toContain('- GetServiceStatusTool — health/version of each service.')
+        ->toContain('- QueryActivityTool — recent system/webhook/playback activity.')
+        ->toContain('- ListPendingRequestsTool — pending Seerr requests.')
+        ->not->toContain('SearchMediaTool')
+        ->not->toContain('GetMediaTool')
+        ->not->toContain('NowPlayingTool')
+        ->not->toContain('WatchHistoryTool');
+});
+
+test('an unscoped run names every read tool in the workflow', function (): void {
+    $captured = captureDecisionAgentRun();
+    Classification::fake([['action_kind' => kindAnswer('other', 0.95)]]);
+
+    runScopedJob();
+
+    expect($captured->instructions)->toContain(<<<'PROMPT'
+   - GetServiceStatusTool — health/version of each service.
+   - QueryActivityTool — recent system/webhook/playback activity.
+   - SearchMediaTool / GetMediaTool — library lookups; the `service` param picks sonarr (TV series), radarr (movies), or whisparr.
+   - ListPendingRequestsTool — pending Seerr requests.
+   - NowPlayingTool / WatchHistoryTool — Emby state.
+   Do not over-fetch. Avoid redundant calls.
+PROMPT);
+});
+
 test('a kind below the scope threshold keeps every tool', function (): void {
     $captured = captureDecisionAgentRun();
     Classification::fake([['action_kind' => kindAnswer('media_server', 0.49)]]);
