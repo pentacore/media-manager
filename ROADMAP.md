@@ -29,17 +29,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
   MCP foundation and AI management tools.
 - **AI features** (brainstorm):
     - Jev score questions pick the chat model and reasoning tier per message.
-    - The scoped DecisionAgent prompt should list only the tools in scope.
     - `SearchMediaReleasesTool` should reach Whisparr.
-    - `QueryActivityTool` uses `visibleTo(null)`, which is safe only while the AI
-      pages are admin-only.
-    - Turn on ToolSearch for the primary provider only, not the whole chain.
-    - Benchmark replay should answer `OfferChoicesTool`.
     - Short-circuit a stuck download that is all samples.
     - A multi-download stuck-import verdict.
-    - The price refresh's step reserve should bound tool calls.
-    - Refresh the cached tool-group options.
-    - Don't make `deliverTemplate` wait for the pins save.
 - **Platform extras** (brainstorm):
     - PWA.
     - Onboarding.
@@ -68,6 +60,11 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - **Drop `NamespacedToolSearchOpenAiGateway`** once a laravel/ai release ships
   [laravel/ai#1259](https://github.com/laravel/ai/pull/1259) (deferred tools in a
   namespace), along with its registration in `AIServiceProvider`.
+- **Old stuck-import calls in drafted benchmark cases**: the fixture migration
+  rewrote stored cases' single `download_id` `InspectStuckImportTool` calls to
+  `download_ids`, but a case drafted from a tool invocation recorded before
+  2026-10-16 (kept up to 90 days) still gets the old call. Rewrite it in
+  `CaseDraftFromUsage` too, or let those invocations age out (mid-January 2027).
 - **Statistics timezone minors**, found while fixing the watch heatmap's timezone:
     - Rollups that `statistics:aggregate` wrote on a non-UTC `APP_TIMEZONE`
       before the fix sit one offset late. Re-run `statistics:backfill` there once
@@ -101,3 +98,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 - qBittorrent and other torrent clients.
 - Jellyfin.
 - Translations (i18n).
+- Not waiting for the pins save in `deliverTemplate`. The wait is the right order:
+  an existing chat's turn reads its pins from the server, and it costs only one
+  round trip.
