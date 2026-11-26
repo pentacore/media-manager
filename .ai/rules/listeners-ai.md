@@ -10,3 +10,6 @@ Pre-flight vetoes for AI calls (rate limits, similar gates) belong in a listener
 
 ## Usage rows go through UsageRecordWriter
 Write every ai_usage_records row via `UsageRecordWriter::record()` (dedupe, catalog snapshot, budget-cache bust) with token columns from `UsageColumns::fromText()` — 1.0 usage is inclusive, the columns stay exclusive. Set `kind` (`AiUsageKind`).
+
+## Usage and failure listeners never throw
+Run a usage or failure listener's write inside `TelemetryGuard::run()` (`RecordAgentUsage`, `RecordFailedAgentRun`, the classification, embeddings and reranking usage and failure listeners, `RecordFailedOverAttemptUsage`, `RecordToolFailure`). laravel/ai dispatches the failure events inside its own catch, so a throw while recording would replace the provider's real error, and on the success path it would fail a completed call. The guard reports the throw and carries on; state the listener must always clear (`RunUsageAccumulator::forget()`) stays outside it.

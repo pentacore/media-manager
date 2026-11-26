@@ -20,6 +20,11 @@ use Illuminate\Support\Facades\DB;
 class RateLimitUsage
 {
     /**
+     * Every token a row recorded; a stopped row with none never reached the provider.
+     */
+    private const string TOKEN_SUM = '(prompt_tokens + completion_tokens + cache_read_input_tokens + cache_write_input_tokens + reasoning_tokens)';
+
+    /**
      * Per-model consumption against configured provider rate limits, each
      * limit measured over its rolling window (the last minute/hour/day —
      * rolling, unlike the free pools' calendar resets). Token limits count
@@ -75,10 +80,12 @@ class RateLimitUsage
 
     /**
      * Requests and prompt+completion tokens recorded inside each period's
-     * rolling window: one aggregate query per distinct window length, keyed
-     * `period value => provider|base_model => {requests, tokens}` (dated
-     * suffixes stripped like poolUsageRows). Pass a provider and base model
-     * to narrow the aggregate to a single catalog row.
+     * rolling window. A failed call is a request (providers count rejected
+     * calls); a stopped row with no tokens at all is not, since the Stop
+     * came before the provider answered. One aggregate query per distinct
+     * window length, keyed `period value => provider|base_model => {requests,
+     * tokens}` (dated suffixes stripped like poolUsageRows). Pass a provider
+     * and base model to narrow the aggregate to a single catalog row.
      *
      * @param  iterable<int, RateLimitPeriod>  $periods
      * @return array<string, Collection<string, object{requests: int|string, tokens: int|string}>>
@@ -102,9 +109,9 @@ class RateLimitUsage
                 ->selectRaw("
                     provider,
                     regexp_replace(model, '".BaseModelName::SQL_REGEX."', '') AS base_model,
-                    COUNT(*) AS requests,
+                    COUNT(*) FILTER (WHERE NOT (status = 'stopped' AND ".self::TOKEN_SUM.' = 0)) AS requests,
                     COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
-                ")
+                ')
                 ->groupByRaw('provider, base_model')
                 ->get()
                 ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
