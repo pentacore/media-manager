@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Benchmark\BenchmarkRunContext;
 use App\Ai\Benchmark\FixtureBook;
 use App\Ai\Benchmark\ReplayTool;
+use App\Ai\Benchmark\RunsInReplay;
 use App\Ai\Benchmark\WriteToolDetector;
 use App\Ai\Middleware\ReplayBenchmarkTools;
 use App\Ai\ResolvedSelection;
@@ -15,6 +16,7 @@ use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Ai\Tools\System\OfferChoicesTool;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Enums\AiTask;
@@ -35,6 +37,8 @@ use Laravel\Ai\Providers\Tools\WebFetch;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Tools\AgentTool;
 use Laravel\Ai\Tools\Request;
+use Symfony\Component\Finder\Finder;
+use Symfony\Component\Finder\SplFileInfo as FinderFile;
 
 /**
  * A read tool whose real handler must never run inside a benchmark step.
@@ -218,6 +222,28 @@ test('an unrecorded read call returns the miss result and counts a miss', functi
 
     expect($result)->toBe(FixtureBook::MISS_RESULT)
         ->and($fixtureBook->misses())->toBe(1);
+});
+
+test('a pure tool runs for real inside a replay and counts a call, never a miss', function (): void {
+    $fixtureBook = replayBook();
+    $arguments = ['question' => 'Which release?', 'options' => [['label' => 'A', 'description' => null], ['label' => 'B', 'description' => null]], 'multiple' => false];
+
+    $result = new ReplayTool(new OfferChoicesTool, false, $fixtureBook, null)->handle(new Request($arguments));
+
+    expect(json_decode($result, true)['choices'])->toBe(['question' => 'Which release?', 'multiple' => false, 'options' => [['label' => 'A', 'description' => null], ['label' => 'B', 'description' => null]]])
+        ->and($fixtureBook->calls())->toBe(1)
+        ->and($fixtureBook->misses())->toBe(0)
+        ->and($fixtureBook->log())->toBe([['tool' => 'OfferChoicesTool', 'arguments' => $arguments, 'result' => $result, 'hit' => true]]);
+});
+
+test('only genuinely pure tools are marked to run inside a replay', function (): void {
+    $marked = collect(Finder::create()->files()->in(app_path('Ai/Tools'))->name('*Tool.php'))
+        ->map(fn (FinderFile $file): string => 'App\\Ai\\Tools\\'.str_replace(['/', '.php'], ['\\', ''], $file->getRelativePathname()))
+        ->filter(fn (string $class): bool => is_subclass_of($class, RunsInReplay::class))
+        ->values()
+        ->all();
+
+    expect($marked)->toBe([OfferChoicesTool::class]);
 });
 
 test('a write tool records every call as an intended action and returns the queued result', function (): void {

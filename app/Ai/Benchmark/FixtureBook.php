@@ -58,6 +58,19 @@ final class FixtureBook
     }
 
     /**
+     * Log a pure tool's call (RunsInReplay) with the result it computed. It
+     * counts as a call, never a miss, since nothing needed recording.
+     *
+     * @param  array<string, mixed>  $arguments
+     */
+    public function recordPure(string $tool, array $arguments, string $result): void
+    {
+        $this->calls++;
+
+        $this->log[] = ['tool' => $tool, 'arguments' => $arguments, 'result' => $result, 'hit' => true];
+    }
+
+    /**
      * Record a write tool's call as an intended action (each call counts).
      *
      * @param  array<string, mixed>  $arguments

@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\System;
 
+use App\Ai\Benchmark\RunsInReplay;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
-class OfferChoicesTool extends BaseTool
+/**
+ * Pure (RunsInReplay): it only validates and echoes its arguments, so a
+ * benchmark replay runs it for real instead of answering from fixtures.
+ */
+class OfferChoicesTool extends BaseTool implements RunsInReplay
 {
     public function description(): Stringable|string
     {

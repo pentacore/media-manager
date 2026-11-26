@@ -16,8 +16,9 @@ use Stringable;
 
 /**
  * Stands in for a tool inside a benchmark step: the model sees the inner
- * tool's name, description and schema, but the inner tool never runs. A read
- * call answers its recorded fixture (or the miss result, counted); a write
+ * tool's name, description and schema, but the inner tool never runs — except
+ * a pure tool (RunsInReplay), which runs for real and is logged as a hit. A
+ * read call answers its recorded fixture (or the miss result, counted); a write
  * call is captured as an intended action and answers its recorded result or
  * the canned queued result, and is logged as a write (a call, never a miss).
  * A destructive call refused by advisory mode is logged as a refused write,
@@ -49,6 +50,13 @@ final readonly class ReplayTool implements Tool
     {
         $name = $this->name();
         $arguments = $request->toArray();
+
+        if (! $this->writes && $this->inner instanceof RunsInReplay) {
+            $result = (string) $this->inner->handle($request);
+            $this->fixtureBook->recordPure($name, $arguments, $result);
+
+            return $result;
+        }
 
         if (! $this->writes) {
             return $this->fixtureBook->answer($name, $arguments) ?? FixtureBook::MISS_RESULT;
