@@ -333,7 +333,7 @@ Every agent invocation is recorded as an `AiUsageRecord` (tokens, snapshot of th
 - **Budgets** — soft/hard monthly USD caps. The soft cap notifies admins once per month; the hard cap makes agents refuse to run.
 - **Model price catalog** — `ai_model_prices` rows per provider+model, refreshed weekly from the [Models.dev](https://models.dev) feed (opt-in: `AI_PRICING_MODELS_DEV_ENABLED=true`) and re-verified monthly by `PriceFetcherAgent` against first-party pricing pages, with anomaly guards and per-row price locks. Manual run: `artisan ai:refresh-prices [--verify] [--dry-run]`.
 - **Free usage pools** — named daily/weekly/monthly token quotas shared by models (e.g. a provider's free tier), subtracted from reported cost; configurable overflow behaviour.
-- **Rate limits** — per-model request/token limits per minute/hour/day, shown as used-vs-limit on the usage page (reporting only, not enforced).
+- **Rate limits** — per-model request/token limits per minute/hour/day, shown as used-vs-limit on the usage page and enforced only when switched on in AI Settings. A failed call counts as a request; a call the user stopped before it used any tokens does not.
 
 #### Semantic library search
 

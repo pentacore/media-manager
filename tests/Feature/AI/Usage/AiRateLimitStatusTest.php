@@ -85,3 +85,28 @@ test('rateLimitStatus returns empty array when no limits are configured', functi
 
     expect(resolve(AiUsageReporting::class)->rateLimitStatus())->toBe([]);
 });
+
+test('rateLimitStatus does not count stopped zero-token rows as requests but still counts failed calls', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-15 13:45:30', 'UTC'));
+
+    seedLimitedPrice(['provider' => 'openai', 'model' => 'gpt-5-mini'], [
+        ['metric' => 'requests', 'period' => 'hour', 'limit_value' => 100],
+    ]);
+
+    $at = CarbonImmutable::now('UTC')->subMinutes(5);
+    $row = static fn (string $status, int $prompt, int $reasoning = 0): array => [
+        'invocation_id' => 'inv-'.uniqid(), 'agent_class' => 'TestAgent', 'provider' => 'openai', 'model' => 'gpt-5-mini',
+        'prompt_tokens' => $prompt, 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => $reasoning, 'tool_calls_count' => 0, 'status' => $status, 'created_at' => $at, 'updated_at' => $at,
+    ];
+
+    DB::table('ai_usage_records')->insert([
+        $row('stopped', 0),       // stopped before the provider answered: not a request
+        $row('stopped', 120),     // stopped after a billed step: a request
+        $row('stopped', 0, 40),   // stopped with only reasoning tokens: a request
+        $row('failed', 0),        // a rejected call still counts
+        $row('success', 300),
+    ]);
+
+    expect(resolve(AiUsageReporting::class)->rateLimitStatus()[0]['limits'][0]['used'])->toBe(4);
+});
