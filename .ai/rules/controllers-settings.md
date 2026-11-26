@@ -1,6 +1,7 @@
 ---
 paths:
-  - 'app/Http/Controllers/Admin/NotificationDestinationController.php, app/Http/Controllers/Settings/NotificationPreferencesController.php'
+  - 'app/Http/Controllers/Admin/NotificationDestinationController.php'
+  - 'app/Http/Controllers/Settings/NotificationPreferencesController.php'
 ---
 
 # Controllers Settings
