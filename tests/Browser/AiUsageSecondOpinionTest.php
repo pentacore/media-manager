@@ -183,5 +183,5 @@ test('the agreement tables have accessible names', function (): void {
         ->assertAttribute('[data-agreement-matrix]', 'aria-label', 'Second opinion against the reviewer’s decision')
         ->assertAttribute('[data-agreement-breakdown="event"] table', 'aria-label', 'Agreement by event')
         ->click('[data-agreement-breakdown-tab="answered_by"]')
-        ->assertAttribute('[data-agreement-breakdown="answered_by"] table', 'aria-label', 'Agreement by verifier');
+        ->assertAttribute('[data-agreement-breakdown="answered_by"] table', 'aria-label', 'Agreement by second opinion');
 });

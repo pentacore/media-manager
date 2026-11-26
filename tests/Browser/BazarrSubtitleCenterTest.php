@@ -92,7 +92,7 @@ test('member retries a review case with Media Advisor after confirmation', funct
     $this->actingAs(User::factory()->member()->create());
 
     $webpage = visit(route('bazarr.escalations', ['connection' => $bazarr->id], false))
-        ->assertSee('Subtitle escalations')
+        ->assertSee('Subtitles needing review')
         ->assertSee('Frieren S01E01')
         ->assertSee('Retry with Media Advisor')
         ->assertSee('No safe replacement matched the required English subtitles.')

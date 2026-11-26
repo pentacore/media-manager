@@ -44,7 +44,7 @@ const breakdown = computed<{
             return { heading: 'Action', rows: props.agreement.by_action_type };
         case 'answered_by':
             return {
-                heading: 'Answered by',
+                heading: 'Second opinion',
                 rows: props.agreement.by_answered_by,
             };
         default:
