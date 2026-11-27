@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Observers\UserObserver;
+use App\Services\Notifications\WebPushConfig;
 use App\Support\UserPreferences;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
@@ -55,6 +56,8 @@ use Override;
  * @property-read int|null $emby_user_links_count
  * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
+ * @property-read Collection<int, PushSubscription> $pushSubscriptions
+ * @property-read int|null $push_subscriptions_count
  *
  * @method static UserFactory factory($count = null, $state = [])
  * @method static Builder<static>|User newModelQuery()
@@ -143,6 +146,23 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->ntfy_topic;
     }
 
+    /**
+     * Web push routing: the user's browser subscriptions. Null when web push
+     * is not configured or the user has no devices.
+     *
+     * @return list<PushSubscription>|null
+     */
+    public function routeNotificationForWebpush(): ?array
+    {
+        if (! resolve(WebPushConfig::class)->available()) {
+            return null;
+        }
+
+        $subscriptions = $this->pushSubscriptions()->get()->all();
+
+        return $subscriptions === [] ? null : array_values($subscriptions);
+    }
+
     /** Discord routing: the user's own webhook URL. Null/empty skips the channel. */
     public function routeNotificationForDiscord(): ?string
     {
@@ -191,5 +211,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function chatTemplates(): HasMany
     {
         return $this->hasMany(ChatTemplate::class);
+    }
+
+    /**
+     * @return HasMany<PushSubscription, $this>
+     */
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
     }
 }

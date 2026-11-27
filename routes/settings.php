@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Settings\NotificationPreferencesController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\PushSubscriptionController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\UserPreferencesController;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('settings/notifications/test', [NotificationPreferencesController::class, 'test'])
         ->middleware('throttle:6,1')
         ->name('settings.notifications.test');
+
+    Route::post('settings/push-subscriptions', [PushSubscriptionController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('settings.push-subscriptions.store');
+    Route::post('settings/push-subscriptions/test', [PushSubscriptionController::class, 'test'])
+        ->middleware('throttle:5,1')
+        ->name('settings.push-subscriptions.test');
+    Route::delete('settings/push-subscriptions/{pushSubscription}', [PushSubscriptionController::class, 'destroy'])
+        ->name('settings.push-subscriptions.destroy');
 
     Route::get('settings/preferences', [UserPreferencesController::class, 'edit'])
         ->name('settings.preferences.edit');

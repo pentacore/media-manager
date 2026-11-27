@@ -14,6 +14,7 @@ use App\Jobs\ReconcileBazarrConnection;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
 use App\Models\Server;
+use App\Services\Notifications\WebPushConfig;
 use App\Services\Whisparr\WhisparrItemIndex;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
@@ -53,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
         // Octane a singleton would serve that list to every later request.
         $this->app->scoped(WhisparrItemIndex::class);
         $this->app->singleton(DecisionAgentSettings::class);
+        $this->app->singleton(WebPushConfig::class, fn (): WebPushConfig => WebPushConfig::fromConfig());
 
         // Telescope is a require-dev package; the wrapper provider extends
         // Laravel\Telescope\TelescopeApplicationServiceProvider, so registering

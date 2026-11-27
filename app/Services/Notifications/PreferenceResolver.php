@@ -12,6 +12,7 @@ use App\Notifications\Channels\NtfyChannel;
 use App\Notifications\Channels\PushChannel;
 use App\Notifications\Channels\TelegramChannel;
 use App\Notifications\Channels\WebhookChannel;
+use App\Notifications\Channels\WebPushChannel;
 use App\Notifications\ServiceUpdateAvailable;
 
 /**
@@ -28,7 +29,7 @@ use App\Notifications\ServiceUpdateAvailable;
 class PreferenceResolver
 {
     /** Channels available across the whole pipeline. */
-    public const array CHANNELS = ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webhook'];
+    public const array CHANNELS = ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webhook', 'webpush'];
 
     /**
      * Custom push channels: Laravel resolves them by class name, the
@@ -41,6 +42,7 @@ class PreferenceResolver
         'discord' => DiscordChannel::class,
         'telegram' => TelegramChannel::class,
         'webhook' => WebhookChannel::class,
+        'webpush' => WebPushChannel::class,
     ];
 
     /** Severities Laravel notifications will route through this resolver. */
@@ -54,6 +56,7 @@ class PreferenceResolver
         'discord' => false,
         'telegram' => false,
         'webhook' => false,
+        'webpush' => false,
     ];
 
     /**
@@ -115,6 +118,7 @@ class PreferenceResolver
                 'discord' => $row->discord,
                 'telegram' => $row->telegram,
                 'webhook' => $row->webhook,
+                'webpush' => $row->webpush,
             ]
             : [...self::DEFAULTS, ...(self::CLASS_DEFAULTS[$notificationClass] ?? [])];
 

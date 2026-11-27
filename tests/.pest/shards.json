@@ -127,10 +127,11 @@
         "Tests\\Browser\\TwoFactorChallengeTest": 1.9535,
         "Tests\\Browser\\ViewerAccessTest": 3.9011,
         "Tests\\Browser\\WantedTest": 2.978,
+        "Tests\\Browser\\WebPushSettingsTest": 6.0559,
         "Tests\\Browser\\WhisparrLibraryTest": 16.88,
         "Tests\\Browser\\WhisparrPreferencesTest": 1.6447,
         "Tests\\Browser\\WideSettingsLayoutTest": 28.3
     },
-    "checksum": "715eceec3ee3341debf4df617f069dd2",
-    "updated_at": "2026-11-24T10:26:22+00:00"
+    "checksum": "596f2941cf819787173077b3895cae94",
+    "updated_at": "2026-11-27T22:20:23+00:00"
 }

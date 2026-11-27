@@ -20,6 +20,7 @@
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
+        "minishlink/web-push": "^11.0",
         "pentacore/laravel-typefinder": "^8.5.0",
         "socialiteproviders/authentik": "^5.3",
         "spatie/laravel-prometheus": "^1.6",

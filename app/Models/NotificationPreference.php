@@ -25,6 +25,7 @@ use Override;
  * @property bool $discord
  * @property bool $telegram
  * @property bool $webhook
+ * @property bool $webpush
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -45,6 +46,7 @@ use Override;
     'discord',
     'telegram',
     'webhook',
+    'webpush',
 ])]
 class NotificationPreference extends Model
 {
@@ -65,6 +67,7 @@ class NotificationPreference extends Model
             'discord' => 'boolean',
             'telegram' => 'boolean',
             'webhook' => 'boolean',
+            'webpush' => 'boolean',
         ];
     }
 

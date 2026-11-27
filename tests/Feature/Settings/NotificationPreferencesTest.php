@@ -251,7 +251,7 @@ test('a non-admin does not see the webhook channel or destination in edit props'
         ->get(route('settings.notifications.edit'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('channels', ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram'])
+            ->where('channels', ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webpush'])
             ->missing('destinations.webhook_url')
             ->missing('destinations.webhook_secret_set')
         );

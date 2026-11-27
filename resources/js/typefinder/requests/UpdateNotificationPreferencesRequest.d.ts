@@ -15,6 +15,7 @@ export type UpdateNotificationPreferencesRequest = {
       discord?: boolean;
       telegram?: boolean;
       webhook?: boolean;
+      webpush?: boolean;
     }[];
   }[];
   ntfy_topic?: string | null;
