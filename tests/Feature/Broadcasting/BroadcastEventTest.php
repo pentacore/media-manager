@@ -9,6 +9,8 @@ use App\Events\ActivityLogCreated;
 use App\Events\DashboardStatsUpdated;
 use App\Events\EmbyPlaybackUpdated;
 use App\Events\MediaReplacementAttemptChanged;
+use App\Events\ServerIncidentChanged;
+use App\Events\ServerReported;
 use App\Events\ServiceConnectionDeleted;
 use App\Events\ServiceConnectionUpserted;
 use App\Events\ServiceHealthChanged;
@@ -21,6 +23,7 @@ use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServerIncident;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
@@ -357,7 +360,11 @@ test('WebhookEventProcessed broadcasts on dashboard channel with the service it 
     $event = new WebhookEventProcessed($webhookEvent);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
-    expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
+    expect($event->broadcastOn())->toEqual([
+        new PrivateChannel('dashboard'),
+        new PrivateChannel('webhooks.sonarr'),
+        new PrivateChannel('webhooks.sonarr.'.$connection->id),
+    ]);
     expect($event->broadcastAs())->toBe('WebhookEventProcessed');
     expect($event->broadcastWith())->toBe([
         'id' => $webhookEvent->id,
@@ -435,7 +442,10 @@ test('MediaReplacementAttemptChanged broadcasts a scalar summary on the admin ch
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event)->not->toBeInstanceOf(ShouldBroadcastNow::class);
     expect($event)->toBeInstanceOf(ShouldDispatchAfterCommit::class);
-    expect($event->broadcastOn())->toEqual(new PrivateChannel('admin.media-replacement'));
+    expect($event->broadcastOn())->toEqual([
+        new PrivateChannel('admin.media-replacement'),
+        new PrivateChannel('admin.media-replacement.'.$attempt->id),
+    ]);
     expect($event->broadcastAs())->toBe('MediaReplacementAttemptChanged');
 
     $payload = $event->broadcastWith();
@@ -503,4 +513,34 @@ test('ActionRequestCreated broadcasts the second opinion verdict of a request th
     $payload = new ActionRequestCreated($actionRequest)->broadcastWith();
 
     expect($payload['second_opinion'])->toMatchArray(['agrees' => false, 'reason' => 'Destructive without cause.']);
+});
+
+test('WebhookEventProcessed leaves out the scoped channels when its connection is gone', function (): void {
+    $webhookEvent = WebhookEvent::factory()->make(['service_connection_id' => null]);
+
+    expect(new WebhookEventProcessed($webhookEvent)->broadcastOn())->toEqual([new PrivateChannel('dashboard')]);
+});
+
+test('ServerReported broadcasts on the servers list and its own server channel', function (): void {
+    $event = new ServerReported(5, '2026-11-27T10:00:00+00:00');
+
+    expect($event->broadcastOn())->toEqual([new PrivateChannel('admin.servers'), new PrivateChannel('admin.servers.5')]);
+    expect($event->broadcastWith())->toBe(['server_id' => 5, 'last_report_at' => '2026-11-27T10:00:00+00:00']);
+});
+
+test('ServerIncidentChanged broadcasts on the servers list and its own server channel', function (): void {
+    $incident = ServerIncident::factory()->make(['id' => 11, 'server_id' => 5]);
+
+    $event = new ServerIncidentChanged($incident);
+
+    expect($event->broadcastOn())->toEqual([new PrivateChannel('admin.servers'), new PrivateChannel('admin.servers.5')]);
+    expect($event->broadcastWith())->toBe([
+        'server_id' => 5,
+        'incident_id' => 11,
+        'key' => $incident->key,
+        'status' => $incident->status->value,
+        'severity' => $incident->severity->value,
+        'title' => $incident->title,
+        'occurred_at' => $event->occurredAt,
+    ]);
 });

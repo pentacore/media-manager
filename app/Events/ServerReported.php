@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Broadcasting\LiveChannels;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -19,9 +20,12 @@ class ServerReported implements ShouldBroadcast
 
     public function __construct(public int $serverId, public ?string $lastReportAt) {}
 
-    public function broadcastOn(): PrivateChannel
+    /**
+     * @return array<int, PrivateChannel>
+     */
+    public function broadcastOn(): array
     {
-        return new PrivateChannel('admin.servers');
+        return [LiveChannels::servers(), LiveChannels::server($this->serverId)];
     }
 
     public function broadcastAs(): string

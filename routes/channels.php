@@ -29,6 +29,12 @@ Broadcast::channel('members.sabnzbd', fn (User $user): bool => $user->role->isAt
 Broadcast::channel('emby.activity', fn (User $user): bool => true);
 Broadcast::channel('dashboard', fn (User $user): bool => true);
 
+// Processed webhooks narrowed to one service type or one connection. Open like
+// `dashboard`, whose payload carries the same figures, so nobody is admitted
+// here that the old channel refused.
+Broadcast::channel('webhooks.{serviceType}', fn (User $user): bool => true);
+Broadcast::channel('webhooks.{serviceType}.{connectionId}', fn (User $user): bool => true);
+
 // Every non-audit activity row, from every user. Viewers see only their own
 // rows (ActivityLog::visibleTo()), so they never join this feed — the
 // dashboard subscribes only for manage-library users.
@@ -48,9 +54,15 @@ Broadcast::channel('admin.ai-prices', fn (User $user): bool => $user->role === U
 // are operator detail, not member-facing.
 Broadcast::channel('admin.media-replacement', fn (User $user): bool => $user->role === UserRole::Admin);
 
+// One attempt's lifecycle, for its detail page. Same rule as the list channel.
+Broadcast::channel('admin.media-replacement.{attemptId}', fn (User $user): bool => $user->role === UserRole::Admin);
+
 // Host monitoring: agent reports and incident changes. Admin-only — the servers
 // pages are gated the same way and the payload names hosts and their problems.
 Broadcast::channel('admin.servers', fn (User $user): bool => $user->can(Abilities::ADMIN));
+
+// One server's reports and incidents, for its detail page. Same rule as the list channel.
+Broadcast::channel('admin.servers.{serverId}', fn (User $user): bool => $user->can(Abilities::ADMIN));
 
 // Per-conversation AI chat liveness — agent step updates ("Calling Sonarr…")
 // for the duration of a single in-flight chat turn. Caller must own the

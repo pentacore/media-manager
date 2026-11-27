@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Broadcasting\LiveChannels;
 use App\Models\MediaReplacementAttempt;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -28,9 +29,15 @@ final class MediaReplacementAttemptChanged implements ShouldBroadcast, ShouldDis
         public MediaReplacementAttempt $mediaReplacementAttempt,
     ) {}
 
-    public function broadcastOn(): PrivateChannel
+    /**
+     * @return array<int, PrivateChannel>
+     */
+    public function broadcastOn(): array
     {
-        return new PrivateChannel('admin.media-replacement');
+        return [
+            LiveChannels::mediaReplacement(),
+            LiveChannels::mediaReplacementAttempt($this->mediaReplacementAttempt->id),
+        ];
     }
 
     public function broadcastAs(): string
