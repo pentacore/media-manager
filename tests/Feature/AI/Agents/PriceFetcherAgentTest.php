@@ -46,7 +46,7 @@ test('agent declares both pricing tools', function (): void {
         ->toContain(UpsertModelPriceTool::class);
 });
 
-test('price fetcher uses provider webfetch when flag enabled', function (): void {
+test('price refresh agent uses provider webfetch when flag enabled', function (): void {
     config()->set('mediamanager.ai.price_fetcher_provider_webfetch', true);
 
     $tools = collect((new PriceFetcherAgent)->tools())->map(fn (object $tool): string => $tool::class);
@@ -55,7 +55,7 @@ test('price fetcher uses provider webfetch when flag enabled', function (): void
         ->not->toContain(WebFetchTool::class);
 });
 
-test('price fetcher defaults to the custom webfetch tool', function (): void {
+test('price refresh agent defaults to the custom webfetch tool', function (): void {
     $tools = collect((new PriceFetcherAgent)->tools())->map(fn (object $tool): string => $tool::class);
 
     expect($tools)->toContain(WebFetchTool::class);
@@ -314,7 +314,7 @@ test('code execution is offered only when every provider in the chain supports i
         ->and((string) $priceFetcherAgent->instructions())->not->toContain('code execution');
 });
 
-test('the price fetcher runs on the price updater model rather than the chat model', function (): void {
+test('the price refresh agent runs on the price refresh model rather than the chat model', function (): void {
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-chat')->create();
     AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-updater')->create();
 

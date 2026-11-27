@@ -19,7 +19,7 @@ use Stringable;
  * Gated behind DecisionAgentSettings::allowManualImport(). It enumerates the
  * download's candidate files and proposes a resolve_manual_import action.
  * Partially-mapped sets are force-queued for human approval regardless of the
- * action rule's auto-execute setting; fully-mapped imports follow the rule.
+ * approval rule's auto-execute setting; fully-mapped imports follow the rule.
  * Interpreting rejection text (import vs remove) is the agent's job, not this
  * tool's — see InspectStuckImportTool / RemoveStuckDownloadTool.
  *
@@ -30,7 +30,7 @@ class ResolveManualImportTool extends DecisionTool
 {
     public function description(): Stringable|string
     {
-        return 'Import a stuck Sonarr/Radarr download (after inspecting it with InspectStuckImportTool). Provide the service and download_id; sample files are skipped automatically and excluded_paths leaves out other candidate files. Fully-mapped imports may auto-run per the action rule; partially-mapped sets are always queued for human approval. If a download should NOT be imported (e.g. "not an upgrade"), use RemoveStuckDownloadTool instead.';
+        return 'Import a stuck Sonarr/Radarr download (after inspecting it with InspectStuckImportTool). Provide the service and download_id; sample files are skipped automatically and excluded_paths leaves out other candidate files. Fully-mapped imports may auto-run per the approval rule; partially-mapped sets are always queued for human approval. If a download should NOT be imported (e.g. "not an upgrade"), use RemoveStuckDownloadTool instead.';
     }
 
     /**

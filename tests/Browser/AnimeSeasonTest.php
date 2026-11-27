@@ -326,7 +326,7 @@ test('a refused Monitor leaves the button enabled so it can be retried', functio
     visit(route('media.anime.index', absolute: false))
         ->assertNoSmoke()
         ->click('[data-anime-monitor]')
-        ->assertSee('This action is disabled in Action Rules.')
+        ->assertSee('This action is disabled in Approval rules.')
         ->assertEnabled('[data-anime-monitor]')
         ->assertSeeIn('[data-anime-monitor]', 'Monitor');
 

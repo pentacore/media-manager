@@ -282,7 +282,7 @@ test('an emby scan whose debounce window passed long ago is re-dispatched', func
     Queue::assertPushed(ExecuteActionRequest::class, 1);
 });
 
-test('a subtitle advisor replacement the advisor never finalized is not started', function (): void {
+test('a Media Advisor replacement the advisor never finalized is not started', function (): void {
     Queue::fake();
     $replacement = ActionRequest::factory()->autoExecute()->create([
         'type' => 'replace_media_file',
@@ -296,7 +296,7 @@ test('a subtitle advisor replacement the advisor never finalized is not started'
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
-test('a finalized subtitle advisor replacement whose job was lost is re-dispatched', function (): void {
+test('a finalized Media Advisor replacement whose job was lost is re-dispatched', function (): void {
     Queue::fake();
     $replacement = ActionRequest::factory()->autoExecute()->create([
         'type' => 'replace_media_file',
@@ -378,7 +378,7 @@ test('an emby scan still inside its debounce window is left waiting even past th
     expect($scan->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
 
-test('an unfinalized subtitle advisor replacement past the 24 hour bound is failed as never started', function (): void {
+test('an unfinalized Media Advisor replacement past the 24 hour bound is failed as never started', function (): void {
     // Nothing finalizes an advisor replacement after its own job: one still
     // unfinalized a day later would otherwise sit Approved forever.
     Queue::fake();

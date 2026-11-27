@@ -27,7 +27,7 @@ final class SubtitleAdvisorRunContext
 
     public function recordQueued(int $actionRequestId): void
     {
-        throw_if($this->capReached(), LogicException::class, 'The subtitle Advisor action cap has been reached.');
+        throw_if($this->capReached(), LogicException::class, 'The Media Advisor action cap has been reached.');
 
         $this->queuedActionRequestId = $actionRequestId;
     }

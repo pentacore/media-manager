@@ -77,7 +77,7 @@ test('a request the second opinion rejected says so', function (): void {
     $actionRequest = ActionRequest::factory()->secondOpinion(agrees: false, reason: 'Wrong series.', mode: 'reject')->create([
         'origin' => 'agent',
         'status' => ActionRequestStatus::Rejected,
-        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.'],
+        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Declined by second opinion: Wrong series.'],
     ]);
     $this->actingAs(User::factory()->admin()->create());
 

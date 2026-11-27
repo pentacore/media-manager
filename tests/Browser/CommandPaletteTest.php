@@ -105,7 +105,7 @@ test('the palette hides admin pages from members', function (): void {
         ->assertSeeIn('[data-palette-sections]', 'Overview')
         ->assertDontSeeIn('[data-palette-sections]', 'Admin')
         ->assertDontSeeIn('[data-palette-sections]', 'Connections')
-        ->assertDontSeeIn('[data-palette-sections]', 'Approval Rules')
+        ->assertDontSeeIn('[data-palette-sections]', 'Approval rules')
         ->assertDontSeeIn('[data-palette-sections]', 'Webhook Log');
 });
 

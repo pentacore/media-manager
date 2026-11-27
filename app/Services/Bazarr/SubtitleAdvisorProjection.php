@@ -348,7 +348,7 @@ final readonly class SubtitleAdvisorProjection
         throw_if(
             strlen(json_encode($projection, JSON_THROW_ON_ERROR)) > self::MAX_JSON_BYTES,
             LengthException::class,
-            'The subtitle Advisor projection exceeds its safe size limit.',
+            'The Media Advisor projection exceeds its safe size limit.',
         );
 
         return $projection;

@@ -179,7 +179,7 @@ class MovieController extends BaseArrController
         return match ($manualActionOutcome->state) {
             ManualActionOutcome::STARTED => $this->flashAnd('success', __('Movie deletion queued.'), to_route('media.movies.index')),
             ManualActionOutcome::QUEUED => $this->flashAnd('info', __('Deletion queued for approval in the Action Queue.'), back()),
-            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting movies is disabled in Action Rules.'), back()),
+            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting movies is disabled in Approval rules.'), back()),
             default => $this->flashAnd('error', __('Failed to delete movie.'), back()),
         };
     }

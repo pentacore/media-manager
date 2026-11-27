@@ -146,7 +146,7 @@ abstract class BaseTool implements Tool
             return $this->safeEncode([
                 'queued' => false,
                 'reason' => 'no_action_type_config',
-                'message' => 'No matching ActionTypeConfig exists for this action type, or it is disabled. Tell the user to enable the rule in Admin → Action Rules.',
+                'message' => 'No matching ActionTypeConfig exists for this action type, or it is disabled. Tell the user to enable the rule in Admin → Approval rules.',
             ]);
         }
 

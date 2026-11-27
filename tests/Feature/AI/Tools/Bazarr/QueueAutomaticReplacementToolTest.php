@@ -127,7 +127,7 @@ test('it queues the unique automatic candidate and records the action in the run
     ]);
 });
 
-test('it allows Action Rules to auto-approve the replacement request', function (): void {
+test('it allows the approval rules to auto-approve the replacement request', function (): void {
     ActionTypeConfig::query()
         ->where('type', 'replace_media_file')
         ->update(['requires_approval' => false]);
@@ -212,7 +212,7 @@ test('it refuses a changed installed file or changed requirements', function ():
         ->and(ActionRequest::query()->count())->toBe(0);
 });
 
-test('it respects disabled Action Rules and Advisory mode', function (): void {
+test('it respects a disabled approval rule and Advisory mode', function (): void {
     ActionTypeConfig::query()
         ->where('type', 'replace_media_file')
         ->update(['is_enabled' => false]);

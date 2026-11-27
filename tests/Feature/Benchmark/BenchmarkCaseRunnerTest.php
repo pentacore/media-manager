@@ -154,7 +154,7 @@ test('a structured sub-agent case outputs the JSON of the structured response', 
     expect(json_decode($caseOutcome->output, true))->toBe($structured);
 });
 
-test('the price updater runs scoped to the case providers on the app web fetch tool as a dry run', function (): void {
+test('the price refresh runs scoped to the case providers on the app web fetch tool as a dry run', function (): void {
     config()->set('mediamanager.ai.price_fetcher_provider_webfetch', true);
     $benchmarkCase = BenchmarkCase::factory()->forTask(AiTask::PriceUpdater)->create([
         'input' => ['prompt' => 'Verify anthropic prices', 'providers' => ['anthropic']],
@@ -558,5 +558,5 @@ test('a verifier answer without a boolean verdict throws so the result fails', f
     DecisionVerifierAgent::fake([$answer]);
 
     expect(fn (): CaseOutcome => resolve(BenchmarkCaseRunner::class)->run($benchmarkCase))
-        ->toThrow(RuntimeException::class, 'The verifier returned no verdict.');
+        ->toThrow(RuntimeException::class, 'The second opinion returned no verdict.');
 })->with(['missing' => [['reason' => 'Unsure.']], 'a string' => [['agrees' => 'true', 'reason' => 'Yes.']]]);

@@ -28,7 +28,7 @@ use Inertia\Inertia;
 
 /**
  * Admin Whisparr actions from the title page. Every write goes through
- * LibraryActionRequester (Action Queue, Action Rules, audit) and pins the
+ * LibraryActionRequester (Action Queue, approval rules, audit) and pins the
  * connection the page was rendered from.
  */
 class WhisparrActionController extends Controller

@@ -1461,7 +1461,7 @@ test('an update-only provider with in-use models but no stored rows still reache
         ->and(AiModelPrice::query()->where('provider', 'openrouter')->pluck('model')->all())->toBe(['vendor/classifier']);
 });
 
-test('the verifier runs on the configured price updater model', function (?Lab $failover): void {
+test('the price refresh agent runs on the configured price refresh model', function (?Lab $failover): void {
     config()->set('ai.default', 'openai');
 
     if ($failover instanceof Lab) {

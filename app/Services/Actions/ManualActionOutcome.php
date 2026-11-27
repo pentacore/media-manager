@@ -42,7 +42,7 @@ final readonly class ManualActionOutcome
         return match ($this->state) {
             self::STARTED => ['type' => 'success', 'message' => $startedMessage],
             self::QUEUED => ['type' => 'info', 'message' => __('Queued for approval in the Action Queue.')],
-            self::DISABLED => ['type' => 'error', 'message' => __('This action is disabled in Action Rules.')],
+            self::DISABLED => ['type' => 'error', 'message' => __('This action is disabled in Approval rules.')],
             self::BLOCKED => ['type' => 'error', 'message' => __('A file replacement is in progress for this title — try again when it finishes.')],
             default => ['type' => 'error', 'message' => __('That item could not be found — refresh and try again.')],
         };

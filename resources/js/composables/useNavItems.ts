@@ -207,13 +207,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                             : undefined,
                     },
                     {
-                        title: 'Requests',
+                        title: 'Seerr requests',
                         href: RequestController.index.url(),
                         icon: Heart,
                         ability: 'manage-requests',
                     },
                     {
-                        title: 'My requests',
+                        title: 'My Seerr requests',
                         href: MyRequestController.index.url(),
                         icon: ListChecks,
                         ability: 'request-media',
@@ -334,7 +334,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         icon: Users,
                     },
                     {
-                        title: 'Approval Rules',
+                        title: 'Approval rules',
                         href: ActionTypeConfigController.index.url(),
                         icon: Shield,
                     },

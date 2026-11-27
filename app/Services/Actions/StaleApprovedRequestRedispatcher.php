@@ -161,7 +161,7 @@ final readonly class StaleApprovedRequestRedispatcher
     }
 
     /**
-     * The subtitle advisor files its replacement Approved but deferred; only
+     * The Media Advisor files its replacement Approved but deferred; only
      * RunSubtitleAdvisor::finishWithQueuedAction() starts it, and that marks
      * the advisor attempt for the request Succeeded. Without such an attempt
      * the replacement was deliberately never started. That wait is bounded by

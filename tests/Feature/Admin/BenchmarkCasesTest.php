@@ -322,7 +322,7 @@ test('a decision draft rewrites an old single-download stuck-import call to the 
             ->where('draft.fixtures.3.arguments', ['service' => 'sonarr', 'download_id' => 'v1']));
 });
 
-test('a price updater draft takes providers from the prompt and prices from upsert calls', function (): void {
+test('a price refresh draft takes providers from the prompt and prices from upsert calls', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $aiUsageRecord = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh prices for Google and OpenAI models');
     benchmarkToolCall($aiUsageRecord, UpsertModelPriceTool::class, 'UpsertModelPriceTool', ['arguments' => [
@@ -342,7 +342,7 @@ test('a price updater draft takes providers from the prompt and prices from upse
             ->where('draft.scoring.expected.0.cache_read_per_mtok', null));
 });
 
-test('a price updater draft without a recognisable provider warns', function (): void {
+test('a price refresh draft without a recognisable provider warns', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $aiUsageRecord = benchmarkTextUsage(PriceFetcherAgent::class, 'Refresh the catalogue');
 
@@ -416,7 +416,7 @@ test('store persists a case with the source fields and audits it', function (): 
     expect($activityLog->subject_id)->toBe($benchmarkCase->id);
 });
 
-test('store accepts decision, price updater and chat payload shapes', function (): void {
+test('store accepts decision, price refresh and chat payload shapes', function (): void {
     $this->actingAs(User::factory()->admin()->create());
     $eventKey = DecisionAgentSettings::availableEventKeys()[0];
 
@@ -472,7 +472,7 @@ test('store validates every rule', function (array $overrides, string $errorKey)
     'history content too long' => [['task' => 'chat', 'input' => ['history' => [['role' => 'user', 'content' => str_repeat('a', 20_001)]]]], 'input.history.0.content'],
     'bad mode' => [['task' => 'chat', 'input' => ['mode' => 'wild']], 'input.mode'],
     'bad event key' => [['task' => 'decision', 'input' => ['event_key' => 'nope:Nope'], 'scoring' => ['type' => 'actions', 'expected' => []]], 'input.event_key'],
-    'price updater without providers' => [['task' => 'price_updater', 'scoring' => ['type' => 'prices', 'expected' => []]], 'input.providers'],
+    'price refresh without providers' => [['task' => 'price_updater', 'scoring' => ['type' => 'prices', 'expected' => []]], 'input.providers'],
     'non canonical provider' => [['task' => 'price_updater', 'input' => ['providers' => ['google']], 'scoring' => ['type' => 'prices', 'expected' => []]], 'input.providers.0'],
     'fixture tool missing' => [['fixtures' => [['tool' => '', 'arguments' => [], 'result' => '']]], 'fixtures.0.tool'],
     'fixture result too long' => [['fixtures' => [['tool' => 'x', 'arguments' => [], 'result' => str_repeat('a', 32_789)]]], 'fixtures.0.result'],

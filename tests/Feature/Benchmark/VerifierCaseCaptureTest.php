@@ -118,7 +118,7 @@ test('the expected verdict comes only from a person reviewing the action', funct
     'rejected by a person' => [ActionRequestStatus::Rejected, true, ['rejection_reason' => 'Wrong series.'], false],
     'still pending' => [ActionRequestStatus::Pending, false, null, null],
     'ran automatically' => [ActionRequestStatus::Completed, false, null, null],
-    'rejected by the second opinion' => [ActionRequestStatus::Rejected, false, ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.'], null],
+    'declined by the second opinion' => [ActionRequestStatus::Rejected, false, ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Declined by second opinion: Wrong series.'], null],
 ]);
 
 test('a reviewer who was deleted since leaves the verdict to choose', function (): void {

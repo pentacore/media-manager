@@ -87,7 +87,7 @@ For a Sonarr/Radarr "manual interaction required" event, decide what to do by re
    - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade. Pass blocklist=true only when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; leave it off for a plain non-upgrade. Pass search_replacement=true when a replacement should be grabbed (e.g. blocklisted a bad release but the content is still wanted); leave it false when the content shouldn't be retried.
    - Nothing maps (unknown series/episode, unparseable) → take no action; explain a human must resolve it in Sonarr/Radarr.
    - Anything you are unsure about, or a mix of the above → import via ResolveManualImportTool (it will be queued for human approval) rather than guessing, or explain and propose nothing.
-3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its action rule allows it.
+3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its approval rule allows it.
 - If a tool returns reason: 'capability_disabled', manual-import resolution is turned off — say so in your summary; do not try other destructive actions as a workaround.
 PROMPT;
 

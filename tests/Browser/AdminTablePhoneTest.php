@@ -114,7 +114,7 @@ test('an admin table keeps its first column on screen while it scrolls sideways 
     'users' => ['admin.users.index', 'users'],
     'connections' => ['admin.connections.index', 'connections'],
     'notification destinations' => ['admin.notification-destinations.index', 'destinations'],
-    'action rules' => ['actions.rules.index', 'action-rules'],
+    'approval rules' => ['actions.rules.index', 'action-rules'],
     'servers' => ['admin.servers.index', 'servers'],
     'server incidents' => ['admin.servers.incidents.index', 'incidents'],
     'benchmark schedules' => ['admin.benchmarks.schedules.index', 'schedules'],

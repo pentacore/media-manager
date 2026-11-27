@@ -12,7 +12,7 @@ use InvalidArgumentException;
 
 /**
  * The one path a member's library action takes into the Action Queue:
- * server-verified description, `origin: 'manual'`, Action Rules applied.
+ * server-verified description, `origin: 'manual'`, approval rules applied.
  */
 final readonly class ManualActionDispatcher
 {

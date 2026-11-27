@@ -133,7 +133,7 @@ class RepairSeriesSubtitlesTool extends BaseTool
     {
         return match ($reason) {
             'nothing_missing' => 'No episode is missing a required subtitle, so there is nothing to repair. Tell the user.',
-            'action_type_disabled' => 'The replace_media_file action type is disabled. Tell the user to enable it in the action rules.',
+            'action_type_disabled' => 'The replace_media_file action type is disabled. Tell the user to enable it in Admin → Approval rules.',
             'batch_in_progress' => 'A subtitle repair for this series is already searching. Tell the user to wait for its notification.',
             default => 'The repair could not start. Tell the user.',
         };

@@ -91,7 +91,7 @@ const showsPrompt = computed(
         ),
 );
 
-/** Canonical Laravel AI provider ids the price updater can be asked to refresh. */
+/** Canonical Laravel AI provider ids a price refresh can be asked to cover. */
 const PRICE_PROVIDERS = [
     'openai',
     'anthropic',

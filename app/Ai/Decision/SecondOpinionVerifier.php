@@ -200,7 +200,7 @@ final readonly class SecondOpinionVerifier
                 ClassificationGate::SecondOpinion,
                 $subjectKey,
                 $secondOpinionVerdict->agrees,
-                $secondOpinionVerdict->agrees ? 'the LLM verifier agreed' : 'the LLM verifier disagreed',
+                $secondOpinionVerdict->agrees ? 'the second opinion agreed' : 'the second opinion disagreed',
                 [ClassificationVerdict::AuditRun, ClassificationVerdict::Fallback],
                 classificationOutcomeSource: ClassificationOutcomeSource::Llm,
             );
@@ -306,7 +306,7 @@ final readonly class SecondOpinionVerifier
             $agrees = $agentResponse['agrees'] ?? null;
             $reason = $agentResponse['reason'] ?? null;
 
-            throw_unless(is_bool($agrees), RuntimeException::class, 'The verifier returned no verdict.');
+            throw_unless(is_bool($agrees), RuntimeException::class, 'The second opinion returned no verdict.');
 
             return new SecondOpinionVerdict(
                 engine: SecondOpinionVerdict::ENGINE_LLM,
@@ -319,7 +319,7 @@ final readonly class SecondOpinionVerifier
         } catch (AiBudgetExceededException) {
             return SecondOpinionVerdict::failure(SecondOpinionVerdict::ENGINE_LLM, 'Skipped: the AI budget hard cap is reached.');
         } catch (Throwable $throwable) {
-            Log::warning('SecondOpinionVerifier: LLM verifier failed', [
+            Log::warning('SecondOpinionVerifier: the second opinion model failed', [
                 'type' => $secondOpinionCase->actionType,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),

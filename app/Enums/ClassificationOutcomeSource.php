@@ -22,7 +22,7 @@ enum ClassificationOutcomeSource: string
     {
         return match ($this) {
             self::Event => 'Observed event',
-            self::Llm => 'LLM verifier',
+            self::Llm => 'Second opinion',
             self::Reviewer => 'Reviewer',
         };
     }

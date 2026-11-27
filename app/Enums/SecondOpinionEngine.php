@@ -35,7 +35,7 @@ enum SecondOpinionEngine: string
     }
 
     /**
-     * Whether the engine can ask the LLM verifier (always, or on doubt).
+     * Whether the engine can ask the second opinion model (always, or on doubt).
      */
     public function canAskLlm(): bool
     {

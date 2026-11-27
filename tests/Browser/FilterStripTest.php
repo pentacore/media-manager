@@ -35,7 +35,7 @@ test('a deep-linked window past the fold scrolls into view in the strip on a pho
     );
 });
 
-test('a strip on Action rules leaves the page and the rules table frame unscrolled on a phone', function (): void {
+test('a strip on Approval rules leaves the page and the rules table frame unscrolled on a phone', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $this->actingAs(User::factory()->admin()->create());
 

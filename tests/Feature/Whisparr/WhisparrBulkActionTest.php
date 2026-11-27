@@ -109,7 +109,7 @@ test('a refused item is named from the Whisparr library, not from the request', 
 
     $this->actingAs($this->admin)
         ->postJson(route('media.whisparr.bulk'), bulkWhisparrPayload($this->whisparr, ['ids' => [12], 'action' => 'search']))
-        ->assertJsonPath('failed', [['id' => 12, 'title' => 'Borealis Scene', 'reason' => 'This action is disabled in Action Rules.']]);
+        ->assertJsonPath('failed', [['id' => 12, 'title' => 'Borealis Scene', 'reason' => 'This action is disabled in Approval rules.']]);
 });
 
 test('a Sonarr connection id is refused and nothing is filed', function (): void {

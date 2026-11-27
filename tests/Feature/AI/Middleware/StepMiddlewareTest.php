@@ -90,7 +90,7 @@ test('every agent runs the step middleware its runs need', function (string $age
     'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
     'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class, ReplayBenchmarkTools::class]],
     'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenDecisionRunOutOfTime::class, ReplayBenchmarkTools::class]],
-    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class, ReplayBenchmarkTools::class]],
+    'price refresh agent' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenPriceRefreshOutOfTime::class, ReplayBenchmarkTools::class]],
     'title' => [TitleAgent::class, [ReplayBenchmarkTools::class]],
     'benchmark judge' => [BenchmarkJudgeAgent::class, [ReplayBenchmarkTools::class]],
 ]);
@@ -167,7 +167,7 @@ test('an unwatched connection never stops a run', function (): void {
     expect((new StopWhenClientDisconnected)->handle(stepMiddlewarePendingStep(2, false), fn (): string => 'ok'))->toBe('ok');
 });
 
-test('the price verifier stops before a later step that no longer fits the refresh time box', function (): void {
+test('the price refresh agent stops before a later step that no longer fits the refresh time box', function (): void {
     $this->freezeTime();
     resolve(PriceRefreshTimeBox::class)->open(PriceRefreshTimeBox::AGENT_STEP_SECONDS - 1);
 
@@ -187,7 +187,7 @@ test('a provider failover restarting the run at step 0 is checked too, not exemp
         ->toThrow(PriceRefreshOutOfTime::class);
 });
 
-test('the price verifier keeps going while a step still fits, and when no time box was opened', function (): void {
+test('the price refresh agent keeps going while a step still fits, and when no time box was opened', function (): void {
     $this->freezeTime();
 
     expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
@@ -197,7 +197,7 @@ test('the price verifier keeps going while a step still fits, and when no time b
     expect((new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(3, false), fn (): string => 'ran'))->toBe('ran');
 });
 
-test('the price verifier step timeout is cut to the time left in the box', function (?int $timeout, int $boxSeconds, int $expected): void {
+test('the price refresh agent step timeout is cut to the time left in the box', function (?int $timeout, int $boxSeconds, int $expected): void {
     $this->freezeTime();
     resolve(PriceRefreshTimeBox::class)->open($boxSeconds);
     $seen = null;
@@ -219,7 +219,7 @@ test('the price verifier step timeout is cut to the time left in the box', funct
     'no timeout with exactly one step left' => [null, PriceRefreshTimeBox::AGENT_STEP_SECONDS, PriceRefreshTimeBox::MODEL_CALL_SECONDS],
 ]);
 
-test('the price verifier step timeout is left alone when no time box was opened', function (): void {
+test('the price refresh agent step timeout is left alone when no time box was opened', function (): void {
     $seen = null;
 
     (new StopWhenPriceRefreshOutOfTime)->handle(stepMiddlewarePendingStep(2, false), function (PendingStep $step) use (&$seen): string {

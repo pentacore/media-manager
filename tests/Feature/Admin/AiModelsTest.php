@@ -384,7 +384,7 @@ test('the index reports no unpriced models when no hard cap is set', function ()
         ->assertInertia(fn ($page) => $page->where('unpricedModels', []));
 });
 
-test('admin can route chat, titles, sub-agents and the price updater through OpenRouter', function (): void {
+test('admin can route chat, titles, sub-agents and the price refresh through OpenRouter', function (): void {
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
     AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5']);
     AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-4.5']);
@@ -429,7 +429,7 @@ test('the decision task saves a provider with its model and reasoning', function
         ->toBe(['openrouter', 'openai/gpt-5-mini', AiReasoningLevel::High]);
 });
 
-test('blank sub-agent and price updater selections clear back to the chat selection', function (): void {
+test('blank sub-agent and price refresh selections clear back to the chat selection', function (): void {
     AiTaskModel::factory()->task(AiTask::FileInspector)->selecting('anthropic', 'claude-sonnet-5-5')->create();
     AiTaskModel::factory()->task(AiTask::StuckDownloadInvestigator)->selecting('anthropic', 'claude-sonnet-5-5')->create();
     AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-5-nano')->create();

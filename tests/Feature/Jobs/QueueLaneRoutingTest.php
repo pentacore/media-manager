@@ -40,7 +40,7 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     'debounced library scan wake-up' => [fn (): ExecuteDebouncedLibraryScan => new ExecuteDebouncedLibraryScan(1), QueueLane::Actions],
     'inbound webhooks' => [fn (): ProcessWebhookEvent => new ProcessWebhookEvent(WebhookEvent::factory()->create()), QueueLane::Webhooks],
     'decision agent' => [fn (): RunDecisionAgent => new RunDecisionAgent(null, 'sonarr', 'Download', ['series' => ['id' => 1]]), QueueLane::Ai],
-    'subtitle advisor' => [fn (): RunSubtitleAdvisor => new RunSubtitleAdvisor(1), QueueLane::Ai],
+    'Media Advisor' => [fn (): RunSubtitleAdvisor => new RunSubtitleAdvisor(1), QueueLane::Ai],
     'price refresh' => [fn (): RefreshAiPricesJob => new RefreshAiPricesJob(User::factory()->admin()->create()), QueueLane::Ai],
     'library embedding' => [fn (): EmbedLibraryItem => new EmbedLibraryItem(IndexedMovie::class, 1), QueueLane::Ai],
     'conversation title' => [fn (): GenerateConversationTitle => new GenerateConversationTitle('01J9ZZZZZZZZZZZZZZZZZZZZZZ', 'hello'), QueueLane::Ai],

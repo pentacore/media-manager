@@ -21,7 +21,7 @@ use Stringable;
  *
  * Gated behind the same manual-import capability as importing. Removals are
  * always queued for human approval regardless of the remove_stuck_download
- * action rule, since this deletes the downloaded data and the agent's prompt
+ * approval rule, since this deletes the downloaded data and the agent's prompt
  * embeds third-party-authored webhook text. Extends DecisionTool, not BaseTool:
  * it owns its dispatch path through dispatchFromAgent().
  */

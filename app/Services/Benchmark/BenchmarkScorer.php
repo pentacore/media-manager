@@ -29,7 +29,7 @@ use Throwable;
 
 /**
  * Scores one case outcome by the case's scoring rule: deterministic checks
- * for decision actions, price-updater writes and verifier verdicts, the blind
+ * for decision actions, price refresh writes and second opinion verdicts, the blind
  * LLM judge for every other task. Details never use the `tool_log` key: the run job merges
  * the tool log into the stored detail itself.
  */

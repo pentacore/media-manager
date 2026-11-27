@@ -72,7 +72,7 @@ final readonly class StuckImportResolver
         }
 
         // Structural safety rail: a set that is still partial after the
-        // exclusions is never auto-imported, regardless of the action rule or
+        // exclusions is never auto-imported, regardless of the approval rule or
         // the caller's judgement. Excluding the unmapped files (a sample, an
         // extra) can turn a partial set into a fully mapped one; that is intended.
         $partial = ! $assessment['fully_mapped'];
@@ -109,7 +109,7 @@ final readonly class StuckImportResolver
             return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
-                'message' => 'The resolve_manual_import Action Rule is missing or disabled; an admin must enable it.',
+                'message' => 'The resolve_manual_import approval rule is missing or disabled; an admin must enable it.',
             ];
         }
 
@@ -130,7 +130,7 @@ final readonly class StuckImportResolver
             'message' => $partial
                 ? 'Only some files mapped — queued for human approval.'
                 : ($actionRequest->requires_approval
-                    ? 'Import queued for human approval (per action rule).'
+                    ? 'Import queued for human approval (per approval rule).'
                     : 'Import queued and will auto-run.'),
         ];
     }
@@ -177,7 +177,7 @@ final readonly class StuckImportResolver
             return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
-                'message' => 'The remove_stuck_download Action Rule is missing or disabled; an admin must enable it.',
+                'message' => 'The remove_stuck_download approval rule is missing or disabled; an admin must enable it.',
             ];
         }
 

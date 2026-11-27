@@ -22,7 +22,7 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
             ->name('requests.bulk');
     });
 
-    // Action rules: admin only
+    // Approval rules: admin only
     Route::prefix('actions')->name('actions.')->middleware('role:admin')->group(function (): void {
         Route::get('rules', [ActionTypeConfigController::class, 'index'])->name('rules.index');
         Route::patch('rules/{actionTypeConfig}', [ActionTypeConfigController::class, 'update'])

@@ -83,7 +83,7 @@ test('executive mode preserves auto-approve behavior', function (): void {
     Queue::assertPushed(ExecuteActionRequest::class);
 });
 
-test('advisory mode does not gate manual requests, which follow the action rule', function (): void {
+test('advisory mode does not gate manual requests, which follow the approval rule', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
 
     ActionTypeConfig::factory()->create([

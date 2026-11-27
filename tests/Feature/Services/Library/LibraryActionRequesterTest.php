@@ -87,7 +87,7 @@ test('a delete files the pinned delete type and exactly one audit row', function
     'whisparr item' => ['whisparr', 11, 'whisparr_delete_item', 'whisparr_item_id', 'whisparr.deleted'],
 ]);
 
-test('a delete that Action Rules disabled files nothing and audits nothing', function (): void {
+test('a delete that the approval rules disabled files nothing and audits nothing', function (): void {
     ActionTypeConfig::query()->where('type', 'whisparr_delete_item')->update(['is_enabled' => false]);
 
     $manualActionOutcome = resolve(LibraryActionRequester::class)->delete($this->whisparr, 11, false, 'Requested by a test.');

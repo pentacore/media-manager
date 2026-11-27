@@ -40,7 +40,7 @@ final class BazarrCapabilityRegistry
     /**
      * The single mapping from a requested subtitle operation to the capability that
      * has to be advertised for it. Every entry point that can queue an operation —
-     * the HTTP controller and the AI tool — gates on this, because an Action Rule
+     * the HTTP controller and the AI tool — gates on this, because an approval rule
      * may auto-execute what they create.
      *
      * @var array<string, string>

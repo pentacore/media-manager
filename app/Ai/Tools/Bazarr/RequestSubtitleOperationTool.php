@@ -62,7 +62,7 @@ final class RequestSubtitleOperationTool extends BaseTool
         $inspection = resolve(SubtitleInspector::class)->inspect($connection, $mediaType, $mediaId);
         $item = $inspection['item'];
         $bazarrClient = new BazarrClient($connection);
-        // The same gate the HTTP controller applies: an Action Rule may auto-execute
+        // The same gate the HTTP controller applies: an approval rule may auto-execute
         // what this tool queues, so an operation this Bazarr does not advertise must
         // never become an Action Request.
         $capability = BazarrCapabilityRegistry::capabilityForOperation($operation, $mediaType);

@@ -277,7 +277,7 @@ test('a lost Seerr response tells the user to check before retrying', function (
 
     $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
         ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])
-        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr did not answer — check My requests before trying again.');
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr did not answer — check My Seerr requests before trying again.');
 });
 
 test('a request with nothing left to request says so', function (): void {

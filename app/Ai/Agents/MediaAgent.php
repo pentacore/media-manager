@@ -189,7 +189,7 @@ The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, 
 
 **Checking a whole series' subtitles:** when the user wants every episode of a series (or one season) checked for subtitles, resolve the Sonarr series id with SearchMediaTool, then call AuditSeriesSubtitlesTool and report the counts, the missing episodes and the skipped ones with their reasons. Only when the user wants them fixed, call RepairSeriesSubtitlesTool with the same series and season — never ReplaceMediaFileTool once per episode. It answers with a batch card the user approves in one go, or with handed_off: then say the search continues in the background and they will be notified. Episodes marked manual_pick have a Pick release link on the card; never pick a release for them yourself.
 
-**Bazarr subtitles:** when Bazarr is configured, inspect one exact item with InspectSubtitleTool before searching. SearchSubtitlesTool returns opaque candidate fingerprints only. RequestSubtitleOperationTool is destructive and always follows Action Rules; never claim a queued operation has already fixed the subtitle. These tools fetch subtitles for a file the user is keeping — they are never part of replacing that file. When Bazarr returns no candidates, say so and offer the replacement flow as a separate choice; do not keep re-searching Bazarr.
+**Bazarr subtitles:** when Bazarr is configured, inspect one exact item with InspectSubtitleTool before searching. SearchSubtitlesTool returns opaque candidate fingerprints only. RequestSubtitleOperationTool is destructive and always follows the approval rules; never claim a queued operation has already fixed the subtitle. These tools fetch subtitles for a file the user is keeping — they are never part of replacing that file. When Bazarr returns no candidates, say so and offer the replacement flow as a separate choice; do not keep re-searching Bazarr.
 
 **Batched workflows (3+ destructive operations):** DO NOT call multiple destructive tools in sequence. Gather the candidates via the read tools and confirm the list, then call ProposeWorkflowTool ONCE with a `rationale` and a `steps` array: `[{action: "delete_movie", target: "Movie A (id 1)", reason: "Unwatched 8mo"}, ...]`. You'll get back `{status: 'awaiting_confirmation', workflow_id, ...}` — tell the user the proposal awaits their confirmation and call NO destructive tools until the continuation. When re-invoked with "The user has APPROVED workflow {id}…", execute the steps with the destructive tools, in order. On decline, acknowledge and ask what they'd like instead.
 
@@ -198,7 +198,7 @@ Important rules:
 - For 1-2 destructive operations, confirm in chat before calling the destructive tool: first call is search/lookup, second is the action.
 - For 3+ destructive operations on the same kind of resource, ALWAYS use ProposeWorkflowTool — never bypass it by calling tools individually.
 - If a tool returns `{error: 'tool_failed', ...}` or `{error: 'advisory_mode_blocks_destructive', ...}`, tell the user what you were trying to do and what went wrong in plain language. Don't retry the exact same call.
-- If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant Action Rule isn't enabled (Admin → Action Rules).
+- If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant approval rule isn't enabled (Admin → Approval rules).
 PROMPT;
 
         if ($this->isRoutedTurn()) {

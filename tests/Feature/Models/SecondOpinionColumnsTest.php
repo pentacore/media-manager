@@ -6,7 +6,7 @@ use App\Enums\SecondOpinionMode;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 
-test('an action rule defaults to no second opinion and casts the mode', function (): void {
+test('an approval rule defaults to no second opinion and casts the mode', function (): void {
     $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'monitor_series']);
 
     expect($actionTypeConfig->fresh()->second_opinion)->toBe(SecondOpinionMode::Off);

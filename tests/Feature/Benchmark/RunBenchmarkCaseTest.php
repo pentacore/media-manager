@@ -1236,6 +1236,6 @@ test('a verifier answer without a verdict fails the result with a clear error', 
     $benchmarkResult->refresh();
 
     expect($benchmarkResult->status)->toBe(BenchmarkResultStatus::Failed)
-        ->and($benchmarkResult->error)->toBe('The verifier returned no verdict.')
+        ->and($benchmarkResult->error)->toBe('The second opinion returned no verdict.')
         ->and($benchmarkRun->fresh()->status)->toBe(BenchmarkRunStatus::Completed);
 });

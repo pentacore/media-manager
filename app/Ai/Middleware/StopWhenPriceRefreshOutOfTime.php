@@ -10,7 +10,7 @@ use Closure;
 use Laravel\Ai\PendingStep;
 
 /**
- * Stop the price verifier before its next step once the queued refresh's
+ * Stop the price refresh agent before its next step once the queued refresh's
  * time box no longer fits one more step, so RefreshAiPricesJob ends with a
  * report instead of being killed at its timeout. Throwing makes the SDK
  * dispatch AgentFailed (completed steps are still billed) and

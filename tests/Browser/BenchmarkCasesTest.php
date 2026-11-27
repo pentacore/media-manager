@@ -144,7 +144,7 @@ test('an admin edits a case and deletes it after confirming', function (): void 
     expect(BenchmarkCase::query()->count())->toBe(0);
 });
 
-test('a price updater case saves its providers and numeric expected prices', function (): void {
+test('a price refresh case saves its providers and numeric expected prices', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.benchmarks.cases.create', absolute: false))
