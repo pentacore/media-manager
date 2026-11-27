@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\TestNotificationChannelRequest;
 use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
 use App\Models\NotificationPreference;
+use App\Models\PushSubscription;
 use App\Notifications\AiBudgetSoftLimitReached;
 use App\Notifications\DecisionAgentActed;
 use App\Notifications\HostIncidentEscalated;
@@ -22,6 +23,7 @@ use App\Notifications\SubtitleCaseNeedsReview;
 use App\Services\Notifications\PreferenceResolver;
 use App\Services\Notifications\PushFailureMessage;
 use App\Services\Notifications\PushMessage;
+use App\Services\Notifications\WebPushConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -144,6 +146,8 @@ class NotificationPreferencesController extends Controller
             $destinations['webhook_secret_set'] = is_string($user->webhook_secret) && $user->webhook_secret !== '';
         }
 
+        $webPushConfig = resolve(WebPushConfig::class);
+
         return Inertia::render('settings/Notifications', [
             'catalog' => $catalog,
             'channels' => $channels,
@@ -152,6 +156,21 @@ class NotificationPreferencesController extends Controller
             'channelsConfigured' => [
                 'ntfy' => is_string(config('services.ntfy.server')) && config('services.ntfy.server') !== '',
                 'telegram' => is_string(config('services.telegram.token')) && config('services.telegram.token') !== '',
+                'webpush' => $webPushConfig->available(),
+            ],
+            'webPush' => [
+                'available' => $webPushConfig->available(),
+                'publicKey' => $webPushConfig->publicKey(),
+                'devices' => $user->pushSubscriptions()
+                    ->latest()
+                    ->get()
+                    ->map(fn (PushSubscription $pushSubscription): array => [
+                        'id' => $pushSubscription->id,
+                        'label' => $pushSubscription->label,
+                        'created_at' => $pushSubscription->created_at?->toIso8601String(),
+                        'last_used_at' => $pushSubscription->last_used_at?->toIso8601String(),
+                    ])
+                    ->all(),
             ],
         ]);
     }

@@ -10,34 +10,7 @@ use App\Notifications\ServiceWarning;
 use App\Services\Notifications\PreferenceResolver;
 use App\Services\Notifications\WebPushConfig;
 use App\Services\Notifications\WebPushResult;
-use App\Services\Notifications\WebPushSender;
 use Illuminate\Support\Facades\Log;
-
-/**
- * @param  array<string, WebPushResult>  $results  keyed by endpoint
- */
-function fakeWebPushSender(array $results = []): object
-{
-    $fake = new class($results) extends WebPushSender
-    {
-        /** @var list<array{endpoint: string, payload: string, options: array<string, mixed>}> */
-        public array $sent = [];
-
-        /** @param array<string, WebPushResult> $results */
-        public function __construct(private readonly array $results) {}
-
-        public function send(PushSubscription $subscription, string $payload, array $options): WebPushResult
-        {
-            $this->sent[] = ['endpoint' => $subscription->endpoint, 'payload' => $payload, 'options' => $options];
-
-            return $this->results[$subscription->endpoint] ?? new WebPushResult(true, false, null);
-        }
-    };
-
-    app()->instance(WebPushSender::class, $fake);
-
-    return $fake;
-}
 
 beforeEach(function (): void {
     app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test'));

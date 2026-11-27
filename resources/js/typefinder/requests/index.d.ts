@@ -81,6 +81,7 @@ export type { StoreCatalogModelPricesRequest } from './StoreCatalogModelPricesRe
 export type { StoreChatTemplateRequest } from './StoreChatTemplateRequest';
 export type { StoreMovieRequest } from './StoreMovieRequest';
 export type { StoreNotificationDestinationRequest } from './StoreNotificationDestinationRequest';
+export type { StorePushSubscriptionRequest } from './StorePushSubscriptionRequest';
 export type { StoreSeriesRequest } from './StoreSeriesRequest';
 export type { StoreServerCheckRequest } from './StoreServerCheckRequest';
 export type { StoreServerRequest } from './StoreServerRequest';
