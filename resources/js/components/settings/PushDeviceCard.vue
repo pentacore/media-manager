@@ -25,7 +25,7 @@ const props = defineProps<{
 }>();
 
 const { formatDateTime, formatSmart } = useDateTime();
-const { supported, permission, endpointHash, busy, enable, disable } =
+const { supported, permission, endpointHash, busy, error, enable, disable } =
     usePushSubscription(props.publicKey);
 
 const testing = ref(false);
@@ -149,7 +149,11 @@ function remove(device: PushDevice): void {
                     {{ testing ? 'Sending…' : 'Send a test push' }}
                 </Button>
             </div>
-            <InputError class="mt-2" :message="$page.props.errors.endpoint" />
+            <InputError
+                class="mt-2"
+                data-push-error
+                :message="error ?? $page.props.errors.endpoint"
+            />
             <InputError class="mt-2" :message="$page.props.errors.test_push" />
         </template>
 

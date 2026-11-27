@@ -13,23 +13,36 @@ const WEB_PUSH_TEST_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/test-device'
  * composable makes are replaced with a fake registration whose subscription
  * reports a fixed FCM-looking endpoint.
  */
-function fakePushBrowserScript(): string
+function fakePushBrowserScript(bool $rejectSubscribe = false, bool $staleExisting = false): string
 {
     $endpoint = WEB_PUSH_TEST_ENDPOINT;
+    $reject = $rejectSubscribe ? 'true' : 'false';
+    $stale = $staleExisting ? 'true' : 'false';
 
     return <<<JS
         (() => {
-            const subscription = {
+            window.__pushCalls = [];
+            const make = (key) => ({
                 endpoint: '{$endpoint}',
-                options: { applicationServerKey: null },
+                options: { applicationServerKey: key },
                 toJSON: () => ({ endpoint: '{$endpoint}', keys: { p256dh: 'BFakePublicKey', auth: 'FakeAuth' } }),
-                unsubscribe: async () => true,
-            };
-            let current = null;
+                unsubscribe: async () => {
+                    window.__pushCalls.push('unsubscribe');
+                    current = null;
+                    return true;
+                },
+            });
+            let current = {$stale} ? make(new Uint8Array([1, 2, 3]).buffer) : null;
             const registration = {
                 pushManager: {
                     getSubscription: async () => current,
-                    subscribe: async () => (current = subscription),
+                    subscribe: async () => {
+                        window.__pushCalls.push('subscribe');
+                        if ({$reject}) {
+                            throw new Error('Push service unreachable');
+                        }
+                        return (current = make(null));
+                    },
                 },
             };
             Object.defineProperty(navigator.serviceWorker, 'register', { value: async () => registration, configurable: true });
@@ -97,4 +110,64 @@ test('removing another device deletes it', function (): void {
         ->assertMissing('[data-push-device]');
 
     expect(PushSubscription::query()->count())->toBe(0);
+});
+
+test('a failing push service shows an error and keeps the card usable', function (): void {
+    configureWebPush();
+    $this->actingAs(User::factory()->create());
+
+    $webpage = visit(route('settings.notifications.edit', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(fakePushBrowserScript(rejectSubscribe: true));
+    $webpage->click('[data-push-enable]')
+        ->assertSeeIn('[data-push-error]', 'Push service unreachable')
+        ->assertPresent('[data-push-enable]')
+        ->assertMissing('[data-push-device]');
+
+    expect(PushSubscription::query()->count())->toBe(0);
+});
+
+test('a subscription made with a rotated server key is replaced before it is registered', function (): void {
+    configureWebPush();
+    $this->actingAs(User::factory()->create());
+
+    $webpage = visit(route('settings.notifications.edit', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->script(fakePushBrowserScript(staleExisting: true));
+    $webpage->click('[data-push-enable]')
+        ->assertCount('[data-push-device]', 1)
+        ->assertScript('JSON.stringify(window.__pushCalls)', '["unsubscribe","subscribe"]');
+
+    expect(PushSubscription::query()->sole()->endpoint)->toBe(WEB_PUSH_TEST_ENDPOINT);
+});
+
+test('the service worker only follows same-origin notification urls', function (): void {
+    $this->actingAs(User::factory()->create());
+
+    $webpage = visit(route('settings.notifications.edit', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+
+    $webpage->assertScript(<<<'JS_WRAP'
+        (async () => {
+            const code = await (await fetch('/sw.js')).text();
+            const fake = { addEventListener() {}, location: { origin: location.origin } };
+            const resolve = new Function('self', code + '; return resolveTargetUrl;')(fake);
+    
+            return JSON.stringify([
+                resolve('/settings/notifications').replace(location.origin, ''),
+                resolve('https://evil.example.com/x'),
+                resolve('//evil.example.com/x'),
+                resolve('javascript:alert(1)'),
+                resolve(undefined),
+                resolve('http://[bad'),
+            ]);
+        })()
+    JS_WRAP, json_encode([
+        '/settings/notifications',
+        '/',
+        '/',
+        '/',
+        '/',
+        '/',
+    ], JSON_UNESCAPED_SLASHES));
 });

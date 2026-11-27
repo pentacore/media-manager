@@ -13,6 +13,8 @@ export type UsePushSubscriptionReturn = {
     /** Hex SHA-256 of `endpoint`, matched against the server's device list. */
     endpointHash: Ref<string | null>;
     busy: Ref<boolean>;
+    /** Why the last enable() failed, or null. */
+    error: Ref<string | null>;
     enable: () => Promise<void>;
     disable: (deviceId: number | null) => Promise<void>;
 };
@@ -64,18 +66,19 @@ function visit(
     method: 'post' | 'delete',
     url: string,
     data: Record<string, unknown> = {},
-): Promise<boolean> {
+): Promise<string | null> {
     return new Promise((resolve) => {
-        let failed = false;
+        let failure: string | null = null;
 
         router.visit(url, {
             method,
             data: data as Record<string, never>,
             preserveScroll: true,
-            onError: () => {
-                failed = true;
+            onError: (errors) => {
+                failure =
+                    Object.values(errors)[0] ?? 'The request was rejected.';
             },
-            onFinish: () => resolve(!failed),
+            onFinish: () => resolve(failure),
         });
     });
 }
@@ -100,6 +103,7 @@ export function usePushSubscription(
     const endpoint = ref<string | null>(null);
     const endpointHash = ref<string | null>(null);
     const busy = ref(false);
+    const error = ref<string | null>(null);
 
     async function setEndpoint(value: string | null): Promise<void> {
         endpoint.value = value;
@@ -142,6 +146,11 @@ export function usePushSubscription(
         }
 
         busy.value = true;
+        error.value = null;
+
+        // Kept when a re-enable fails, so a working device stays working.
+        let previous = endpoint.value;
+        let created: PushSubscription | null = null;
 
         try {
             await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
@@ -165,15 +174,19 @@ export function usePushSubscription(
             ) {
                 await subscription.unsubscribe();
                 subscription = null;
+                previous = null;
             }
 
-            subscription ??= await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: key,
-            });
+            if (subscription === null) {
+                subscription = created =
+                    await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: key,
+                    });
+            }
 
             const json = subscription.toJSON();
-            const saved = await visit('post', store().url, {
+            const failure = await visit('post', store().url, {
                 endpoint: json.endpoint,
                 keys: {
                     p256dh: json.keys?.p256dh,
@@ -181,14 +194,22 @@ export function usePushSubscription(
                 },
             });
 
-            if (saved) {
+            if (failure === null) {
                 await setEndpoint(subscription.endpoint);
-            } else {
-                await subscription.unsubscribe();
-                await setEndpoint(null);
+
+                return;
             }
-        } catch {
-            await setEndpoint(null);
+
+            error.value = failure;
+            await created?.unsubscribe().catch(() => false);
+            await setEndpoint(previous);
+        } catch (caught) {
+            error.value =
+                caught instanceof Error && caught.message !== ''
+                    ? caught.message
+                    : 'Could not enable web push on this device.';
+            await created?.unsubscribe().catch(() => false);
+            await setEndpoint(previous);
         } finally {
             busy.value = false;
         }
@@ -208,9 +229,9 @@ export function usePushSubscription(
                 return;
             }
 
-            const removed = await visit('delete', destroy(deviceId).url);
+            const failure = await visit('delete', destroy(deviceId).url);
 
-            if (removed) {
+            if (failure === null) {
                 await unsubscribeLocally();
             }
         } finally {
@@ -226,9 +247,11 @@ export function usePushSubscription(
             await (
                 await registration?.pushManager.getSubscription()
             )?.unsubscribe();
-        } finally {
-            await setEndpoint(null);
+        } catch {
+            // The server row is already gone; a stale local subscription is harmless.
         }
+
+        await setEndpoint(null);
     }
 
     return {
@@ -237,6 +260,7 @@ export function usePushSubscription(
         endpoint,
         endpointHash,
         busy,
+        error,
         enable,
         disable,
     };

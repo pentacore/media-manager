@@ -32,10 +32,30 @@ self.addEventListener('push', (event) => {
     );
 });
 
+/**
+ * The payload url comes from the server but is only ever followed within this
+ * origin; anything unparsable or cross-origin falls back to the app root.
+ */
+function resolveTargetUrl(raw) {
+    if (typeof raw !== 'string') {
+        return '/';
+    }
+
+    try {
+        const url = new URL(raw, self.location.origin);
+
+        return url.origin === self.location.origin ? url.href : '/';
+    } catch {
+        return '/';
+    }
+}
+
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
 
-    const url = (event.notification.data && event.notification.data.url) || '/';
+    const target = resolveTargetUrl(
+        event.notification.data && event.notification.data.url,
+    );
 
     event.waitUntil(
         (async () => {
@@ -43,18 +63,26 @@ self.addEventListener('notificationclick', (event) => {
                 type: 'window',
                 includeUncontrolled: true,
             });
-            const sameOrigin = windows.find(
-                (client) => new URL(client.url).origin === self.location.origin,
-            );
+            const sameOrigin = windows.find((client) => {
+                try {
+                    return new URL(client.url).origin === self.location.origin;
+                } catch {
+                    return false;
+                }
+            });
 
             if (sameOrigin) {
-                await sameOrigin.focus();
-                await sameOrigin.navigate(url);
+                try {
+                    await sameOrigin.focus();
+                    await sameOrigin.navigate(target);
 
-                return;
+                    return;
+                } catch {
+                    // navigate() rejects for uncontrolled windows; open instead.
+                }
             }
 
-            await self.clients.openWindow(url);
+            await self.clients.openWindow(target);
         })(),
     );
 });
