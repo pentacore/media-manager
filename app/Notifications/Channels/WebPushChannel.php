@@ -52,7 +52,7 @@ class WebPushChannel extends PushChannel
                 continue;
             }
 
-            if ($subscription->vapid_public_key !== $config->publicKey()) {
+            if ($subscription->vapid_public_key !== $config->publicKey() || ! $config->allowsEndpoint($subscription->endpoint)) {
                 $subscription->delete();
 
                 continue;

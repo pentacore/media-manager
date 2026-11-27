@@ -73,6 +73,10 @@ return [
         'public_key' => env('WEBPUSH_PUBLIC_KEY'),
         'private_key' => env('WEBPUSH_PRIVATE_KEY'),
         'subject' => env('WEBPUSH_SUBJECT'),
+        'allowed_hosts' => array_values(array_filter(array_map(
+            trim(...),
+            explode(',', (string) env('WEBPUSH_ALLOWED_HOSTS', 'fcm.googleapis.com,*.push.services.mozilla.com,*.notify.windows.com,*.push.apple.com')),
+        ))),
     ],
 
 ];

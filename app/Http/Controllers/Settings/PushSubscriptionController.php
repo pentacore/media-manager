@@ -71,6 +71,13 @@ class PushSubscriptionController extends Controller
     public function test(Request $request, WebPushChannel $webPushChannel): RedirectResponse
     {
         $user = $request->user();
+
+        if (! resolve(WebPushConfig::class)->available()) {
+            throw ValidationException::withMessages([
+                'test_push' => __('Web push is not configured on this server.'),
+            ]);
+        }
+
         $route = $user->routeNotificationForWebpush();
 
         if ($route === null) {

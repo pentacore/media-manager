@@ -9,7 +9,7 @@ use App\Services\Notifications\WebPushResult;
 
 beforeEach(function (): void {
     config()->set('inertia.testing.ensure_pages_exist', false);
-    app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test'));
+    app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test', ['push.example.test']));
 });
 
 /**
@@ -140,7 +140,50 @@ test('test is rate limited to five a minute', function (): void {
     $this->actingAs($user)->post(route('settings.push-subscriptions.test'))->assertStatus(429);
 });
 
+test('store accepts an allowed push service and rejects everything else', function (string $endpoint, bool $allowed): void {
+    app()->instance(WebPushConfig::class, new WebPushConfig('k', 'p', null, ['fcm.googleapis.com', '*.push.services.mozilla.com']));
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('settings.push-subscriptions.store'), pushBody($endpoint));
+
+    if ($allowed) {
+        $response->assertSessionHasNoErrors();
+        expect(PushSubscription::query()->count())->toBe(1);
+    } else {
+        $response->assertSessionHasErrors('endpoint');
+        expect(PushSubscription::query()->count())->toBe(0);
+    }
+})->with([
+    'fcm' => ['https://fcm.googleapis.com/fcm/send/abc', true],
+    'wildcard subdomain' => ['https://updates.push.services.mozilla.com/wpush/v2/abc', true],
+    'bare wildcard suffix' => ['https://push.services.mozilla.com/x', false],
+    'suffix lookalike' => ['https://evilpush.services.mozilla.com/x', false],
+    'metadata ip' => ['https://169.254.169.254/x', false],
+    'localhost' => ['https://localhost/x', false],
+    'attacker lookalike' => ['https://evilfcm.googleapis.com.attacker.test/x', false],
+    'custom port' => ['https://fcm.googleapis.com:8443/x', false],
+    'userinfo' => ['https://user@fcm.googleapis.com/x', false],
+]);
+
+test('the allowed hosts come from config', function (): void {
+    config(['services.webpush.allowed_hosts' => ['push.corp.test']]);
+    $config = WebPushConfig::fromConfig();
+
+    expect($config->allowsEndpoint('https://push.corp.test/a'))->toBeTrue()
+        ->and($config->allowsEndpoint('https://fcm.googleapis.com/a'))->toBeFalse();
+});
+
+test('test flashes the not configured error when web push is unavailable', function (): void {
+    app()->instance(WebPushConfig::class, new WebPushConfig(null, null, null));
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post(route('settings.push-subscriptions.test'))->assertSessionHasErrors('test_push');
+});
+
 test('guests are redirected', function (): void {
+    $row = PushSubscription::factory()->create();
+    $this->delete(route('settings.push-subscriptions.destroy', $row))->assertRedirect(route('login'));
+
     $this->post(route('settings.push-subscriptions.store'), pushBody())->assertRedirect(route('login'));
     $this->post(route('settings.push-subscriptions.test'))->assertRedirect(route('login'));
 });

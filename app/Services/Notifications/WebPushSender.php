@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Notifications;
 
 use App\Models\PushSubscription;
+use GuzzleHttp\Client;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 
@@ -27,7 +28,15 @@ class WebPushSender
                 'publicKey' => (string) $this->config->publicKey(),
                 'privateKey' => (string) $this->config->privateKey(),
             ],
-        ]);
+        ], [], new Client([
+            'allow_redirects' => false,
+            'timeout' => 10,
+            'connect_timeout' => 5,
+        ]));
+
+        if (! $this->config->allowsEndpoint($subscription->endpoint)) {
+            return new WebPushResult(false, true, 'Endpoint host is not allowed');
+        }
 
         $webPush->queueNotification(
             new Subscription(

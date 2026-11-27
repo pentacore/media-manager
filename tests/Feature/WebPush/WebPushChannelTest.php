@@ -13,7 +13,7 @@ use App\Services\Notifications\WebPushResult;
 use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
-    app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test'));
+    app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test', ['push.example.test']));
 });
 
 test('it sends the push message to every device of the user', function (string $severity, string $urgency): void {
@@ -123,4 +123,15 @@ test('webpush resolves to the web push channel when enabled and is off by defaul
     ]);
 
     expect($resolver->channelsFor($user, ServiceWarning::class, 'warning'))->toBe([WebPushChannel::class]);
+});
+
+test('a stored device on a now-disallowed host is deleted and not sent to', function (): void {
+    $user = User::factory()->create();
+    $bad = PushSubscription::factory()->for($user)->create(['endpoint' => 'https://internal.attacker.test/x']);
+    $fake = fakeWebPushSender();
+
+    new WebPushChannel()->send($user, new ServiceWarning('sonarr', 'T', 'M', 'warning'));
+
+    expect($fake->sent)->toBe([])
+        ->and(PushSubscription::query()->find($bad->id))->toBeNull();
 });
