@@ -318,7 +318,8 @@ function appHydratedScript(): string
  * `private-{$channel}`, after waiting (up to ~5 s) until at least
  * `$minimumListeners` callbacks are bound for the event. It throws when they
  * never are, so an emit can neither race the page's subscriptions nor pass
- * vacuously.
+ * vacuously. With `$minimumListeners` of 0 an emit on a channel the page never
+ * subscribed to is a no-op, which negative cases rely on.
  *
  * @param  array<string, mixed>  $payload
  */
@@ -336,7 +337,7 @@ function echoEmitScript(string $channel, string $event, array $payload, int $min
             if (bound() < {$minimumListeners}) {
                 throw new Error('private-{$channel} has ' + bound() + ' listener(s) for {$event} after 5 s.');
             }
-            channel().emit('{$event}', {$json});
+            channel()?.emit('{$event}', {$json});
         })()
     JS;
 }

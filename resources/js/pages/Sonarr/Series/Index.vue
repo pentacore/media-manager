@@ -8,7 +8,7 @@ import {
     RefreshCcw,
     Search,
 } from '@lucide/vue';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import {
@@ -36,7 +36,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
@@ -87,20 +86,6 @@ defineOptions({
         ],
     },
 });
-
-// WebhookEventProcessed fires after the queued handler cleared the Sonarr
-// cache; WebhookReceived fires before, and a reload on it can re-read
-// stale rows.
-const { subscribe: subscribeReload } = useRealtimeReload<{
-    service_type: string | null;
-}>({
-    channel: 'dashboard',
-    event: 'WebhookEventProcessed',
-    only: ['series'],
-    filter: (event) => event.service_type === 'sonarr',
-});
-
-onMounted(subscribeReload);
 
 const view = ref<'grid' | 'table'>('grid');
 const monitoredFilter = ref<'all' | 'monitored' | 'unmonitored'>('all');

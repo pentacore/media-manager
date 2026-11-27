@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ExternalLink, Plus, RefreshCcw, Search } from '@lucide/vue';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import {
@@ -29,7 +29,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
 import { formatBytes } from '@/lib/format';
@@ -77,20 +76,6 @@ defineOptions({
         ],
     },
 });
-
-// WebhookEventProcessed fires after the queued handler cleared the Radarr
-// cache; WebhookReceived fires before, and a reload on it can re-read
-// stale rows.
-const { subscribe: subscribeReload } = useRealtimeReload<{
-    service_type: string | null;
-}>({
-    channel: 'dashboard',
-    event: 'WebhookEventProcessed',
-    only: ['movies'],
-    filter: (event) => event.service_type === 'radarr',
-});
-
-onMounted(subscribeReload);
 
 const query = ref('');
 const profileFilter = ref<string>('all');

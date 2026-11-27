@@ -15,7 +15,7 @@ import {
     Tv,
     X,
 } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import {
     InitialsAvatar,
@@ -53,7 +53,6 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
 import { useConfirm } from '@/composables/useConfirm';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { jsonRequest } from '@/lib/http';
 import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { tmdbPosterUrl } from '@/lib/tmdb';
@@ -107,20 +106,6 @@ defineOptions({
         ],
     },
 });
-
-// WebhookEventProcessed fires after the queued handler cleared the Seerr
-// cache; WebhookReceived fires before, and a reload on it can re-read
-// stale rows.
-const { subscribe: subscribeReload } = useRealtimeReload<{
-    service_type: string | null;
-}>({
-    channel: 'dashboard',
-    event: 'WebhookEventProcessed',
-    only: ['requests', 'summary'],
-    filter: (event) => event.service_type === 'seerr',
-});
-
-onMounted(subscribeReload);
 
 const { isAdmin } = useCan();
 
