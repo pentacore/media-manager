@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { onMounted } from 'vue';
 import ServerController from '@/actions/App/Http/Controllers/Admin/ServerController';
 import { PageHeader, Pill, TimeStamp } from '@/components/mm';
 import {
@@ -10,7 +9,6 @@ import {
 } from '@/components/servers';
 import type { ServerRow, WatcherState } from '@/components/servers';
 import { Button } from '@/components/ui/button';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -51,23 +49,6 @@ function goToPage(url: string | null): void {
 
     router.get(url, {}, { preserveScroll: true });
 }
-
-const reports = useRealtimeReload({
-    channel: 'admin.servers',
-    event: 'ServerReported',
-    only: ['servers'],
-});
-
-const incidents = useRealtimeReload({
-    channel: 'admin.servers',
-    event: 'ServerIncidentChanged',
-    only: ['servers'],
-});
-
-onMounted(() => {
-    reports.subscribe();
-    incidents.subscribe();
-});
 </script>
 
 <template>

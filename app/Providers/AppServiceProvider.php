@@ -14,6 +14,7 @@ use App\Jobs\ReconcileBazarrConnection;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
 use App\Models\Server;
+use App\Observers\DatabaseNotificationObserver;
 use App\Services\Whisparr\WhisparrItemIndex;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
@@ -24,6 +25,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -132,6 +134,8 @@ class AppServiceProvider extends ServiceProvider
         // double-count. RunDecisionAgentForWebhook tolerates its own double
         // binding only because its handler is idempotent.
         Event::listen(WebhookEventProcessed::class, RunDecisionAgentForWebhook::class);
+
+        DatabaseNotification::observe(DatabaseNotificationObserver::class);
     }
 
     /**

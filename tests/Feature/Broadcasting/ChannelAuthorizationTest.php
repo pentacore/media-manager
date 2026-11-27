@@ -211,3 +211,27 @@ test('only admins can join the admin.servers channel', function (): void {
         ])
         ->assertForbidden();
 });
+
+test('every role can join the scoped webhook channels', function (): void {
+    foreach ([User::factory()->create(), User::factory()->member()->create(), User::factory()->admin()->create()] as $user) {
+        foreach (['private-webhooks.sonarr', 'private-webhooks.sonarr.3'] as $channel) {
+            $this->actingAs($user)
+                ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => $channel])
+                ->assertOk();
+        }
+    }
+});
+
+test('only admins can join the scoped server and media replacement channels', function (): void {
+    foreach (['private-admin.servers.5', 'private-admin.media-replacement.9'] as $channel) {
+        $this->actingAs(User::factory()->admin()->create())
+            ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => $channel])
+            ->assertOk();
+
+        foreach ([User::factory()->member()->create(), User::factory()->create()] as $nonAdmin) {
+            $this->actingAs($nonAdmin)
+                ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => $channel])
+                ->assertForbidden();
+        }
+    }
+});

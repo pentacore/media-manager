@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Broadcasting\LiveChannels;
 use App\Enums\ServiceType;
+use App\Events\WebhookEventProcessed;
 use App\Http\Requests\Media\DestroyArrMediaRequest;
 use App\Http\Requests\Media\StoreMovieRequest;
 use App\Models\ServiceConnection;
@@ -37,12 +39,13 @@ class MovieController extends BaseArrController
         return Inertia::render('Radarr/Movies/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
+            // The list follows whichever connection is active, so it listens service-wide.
             'movies' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),
                 fn (RadarrClient $radarrClient): array => $radarrClient->getMovies(),
                 fn (array $item): array => $this->mapMovie($item),
-            )),
+            ))->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhooks(ServiceType::Radarr)),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),
@@ -70,7 +73,13 @@ class MovieController extends BaseArrController
         return Inertia::render('Radarr/Movies/Show', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $connection->id,
-            'movie' => $this->mapMovie($movie, detailed: true, canManageLibrary: $canManageLibrary),
+            // WebhookEventProcessed fires after the queued handler cleared this
+            // connection's Radarr cache, so a reload reads fresh data.
+            'movie' => Inertia::live(
+                fn (): array => $this->mapMovie($movie, detailed: true, canManageLibrary: $canManageLibrary),
+                on: WebhookEventProcessed::class,
+                channel: LiveChannels::webhookConnection(ServiceType::Radarr, $connection->id),
+            ),
             // Managers get the whole list for the profile dropdown; viewers get
             // only the current profile's name, read from the same cached list.
             ...$canManageLibrary ? [

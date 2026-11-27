@@ -313,12 +313,57 @@ function appHydratedScript(): string
 }
 
 /**
+ * Records every partial reload the page starts, as its comma-joined `only`, in
+ * `window.__mmReloads`. Install it after the page has hydrated (and any
+ * deferred props have loaded).
+ */
+function reloadRecorderScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmReloads = [];
+            document.addEventListener('inertia:start', (event) => {
+                const visit = event.detail.visit;
+                if (!visit.prefetch && visit.only.length > 0) {
+                    window.__mmReloads.push(visit.only.join(','));
+                }
+            });
+        })()
+    JS;
+}
+
+/**
+ * Waits (up to ~5 s) until the page's own `private-{$channel}` has a listener
+ * for `$event`, then returns the names of every channel the page subscribed
+ * to. Negative live-prop cases call it first, so an emit on another channel
+ * cannot pass just because the subscription had not happened yet, and assert
+ * on the returned set.
+ */
+function echoSubscribedChannelsScript(string $channel, string $event): string
+{
+    return <<<JS
+        (async () => {
+            const pusher = () => window.Pusher?.instances?.[0];
+            const bound = () => (pusher()?.channel('private-{$channel}')?.callbacks?.get('{$event}') ?? []).length;
+            for (let attempt = 0; attempt < 250 && bound() < 1; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            if (bound() < 1) {
+                throw new Error('private-{$channel} has no listener for {$event} after 5 s.');
+            }
+            return Object.keys(pusher().channels.channels).sort();
+        })()
+    JS;
+}
+
+/**
  * Hands a broadcast to the page's Echo listeners. Tests broadcast through the
  * null driver, so this emits on the pusher-js channel Echo created for
  * `private-{$channel}`, after waiting (up to ~5 s) until at least
  * `$minimumListeners` callbacks are bound for the event. It throws when they
  * never are, so an emit can neither race the page's subscriptions nor pass
- * vacuously.
+ * vacuously. With `$minimumListeners` of 0 an emit on a channel the page never
+ * subscribed to is a no-op, which negative cases rely on.
  *
  * @param  array<string, mixed>  $payload
  */
@@ -336,7 +381,7 @@ function echoEmitScript(string $channel, string $event, array $payload, int $min
             if (bound() < {$minimumListeners}) {
                 throw new Error('private-{$channel} has ' + bound() + ' listener(s) for {$event} after 5 s.');
             }
-            channel().emit('{$event}', {$json});
+            channel()?.emit('{$event}', {$json});
         })()
     JS;
 }

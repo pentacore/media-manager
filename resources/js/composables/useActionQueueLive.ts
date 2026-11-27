@@ -50,7 +50,8 @@ export type UseActionQueueLiveReturn = {
  * changes apply to listed rows in version order, are remembered so a reload or
  * redirect read before them cannot roll a row back, and reload the tab counts
  * (and, for an admin's failure, the rows) on a 500 ms debounce. An admin also
- * reloads a listed row whose replacement attempt changed. The page calls
+ * reloads a listed row whose replacement attempt changed. A restored
+ * connection reloads the rows and counts once. The page calls
  * `subscribe()` from its `onMounted` to take the channel leases and Inertia
  * listeners; they are released on unmount, so each visit binds them once.
  */
@@ -206,8 +207,9 @@ export function useActionQueueLive(
         merge.value ? liveRequests.value : props.requests.data,
     );
 
-    const { acquirePrivateChannel } = useWebSocket();
+    const { acquirePrivateChannel, onReconnect } = useWebSocket();
     let statusLease: ChannelLease | null = null;
+    let stopReconnect: (() => void) | null = null;
 
     function applyStatusChange(payload: LiveStatusChange): void {
         const target = liveRequests.value.find((row) => row.id === payload.id);
@@ -302,6 +304,34 @@ export function useActionQueueLive(
         }, 500);
     }
 
+    /**
+     * The connection came back: the events sent while it was down were lost,
+     * so re-read what they would have changed, once — the rows (a created or
+     * changed request), the tab counts and a shown off-page request. The
+     * debounced reloads still pending are folded into this one. The rows'
+     * visit is ordered against the live statuses like any other.
+     */
+    function catchUp(): void {
+        if (statusCountsReloadTimer !== null) {
+            clearTimeout(statusCountsReloadTimer);
+            statusCountsReloadTimer = null;
+        }
+
+        if (requestsReloadTimer !== null) {
+            clearTimeout(requestsReloadTimer);
+            requestsReloadTimer = null;
+        }
+
+        const only = ['requests', 'statusCounts'];
+
+        if (preselectedChanged || props.preselectedRequest) {
+            only.push('preselectedRequest');
+        }
+
+        preselectedChanged = false;
+        router.reload({ only });
+    }
+
     let stopVisitStartListener: VoidFunction | null = null;
     let stopVisitSuccessListener: VoidFunction | null = null;
     let stopVisitFinishListener: VoidFunction | null = null;
@@ -370,6 +400,8 @@ export function useActionQueueLive(
                 scheduleStatusCountsReload(),
             );
 
+        stopReconnect = onReconnect(catchUp);
+
         // Admin-only channel; members never see attempt detail and would 403 on
         // channel auth.
         if (isAdmin.value) {
@@ -396,6 +428,8 @@ export function useActionQueueLive(
 
         statusLease?.release();
         statusLease = null;
+        stopReconnect?.();
+        stopReconnect = null;
 
         stopVisitStartListener?.();
         stopVisitSuccessListener?.();

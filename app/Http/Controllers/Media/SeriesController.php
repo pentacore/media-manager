@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Broadcasting\LiveChannels;
 use App\Enums\ServiceType;
+use App\Events\WebhookEventProcessed;
 use App\Http\Requests\Media\DestroyArrMediaRequest;
 use App\Http\Requests\Media\StoreSeriesRequest;
 use App\Models\ServiceConnection;
@@ -37,12 +39,13 @@ class SeriesController extends BaseArrController
         return Inertia::render('Sonarr/Series/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
+            // The list follows whichever connection is active, so it listens service-wide.
             'series' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),
                 fn (SonarrClient $sonarrClient): array => $sonarrClient->getSeries(),
                 fn (array $item): array => $this->mapSeries($item),
-            )),
+            ))->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhooks(ServiceType::Sonarr)),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),
@@ -70,7 +73,13 @@ class SeriesController extends BaseArrController
         return Inertia::render('Sonarr/Series/Show', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $connection->id,
-            'series' => $this->mapSeries($series, detailed: true, canManageLibrary: $canManageLibrary),
+            // WebhookEventProcessed fires after the queued handler cleared this
+            // connection's Sonarr cache, so a reload reads fresh data.
+            'series' => Inertia::live(
+                fn (): array => $this->mapSeries($series, detailed: true, canManageLibrary: $canManageLibrary),
+                on: WebhookEventProcessed::class,
+                channel: LiveChannels::webhookConnection(ServiceType::Sonarr, $connection->id),
+            ),
             'episodes' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),
@@ -85,7 +94,7 @@ class SeriesController extends BaseArrController
                     'monitored' => $ep['monitored'] ?? false,
                     'overview' => $ep['overview'] ?? null,
                 ],
-            )),
+            ))->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhookConnection(ServiceType::Sonarr, $connection->id)),
             // Managers get the whole list for the profile dropdown; viewers get
             // only the current profile's name, read from the same cached list.
             ...$canManageLibrary ? [

@@ -43,15 +43,18 @@ export type UseAiPriceRefreshReturn = {
  * The AI prices "Refresh online" state. `refreshing` starts from the server's
  * lock flag, flips on as soon as the admin clicks, and then follows the
  * `.AiPriceRefreshStateChanged` broadcasts on the private `admin.ai-prices`
- * channel, which also toast the outcome and reload the price rows. Call
+ * channel, which also toast the outcome and reload the price rows. A
+ * restored connection reloads the rows and the lock flag. Call
  * `subscribe()` from the page's `onMounted`; the lease is released on unmount.
  */
 export function useAiPriceRefresh(
     initiallyRunning: boolean,
 ): UseAiPriceRefreshReturn {
     const refreshing = ref(initiallyRunning);
-    const { acquirePrivateChannel } = useWebSocket();
+    const { acquirePrivateChannel, onReconnect } = useWebSocket();
     let refreshLease: ChannelLease | null = null;
+    let stopReconnect: (() => void) | null = null;
+    let clicks = 0;
 
     function refreshPrices() {
         if (refreshing.value) {
@@ -62,6 +65,7 @@ export function useAiPriceRefresh(
         // before the broadcast lands. The job will keep us in this state until
         // succeeded/failed arrives.
         refreshing.value = true;
+        clicks++;
         router.post(
             AiModelPriceController.refresh.url(),
             {},
@@ -154,11 +158,33 @@ export function useAiPriceRefresh(
             '.AiPriceRefreshStateChanged',
             (event: PriceRefreshPayload) => handleRefreshState(event),
         );
+
+        // A refresh may have finished (or started) while the connection was
+        // down: re-read the rows and the server's lock flag, which seeds
+        // `initiallyRunning` on the page.
+        stopReconnect = onReconnect(() => {
+            const clicksAtStart = clicks;
+
+            router.reload({
+                only: ['prices', 'refresh_running'],
+                onSuccess: (page) => {
+                    // A click while the reload was in flight is newer than
+                    // this response, which would flip it back to false.
+                    if (clicks !== clicksAtStart) {
+                        return;
+                    }
+
+                    refreshing.value = page.props.refresh_running === true;
+                },
+            });
+        });
     }
 
     function unsubscribe(): void {
         refreshLease?.release();
         refreshLease = null;
+        stopReconnect?.();
+        stopReconnect = null;
     }
 
     onUnmounted(unsubscribe);

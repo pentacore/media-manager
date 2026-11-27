@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Broadcasting\LiveChannels;
 use App\Enums\DbPingEngine;
 use App\Enums\HostCheckType;
 use App\Enums\IncidentSeverity;
 use App\Enums\IncidentStatus;
 use App\Enums\ServerMetricRange;
+use App\Events\ServerIncidentChanged;
+use App\Events\ServerReported;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreServerRequest;
 use App\Models\Server;
@@ -30,25 +33,27 @@ class ServerController extends Controller
 {
     public function index(MonitoringSettings $monitoringSettings): Response
     {
-        $lengthAwarePaginator = Server::query()
-            ->withStatus()
-            ->orderBy('name')
-            ->paginate(25)
-            ->withQueryString();
-
         $pushUrlHint = $monitoringSettings->pushUrlHint();
 
         return Inertia::render('Admin/Servers/Index', [
-            'servers' => [
-                'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
-                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
-                'meta' => [
-                    'current_page' => $lengthAwarePaginator->currentPage(),
-                    'last_page' => $lengthAwarePaginator->lastPage(),
-                    'total' => $lengthAwarePaginator->total(),
-                    'per_page' => $lengthAwarePaginator->perPage(),
-                ],
-            ],
+            'servers' => Inertia::live(function (): array {
+                $lengthAwarePaginator = Server::query()
+                    ->withStatus()
+                    ->orderBy('name')
+                    ->paginate(25)
+                    ->withQueryString();
+
+                return [
+                    'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
+                    'links' => $lengthAwarePaginator->linkCollection()->toArray(),
+                    'meta' => [
+                        'current_page' => $lengthAwarePaginator->currentPage(),
+                        'last_page' => $lengthAwarePaginator->lastPage(),
+                        'total' => $lengthAwarePaginator->total(),
+                        'per_page' => $lengthAwarePaginator->perPage(),
+                    ],
+                ];
+            }, on: [ServerReported::class, ServerIncidentChanged::class], channel: LiveChannels::servers()),
             'latestAgentVersion' => AgentRelease::latest(),
             'watcher' => [
                 'push_url_set' => $pushUrlHint !== null,
@@ -92,9 +97,11 @@ class ServerController extends Controller
         $serverMetricRange = ServerMetricRange::fromRequest(is_string($range) ? $range : null);
 
         return Inertia::render('Admin/Servers/Show', [
-            'server' => fn (): array => $this->facts($server->loadStatus()),
-            'latest' => fn (): ?array => $this->latest($server),
-            'checks' => fn (): array => $server->checks()->orderBy('id')->get()->map($this->check(...))->all(),
+            // ServerReported refreshes everything a report changes; an incident change
+            // touches only the server's status and its incident list.
+            'server' => Inertia::live(fn (): array => $this->facts($server->loadStatus()), on: [ServerReported::class, ServerIncidentChanged::class], channel: LiveChannels::server($server->id)),
+            'latest' => Inertia::live(fn (): ?array => $this->latest($server), on: ServerReported::class, channel: LiveChannels::server($server->id)),
+            'checks' => Inertia::live(fn (): array => $server->checks()->orderBy('id')->get()->map($this->check(...))->all(), on: ServerReported::class, channel: LiveChannels::server($server->id)),
             'checkTypes' => array_map(
                 static fn (HostCheckType $hostCheckType): array => ['value' => $hostCheckType->value, 'label' => $hostCheckType->label()],
                 HostCheckType::cases(),
@@ -103,10 +110,13 @@ class ServerController extends Controller
                 static fn (DbPingEngine $dbPingEngine): array => ['value' => $dbPingEngine->value, 'label' => $dbPingEngine->label()],
                 DbPingEngine::cases(),
             ),
-            'incidents' => fn (): array => $this->incidents($server),
-            'range' => $serverMetricRange->value,
+            'incidents' => Inertia::live(fn (): array => $this->incidents($server), on: [ServerReported::class, ServerIncidentChanged::class], channel: LiveChannels::server($server->id)),
+            // `range` rides along with `metrics`, so the range selector always names the
+            // range the charts on screen were read for, whichever reload lands last.
+            'range' => Inertia::live(fn (): string => $serverMetricRange->value, on: ServerReported::class, channel: LiveChannels::server($server->id)),
             'ranges' => ServerMetricRange::options(),
-            'metrics' => Inertia::defer(fn (): array => $serverMetricRepository->series($server, $serverMetricRange), 'metrics'),
+            'metrics' => Inertia::defer(fn (): array => $serverMetricRepository->series($server, $serverMetricRange), 'metrics')
+                ->live(on: ServerReported::class, channel: LiveChannels::server($server->id)),
         ]);
     }
 

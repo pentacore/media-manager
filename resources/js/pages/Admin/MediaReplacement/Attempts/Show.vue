@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { AlertTriangle, ArrowLeft, ExternalLink } from '@lucide/vue';
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
@@ -16,7 +16,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { formatBytes } from '@/lib/format';
 import { dashboard } from '@/routes';
 
@@ -173,15 +172,6 @@ function acknowledge(): void {
 function confirmCancel(): void {
     post(MediaReplacementAttemptController.cancel.url(props.attempt.id));
 }
-
-const { subscribe } = useRealtimeReload<{ id: number }>({
-    channel: 'admin.media-replacement',
-    event: 'MediaReplacementAttemptChanged',
-    only: ['attempt'],
-    filter: (event) => event.id === props.attempt.id,
-});
-
-onMounted(subscribe);
 </script>
 
 <template>

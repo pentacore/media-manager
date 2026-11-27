@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Whisparr;
 
+use App\Broadcasting\LiveChannels;
 use App\Enums\ServiceType;
 use App\Enums\WhisparrVersion;
+use App\Events\WebhookEventProcessed;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Arr\LibraryCacheSync;
@@ -34,7 +36,8 @@ class WhisparrController extends Controller
 
         return Inertia::render('Whisparr/Index', [
             'connection' => $this->connectionProps($connection),
-            'library' => Inertia::defer(fn (): array => $this->library($connection, $whisparrItemPresenter)),
+            'library' => Inertia::defer(fn (): array => $this->library($connection, $whisparrItemPresenter))
+                ->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhooks(ServiceType::Whisparr)),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->qualityProfiles($connection), 'qualityProfiles'),
         ]);
     }
@@ -60,11 +63,20 @@ class WhisparrController extends Controller
             return $this->backToLibrary(__('That title is no longer in Whisparr.'));
         }
 
+        $liveChannel = LiveChannels::webhookConnection(ServiceType::Whisparr, $connection->id);
+
         return Inertia::render('Whisparr/Show', [
             'connection' => $this->connectionProps($connection),
-            'item' => $item,
+            // The controller knows the connection, so the page listens on its
+            // channel only; v3 has no scenes, so only the v2 deferred group is live.
+            'item' => Inertia::live(
+                fn (): array => $item,
+                on: WebhookEventProcessed::class,
+                channel: $liveChannel,
+            ),
             'scenes' => $whisparrVersion === WhisparrVersion::V2
                 ? Inertia::defer(fn (): array => $this->scenes($whisparrClient, $id, $whisparrItemPresenter), 'scenes')
+                    ->live(on: WebhookEventProcessed::class, channel: $liveChannel)
                 : ['groups' => [], 'error' => null],
             'qualityProfiles' => Inertia::defer(fn (): array => $this->qualityProfiles($connection), 'qualityProfiles'),
         ]);

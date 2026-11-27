@@ -119,6 +119,8 @@ const {
     initial: props.activities.data,
     cap: props.activities.meta.per_page,
     map: liveActivityRow,
+    // A restored connection runs the "N new" refresh (hoisted, below).
+    refresh: () => refresh(),
 });
 
 watch(
@@ -322,7 +324,10 @@ function currentFilter(): string {
                     :default-value="currentFilter()"
                     @update:model-value="onMediaTypeChange"
                 >
-                    <SelectTrigger class="h-7 w-32 text-xs">
+                    <SelectTrigger
+                        data-watch-media-type
+                        class="h-7 w-32 text-xs"
+                    >
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -426,6 +431,7 @@ function currentFilter(): string {
         <!-- Stale notice -->
         <div
             v-if="staleCount > 0"
+            data-watch-stale
             class="flex items-center justify-between rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm"
         >
             <span class="flex items-center gap-2 text-accent">
@@ -687,6 +693,7 @@ function currentFilter(): string {
                 variant="outline"
                 size="sm"
                 :disabled="!link.url"
+                :data-watch-page="link.label"
                 :class="link.active ? 'bg-accent text-accent-foreground' : ''"
                 @click="goToPage(link.url)"
             >

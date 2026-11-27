@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Eye, RefreshCcw } from '@lucide/vue';
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
@@ -17,7 +17,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -261,14 +260,6 @@ function totalAttempts(): number {
         0,
     );
 }
-
-const { subscribe } = useRealtimeReload({
-    channel: 'admin.media-replacement',
-    event: 'MediaReplacementAttemptChanged',
-    only: ['attempts', 'statusCounts'],
-});
-
-onMounted(subscribe);
 
 // `setTimeout` isn't bound to the effect scope, so a pending search would
 // still navigate back to this list after the user has left for a detail page.

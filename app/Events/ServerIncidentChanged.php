@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Broadcasting\LiveChannels;
 use App\Models\ServerIncident;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -43,9 +44,12 @@ class ServerIncidentChanged implements ShouldBroadcast
         $this->occurredAt = now()->toIso8601String();
     }
 
-    public function broadcastOn(): PrivateChannel
+    /**
+     * @return array<int, PrivateChannel>
+     */
+    public function broadcastOn(): array
     {
-        return new PrivateChannel('admin.servers');
+        return [LiveChannels::servers(), LiveChannels::server($this->serverId)];
     }
 
     public function broadcastAs(): string

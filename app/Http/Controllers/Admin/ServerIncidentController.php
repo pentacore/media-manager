@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Broadcasting\LiveChannels;
+use App\Events\ServerIncidentChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Server;
 use App\Models\ServerIncident;
@@ -18,21 +20,23 @@ class ServerIncidentController extends Controller
     {
         $serverId = $this->filteredServerId($request);
 
-        $lengthAwarePaginator = $this->incidentQuery($serverId)
-            ->paginate(25)
-            ->withQueryString();
-
         return Inertia::render('Admin/Servers/Incidents', [
-            'incidents' => [
-                'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
-                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
-                'meta' => [
-                    'current_page' => $lengthAwarePaginator->currentPage(),
-                    'last_page' => $lengthAwarePaginator->lastPage(),
-                    'total' => $lengthAwarePaginator->total(),
-                    'per_page' => $lengthAwarePaginator->perPage(),
-                ],
-            ],
+            'incidents' => Inertia::live(function () use ($serverId): array {
+                $lengthAwarePaginator = $this->incidentQuery($serverId)
+                    ->paginate(25)
+                    ->withQueryString();
+
+                return [
+                    'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
+                    'links' => $lengthAwarePaginator->linkCollection()->toArray(),
+                    'meta' => [
+                        'current_page' => $lengthAwarePaginator->currentPage(),
+                        'last_page' => $lengthAwarePaginator->lastPage(),
+                        'total' => $lengthAwarePaginator->total(),
+                        'per_page' => $lengthAwarePaginator->perPage(),
+                    ],
+                ];
+            }, on: ServerIncidentChanged::class, channel: LiveChannels::servers()),
             'servers' => Server::query()->orderBy('name')->get(['id', 'name'])
                 ->map(static fn (Server $server): array => ['id' => $server->id, 'name' => $server->name])
                 ->all(),

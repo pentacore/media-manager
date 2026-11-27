@@ -188,7 +188,7 @@ test('a new incident appears live', function (): void {
     $webpage->script(appHydratedScript());
 
     $serverIncident = ServerIncident::factory()->for($server)->open()->critical()->create(['title' => 'Mount /mnt/backups is missing']);
-    $webpage->script(echoEmitScript('admin.servers', 'ServerIncidentChanged', [
+    $webpage->script(echoEmitScript('admin.servers.'.$server->id, 'ServerIncidentChanged', [
         'server_id' => $server->id, 'incident_id' => $serverIncident->id, 'key' => $serverIncident->key,
         'status' => 'open', 'severity' => 'critical', 'title' => $serverIncident->title, 'occurred_at' => now()->toIso8601String(),
     ]));
@@ -197,11 +197,45 @@ test('a new incident appears live', function (): void {
         ->assertVisible('[data-server-status="incident"]');
 
     $server->update(['last_report' => [...$server->last_report, 'cpu_percent' => 87.5]]);
-    $webpage->script(echoEmitScript('admin.servers', 'ServerReported', [
+    $webpage->script(echoEmitScript('admin.servers.'.$server->id, 'ServerReported', [
         'server_id' => $server->id, 'last_report_at' => now()->toIso8601String(),
     ]));
 
     $webpage->assertSeeIn('[data-server-cpu]', '87.5%');
+});
+
+test("another server's report does not reload the page", function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+    $server = Server::factory()->reporting()->create();
+    $other = Server::factory()->reporting()->create();
+
+    $webpage = visit(route('admin.servers.show', $server, absolute: false))
+        ->assertNoSmoke()
+        ->assertVisible('[data-server-status="ok"]');
+    $webpage->script(appHydratedScript());
+    $webpage->script(reloadRecorderScript());
+
+    // The page listens on its own server's channel and on no other server's.
+    $channels = $webpage->script(echoSubscribedChannelsScript('admin.servers.'.$server->id, 'ServerReported'));
+    expect($channels)->toContain('private-admin.servers.'.$server->id)
+        ->not->toContain('private-admin.servers.'.$other->id)
+        ->not->toContain('private-admin.servers');
+
+    $webpage->script(echoEmitScript('admin.servers.'.$other->id, 'ServerReported', [
+        'server_id' => $other->id, 'last_report_at' => now()->toIso8601String(),
+    ], 0));
+    $webpage->wait(2);
+
+    expect($webpage->script('window.__mmReloads.length'))->toBe(0);
+
+    $webpage->script(echoEmitScript('admin.servers.'.$server->id, 'ServerReported', [
+        'server_id' => $server->id, 'last_report_at' => now()->toIso8601String(),
+    ]));
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmReloads.length > 0'));
+    $webpage->wait(1.5);
+
+    expect($webpage->script('window.__mmReloads.length'))->toBe(1);
+    $webpage->assertNoSmoke();
 });
 
 test('the server page fits a phone screen', function (): void {

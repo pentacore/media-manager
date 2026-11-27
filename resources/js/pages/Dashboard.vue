@@ -8,7 +8,7 @@ import {
     RefreshCcw,
     X,
 } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import {
@@ -140,14 +140,24 @@ function activityChannels(): string[] {
     return can('admin') ? ['activity', 'activity.audit'] : ['activity'];
 }
 
-const { items: liveActivity, subscribe: subscribeActivity } =
-    useRealtimeList<ActivityItem>({
-        channel: activityChannels(),
-        event: 'ActivityLogCreated',
-        keyField: 'id',
-        initial: props.recentActivity,
-        cap: 10,
-    });
+const {
+    items: liveActivity,
+    reseed: reseedActivity,
+    subscribe: subscribeActivity,
+} = useRealtimeList<ActivityItem>({
+    channel: activityChannels(),
+    event: 'ActivityLogCreated',
+    keyField: 'id',
+    initial: props.recentActivity,
+    cap: 10,
+    // A restored connection re-reads the rows; the watcher below reseeds.
+    refresh: () => router.reload({ only: ['recentActivity'] }),
+});
+
+watch(
+    () => props.recentActivity,
+    (rows) => reseedActivity(rows),
+);
 
 const recentActions = computed(
     () => liveStats.value?.recentActions ?? props.stats.recentActions,

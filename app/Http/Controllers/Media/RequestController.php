@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Broadcasting\LiveChannels;
 use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
+use App\Events\WebhookEventProcessed;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\UpdateSeerrRequestRequest;
 use App\Jobs\ClearSeerrRequests;
@@ -86,8 +88,13 @@ class RequestController extends Controller
         return Inertia::render('Seerr/Requests', [
             'connection' => ['url' => $connection->linkUrl()],
             'filters' => ['page' => $page, 'status' => $status],
-            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status, $request->user())),
-            'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection), 'summary'),
+            // WebhookEventProcessed fires after the queued handler cleared the Seerr
+            // cache; WebhookReceived fires before, and a reload on it can re-read
+            // stale rows.
+            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status, $request->user()))
+                ->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhooks(ServiceType::Seerr)),
+            'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection), 'summary')
+                ->live(on: WebhookEventProcessed::class, channel: LiveChannels::webhooks(ServiceType::Seerr)),
         ]);
     }
 

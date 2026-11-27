@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Broadcasting\LiveChannels;
+use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -19,9 +21,26 @@ class WebhookEventProcessed implements ShouldBroadcast
 
     public function __construct(public WebhookEvent $webhookEvent) {}
 
-    public function broadcastOn(): PrivateChannel
+    /**
+     * The dashboard feed, plus the per-service and per-connection channels when
+     * the connection still exists.
+     *
+     * @return array<int, PrivateChannel>
+     */
+    public function broadcastOn(): array
     {
-        return new PrivateChannel('dashboard');
+        $channels = [LiveChannels::dashboard()];
+
+        $this->webhookEvent->loadMissing('serviceConnection:id,type');
+        /** @var ServiceConnection|null $serviceConnection The row can be gone by the time a queued broadcast resolves its channels. */
+        $serviceConnection = $this->webhookEvent->serviceConnection;
+
+        if ($serviceConnection !== null) {
+            $channels[] = LiveChannels::webhooks($serviceConnection->type);
+            $channels[] = LiveChannels::webhookConnection($serviceConnection->type, $serviceConnection->id);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
@@ -40,11 +59,13 @@ class WebhookEventProcessed implements ShouldBroadcast
     public function broadcastWith(): array
     {
         $this->webhookEvent->loadMissing('serviceConnection:id,type');
+        /** @var ServiceConnection|null $serviceConnection The row can be gone by the time a queued broadcast serializes. */
+        $serviceConnection = $this->webhookEvent->serviceConnection;
 
         return [
             'id' => $this->webhookEvent->id,
             'service_connection_id' => $this->webhookEvent->service_connection_id,
-            'service_type' => $this->webhookEvent->serviceConnection->type->value,
+            'service_type' => $serviceConnection?->type->value,
             'event_type' => $this->webhookEvent->event_type,
             'processed_at' => $this->webhookEvent->processed_at?->toISOString(),
         ];

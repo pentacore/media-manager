@@ -9,7 +9,7 @@ import {
     Search,
     Trash2,
 } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import {
     InteractiveSearchDialog,
@@ -33,7 +33,6 @@ import {
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { formatBytes } from '@/lib/format';
 import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
@@ -79,23 +78,6 @@ const props = defineProps<{
 }>();
 
 const { can } = useCan();
-
-// WebhookEventProcessed fires after the queued handler cleared this
-// connection's Radarr cache, so the reload reads the fresh movie; a webhook
-// for another connection leaves this title alone.
-const { subscribe: subscribeReload } = useRealtimeReload<{
-    service_connection_id: number | null;
-    service_type: string | null;
-}>({
-    channel: 'dashboard',
-    event: 'WebhookEventProcessed',
-    only: ['movie'],
-    filter: (event) =>
-        event.service_type === 'radarr' &&
-        event.service_connection_id === props.service_connection_id,
-});
-
-onMounted(subscribeReload);
 
 // Managers read the name from the dropdown's list, viewers get only the
 // name. `undefined` while the deferred prop is still loading.

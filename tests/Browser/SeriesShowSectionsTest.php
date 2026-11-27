@@ -211,7 +211,7 @@ test('an expanded season stays open when a processed webhook reloads the series'
         ->assertVisible('[data-season-card="1"] [data-episode-actions="70"]');
     $webpage->script(seriesSectionsReloadRecorderScript());
 
-    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
+    $webpage->script(echoEmitScript('webhooks.sonarr.'.$this->sonarr->id, 'WebhookEventProcessed', [
         'id' => 7001, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
         'event_type' => 'Download', 'processed_at' => '2026-10-12T10:00:00.000000Z',
     ]));
@@ -344,7 +344,7 @@ test('a processed webhook reload does not reopen a closed replace dialog', funct
 
     expect($webpage->script('location.search'))->not->toContain('replace_');
 
-    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
+    $webpage->script(echoEmitScript('webhooks.sonarr.'.$this->sonarr->id, 'WebhookEventProcessed', [
         'id' => 7002, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
         'event_type' => 'Download', 'processed_at' => '2026-10-12T10:00:00.000000Z',
     ]));
@@ -366,7 +366,7 @@ test('a webhook reload in flight when the replace dialog closes does not reopen 
     $webpage->script(seriesSectionsHoldEpisodesScript());
 
     // The reload leaves from the link's URL and is answered after the close.
-    $webpage->script(echoEmitScript('dashboard', 'WebhookEventProcessed', [
+    $webpage->script(echoEmitScript('webhooks.sonarr.'.$this->sonarr->id, 'WebhookEventProcessed', [
         'id' => 7003, 'service_connection_id' => $this->sonarr->id, 'service_type' => 'sonarr',
         'event_type' => 'Download', 'processed_at' => '2026-10-12T10:00:00.000000Z',
     ]));
