@@ -7,25 +7,6 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
-/**
- * Records every partial reload the page starts, as its comma-joined `only`.
- * Install it after the deferred props have loaded.
- */
-function libraryLiveRecorderScript(): string
-{
-    return <<<'JS'
-        (() => {
-            window.__mmReloads = [];
-            document.addEventListener('inertia:start', (event) => {
-                const visit = event.detail.visit;
-                if (!visit.prefetch && visit.only.length > 0) {
-                    window.__mmReloads.push(visit.only.join(','));
-                }
-            });
-        })()
-    JS;
-}
-
 function libraryLiveReloadCountScript(string $only): string
 {
     return sprintf("window.__mmReloads.filter((only) => only === '%s').length", $only);
@@ -63,7 +44,7 @@ test('the series list reloads only after a Sonarr webhook was processed', functi
         ->assertNoSmoke()
         ->assertSeeIn('[data-series-card="1"]', 'Example Show Series');
     $webpage->script(appHydratedScript());
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     // The page listens on the Sonarr channel, not Radarr's. (The old
     // WebhookReceived-on-dashboard case is dropped: the feature test pins the
@@ -99,7 +80,7 @@ test('the movie list reloads after a Radarr webhook was processed', function ():
     $webpage = visit(route('media.movies.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-movie-card="1"]', 'Example Movie');
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     $webpage->script(echoEmitScript('webhooks.radarr', 'WebhookEventProcessed', libraryLiveProcessed('radarr', $radarr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('movies'))));
@@ -118,7 +99,7 @@ test('the Seerr requests list reloads after a Seerr webhook was processed', func
     $webpage = visit(route('media.requests.index', absolute: false))
         ->assertNoSmoke()
         ->assertSee('No requests in this view.');
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     $webpage->script(echoEmitScript('webhooks.seerr', 'WebhookEventProcessed', libraryLiveProcessed('seerr', $seerr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('requests,summary'))));
@@ -139,7 +120,7 @@ test('the Whisparr library and title page reload after a Whisparr webhook was pr
     $webpage = visit(route('media.whisparr.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-card="21"]', 'Example Scene');
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
     $webpage->script(echoEmitScript('webhooks.whisparr', 'WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('library'))));
 
@@ -148,7 +129,7 @@ test('the Whisparr library and title page reload after a Whisparr webhook was pr
     $title = visit(route('media.whisparr.show', ['id' => 21], absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-show-title]', 'Example Scene');
-    $title->script(libraryLiveRecorderScript());
+    $title->script(reloadRecorderScript());
     $title->script(echoEmitScript('webhooks.whisparr.'.$whisparr->id, 'WebhookEventProcessed', libraryLiveProcessed('whisparr', $whisparr->id)));
     $title->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('item'))));
 
@@ -170,7 +151,7 @@ test('a series page reloads only after its own Sonarr connection processed a web
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     // Another Sonarr connection, then another service: neither is this page's.
     $channels = $webpage->script(echoSubscribedChannelsScript('webhooks.sonarr.'.$sonarr->id, 'WebhookEventProcessed'));
@@ -204,7 +185,7 @@ test('a movie page reloads for a viewer after its Radarr connection processed a 
 
     $webpage = visit(route('media.movies.show', ['id' => 42], absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     $webpage->script(echoEmitScript('webhooks.radarr.'.$radarr->id, 'WebhookEventProcessed', libraryLiveProcessed('radarr', $radarr->id)));
     $webpage->script(confirmDialogWaitUntilScript(sprintf('%s > 0', libraryLiveReloadCountScript('movie'))));
@@ -229,7 +210,7 @@ test('a series page ignores a webhook from another Sonarr connection', function 
 
     $webpage = visit(route('media.series.show', ['id' => 7], absolute: false))->assertNoSmoke();
     $webpage->script(appHydratedScript());
-    $webpage->script(libraryLiveRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     // The other connection's event reaches its own channel and the service-wide
     // one, neither of which this page listens on.

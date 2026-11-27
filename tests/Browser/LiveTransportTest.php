@@ -13,24 +13,6 @@ use App\Models\User;
  */
 
 /**
- * Records every partial reload the page starts, as its comma-joined `only`.
- */
-function liveTransportRecorderScript(): string
-{
-    return <<<'JS'
-        (() => {
-            window.__mmReloads = [];
-            document.addEventListener('inertia:start', (event) => {
-                const visit = event.detail.visit;
-                if (!visit.prefetch && visit.only.length > 0) {
-                    window.__mmReloads.push(visit.only.join(','));
-                }
-            });
-        })()
-    JS;
-}
-
-/**
  * Emits a pusher-js connection state change, as a dropped or restored Reverb
  * connection would.
  */
@@ -56,7 +38,7 @@ test('the first connect does not count as a reconnect', function (): void {
         ->assertNoSmoke()
         ->assertCount(sprintf('[data-attempt-row="%d"]', $attempt->id), 1);
     $webpage->script(appHydratedScript());
-    $webpage->script(liveTransportRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     $webpage->script(liveTransportStateChangeScript('connecting', 'connected'));
     $webpage->wait(1.5);
@@ -106,7 +88,7 @@ test('a restored connection reloads the live props once', function (): void {
         ->assertNoSmoke()
         ->assertCount(sprintf('[data-attempt-row="%d"]', $attempt->id), 1);
     $webpage->script(appHydratedScript());
-    $webpage->script(liveTransportRecorderScript());
+    $webpage->script(reloadRecorderScript());
 
     // Connected first, as on page load: that is not a reconnect (the test above).
     $webpage->script(liveTransportStateChangeScript('connecting', 'connected'));

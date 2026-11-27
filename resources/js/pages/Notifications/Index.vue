@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Bell, BellOff, CheckCheck, Trash2 } from '@lucide/vue';
-import { onMounted } from 'vue';
 import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import { PageHeader, Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
 interface NotificationData {
     title?: string;
@@ -38,24 +36,6 @@ defineOptions({
             },
         ],
     },
-});
-
-// Laravel auto-broadcasts on the user's private channel as
-// "BroadcastNotificationCreated" whenever a notification's via() includes
-// 'broadcast'. The websocket payload doesn't carry created_at / read_at
-// metadata, so refetch the rows server-side rather than try to upsert
-// from the event.
-const userId = usePage().props.auth.user?.id;
-const { subscribe } = useRealtimeReload({
-    channel: `App.Models.User.${userId}`,
-    event: 'BroadcastNotificationCreated',
-    only: ['notifications', 'unreadCount'],
-});
-
-onMounted(() => {
-    if (userId) {
-        subscribe();
-    }
 });
 
 function markRead(id: string) {

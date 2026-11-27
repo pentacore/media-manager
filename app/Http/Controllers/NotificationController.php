@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Broadcasting\LiveChannels;
+use App\Events\UserNotificationStored;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
@@ -16,7 +19,7 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
-        $notifications = $user
+        $notifications = fn (): array => $user
             ?->notifications()
             ->latest()
             ->limit(100)
@@ -29,10 +32,15 @@ class NotificationController extends Controller
                 'created_at' => $databaseNotification->created_at?->toIso8601String(),
             ])
             ->all() ?? [];
+        $unreadCount = fn (): int => $user?->unreadNotifications()->count() ?? 0;
 
-        return Inertia::render('Notifications/Index', [
-            'notifications' => $notifications,
-            'unreadCount' => $user?->unreadNotifications()->count() ?? 0,
+        // Without a user there is no channel to listen on: plain props.
+        return Inertia::render('Notifications/Index', $user instanceof User ? [
+            'notifications' => Inertia::live($notifications, on: UserNotificationStored::class, channel: LiveChannels::user($user->id)),
+            'unreadCount' => Inertia::live($unreadCount, on: UserNotificationStored::class, channel: LiveChannels::user($user->id)),
+        ] : [
+            'notifications' => $notifications(),
+            'unreadCount' => $unreadCount(),
         ]);
     }
 

@@ -213,17 +213,7 @@ test("another server's report does not reload the page", function (): void {
         ->assertNoSmoke()
         ->assertVisible('[data-server-status="ok"]');
     $webpage->script(appHydratedScript());
-    $webpage->script(<<<'JS'
-        (() => {
-            window.__mmReloads = [];
-            document.addEventListener('inertia:start', (event) => {
-                const visit = event.detail.visit;
-                if (!visit.prefetch && visit.only.length > 0) {
-                    window.__mmReloads.push(visit.only.join(','));
-                }
-            });
-        })()
-    JS);
+    $webpage->script(reloadRecorderScript());
 
     // The page listens on its own server's channel and on no other server's.
     $channels = $webpage->script(echoSubscribedChannelsScript('admin.servers.'.$server->id, 'ServerReported'));
@@ -242,6 +232,7 @@ test("another server's report does not reload the page", function (): void {
         'server_id' => $server->id, 'last_report_at' => now()->toIso8601String(),
     ]));
     $webpage->script(confirmDialogWaitUntilScript('window.__mmReloads.length > 0'));
+    $webpage->wait(1.5);
 
     expect($webpage->script('window.__mmReloads.length'))->toBe(1);
     $webpage->assertNoSmoke();

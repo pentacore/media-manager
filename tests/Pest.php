@@ -313,6 +313,26 @@ function appHydratedScript(): string
 }
 
 /**
+ * Records every partial reload the page starts, as its comma-joined `only`, in
+ * `window.__mmReloads`. Install it after the page has hydrated (and any
+ * deferred props have loaded).
+ */
+function reloadRecorderScript(): string
+{
+    return <<<'JS'
+        (() => {
+            window.__mmReloads = [];
+            document.addEventListener('inertia:start', (event) => {
+                const visit = event.detail.visit;
+                if (!visit.prefetch && visit.only.length > 0) {
+                    window.__mmReloads.push(visit.only.join(','));
+                }
+            });
+        })()
+    JS;
+}
+
+/**
  * Waits (up to ~5 s) until the page's own `private-{$channel}` has a listener
  * for `$event`, then returns the names of every channel the page subscribed
  * to. Negative live-prop cases call it first, so an emit on another channel
