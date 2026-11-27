@@ -22,6 +22,10 @@ class WebPushSender
      */
     public function send(PushSubscription $subscription, string $payload, array $options): WebPushResult
     {
+        if (! $this->config->allowsEndpoint($subscription->endpoint)) {
+            return new WebPushResult(false, true, 'Endpoint host is not allowed');
+        }
+
         $webPush = new WebPush([
             'VAPID' => [
                 'subject' => $this->config->subject(),
@@ -33,10 +37,6 @@ class WebPushSender
             'timeout' => 10,
             'connect_timeout' => 5,
         ]));
-
-        if (! $this->config->allowsEndpoint($subscription->endpoint)) {
-            return new WebPushResult(false, true, 'Endpoint host is not allowed');
-        }
 
         $webPush->queueNotification(
             new Subscription(

@@ -68,9 +68,14 @@ final readonly class WebPushConfig
             return false;
         }
 
-        $host = strtolower(rtrim($parts['host'], '.'));
+        $host = strtolower($parts['host']);
 
-        if ($host === '' || str_contains($host, ':') || filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        if (str_ends_with($host, '.')) {
+            $host = substr($host, 0, -1);
+        }
+
+        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/', $host) !== 1
+            || filter_var($host, FILTER_VALIDATE_IP) !== false) {
             return false;
         }
 
