@@ -36,6 +36,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('settings.notifications.test');
 
     Route::post('settings/push-subscriptions', [PushSubscriptionController::class, 'store'])
+        ->middleware('throttle:10,1')
         ->name('settings.push-subscriptions.store');
     Route::post('settings/push-subscriptions/test', [PushSubscriptionController::class, 'test'])
         ->middleware('throttle:5,1')

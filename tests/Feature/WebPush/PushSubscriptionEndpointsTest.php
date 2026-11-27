@@ -7,6 +7,9 @@ use App\Models\User;
 use App\Services\Notifications\WebPushConfig;
 use App\Services\Notifications\WebPushResult;
 
+const WEB_PUSH_TEST_P256DH = 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const WEB_PUSH_TEST_AUTH = 'AAAAAAAAAAAAAAAAAAAAAA';
+
 beforeEach(function (): void {
     config()->set('inertia.testing.ensure_pages_exist', false);
     app()->instance(WebPushConfig::class, new WebPushConfig('test-vapid-public-key', 'private', 'mailto:a@example.test', ['push.example.test']));
@@ -19,7 +22,7 @@ function pushBody(string $endpoint = 'https://push.example.test/send/abc'): arra
 {
     return [
         'endpoint' => $endpoint,
-        'keys' => ['p256dh' => 'BPublicKey', 'auth' => 'AuthSecret'],
+        'keys' => ['p256dh' => WEB_PUSH_TEST_P256DH, 'auth' => WEB_PUSH_TEST_AUTH],
         'contentEncoding' => 'aes128gcm',
     ];
 }
@@ -35,8 +38,8 @@ test('store creates a subscription for the caller', function (): void {
     $row = PushSubscription::query()->sole();
     expect($row->user_id)->toBe($user->id)
         ->and($row->endpoint)->toBe('https://push.example.test/send/abc')
-        ->and($row->public_key)->toBe('BPublicKey')
-        ->and($row->auth_token)->toBe('AuthSecret')
+        ->and($row->public_key)->toBe(WEB_PUSH_TEST_P256DH)
+        ->and($row->auth_token)->toBe(WEB_PUSH_TEST_AUTH)
         ->and($row->content_encoding)->toBe('aes128gcm')
         ->and($row->vapid_public_key)->toBe('test-vapid-public-key')
         ->and($row->label)->toBe('Chrome on Android');
@@ -66,8 +69,37 @@ test('store rejects invalid bodies', function (array $override, string $field): 
 })->with([
     'missing auth' => [['remove' => true], 'keys.auth'],
     'http endpoint' => [['endpoint' => 'http://push.example.test/send/abc'], 'endpoint'],
+    'p256dh not base64url' => [['keys' => ['p256dh' => 'not base64!']], 'keys.p256dh'],
+    'p256dh wrong length' => [['keys' => ['p256dh' => 'BAAA']], 'keys.p256dh'],
+    'p256dh not uncompressed' => [['keys' => ['p256dh' => 'A'.str_repeat('A', 86)]], 'keys.p256dh'],
+    'auth wrong length' => [['keys' => ['auth' => 'AAAA']], 'keys.auth'],
     'bad encoding' => [['contentEncoding' => 'nope'], 'contentEncoding'],
 ]);
+
+test('store caps the devices per user but always allows re-storing an existing endpoint', function (): void {
+    config(['services.webpush.max_devices' => 2]);
+    $user = User::factory()->create();
+    PushSubscription::factory()->for($user)->create(['endpoint' => 'https://push.example.test/send/abc']);
+    PushSubscription::factory()->for($user)->create();
+    PushSubscription::factory()->create();
+
+    $this->actingAs($user)->post(route('settings.push-subscriptions.store'), pushBody('https://push.example.test/send/new'))
+        ->assertSessionHasErrors(['endpoint' => 'You have reached the device limit; remove a device first.']);
+    expect(PushSubscription::query()->where('user_id', $user->id)->count())->toBe(2);
+
+    $this->actingAs($user)->post(route('settings.push-subscriptions.store'), pushBody())->assertSessionHasNoErrors();
+    expect(PushSubscription::query()->where('user_id', $user->id)->count())->toBe(2);
+});
+
+test('store is rate limited to ten a minute', function (): void {
+    $user = User::factory()->create();
+
+    foreach (range(1, 10) as $ignored) {
+        $this->actingAs($user)->post(route('settings.push-subscriptions.store'), pushBody())->assertRedirect();
+    }
+
+    $this->actingAs($user)->post(route('settings.push-subscriptions.store'), pushBody())->assertStatus(429);
+});
 
 test('store is unprocessable when web push is unavailable', function (): void {
     app()->instance(WebPushConfig::class, new WebPushConfig(null, null, null));
@@ -113,6 +145,15 @@ test('test reports a failing delivery', function (): void {
     $user = User::factory()->create();
     $row = PushSubscription::factory()->for($user)->create();
     fakeWebPushSender([$row->endpoint => new WebPushResult(false, false, 'HTTP 503')]);
+
+    $this->actingAs($user)->post(route('settings.push-subscriptions.test'))
+        ->assertSessionHasErrors('test_push');
+});
+
+test('test errors when no device received it', function (): void {
+    $user = User::factory()->create();
+    $row = PushSubscription::factory()->for($user)->create();
+    fakeWebPushSender([$row->endpoint => new WebPushResult(false, true, 'Gone')]);
 
     $this->actingAs($user)->post(route('settings.push-subscriptions.test'))
         ->assertSessionHasErrors('test_push');

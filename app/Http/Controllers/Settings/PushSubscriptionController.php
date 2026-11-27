@@ -36,11 +36,20 @@ class PushSubscriptionController extends Controller
         }
 
         $validated = $storePushSubscriptionRequest->validated();
+        $user = $storePushSubscriptionRequest->user();
+
+        $isNew = ! PushSubscription::query()->where('endpoint', $validated['endpoint'])->where('user_id', $user->id)->exists();
+
+        if ($isNew && PushSubscription::query()->where('user_id', $user->id)->count() >= $this->maxDevices()) {
+            throw ValidationException::withMessages([
+                'endpoint' => __('You have reached the device limit; remove a device first.'),
+            ]);
+        }
 
         PushSubscription::query()->updateOrCreate(
             ['endpoint' => $validated['endpoint']],
             [
-                'user_id' => $storePushSubscriptionRequest->user()->id,
+                'user_id' => $user->id,
                 'public_key' => $validated['keys']['p256dh'],
                 'auth_token' => $validated['keys']['auth'],
                 'content_encoding' => $validated['contentEncoding'] ?? 'aes128gcm',
@@ -105,9 +114,22 @@ class PushSubscriptionController extends Controller
             ]);
         }
 
+        if ($webPushChannel->delivered === 0) {
+            throw ValidationException::withMessages([
+                'test_push' => __('No device received the test push.'),
+            ]);
+        }
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Test push sent.')]);
 
         return back();
+    }
+
+    private function maxDevices(): int
+    {
+        $max = config('services.webpush.max_devices');
+
+        return is_numeric($max) ? max(1, (int) $max) : 10;
     }
 
     /**

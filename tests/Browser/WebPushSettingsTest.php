@@ -25,7 +25,7 @@ function fakePushBrowserScript(bool $rejectSubscribe = false, bool $staleExistin
             const make = (key) => ({
                 endpoint: '{$endpoint}',
                 options: { applicationServerKey: key },
-                toJSON: () => ({ endpoint: '{$endpoint}', keys: { p256dh: 'BFakePublicKey', auth: 'FakeAuth' } }),
+                toJSON: () => ({ endpoint: '{$endpoint}', keys: { p256dh: 'BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', auth: 'AAAAAAAAAAAAAAAAAAAAAA' } }),
                 unsubscribe: async () => {
                     window.__pushCalls.push('unsubscribe');
                     current = null;

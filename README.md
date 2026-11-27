@@ -304,6 +304,8 @@ WEBPUSH_PRIVATE_KEY=
 WEBPUSH_SUBJECT=mailto:you@example.com
 # optional, comma-separated; defaults to the Google, Mozilla, Windows and Apple push services
 WEBPUSH_ALLOWED_HOSTS=
+# optional, devices one user may register (default 10)
+WEBPUSH_MAX_DEVICES=10
 ```
 
 HTTPS is required (browsers only register service workers on secure origins). Each user enables it per device under **Settings → Notifications**; on iOS the app must first be added to the Home Screen. Keep the keys stable: rotating them drops every device's subscription and users must re-enable it.
