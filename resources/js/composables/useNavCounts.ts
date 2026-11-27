@@ -42,6 +42,40 @@ type LiveCounter =
 
 const SESSION_EXPIRY_MS = 10 * 60 * 1000;
 
+// How many mounted badge sets want a `nav` reload after a reconnect, and the
+// one reconnect callback they share: one reload re-syncs them all (each
+// applies a reload that names `nav` on 'success'), so a second mounted copy
+// must not register a second reload.
+let reconnectHolders = 0;
+let stopReconnect: (() => void) | null = null;
+
+/** Takes a share of the reconnect `nav` reload; returns its release. */
+function holdReconnectReload(
+    onReconnect: (callback: () => void) => () => void,
+): () => void {
+    reconnectHolders += 1;
+    stopReconnect ??= onReconnect(() => {
+        // Events sent while the connection was down were lost.
+        router.reload({ only: ['nav'] });
+    });
+
+    let released = false;
+
+    return () => {
+        if (released) {
+            return;
+        }
+
+        released = true;
+        reconnectHolders -= 1;
+
+        if (reconnectHolders === 0) {
+            stopReconnect?.();
+            stopReconnect = null;
+        }
+    };
+}
+
 /**
  * How long Inertia keeps a hover prefetch reusable (`defaults.prefetch.cacheFor`
  * in app.ts). After it no click can reuse that prefetch, so its date is dropped.
@@ -59,7 +93,8 @@ function pageKey(url: string | URL): string {
  * Live counters for the sidebar badges. Seeded from the `nav` shared prop and
  * kept current by private channels. `nav` is a lazy shared prop: full page
  * visits (and prefetched ones) send a fresh object, partial reloads omit it
- * unless they name it, and Inertia keeps the previous object.
+ * unless they name it, and Inertia keeps the previous object. A restored
+ * connection reloads `nav` once, however many copies are mounted.
  */
 export function useNavCounts(): NavCounts {
     const page = usePage();
@@ -95,8 +130,9 @@ export function useNavCounts(): NavCounts {
     // When the hover prefetch cached for a page was fetched (client clock).
     const prefetchFetchedAt = new Map<string, number>();
 
-    const { acquirePrivateChannel } = useWebSocket();
+    const { acquirePrivateChannel, onReconnect } = useWebSocket();
     const channelLeases: ChannelLease[] = [];
+    let releaseReconnectReload: (() => void) | null = null;
 
     let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -411,11 +447,15 @@ export function useNavCounts(): NavCounts {
             );
         }
 
+        releaseReconnectReload = holdReconnectReload(onReconnect);
+
         activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
     });
 
     onUnmounted(() => {
         channelLeases.splice(0).forEach((lease) => lease.release());
+        releaseReconnectReload?.();
+        releaseReconnectReload = null;
 
         if (activitySessionTimer) {
             clearInterval(activitySessionTimer);

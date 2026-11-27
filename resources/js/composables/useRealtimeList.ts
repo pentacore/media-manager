@@ -30,6 +30,14 @@ export interface UseRealtimeListOptions<T, TPayload = T> {
      * (a batch's own rows) returns false, so no "N new" notice is raised.
      */
     countsAsStale?: (payload: TPayload) => boolean;
+    /**
+     * Re-reads the list's rows from the server (the page's own refresh, whose
+     * prop watcher reseeds the list). Given, it runs once when a dropped
+     * Reverb connection comes back, since events sent meanwhile were lost.
+     * A paused list remembers the missed reconnect and refreshes on
+     * `resume()` instead; a reconnect never counts toward `staleCount`.
+     */
+    refresh?: () => void;
 }
 
 export interface UseRealtimeList<T> {
@@ -62,14 +70,18 @@ export function useRealtimeList<T, TPayload = T>({
     map,
     replaces,
     countsAsStale,
+    refresh,
 }: UseRealtimeListOptions<T, TPayload>): UseRealtimeList<T> {
-    const { acquirePrivateChannel } = useWebSocket();
+    const { acquirePrivateChannel, onReconnect } = useWebSocket();
     const channels: string[] =
         typeof channel === 'string' ? [channel] : [...channel];
     const items = ref<T[]>([...initial]) as Ref<T[]>;
     const staleCount = ref(0);
     const isPaused = ref(false);
     let leases: ChannelLease[] = [];
+    let stopReconnect: (() => void) | null = null;
+    // A reconnect that happened while paused: resume() refreshes once for it.
+    let missedReconnect = false;
 
     function upsert(row: T): void {
         const key = row[keyField];
@@ -114,6 +126,16 @@ export function useRealtimeList<T, TPayload = T>({
         upsert(map ? map(payload) : (payload as unknown as T));
     }
 
+    function catchUp(): void {
+        if (isPaused.value) {
+            missedReconnect = true;
+
+            return;
+        }
+
+        refresh?.();
+    }
+
     function subscribe(): void {
         if (leases.length > 0) {
             return;
@@ -122,11 +144,18 @@ export function useRealtimeList<T, TPayload = T>({
         leases = channels.map((name) =>
             acquirePrivateChannel(name).listen(`.${event}`, receive),
         );
+
+        if (refresh) {
+            stopReconnect = onReconnect(catchUp);
+        }
     }
 
     function unsubscribe(): void {
         leases.forEach((lease) => lease.release());
         leases = [];
+        stopReconnect?.();
+        stopReconnect = null;
+        missedReconnect = false;
     }
 
     function pause(): void {
@@ -136,6 +165,11 @@ export function useRealtimeList<T, TPayload = T>({
     function resume(): void {
         isPaused.value = false;
         staleCount.value = 0;
+
+        if (missedReconnect) {
+            missedReconnect = false;
+            refresh?.();
+        }
     }
 
     /**

@@ -93,6 +93,8 @@ const {
     keyField: 'id',
     initial: props.logs.data,
     cap: props.logs.meta.per_page,
+    // A restored connection runs the "N new" refresh (hoisted, below).
+    refresh: () => refresh(),
 });
 
 // Audit rows arrive on their own admin-only channel. They are never merged

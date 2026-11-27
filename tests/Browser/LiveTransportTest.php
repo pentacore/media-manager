@@ -101,7 +101,11 @@ test('a restored connection reloads the live props once', function (): void {
     $webpage->script(confirmDialogWaitUntilScript('window.__mmReloads.length > 0'));
     $webpage->wait(1.5);
 
-    $reloads = $webpage->script('window.__mmReloads');
+    // The sidebar's nav badges catch up with a reload of their own.
+    $reloads = array_values(array_filter(
+        $webpage->script('window.__mmReloads'),
+        fn (string $only): bool => $only !== 'nav',
+    ));
     expect($reloads)->toHaveCount(1)
         ->and(explode(',', (string) $reloads[0]))->toContain('attempts', 'statusCounts');
     $webpage->assertNoSmoke();
