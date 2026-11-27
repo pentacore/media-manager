@@ -86,6 +86,28 @@ test('enabling push on this device registers it and lists it', function (): void
         ->and($row->vapid_public_key)->toBe('BFakeVapidPublicKey');
 });
 
+test('enabling push keeps an unsaved preference change and shows the no-devices hint until a device exists', function (): void {
+    configureWebPush();
+    $this->actingAs(User::factory()->create());
+
+    $webpage = visit(route('settings.notifications.edit', absolute: false))->assertNoSmoke();
+    $webpage->script(appHydratedScript());
+    $webpage->assertPresent('[data-webpush-no-devices]');
+    $webpage->script(<<<'JS'
+        (() => {
+            const box = document.querySelector('[data-notification-matrix] input[type=checkbox]:not(:disabled)');
+            box.click();
+            window.__ticked = box.getAttribute('aria-label');
+            window.__expected = box.checked;
+        })()
+    JS);
+    $webpage->script(fakePushBrowserScript());
+    $webpage->click('[data-push-enable]')
+        ->assertCount('[data-push-device]', 1)
+        ->assertMissing('[data-webpush-no-devices]')
+        ->assertScript('document.querySelector(`input[aria-label="${window.__ticked}"]`).checked === window.__expected', true);
+});
+
 test('the card says web push is not configured when the keys are missing', function (): void {
     configureWebPush(false);
     $this->actingAs(User::factory()->create());
@@ -141,7 +163,7 @@ test('a subscription made with a rotated server key is replaced before it is reg
     expect(PushSubscription::query()->sole()->endpoint)->toBe(WEB_PUSH_TEST_ENDPOINT);
 });
 
-test('the service worker only follows same-origin notification urls', function (): void {
+test('the service worker only follows notification urls on this origin', function (): void {
     $this->actingAs(User::factory()->create());
 
     $webpage = visit(route('settings.notifications.edit', absolute: false))->assertNoSmoke();
@@ -155,16 +177,18 @@ test('the service worker only follows same-origin notification urls', function (
     
             return JSON.stringify([
                 resolve('/settings/notifications').replace(location.origin, ''),
-                resolve('https://evil.example.com/x'),
-                resolve('//evil.example.com/x'),
+                resolve('https://other.example.com/a/b?c=1#d').replace(location.origin, ''),
+                resolve('//other.example.com/x').replace(location.origin, ''),
                 resolve('javascript:alert(1)'),
+                resolve('ftp://other.example.com/x'),
                 resolve(undefined),
                 resolve('http://[bad'),
             ]);
         })()
     JS_WRAP, json_encode([
         '/settings/notifications',
-        '/',
+        '/a/b?c=1#d',
+        '/x',
         '/',
         '/',
         '/',

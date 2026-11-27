@@ -10,6 +10,17 @@ test('the service worker is a public static file with a push handler and no fetc
     expect(file_get_contents(public_path('sw.js')))->toContain("addEventListener('push'")->not->toContain("addEventListener('fetch'");
 });
 
+test('the service worker uses a dedicated monochrome badge and renotifies tagged pushes', function (): void {
+    $worker = (string) file_get_contents(public_path('sw.js'));
+
+    expect($worker)->toContain("badge: '/icons/badge-96.png'")
+        ->toContain('renotify: Boolean(payload.tag)')
+        ->and(public_path('icons/badge-96.png'))->toBeFile();
+
+    [$width, $height, $type] = getimagesize(public_path('icons/badge-96.png'));
+    expect([$width, $height, $type])->toBe([96, 96, IMAGETYPE_PNG]);
+});
+
 test('the manifest is standalone and its icons exist on disk', function (): void {
     expect(public_path('manifest.webmanifest'))->toBeFile();
 

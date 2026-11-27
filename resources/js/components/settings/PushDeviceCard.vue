@@ -152,7 +152,12 @@ function remove(device: PushDevice): void {
             <InputError
                 class="mt-2"
                 data-push-error
-                :message="error ?? $page.props.errors.endpoint"
+                :message="
+                    error ??
+                    $page.props.errors.endpoint ??
+                    $page.props.errors['keys.p256dh'] ??
+                    $page.props.errors['keys.auth']
+                "
             />
             <InputError class="mt-2" :message="$page.props.errors.test_push" />
         </template>

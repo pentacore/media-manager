@@ -259,6 +259,16 @@ function save(): void {
                                         class="block text-[10px] font-normal tracking-normal normal-case"
                                         >Not configured</span
                                     >
+                                    <span
+                                        v-else-if="
+                                            channel === 'webpush' &&
+                                            webPush.devices.length === 0
+                                        "
+                                        data-webpush-no-devices
+                                        class="block text-[10px] font-normal tracking-normal normal-case"
+                                        >Enable push on this device above to
+                                        receive these.</span
+                                    >
                                 </th>
                             </tr>
                         </thead>

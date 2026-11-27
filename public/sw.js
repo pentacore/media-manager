@@ -25,16 +25,20 @@ self.addEventListener('push', (event) => {
         self.registration.showNotification(title, {
             body: payload.body || '',
             tag: payload.tag || undefined,
+            // Without this, a notification that reuses a tag updates silently.
+            renotify: Boolean(payload.tag),
             data: { url: payload.url || '/' },
             icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
+            badge: '/icons/badge-96.png',
         }),
     );
 });
 
 /**
  * The payload url comes from the server but is only ever followed within this
- * origin; anything unparsable or cross-origin falls back to the app root.
+ * origin. APP_URL may differ from the origin the phone uses, so another
+ * http(s) origin keeps its path on this one; anything unparsable or not
+ * http(s) falls back to the app root.
  */
 function resolveTargetUrl(raw) {
     if (typeof raw !== 'string') {
@@ -44,7 +48,13 @@ function resolveTargetUrl(raw) {
     try {
         const url = new URL(raw, self.location.origin);
 
-        return url.origin === self.location.origin ? url.href : '/';
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            return '/';
+        }
+
+        return url.origin === self.location.origin
+            ? url.href
+            : self.location.origin + url.pathname + url.search + url.hash;
     } catch {
         return '/';
     }

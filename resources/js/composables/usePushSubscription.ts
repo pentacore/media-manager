@@ -73,6 +73,8 @@ function visit(
         router.visit(url, {
             method,
             data: data as Record<string, never>,
+            // Keep the page (unsaved preference ticks, the error ref) alive.
+            preserveState: true,
             preserveScroll: true,
             onError: (errors) => {
                 failure =
@@ -153,16 +155,17 @@ export function usePushSubscription(
         let created: PushSubscription | null = null;
 
         try {
-            await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
-                scope: '/',
-            });
-            const registration = await navigator.serviceWorker.ready;
-
+            // First, while the tap's user activation is still live.
             permission.value = await Notification.requestPermission();
 
             if (permission.value !== 'granted') {
                 return;
             }
+
+            await navigator.serviceWorker.register(SERVICE_WORKER_URL, {
+                scope: '/',
+            });
+            const registration = await navigator.serviceWorker.ready;
 
             const key = urlBase64ToBytes(publicKey);
             let subscription = await registration.pushManager.getSubscription();
