@@ -8,8 +8,11 @@ use App\Models\User;
 use App\Notifications\Channels\WebPushChannel;
 use App\Notifications\ServiceWarning;
 use App\Services\Notifications\PreferenceResolver;
+use App\Services\Notifications\PushMessage;
 use App\Services\Notifications\WebPushConfig;
 use App\Services\Notifications\WebPushResult;
+use App\Services\Notifications\WebPushSender;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
@@ -31,7 +34,7 @@ test('it sends the push message to every device of the user', function (string $
             'body' => $message->body,
             'url' => $message->url,
             'severity' => $message->severity,
-            'tag' => 'mm-'.substr(sha1($message->title), 0, 12),
+            'tag' => 'mm-'.substr(sha1($message->title."\n".$message->body."\n".$message->url), 0, 12),
         ])
         ->and($fake->sent[0]['options'])->toBe(['TTL' => 86400, 'urgency' => $urgency]);
 })->with([
@@ -134,4 +137,50 @@ test('a stored device on a now-disallowed host is deleted and not sent to', func
 
     expect($fake->sent)->toBe([])
         ->and(PushSubscription::query()->find($bad->id))->toBeNull();
+});
+
+test('notifications that share a title get different tags', function (): void {
+    $user = User::factory()->create();
+    PushSubscription::factory()->for($user)->create();
+    $fake = fakeWebPushSender();
+    $channel = new WebPushChannel;
+
+    $channel->send($user, new ServiceWarning('sonarr', 'Same title', 'First body', 'warning'));
+    $channel->send($user, new ServiceWarning('sonarr', 'Same title', 'Second body', 'warning'));
+    $channel->send($user, new ServiceWarning('sonarr', 'Same title', 'First body', 'warning'));
+
+    $tags = array_map(fn (array $sent): string => json_decode($sent['payload'], true)['tag'], $fake->sent);
+    expect($tags[0])->toStartWith('mm-')->toHaveLength(15)
+        ->and($tags[1])->not->toBe($tags[0])
+        ->and($tags[2])->toBe($tags[0]);
+});
+
+test('a long Swedish body is truncated so the payload fits', function (): void {
+    $user = User::factory()->create();
+    $device = PushSubscription::factory()->for($user)->create();
+    $fake = fakeWebPushSender();
+    $body = str_repeat('Åäö är långa tecken. ', 400);
+
+    new WebPushChannel()->deliver([$device], new PushMessage('info', str_repeat('Ö', 500), $body));
+
+    $payload = json_decode($fake->sent[0]['payload'], true);
+    expect(mb_strlen($payload['title']))->toBe(200)
+        ->and(mb_strlen($payload['body']))->toBe(1000)
+        ->and($payload['body'])->toEndWith('…')
+        ->and($fake->sent[0]['payload'])->toContain('Åäö')
+        ->and(strlen($fake->sent[0]['payload']))->toBeLessThan(4078);
+});
+
+test('a throwing device does not stop the next one', function (): void {
+    [$public, $auth] = deviceKeys();
+    $user = User::factory()->create();
+    app()->instance(WebPushSender::class, senderWith([new Response(201)]));
+    $vapid = resolve(WebPushConfig::class)->publicKey();
+    $broken = PushSubscription::factory()->for($user)->create(['vapid_public_key' => $vapid]);
+    $ok = PushSubscription::factory()->for($user)->create(['public_key' => $public, 'auth_token' => $auth, 'vapid_public_key' => $vapid]);
+
+    new WebPushChannel()->send($user, new ServiceWarning('sonarr', 'T', 'M', 'warning'));
+
+    expect($broken->refresh()->last_used_at)->toBeNull()
+        ->and($ok->refresh()->last_used_at)->not->toBeNull();
 });

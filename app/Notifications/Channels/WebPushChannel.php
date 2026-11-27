@@ -22,12 +22,20 @@ class WebPushChannel extends PushChannel
 
     private const int TTL = 86400;
 
+    private const int MAX_TITLE = 200;
+
+    private const int MAX_BODY = 1000;
+
+    /** Devices the last deliver() call reached successfully. */
+    public int $delivered = 0;
+
     public function deliver(mixed $route, PushMessage $message): void
     {
         if (! is_array($route) || $route === []) {
             return;
         }
 
+        $this->delivered = 0;
         $config = resolve(WebPushConfig::class);
 
         if (! $config->available()) {
@@ -35,13 +43,15 @@ class WebPushChannel extends PushChannel
         }
 
         $sender = resolve(WebPushSender::class);
+        $title = $this->truncate($message->title, self::MAX_TITLE);
+        $body = $this->truncate($message->body, self::MAX_BODY);
         $payload = json_encode([
-            'title' => $message->title,
-            'body' => $message->body,
+            'title' => $title,
+            'body' => $body,
             'url' => $message->url,
             'severity' => $message->severity,
-            'tag' => 'mm-'.substr(sha1($message->title), 0, 12),
-        ], JSON_THROW_ON_ERROR);
+            'tag' => 'mm-'.substr(sha1($message->title."\n".$message->body."\n".($message->url ?? '')), 0, 12),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
         $options = ['TTL' => self::TTL, 'urgency' => $message->severity === 'error' ? 'high' : 'normal'];
 
         $attempted = 0;
@@ -62,6 +72,7 @@ class WebPushChannel extends PushChannel
             $result = $sender->send($subscription, $payload, $options);
 
             if ($result->success) {
+                $this->delivered++;
                 $subscription->forceFill(['last_used_at' => now()])->save();
             } elseif ($result->expired) {
                 $subscription->delete();
@@ -73,6 +84,14 @@ class WebPushChannel extends PushChannel
         if ($attempted > 0 && count($failures) === $attempted) {
             throw new RuntimeException(implode('; ', array_unique($failures)));
         }
+    }
+
+    /**
+     * A push payload may not exceed ~4 KB encrypted, so long texts are cut.
+     */
+    private function truncate(string $text, int $max): string
+    {
+        return mb_strlen($text) > $max ? mb_substr($text, 0, $max - 1).'…' : $text;
     }
 
     public function label(): string
