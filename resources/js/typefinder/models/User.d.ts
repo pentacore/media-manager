@@ -7,6 +7,7 @@
 import type { ActivityLog } from './ActivityLog';
 import type { ChatTemplate } from './ChatTemplate';
 import type { EmbyUserLink } from './EmbyUserLink';
+import type { PushSubscription } from './PushSubscription';
 import type { UserRole } from '../enums';
 
 export type User = {
@@ -28,6 +29,7 @@ export type User = {
   emby_user_links?: EmbyUserLink[];
   activity_logs?: ActivityLog[];
   chat_templates?: ChatTemplate[];
+  push_subscriptions?: PushSubscription[];
 };
 
 export type UserCreate = {

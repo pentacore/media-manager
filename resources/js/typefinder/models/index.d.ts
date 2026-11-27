@@ -36,6 +36,7 @@ export type { IndexedSeries, IndexedSeriesCreate, IndexedSeriesUpdate } from './
 export type { MediaReplacementAttempt, MediaReplacementAttemptCreate, MediaReplacementAttemptUpdate } from './MediaReplacementAttempt';
 export type { NotificationDestination, NotificationDestinationCreate, NotificationDestinationUpdate } from './NotificationDestination';
 export type { NotificationPreference, NotificationPreferenceCreate, NotificationPreferenceUpdate } from './NotificationPreference';
+export type { PushSubscription, PushSubscriptionCreate, PushSubscriptionUpdate } from './PushSubscription';
 export type { Server, ServerCreate, ServerUpdate } from './Server';
 export type { ServerCheck, ServerCheckCreate, ServerCheckUpdate } from './ServerCheck';
 export type { ServerFilesystemSample, ServerFilesystemSampleCreate, ServerFilesystemSampleUpdate } from './ServerFilesystemSample';

@@ -55,6 +55,8 @@ use Override;
  * @property-read int|null $emby_user_links_count
  * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
+ * @property-read Collection<int, PushSubscription> $pushSubscriptions
+ * @property-read int|null $push_subscriptions_count
  *
  * @method static UserFactory factory($count = null, $state = [])
  * @method static Builder<static>|User newModelQuery()
@@ -191,5 +193,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public function chatTemplates(): HasMany
     {
         return $this->hasMany(ChatTemplate::class);
+    }
+
+    /**
+     * @return HasMany<PushSubscription, $this>
+     */
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
     }
 }
