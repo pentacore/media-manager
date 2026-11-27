@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { initializeTheme } from '@/composables/useAppearance';
 import { appName, resolveLayout } from '@/inertia';
 import { initializeFlashToast } from '@/lib/flashToast';
+import { liveTransport } from '@/lib/liveTransport';
 
 // Mounts the app; nothing after it waits for that.
 void createInertiaApp({
@@ -18,6 +19,8 @@ void createInertiaApp({
             cacheFor: '10s',
         },
     },
+    // Live props subscribe through our channel leases (see liveTransport).
+    live: liveTransport,
 });
 
 initializeTheme();
