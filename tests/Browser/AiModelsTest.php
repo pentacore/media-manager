@@ -63,7 +63,7 @@ test('the reasoning picker is disabled for a model that does not reason', functi
         ->assertDisabled('[data-task="title"] [data-reasoning-select] button');
 });
 
-test('admin can pick a dedicated price updater model', function (): void {
+test('admin can pick a dedicated price refresh model', function (): void {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-updater']);
     $this->actingAs(User::factory()->admin()->create());
 

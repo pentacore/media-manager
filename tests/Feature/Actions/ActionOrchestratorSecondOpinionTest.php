@@ -84,7 +84,7 @@ test('a disagreement under reject creates a rejected request that never runs', f
     $actionRequest = secondOpinionDispatch();
 
     expect($actionRequest->status)->toBe(ActionRequestStatus::Rejected)
-        ->and($actionRequest->result)->toBe(['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.']);
+        ->and($actionRequest->result)->toBe(['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Declined by second opinion: Wrong series.']);
     Queue::assertNotPushed(ExecuteActionRequest::class);
     Event::assertDispatched(ActionRequestCreated::class);
 });
@@ -238,7 +238,7 @@ test('an event set to off skips the check its hold rule would run', function ():
     Queue::assertPushed(ExecuteActionRequest::class);
 });
 
-test('an event set to off leaves no mark where the action rule would not check either', function (string $type, SecondOpinionMode $actionMode): void {
+test('an event set to off leaves no mark where the approval rule would not check either', function (string $type, SecondOpinionMode $actionMode): void {
     secondOpinionRule($type, $actionMode);
     secondOpinionEventMode('sonarr:Download', SecondOpinionMode::Off);
     DecisionVerifierAgent::fake()->preventStrayPrompts();
@@ -270,7 +270,7 @@ test('an event mode never turns the check on for an unsupported type', function 
     DecisionVerifierAgent::assertNeverPrompted();
 });
 
-test('a run without an event keeps the action rule and records no event', function (): void {
+test('a run without an event keeps the approval rule and records no event', function (): void {
     secondOpinionRule('monitor_series', SecondOpinionMode::Hold);
     secondOpinionEventMode('sonarr:Download', SecondOpinionMode::Off);
     DecisionVerifierAgent::fake([['agrees' => true, 'reason' => 'Justified.']]);

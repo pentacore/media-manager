@@ -344,6 +344,6 @@ test('a settings checkbox is named by its row label, its inline text describes i
 })->with([
     'relative time' => ['settings.preferences.edit', 'preferences-relative-time', 'Relative time', 'Show relative time for recent entries', "Show '8h ago' for recent entries instead of full timestamps."],
     'whisparr posters' => ['settings.preferences.edit', 'preferences-whisparr-posters', 'Whisparr posters', 'Blur posters on the Whisparr pages', 'Blur Whisparr posters until you hover, focus or tap them.'],
-    'automatic selection' => ['admin.media-replacement.index', 'media-replacement-automatic-selection', 'Automatic selection', 'Enable automatic candidate selection', 'When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution.'],
+    'automatic selection' => ['admin.media-replacement.index', 'media-replacement-automatic-selection', 'Automatic selection', 'Enable automatic candidate selection', 'When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The approval rule still governs execution.'],
     'subtitle check' => ['admin.media-replacement.index', 'media-replacement-subtitle-check', 'Automatic subtitle check', 'Check tagged imports for missing subtitles', "Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."],
 ]);

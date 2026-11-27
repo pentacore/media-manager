@@ -52,7 +52,7 @@ test('a request the second opinion created rejected is logged as rejected, never
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Rejected,
         'requires_approval' => false,
-        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.'],
+        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Declined by second opinion: Wrong series.'],
     ]);
 
     $log = ActivityLog::where('subject_id', $request->id)->sole();

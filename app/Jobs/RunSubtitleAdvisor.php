@@ -172,7 +172,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         try {
             $summary = $subtitleAdvisorDecider->decide($subtitleCase);
         } catch (Throwable $throwable) {
-            Log::warning('Subtitle Advisor run failed.', [
+            Log::warning('Media Advisor run failed.', [
                 'subtitle_case_id' => $subtitleCase->id,
                 'exception' => $throwable::class,
                 'message' => UpstreamErrorText::sanitize($throwable->getMessage()),

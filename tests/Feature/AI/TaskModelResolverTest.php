@@ -112,20 +112,20 @@ test('title falls back to its config model, not the chat model', function (): vo
     expect(resolver()->resolve(AiTask::Title)->model)->toBe('gpt-config-title');
 });
 
-test('the price updater follows the chat default when unset', function (): void {
+test('the price refresh follows the chat default when unset', function (): void {
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
 
     expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-5.6-luna');
 });
 
-test('the price updater falls back to its config model before the chat model', function (): void {
+test('the price refresh falls back to its config model before the chat model', function (): void {
     config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
     AiTaskModel::factory()->task(AiTask::Chat)->selecting('openai', 'gpt-5.6-luna')->create();
 
     expect(resolver()->resolve(AiTask::PriceUpdater)->model)->toBe('gpt-config-updater');
 });
 
-test('a price updater row wins over its config model and clears back to it', function (): void {
+test('a price refresh row wins over its config model and clears back to it', function (): void {
     config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
     $priceUpdater = AiTaskModel::factory()->task(AiTask::PriceUpdater)->selecting('openai', 'gpt-saved-updater')->create();
 

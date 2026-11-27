@@ -70,7 +70,7 @@ test('a verifier that no longer fits the box is never prompted and fails its pro
     PriceFetcherAgent::assertNeverPrompted();
 
     expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_FAILED)
-        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.')
+        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before its agent finished; providers it had not verified keep their stored prices.')
         ->and(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results['anthropic']['status'])->toBe('fallback_failed')
         ->and(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->status)->not->toBe('running');
 });
@@ -113,7 +113,7 @@ test('a provider failover restarting the verifier at step 0 still stops the run 
     );
 
     expect($providersTried)->toBe(['openai'])
-        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.')
+        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before its agent finished; providers it had not verified keep their stored prices.')
         ->and(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->status)->not->toBe('running');
 });
 
@@ -132,7 +132,7 @@ test('a verifier that starts with the box already too tight is never prompted', 
 
     PriceFetcherAgent::assertNeverPrompted();
 
-    expect($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.');
+    expect($refreshReport->errorMessage)->toBe('The price refresh ran out of time before its agent finished; providers it had not verified keep their stored prices.');
 });
 
 test('a mid-agent time-box stop resolves the provider the agent had already verified, instead of failing every provider', function (): void {
@@ -205,7 +205,7 @@ test('a mid-agent time-box stop resolves the provider the agent had already veri
     expect($aiPriceRefreshRun->provider_results['anthropic']['status'])->toBe(PriceRefreshLedger::PROVIDER_FALLBACK)
         ->and($aiPriceRefreshRun->provider_results['anthropic']['created'])->toBe(1)
         ->and($aiPriceRefreshRun->provider_results['gemini']['status'])->toBe(PriceRefreshLedger::PROVIDER_FALLBACK_FAILED)
-        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.')
+        ->and($refreshReport->errorMessage)->toBe('The price refresh ran out of time before its agent finished; providers it had not verified keep their stored prices.')
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL)
         ->and($aiPriceRefreshRun->status)->not->toBe('running')
         ->and(AiModelPrice::query()->where('provider', 'anthropic')->where('model', 'claude-verify')->exists())->toBeTrue()

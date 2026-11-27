@@ -74,7 +74,7 @@ test('a disabled action type is refused', function (): void {
 
     $this->actingAs($this->member)
         ->post(route('media.library.actions.search'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'command' => 'series_search', 'series_id' => 7])
-        ->assertSessionHas('inertia.flash_data.toast.message', 'This action is disabled in Action Rules.');
+        ->assertSessionHas('inertia.flash_data.toast.message', 'This action is disabled in Approval rules.');
 
     expect(ActionRequest::query()->count())->toBe(0);
 });
@@ -277,7 +277,7 @@ test('grabbing a disabled action type answers 422 with the disabled message', fu
     $this->actingAs($this->member)
         ->postJson(route('media.library.actions.grab'), ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10, 'release_key' => hash('sha256', 'guid-9'), 'indexer_id' => 5])
         ->assertStatus(422)
-        ->assertJsonPath('message', 'This action is disabled in Action Rules.');
+        ->assertJsonPath('message', 'This action is disabled in Approval rules.');
 
     expect(ActionRequest::query()->count())->toBe(0);
 });

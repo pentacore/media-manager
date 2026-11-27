@@ -396,7 +396,7 @@ test('destroy reports a disabled rule', function (): void {
         ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast.type', 'error')
-        ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting movies is disabled in Action Rules.');
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting movies is disabled in Approval rules.');
 
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
     expect(ActionRequest::query()->where('type', 'delete_movie')->exists())->toBeFalse();

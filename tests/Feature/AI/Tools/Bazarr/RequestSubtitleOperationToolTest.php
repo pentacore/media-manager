@@ -89,7 +89,7 @@ test('a chat-queued subtitle operation is described from the inspected item', fu
 test('an operation this Bazarr cannot perform never becomes an Action Request', function (): void {
     $serviceConnection = requestToolConnection();
     // The movie subtitle PATCH that backs a best-download is not advertised, so the
-    // tool must refuse exactly as the HTTP controller does — an Action Rule could
+    // tool must refuse exactly as the HTTP controller does — an approval rule could
     // auto-execute what it queued.
     fakeRequestToolMovie(omitPaths: ['/movies/subtitles']);
 
@@ -137,7 +137,7 @@ test('advisory mode blocks requests before any Bazarr call', function (): void {
     Http::assertNothingSent();
 });
 
-test('a disabled Action Rule returns a non-queued result', function (): void {
+test('a disabled approval rule returns a non-queued result', function (): void {
     ActionTypeConfig::query()->where('type', 'bazarr_download_best')->update(['is_enabled' => false]);
     $serviceConnection = requestToolConnection();
     fakeRequestToolMovie();

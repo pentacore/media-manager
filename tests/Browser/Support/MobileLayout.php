@@ -239,7 +239,7 @@ function mobileLayoutFakeServices(array $overrides = []): void
     // lists this long title (the factory's random action and series title
     // used to show it only sometimes, which made the statistics row flaky).
     EmbyActivity::factory()->create(['media_type' => 'movie', 'media_title' => 'An Extremely Long Example Movie Title That Wraps Badly', 'series_title' => null, 'action' => 'played']);
-    // The admin tables' rows: action rules, notification destinations and an
+    // The admin tables' rows: approval rules, notification destinations and an
     // Emby link. The fake runs before the test's own user exists, so the link
     // gets a user of its own; the AI conversation is the admin's own
     // (mobileLayoutSeedDetailModels()).
@@ -892,7 +892,7 @@ function mobileLayoutAdminPages(): array
         'benchmark schedules' => ['admin.benchmarks.schedules.index', '[data-benchmark-schedule-new]'],
         'servers' => ['admin.servers.index', '[data-server-add]'],
         'server incidents' => ['admin.servers.incidents.index', null],
-        'action rules' => ['actions.rules.index', null],
+        'approval rules' => ['actions.rules.index', null],
         'emby links' => ['emby.links.index', null],
         'notification destinations' => ['admin.notification-destinations.index', '[data-destination-add]'],
         'ai conversations' => ['admin.ai-conversations.index', null],
@@ -1007,7 +1007,7 @@ function mobileLayoutTouchPages(): array
         'users' => ['admin.users.index', [], null],
         'connections' => ['admin.connections.index', [], null],
         'notification destinations' => ['admin.notification-destinations.index', [], null],
-        'action rules' => ['actions.rules.index', [], null],
+        'approval rules' => ['actions.rules.index', [], null],
         'servers' => ['admin.servers.index', [], null],
         'server incidents' => ['admin.servers.incidents.index', [], null],
         'benchmark schedules' => ['admin.benchmarks.schedules.index', [], null],

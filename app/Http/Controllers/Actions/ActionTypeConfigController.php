@@ -41,7 +41,7 @@ class ActionTypeConfigController extends Controller
                 $auditLogger->record(
                     'action_rule.updated',
                     $actionTypeConfig,
-                    sprintf('Updated the "%s" action rule.', $actionTypeConfig->label),
+                    sprintf('Updated the "%s" approval rule.', $actionTypeConfig->label),
                     $changes,
                 );
             }

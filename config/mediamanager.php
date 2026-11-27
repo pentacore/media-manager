@@ -139,7 +139,7 @@ return [
                 'retries' => 2,
                 'max_response_bytes' => 5_000_000,
             ],
-            // Model the price updater agent runs on; empty follows the chat model.
+            // Model the price refresh agent runs on; empty follows the chat model.
             'updater_model' => env('AI_PRICING_UPDATER_MODEL', ''),
             'max_increase_ratio' => 4.0,
             'min_decrease_ratio' => 0.25,
@@ -212,7 +212,7 @@ return [
         // job's 240 s timeout less 30 s for recording the outcome.
         'run_time_limit' => 210,
 
-        // Second opinion on automated proposals (Action Rules choose which
+        // Second opinion on automated proposals (approval rules choose which
         // types are checked): 'llm', 'jev_then_llm' or 'jev'.
         'second_opinion_engine' => env('MEDIAMANAGER_DECISION_AGENT_SECOND_OPINION_ENGINE', 'llm'),
 

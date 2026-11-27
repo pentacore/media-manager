@@ -210,7 +210,7 @@ function setScopeLanguages(scope: Scope, value: string): void {
                     <Field
                         for="media-replacement-automatic-selection"
                         label="Automatic selection"
-                        hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The Action Rule still governs execution."
+                        hint="When enabled, a unique candidate above the confidence threshold may be queued without asking you to choose. The approval rule still governs execution."
                     >
                         <span />
                     </Field>

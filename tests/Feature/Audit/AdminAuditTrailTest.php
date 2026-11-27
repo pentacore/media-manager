@@ -307,7 +307,7 @@ test('an Emby import that creates accounts records one summary row, and one that
         ->and($activityLog->metadata['context'])->toBe(['created' => 1, 'skipped' => 1, 'user_ids' => [$user->id]]);
 });
 
-test('an action rule change records what changed and a repeat save records nothing', function (): void {
+test('an approval rule change records what changed and a repeat save records nothing', function (): void {
     $admin = User::factory()->admin()->create();
     $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'delete_series', 'label' => 'Delete series', 'requires_approval' => true, 'is_enabled' => true]);
 
@@ -318,7 +318,7 @@ test('an action rule change records what changed and a repeat save records nothi
 
     expect($activityLog->user_id)->toBe($admin->id)
         ->and($activityLog->subject_id)->toBe($actionTypeConfig->id)
-        ->and($activityLog->description)->toBe('Updated the "Delete series" action rule.')
+        ->and($activityLog->description)->toBe('Updated the "Delete series" approval rule.')
         ->and($activityLog->metadata['changes'])->toBe(['requires_approval' => ['from' => true, 'to' => false]]);
 });
 

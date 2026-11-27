@@ -215,7 +215,7 @@ function saveAutomation(): void {
                     :href="action_rules_url"
                     class="touch-target inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
                 >
-                    Configure Action Rules
+                    Configure approval rules
                     <ShieldCheck class="size-4" />
                 </a>
             </div>

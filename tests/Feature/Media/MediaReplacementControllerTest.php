@@ -425,7 +425,7 @@ test('a Sonarr/Radarr connection failure surfaces as a 502 for replace', functio
         ->assertJsonPath('message', 'Sonarr/Radarr is unreachable.');
 });
 
-test('replace rejects with the Action Rules message when the action type is disabled', function (): void {
+test('replace rejects with the approval rules message when the action type is disabled', function (): void {
     $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
     fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
     fakeRadarrReleases(movieId: 10);
@@ -442,7 +442,7 @@ test('replace rejects with the Action Rules message when the action type is disa
             'verify_subtitles' => true,
         ])
         ->assertUnprocessable()
-        ->assertJsonPath('message', 'This action is disabled in Action Rules.');
+        ->assertJsonPath('message', 'This action is disabled in Approval rules.');
 });
 
 test('replace still queues Pending in advisory mode even when the action type auto-approves', function (): void {

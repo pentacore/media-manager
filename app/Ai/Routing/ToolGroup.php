@@ -76,7 +76,7 @@ enum ToolGroup: string
         return match ($this) {
             self::Downloads => 'Downloads',
             self::LibraryChanges => 'Library changes',
-            self::Requests => 'Requests',
+            self::Requests => 'Seerr requests',
             self::Discovery => 'Discovery',
             self::Playback => 'Playback',
             self::SubtitlesReplacement => 'Subtitles & replacement',

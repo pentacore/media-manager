@@ -175,7 +175,7 @@ class ProposeActionTool extends DecisionTool
             return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
-                'message' => sprintf('No enabled Action Rule exists for "%s". It cannot be queued until an admin enables it.', $type),
+                'message' => sprintf('No enabled approval rule exists for "%s". It cannot be queued until an admin enables it.', $type),
             ];
         }
 
@@ -306,7 +306,7 @@ class ProposeActionTool extends DecisionTool
      * malformed id is left to the describer, which rejects it as
      * missing_target. When the event names no subject, only the destructive
      * delete types are refused; monitor/quality changes stay subject to the
-     * admin's action rules.
+     * admin's approval rules.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>|null structured rejection, or null when OK

@@ -260,7 +260,7 @@ function submit(): void {
                         <Field
                             for="decision-agent-manual-import"
                             label="Manual-import resolution"
-                            hint="Lets the agent resolve stuck Sonarr/Radarr imports. Ambiguous imports are always queued for approval regardless of the action rule."
+                            hint="Lets the agent resolve stuck Sonarr/Radarr imports. Ambiguous imports are always queued for approval regardless of the approval rule."
                         >
                             <span />
                         </Field>

@@ -56,7 +56,10 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard().url },
-            { title: 'My requests', href: MyRequestController.index.url() },
+            {
+                title: 'My Seerr requests',
+                href: MyRequestController.index.url(),
+            },
         ],
     },
 });
@@ -82,12 +85,12 @@ function confirmCancel(): void {
 </script>
 
 <template>
-    <Head title="My requests" />
+    <Head title="My Seerr requests" />
 
     <div class="flex flex-col gap-4 p-5">
         <div>
             <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
-                My requests
+                My Seerr requests
             </h1>
             <p class="mt-1 text-[13px] text-muted-foreground">
                 What you asked for, and where it is.

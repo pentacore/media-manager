@@ -38,23 +38,6 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Ready to pick up
 
-- **Glossary words still left**, after the first rename pass:
-    - "Action Rules": the page and sidebar say Approval rules, but the
-      "disabled in Action Rules" messages (controllers, `ManualActionOutcome`,
-      AI tool results), the Bazarr admin's "Configure Action Rules" button and
-      the README still use the old name. Add "action rules" to the glossary's
-      words to avoid and rename them together, tool results included.
-    - "Requests" and "My requests" (sidebar, page titles) say "request" on its
-      own; the glossary wants "Seerr requests".
-    - Stored and model-read text still says rejected or verifier: the
-      `rejection_reason` "Rejected by second opinion: …", the decision summary
-      "The second opinion rejected it", `ClassificationOutcomeSource::Llm`'s
-      "LLM verifier" label, and the agent and verifier prompts. Changing it
-      changes what models read and leaves old rows worded differently, so
-      decide whether it is worth it.
-    - Code comments, log lines and exception messages still say "subtitle
-      advisor" and "price verifier" (`QueueAutomaticReplacementTool`,
-      `SubtitleAdvisorRunContext`, `StopWhenPriceRefreshOutOfTime`, …).
 - **AI routing minors**, from the review of each AI routing pull request.
     - Agreement and gate charts:
         - Agreement "All" window: verdicts are read in chunks now, so memory is
@@ -101,6 +84,9 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
 
 ## Not planned
 
+- Rewording the decision agent and second opinion prompts away from "reject"
+  and "verifier". Only models read them, and a prompt change can move benchmark
+  results.
 - Typed Inertia pages through `#[TypefinderPage]`. The attribute does not read
   props from `Inertia::render()`: every prop type is still written by hand, as a
   TypeScript string in PHP, and the drift check compares prop names only. Props

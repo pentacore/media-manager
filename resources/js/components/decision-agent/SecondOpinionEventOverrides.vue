@@ -174,7 +174,7 @@ function setThreshold(
                             value="inherit"
                             data-override-mode-option="inherit"
                         >
-                            Use action rules
+                            Use approval rules
                         </SelectItem>
                         <SelectItem
                             v-for="mode in modes"

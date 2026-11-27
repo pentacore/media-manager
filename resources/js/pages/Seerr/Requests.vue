@@ -103,7 +103,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
-            { title: 'Requests', href: RequestController.index.url() },
+            { title: 'Seerr requests', href: RequestController.index.url() },
         ],
     },
 });
@@ -540,7 +540,7 @@ const rangeText = computed(() => {
 </script>
 
 <template>
-    <Head title="Requests" />
+    <Head title="Seerr requests" />
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->

@@ -105,9 +105,9 @@ type Scope = 'all' | 'library' | 'requests' | 'indexers';
 const scope = ref<Scope>(props.scope ?? 'all');
 
 const SCOPES: { id: Scope; label: string }[] = [
-    { id: 'all', label: 'Library + Requests' },
+    { id: 'all', label: 'Library + Seerr requests' },
     { id: 'library', label: 'Library' },
-    { id: 'requests', label: 'Requests' },
+    { id: 'requests', label: 'Seerr requests' },
     { id: 'indexers', label: 'Indexers' },
 ];
 

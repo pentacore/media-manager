@@ -164,7 +164,7 @@ test('no ActionTypeConfig for the resolved action type records no action and nev
 
     DecisionAgent::assertNeverPrompted();
     expect(ActionRequest::count())->toBe(0)
-        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::NoAction)->summary->toContain('Action Rule')
+        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::NoAction)->summary->toContain('approval rule')
         ->and(ClassificationOutcome::count())->toBe(0);
 });
 
@@ -304,7 +304,7 @@ test('a confident import the second opinion rejects is recorded as resolved and 
 
     DecisionAgent::assertNeverPrompted();
     expect(ActionRequest::sole())->status->toBe(ActionRequestStatus::Rejected)
-        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('The second opinion rejected it');
+        ->and(AgentDecision::sole())->status->toBe(AgentDecisionStatus::ResolvedByClassifier)->summary->toContain('The second opinion declined it');
     Queue::assertNotPushed(ExecuteActionRequest::class);
     // Nothing was suggested or acted, so the Action Queue is the only place it shows.
     Notification::assertNothingSent();

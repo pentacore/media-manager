@@ -20,6 +20,6 @@ final class PriceRefreshOutOfTime extends RuntimeException
 {
     public function __construct()
     {
-        parent::__construct('The price refresh ran out of time before the verifier finished; providers it had not verified keep their stored prices.');
+        parent::__construct('The price refresh ran out of time before its agent finished; providers it had not verified keep their stored prices.');
     }
 }

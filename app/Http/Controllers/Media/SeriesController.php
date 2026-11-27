@@ -194,7 +194,7 @@ class SeriesController extends BaseArrController
         return match ($manualActionOutcome->state) {
             ManualActionOutcome::STARTED => $this->flashAnd('success', __('Series deletion queued.'), to_route('media.series.index')),
             ManualActionOutcome::QUEUED => $this->flashAnd('info', __('Deletion queued for approval in the Action Queue.'), back()),
-            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting series is disabled in Action Rules.'), back()),
+            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting series is disabled in Approval rules.'), back()),
             default => $this->flashAnd('error', __('Failed to delete series.'), back()),
         };
     }

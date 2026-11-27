@@ -96,7 +96,7 @@ function setSecondOpinion(rule: RuleRow, value: RuleRow['second_opinion']) {
             v-if="localRules.length === 0"
             class="rounded-xl border border-border bg-card p-8 text-center text-sm text-fg-subtle"
         >
-            No action rules configured.
+            No approval rules configured.
         </div>
 
         <div

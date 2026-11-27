@@ -232,7 +232,7 @@ function mappedAndExtraCandidates(array $extra = []): array
     ];
 }
 
-test('excluding the unmapped file follows the action rule instead of forcing approval', function (): void {
+test('excluding the unmapped file follows the approval rule instead of forcing approval', function (): void {
     DB::table('action_type_configs')
         ->where('type', 'resolve_manual_import')
         ->update(['requires_approval' => false, 'is_enabled' => true]);

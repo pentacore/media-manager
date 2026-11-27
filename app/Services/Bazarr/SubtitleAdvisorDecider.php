@@ -47,7 +47,7 @@ class SubtitleAdvisorDecider
             // path instead of being swallowed into a routine "needs review".
             InvalidArgumentException|LengthException|JsonException|ModelNotFoundException|RequestException|ConnectionException $throwable
         ) {
-            Log::warning('Subtitle Advisor inspection failed.', [
+            Log::warning('Media Advisor inspection failed.', [
                 'subtitle_case_id' => $subtitleCase->id,
                 'exception' => $throwable::class,
                 'message' => UpstreamErrorText::sanitize($throwable->getMessage()),

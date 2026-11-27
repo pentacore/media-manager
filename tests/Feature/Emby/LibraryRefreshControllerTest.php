@@ -111,7 +111,7 @@ test('a disabled scan rule is reported and nothing is queued', function (): void
     $this->actingAs(User::factory()->admin()->create())
         ->from(route('monitoring.now-playing'))
         ->post(route('monitoring.now-playing.refresh-library'))
-        ->assertSessionHas('inertia.flash_data.toast.message', 'This action is disabled in Action Rules.');
+        ->assertSessionHas('inertia.flash_data.toast.message', 'This action is disabled in Approval rules.');
 
     expect(ActionRequest::query()->count())->toBe(0)
         ->and(ActivityLog::query()->where('action', 'emby.library_refresh.requested')->exists())->toBeFalse();

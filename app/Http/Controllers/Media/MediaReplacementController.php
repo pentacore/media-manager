@@ -202,7 +202,7 @@ class MediaReplacementController extends Controller
                 forceRequiresApproval: $built['force_requires_approval'],
             );
 
-            abort_if(! $actionRequest instanceof ActionRequest, 422, 'This action is disabled in Action Rules.');
+            abort_if(! $actionRequest instanceof ActionRequest, 422, 'This action is disabled in Approval rules.');
 
             return response()->json([
                 'action_request_id' => $actionRequest->id,

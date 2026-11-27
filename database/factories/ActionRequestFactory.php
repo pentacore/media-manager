@@ -56,7 +56,7 @@ class ActionRequestFactory extends Factory
     }
 
     /**
-     * A request whose event's Off mode skipped the check its action rule would run.
+     * A request whose event's Off mode skipped the check its approval rule would run.
      */
     public function secondOpinionSkipped(string $eventKey): static
     {

@@ -32,7 +32,7 @@ test('the second opinion panel shows agreement with reviewers', function (): voi
     ActionRequest::factory()->secondOpinion(false, mode: 'reject')->create([
         'status' => ActionRequestStatus::Rejected,
         'requires_approval' => false,
-        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Rejected by second opinion: Wrong series.'],
+        'result' => ['success' => false, 'reason' => 'second_opinion_rejected', 'rejection_reason' => 'Declined by second opinion: Wrong series.'],
     ]);
     ActionRequest::factory()->secondOpinion(false)->create();
     ActionRequest::factory()->secondOpinion(true)->autoExecute()->completed()->create();

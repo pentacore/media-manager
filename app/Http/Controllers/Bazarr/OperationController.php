@@ -60,7 +60,7 @@ final class OperationController extends Controller
 
         if (! $actionRequest instanceof ActionRequest) {
             throw ValidationException::withMessages([
-                'operation' => 'This Bazarr operation is disabled in Action Rules.',
+                'operation' => 'This Bazarr operation is disabled in Approval rules.',
             ]);
         }
 

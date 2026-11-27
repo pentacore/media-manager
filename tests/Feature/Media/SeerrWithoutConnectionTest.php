@@ -71,7 +71,7 @@ test('the Seerr JSON endpoints answer 422 without an active Seerr connection', f
     Http::assertNothingSent();
 });
 
-test('the Discover and My requests pages render as not connected', function (): void {
+test('the Discover and My Seerr requests pages render as not connected', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)

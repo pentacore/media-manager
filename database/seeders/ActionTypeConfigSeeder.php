@@ -254,7 +254,7 @@ class ActionTypeConfigSeeder extends Seeder
             $config = ActionTypeConfig::query()->firstOrCreate(['type' => $type['type']], $type);
 
             if (! $config->wasRecentlyCreated) {
-                // requires_approval / is_enabled belong to the admin via Action Rules —
+                // requires_approval / is_enabled belong to the admin via Approval rules —
                 // a re-run must never reset them. Only the display copy self-heals.
                 $config->update([
                     'label' => $type['label'],

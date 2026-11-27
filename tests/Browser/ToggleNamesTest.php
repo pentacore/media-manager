@@ -18,7 +18,7 @@ beforeEach(function (): void {
     $this->actingAs(User::factory()->admin()->create());
 });
 
-test('the action rule switches are named by their rule and column', function (): void {
+test('the approval rule switches are named by their rule and column', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
 
     visit(route('actions.rules.index', absolute: false))

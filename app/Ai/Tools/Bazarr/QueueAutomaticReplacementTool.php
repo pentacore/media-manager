@@ -171,7 +171,7 @@ final class QueueAutomaticReplacementTool extends BaseTool
                 && $attempt instanceof SubtitleCaseAttempt
                 && (int) ($actionRequest->payload['subtitle_case_id'] ?? 0) === $subtitleCase->id,
             InvalidArgumentException::class,
-            'No active subtitle Advisor attempt can own this replacement.',
+            'No active Media Advisor attempt can own this replacement.',
         );
 
         throw_unless(
@@ -213,7 +213,7 @@ final class QueueAutomaticReplacementTool extends BaseTool
         throw_unless(
             $context instanceof SubtitleAdvisorRunContext,
             InvalidArgumentException::class,
-            'No subtitle Advisor run context is bound.',
+            'No Media Advisor run context is bound.',
         );
 
         return $context;

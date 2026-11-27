@@ -131,7 +131,7 @@ class DiscoverController extends Controller
             return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException, $user));
         } catch (ConnectionException) {
             // createRequest never retries: Seerr may have filed it already.
-            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Seerr did not answer — check My requests before trying again.'));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Seerr did not answer — check My Seerr requests before trying again.'));
         }
 
         // Seerr answers 202 {message} when every chosen season is already

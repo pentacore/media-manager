@@ -18,7 +18,7 @@ use Inertia\Inertia;
 /**
  * "Refresh library" on Now Playing (admin). Joins a scan that is already
  * waiting for the active Emby server, or dispatches emby_library_scan pinned
- * to that server through the Action Queue (origin manual, Action Rules
+ * to that server through the Action Queue (origin manual, approval rules
  * apply) — both under the scheduler's per-server lock.
  */
 class LibraryRefreshController extends Controller

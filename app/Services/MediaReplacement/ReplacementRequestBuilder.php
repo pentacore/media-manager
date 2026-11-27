@@ -12,7 +12,7 @@ use App\Settings\MediaReplacementSettings;
  * Builds the `replace_media_file` ActionRequest payload, its approval
  * override, and the approval-card ActionDescription. Three entry points
  * dispatch the same action — the arr AI tool, the automatic subtitle check,
- * and the Bazarr subtitle advisor — so a second hand-built copy of the shape
+ * and the Bazarr Media Advisor — so a second hand-built copy of the shape
  * would drift. Thirteen of the fifteen base payload keys are read by
  * MediaReplacementActions or the approval card;
  * `agent_rationale` is stored for audit only and read by neither, and

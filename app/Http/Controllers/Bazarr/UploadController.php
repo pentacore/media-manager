@@ -191,7 +191,7 @@ final class UploadController extends Controller
                 );
 
                 throw_unless($actionRequest instanceof ActionRequest, ValidationException::withMessages([
-                    'subtitle_file' => 'Subtitle uploads are disabled in Action Rules.',
+                    'subtitle_file' => 'Subtitle uploads are disabled in Approval rules.',
                 ]));
 
                 $subtitleUpload->update(['action_request_id' => $actionRequest->id]);

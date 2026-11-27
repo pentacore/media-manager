@@ -290,7 +290,7 @@ final readonly class BenchmarkCaseRunner
     {
         $agrees = $structuredAgentResponse['agrees'] ?? null;
 
-        throw_unless(is_bool($agrees), RuntimeException::class, 'The verifier returned no verdict.');
+        throw_unless(is_bool($agrees), RuntimeException::class, 'The second opinion returned no verdict.');
 
         $reason = $structuredAgentResponse['reason'] ?? '';
 

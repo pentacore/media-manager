@@ -146,7 +146,7 @@ test('manual action outcomes map onto bulk outcomes with the single action wordi
 })->with([
     'started' => [ManualActionOutcome::STARTED, BulkItemOutcome::STARTED, null],
     'queued' => [ManualActionOutcome::QUEUED, BulkItemOutcome::QUEUED, null],
-    'disabled' => [ManualActionOutcome::DISABLED, BulkItemOutcome::FAILED, 'This action is disabled in Action Rules.'],
+    'disabled' => [ManualActionOutcome::DISABLED, BulkItemOutcome::FAILED, 'This action is disabled in Approval rules.'],
     'undescribable' => [ManualActionOutcome::UNDESCRIBABLE, BulkItemOutcome::FAILED, 'That item could not be found — refresh and try again.'],
     'blocked' => [ManualActionOutcome::BLOCKED, BulkItemOutcome::FAILED, 'A file replacement is in progress for this title — try again when it finishes.'],
 ]);

@@ -604,7 +604,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         if ($reason === 'second_opinion_rejected') {
-            $summary = sprintf('%s The second opinion rejected it, so nothing will run.', $verdictLine);
+            $summary = sprintf('%s The second opinion declined it, so nothing will run.', $verdictLine);
             $this->record($webhookEventId, AgentDecisionStatus::ResolvedByClassifier, $summary, $decisionRunContext);
 
             return FastPathResolution::resolvedWithSummary($summary);

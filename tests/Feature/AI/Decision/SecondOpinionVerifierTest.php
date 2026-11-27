@@ -458,7 +458,7 @@ test('resolving the review of a request without a second opinion touches no outc
         ->and($classificationOutcome->fresh()->outcome_positive)->toBeNull();
 });
 
-test('the event mode replaces the action rule, for supported types only', function (string $type, SecondOpinionMode $actionMode, ?SecondOpinionMode $eventMode, ?string $eventKey, SecondOpinionMode $expected): void {
+test('the event mode replaces the approval rule, for supported types only', function (string $type, SecondOpinionMode $actionMode, ?SecondOpinionMode $eventMode, ?string $eventKey, SecondOpinionMode $expected): void {
     if ($eventMode instanceof SecondOpinionMode) {
         resolve(DecisionAgentSettings::class)->setSecondOpinionEventOverrides(['sonarr:Download' => ['mode' => $eventMode, 'engine' => null, 'jev_threshold' => null]]);
     }

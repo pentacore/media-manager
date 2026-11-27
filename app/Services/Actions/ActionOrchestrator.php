@@ -243,7 +243,7 @@ class ActionOrchestrator
             'result' => $rejectedBySecondOpinion ? [
                 'success' => false,
                 'reason' => 'second_opinion_rejected',
-                'rejection_reason' => sprintf('Rejected by second opinion: %s', $secondOpinionVerdict->reason ?? 'no reason given.'),
+                'rejection_reason' => sprintf('Declined by second opinion: %s', $secondOpinionVerdict->reason ?? 'no reason given.'),
             ] : null,
             'second_opinion' => $secondOpinionVerdict?->toArray($secondOpinionMode, $secondOpinionPolicy->overrideEventKey()) ?? $secondOpinionPolicy->skipMarker(),
         ]);

@@ -53,7 +53,7 @@ The words this project uses for its domain, and the words to avoid. Use these wo
 | Avoid | Say instead | Why |
 | --- | --- | --- |
 | "subtitle advisor" | "Media Advisor" | The UI, messages and README say Media Advisor. Classes keep `SubtitleAdvisor`. |
-| "reject" in UI copy | "decline" | The Action Queue says Decline and Declined. The stored status stays `rejected`, and so do `ActionQueueBulkAction::Reject` and `SecondOpinionMode::Reject`. |
+| "reject" in UI copy | "decline" | The Action Queue says Decline and Declined. The stored status stays `rejected`, and so do `ActionQueueBulkAction::Reject`, `SecondOpinionMode::Reject` and the `second_opinion_rejected` reason. Rows written before the rename still say "Rejected by second opinion". |
 | "escalation" | "needs review" | The status is `needs_review`; the Subtitle Center tab says "Needs review". Classes and routes keep `Escalation` (`EscalationController`, `bazarr.escalations`). A server incident still "escalates" when its severity rises. |
 | "verifier" on its own | "second opinion" (decision check), "price refresh" (pricing) | It names two unrelated agents: the decision verifier and the price verifier. Classes keep `DecisionVerifierAgent` and `AiTask::DecisionVerifier`. |
 | "price verifier", "price updater", "price fetcher" | "price refresh" | One feature had four names. The UI says price refresh; code keeps `AiTask::PriceUpdater`, `PriceFetcherAgent` and `RefreshAiPricesJob`. |
@@ -61,6 +61,7 @@ The words this project uses for its domain, and the words to avoid. Use these wo
 | "library activity" | "grab queue" | The sidebar and page say Grab queue. "Activity" is the activity log. Code keeps `LibraryActivityController`. |
 | "Subtitles" for the Bazarr section | "Subtitle Center" | The sidebar, breadcrumbs and page title say Subtitle Center. |
 | "action type config" in prose | "approval rule" | The page and sidebar say Approval rules; the model is `ActionTypeConfig`. |
+| "Action Rules", "action rule" | "Approval rules", "approval rule" | The old name of the same page. Routes and selectors keep `actions.rules` and `action-rules`. |
 | "show" for a TV series | "series" | "Show" is also the detail page (`Show.vue`, a controller's `show()`). Say "detail page" for that. |
 | "request" on its own | "Seerr request", "action request" or "form request" | Three kinds of request share the word. |
 | "integration" | "service" (the product) or "connection" (a configured instance) | `integrations` in the shared props means "optional services with an active connection". |
