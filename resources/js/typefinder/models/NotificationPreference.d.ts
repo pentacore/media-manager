@@ -20,6 +20,7 @@ export type NotificationPreference = {
   discord: boolean;
   telegram: boolean;
   webhook: boolean;
+  webpush: boolean;
   user?: User | null;
 };
 
@@ -34,6 +35,7 @@ export type NotificationPreferenceCreate = {
   discord?: boolean;
   telegram?: boolean;
   webhook?: boolean;
+  webpush?: boolean;
 };
 
 export type NotificationPreferenceUpdate = {
@@ -47,4 +49,5 @@ export type NotificationPreferenceUpdate = {
   discord?: boolean;
   telegram?: boolean;
   webhook?: boolean;
+  webpush?: boolean;
 };

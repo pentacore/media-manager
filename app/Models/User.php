@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Observers\UserObserver;
+use App\Services\Notifications\WebPushConfig;
 use App\Support\UserPreferences;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
@@ -143,6 +144,23 @@ class User extends Authenticatable implements MustVerifyEmail
     public function routeNotificationForNtfy(): ?string
     {
         return $this->ntfy_topic;
+    }
+
+    /**
+     * Web push routing: the user's browser subscriptions. Null when web push
+     * is not configured or the user has no devices.
+     *
+     * @return list<PushSubscription>|null
+     */
+    public function routeNotificationForWebpush(): ?array
+    {
+        if (! resolve(WebPushConfig::class)->available()) {
+            return null;
+        }
+
+        $subscriptions = $this->pushSubscriptions()->get()->all();
+
+        return $subscriptions === [] ? null : array_values($subscriptions);
     }
 
     /** Discord routing: the user's own webhook URL. Null/empty skips the channel. */

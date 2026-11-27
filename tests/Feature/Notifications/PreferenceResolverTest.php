@@ -10,18 +10,20 @@ use App\Notifications\Channels\DiscordChannel;
 use App\Notifications\Channels\NtfyChannel;
 use App\Notifications\Channels\TelegramChannel;
 use App\Notifications\Channels\WebhookChannel;
+use App\Notifications\Channels\WebPushChannel;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Support\Facades\DB;
 
 test('the channel list includes the push channels and maps them to classes', function (): void {
-    expect(PreferenceResolver::CHANNELS)->toBe(['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webhook'])
+    expect(PreferenceResolver::CHANNELS)->toBe(['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webhook', 'webpush'])
         ->and(PreferenceResolver::CHANNEL_CLASSES)->toBe([
             'ntfy' => NtfyChannel::class,
             'discord' => DiscordChannel::class,
             'telegram' => TelegramChannel::class,
             'webhook' => WebhookChannel::class,
+            'webpush' => WebPushChannel::class,
         ]);
 });
 
