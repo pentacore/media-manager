@@ -78,6 +78,12 @@ test('the dashboard reloads its stats and activity after a reconnect', function 
 
     ActivityLog::factory()->create(['description' => 'Example missed activity.']);
 
+    // The first connect (as on page load) never reloads.
+    $webpage->script("window.Pusher.instances[0].connection.emit('state_change', { previous: 'connecting', current: 'connected' })");
+    $webpage->wait(0.5);
+
+    expect($webpage->script('window.__mmReloads'))->toBe([]);
+
     $webpage->script(realtimeReconnectScript());
     $webpage->script(confirmDialogWaitUntilScript("document.querySelector('[data-dashboard-activity-row]') !== null"));
     $webpage->wait(1.5);

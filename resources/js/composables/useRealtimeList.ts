@@ -173,11 +173,12 @@ export function useRealtimeList<T, TPayload = T>({
     }
 
     /**
-     * Replace the list with fresh server rows. Pages navigate with
-     * `preserveState: true`, so the once-at-setup `initial` seed goes stale
-     * the moment a filter changes or a reload replaces the prop — callers
-     * must reseed from a watcher on the prop or the realtime list renders
-     * rows from a previous filter/page.
+     * Replace the list with fresh server rows. The once-at-setup `initial`
+     * seed goes stale when a reload or a `preserveState` visit (pagination)
+     * replaces the prop without a remount, so callers must reseed from a
+     * watcher on the prop or the list renders rows from a previous page. A
+     * filter change is a full visit that remounts the page and reseeds
+     * through `initial`.
      */
     function reseed(rows: T[]): void {
         items.value = [...rows];
