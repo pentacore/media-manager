@@ -290,6 +290,24 @@ NTFY_TOKEN=
 
 Each user sets their own topic on the preferences page. Delivery is best-effort — failures are logged, never thrown.
 
+### Web push
+
+Browsers can receive notifications through **Web push** (a per-user channel next to the four above, delivered while the app is closed). Generate a VAPID key pair once and set it in `.env`:
+
+```bash
+php artisan webpush:keys
+```
+
+```ini
+WEBPUSH_PUBLIC_KEY=
+WEBPUSH_PRIVATE_KEY=
+WEBPUSH_SUBJECT=mailto:you@example.com
+# optional, comma-separated; defaults to the Google, Mozilla, Windows and Apple push services
+WEBPUSH_ALLOWED_HOSTS=
+```
+
+HTTPS is required (browsers only register service workers on secure origins). Each user enables it per device under **Settings → Notifications**; on iOS the app must first be added to the Home Screen. Keep the keys stable: rotating them drops every device's subscription and users must re-enable it.
+
 ### AI (optional)
 
 Gated behind `MEDIAMANAGER_AI_ENABLED`. When disabled, `/ai/*` routes 403, all AI pages are hidden, and the autonomous agents no-op. Providers are configured through `laravel/ai` (`config/ai.php`) — set an API key for whichever you use (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, …). Defaults:

@@ -27,7 +27,7 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
     - Short-circuit a stuck download that is all samples.
     - A multi-download stuck-import verdict.
 - **Platform extras** (brainstorm):
-    - PWA.
+    - PWA on iOS (Home Screen install prompt).
     - Onboarding.
     - Settings backup.
     - Keyboard shortcuts.
