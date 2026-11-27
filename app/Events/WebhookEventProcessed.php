@@ -29,7 +29,7 @@ class WebhookEventProcessed implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        $channels = [new PrivateChannel('dashboard')];
+        $channels = [LiveChannels::dashboard()];
 
         $this->webhookEvent->loadMissing('serviceConnection:id,type');
         /** @var ServiceConnection|null $serviceConnection The row can be gone by the time a queued broadcast resolves its channels. */
@@ -59,11 +59,13 @@ class WebhookEventProcessed implements ShouldBroadcast
     public function broadcastWith(): array
     {
         $this->webhookEvent->loadMissing('serviceConnection:id,type');
+        /** @var ServiceConnection|null $serviceConnection The row can be gone by the time a queued broadcast serializes. */
+        $serviceConnection = $this->webhookEvent->serviceConnection;
 
         return [
             'id' => $this->webhookEvent->id,
             'service_connection_id' => $this->webhookEvent->service_connection_id,
-            'service_type' => $this->webhookEvent->serviceConnection->type->value,
+            'service_type' => $serviceConnection?->type->value,
             'event_type' => $this->webhookEvent->event_type,
             'processed_at' => $this->webhookEvent->processed_at?->toISOString(),
         ];

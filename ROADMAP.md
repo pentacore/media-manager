@@ -48,6 +48,13 @@ discussion comes before any plan. Unmarked items can be picked up as they are.
       `admin.media-replacement.{id}` channel or Whisparr V2 `scenes` liveness.
     - The Dashboard's reconnect reseed of recent activity can drop one row that
       arrives while the reload is in flight.
+    - No browser test checks that the toast listener on the user's channel keeps
+      working next to the Notifications page's live props.
+    - The AI prices reconnect test checks only which prop reloads, not that the
+      refresh button's running state is re-read.
+    - Live props reload at most once a second (the old reload waited 1.5 s); if
+      webhook bursts make the Sonarr, Radarr or Whisparr list pages call their
+      APIs too often, pass a longer throttle on those props.
 - **AI routing minors**, from the review of each AI routing pull request.
     - Agreement and gate charts:
         - Agreement "All" window: verdicts are read in chunks now, so memory is

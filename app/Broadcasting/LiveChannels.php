@@ -13,6 +13,11 @@ use Illuminate\Broadcasting\PrivateChannel;
  */
 final class LiveChannels
 {
+    public static function dashboard(): PrivateChannel
+    {
+        return new PrivateChannel('dashboard');
+    }
+
     public static function webhooks(ServiceType $serviceType): PrivateChannel
     {
         return new PrivateChannel('webhooks.'.$serviceType->value);

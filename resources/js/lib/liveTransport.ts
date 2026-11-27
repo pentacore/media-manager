@@ -51,7 +51,15 @@ export const liveTransport: LiveTransport = {
 
             return () => held.release();
         } catch (error) {
-            lease?.release();
+            try {
+                lease?.release();
+            } catch (releaseError) {
+                console.warn(
+                    'Could not release the live channel lease.',
+                    releaseError,
+                );
+            }
+
             console.warn(
                 `Could not subscribe to the live channel "${channel.name}".`,
                 error,

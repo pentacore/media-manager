@@ -13,7 +13,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 
 /**
  * A database notification row was stored for a user, whatever channels their
- * preferences enabled, so their notification bell and page can reload.
+ * preferences enabled, so their notifications page can reload.
  */
 final class UserNotificationStored implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
