@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { KeyRound, Trash2 } from '@lucide/vue';
-import { onMounted } from 'vue';
 import ServerController from '@/actions/App/Http/Controllers/Admin/ServerController';
 import { PageHeader } from '@/components/mm';
 import {
@@ -24,7 +23,6 @@ import type {
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/composables/useConfirm';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { returnFocusToPageHeaderMenu } from '@/lib/pageHeader';
 import { dashboard } from '@/routes';
 import type { DbPingEngine, HostCheckType } from '@/typefinder';
@@ -40,30 +38,6 @@ const props = defineProps<{
     ranges: EnumOption<ServerMetricRange>[];
     metrics?: MetricSeries;
 }>();
-
-const isThisServer = (event: { server_id: number }): boolean =>
-    event.server_id === props.server.id;
-
-// `range` rides along with `metrics`, so the range selector always names the
-// range the charts on screen were read for, whichever reload lands last.
-const reports = useRealtimeReload({
-    channel: 'admin.servers',
-    event: 'ServerReported',
-    only: ['server', 'latest', 'checks', 'incidents', 'metrics', 'range'],
-    filter: isThisServer,
-});
-
-const incidentChanges = useRealtimeReload({
-    channel: 'admin.servers',
-    event: 'ServerIncidentChanged',
-    only: ['server', 'incidents'],
-    filter: isThisServer,
-});
-
-onMounted(() => {
-    reports.subscribe();
-    incidentChanges.subscribe();
-});
 
 defineOptions({
     layout: {

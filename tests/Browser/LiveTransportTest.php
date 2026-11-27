@@ -97,3 +97,30 @@ test('leaving a live page keeps the nav badge listener on the shared channel', f
         ->and($after)->toBeLessThan($before);
     $webpage->assertNoSmoke();
 });
+
+test('a restored connection reloads the live props once', function (): void {
+    $attempt = MediaReplacementAttempt::factory()->verified()->create();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.media-replacement.attempts.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertCount(sprintf('[data-attempt-row="%d"]', $attempt->id), 1);
+    $webpage->script(appHydratedScript());
+    $webpage->script(liveTransportRecorderScript());
+
+    // Connected first, as on page load: that is not a reconnect (the test above).
+    $webpage->script(liveTransportStateChangeScript('connecting', 'connected'));
+    $webpage->wait(1);
+
+    expect($webpage->script('window.__mmReloads.length'))->toBe(0);
+
+    $webpage->script(liveTransportStateChangeScript('connected', 'unavailable'));
+    $webpage->script(liveTransportStateChangeScript('unavailable', 'connected'));
+    $webpage->script(confirmDialogWaitUntilScript('window.__mmReloads.length > 0'));
+    $webpage->wait(1.5);
+
+    $reloads = $webpage->script('window.__mmReloads');
+    expect($reloads)->toHaveCount(1)
+        ->and(explode(',', (string) $reloads[0]))->toContain('attempts', 'statusCounts');
+    $webpage->assertNoSmoke();
+});

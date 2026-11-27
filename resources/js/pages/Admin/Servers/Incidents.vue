@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { onMounted } from 'vue';
 import ServerController from '@/actions/App/Http/Controllers/Admin/ServerController';
 import ServerIncidentController from '@/actions/App/Http/Controllers/Admin/ServerIncidentController';
 import { PageHeader, Pill, TimeStamp } from '@/components/mm';
@@ -14,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -89,14 +87,6 @@ function goToPage(url: string | null): void {
 
     router.get(url, {}, { preserveScroll: true });
 }
-
-const live = useRealtimeReload({
-    channel: 'admin.servers',
-    event: 'ServerIncidentChanged',
-    only: ['incidents'],
-});
-
-onMounted(live.subscribe);
 </script>
 
 <template>

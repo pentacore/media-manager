@@ -1,4 +1,5 @@
 import type { LiveTransport } from '@inertiajs/core';
+import type { ChannelLease } from '@/composables/useWebSocket';
 import {
     acquirePrivateChannel,
     currentSocketId,
@@ -36,16 +37,21 @@ export const liveTransport: LiveTransport = {
                 : `.${event}`;
 
         // This runs during a page swap, and a throw would take the swap with it.
+        // The lease lives outside `listen`: `listen` can throw after the lease
+        // already counts, and an unreleased lease would pin the channel forever.
+        let lease: ChannelLease | null = null;
+
         try {
-            const lease = acquirePrivateChannel(channel.name).listen(
-                name,
-                handler,
-            );
+            lease = acquirePrivateChannel(channel.name);
+            lease.listen(name, handler);
 
             // The lease stops only this handler while another consumer still
             // holds the channel, and leaves the channel on the last release.
-            return () => lease.release();
+            const held = lease;
+
+            return () => held.release();
         } catch (error) {
+            lease?.release();
             console.warn(
                 `Could not subscribe to the live channel "${channel.name}".`,
                 error,

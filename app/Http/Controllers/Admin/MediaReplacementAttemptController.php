@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Broadcasting\LiveChannels;
 use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementScope;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Http\Controllers\Controller;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -35,22 +37,24 @@ class MediaReplacementAttemptController extends Controller
         $status = in_array($status, MediaReplacementStatus::values(), true) ? $status : '';
         $scope = in_array($scope, MediaReplacementScope::values(), true) ? $scope : '';
 
-        $lengthAwarePaginator = $this->buildBuilder($status, $scope, $serviceId, $search, $unacknowledged)
-            ->with(['serviceConnection:id,name,type', 'actionRequest:id,status'])
-            ->paginate(50)
-            ->withQueryString();
-
         return Inertia::render('Admin/MediaReplacement/Attempts/Index', [
-            'attempts' => [
-                'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
-                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
-                'meta' => [
-                    'current_page' => $lengthAwarePaginator->currentPage(),
-                    'last_page' => $lengthAwarePaginator->lastPage(),
-                    'total' => $lengthAwarePaginator->total(),
-                    'per_page' => $lengthAwarePaginator->perPage(),
-                ],
-            ],
+            'attempts' => Inertia::live(function () use ($status, $scope, $serviceId, $search, $unacknowledged): array {
+                $lengthAwarePaginator = $this->buildBuilder($status, $scope, $serviceId, $search, $unacknowledged)
+                    ->with(['serviceConnection:id,name,type', 'actionRequest:id,status'])
+                    ->paginate(50)
+                    ->withQueryString();
+
+                return [
+                    'data' => $lengthAwarePaginator->getCollection()->map($this->row(...))->all(),
+                    'links' => $lengthAwarePaginator->linkCollection()->toArray(),
+                    'meta' => [
+                        'current_page' => $lengthAwarePaginator->currentPage(),
+                        'last_page' => $lengthAwarePaginator->lastPage(),
+                        'total' => $lengthAwarePaginator->total(),
+                        'per_page' => $lengthAwarePaginator->perPage(),
+                    ],
+                ];
+            }, on: MediaReplacementAttemptChanged::class, channel: LiveChannels::mediaReplacement()),
             'filters' => [
                 'status' => $status !== '' ? $status : null,
                 'scope' => $scope !== '' ? $scope : null,
@@ -78,7 +82,7 @@ class MediaReplacementAttemptController extends Controller
                     ])
                     ->all(),
             ],
-            'statusCounts' => $this->statusCounts(),
+            'statusCounts' => Inertia::live(fn (): array => $this->statusCounts(), on: MediaReplacementAttemptChanged::class, channel: LiveChannels::mediaReplacement()),
         ]);
     }
 
@@ -91,7 +95,7 @@ class MediaReplacementAttemptController extends Controller
         $downloadId = $this->stringOrNull($mediaReplacementAttempt->download_id);
 
         return Inertia::render('Admin/MediaReplacement/Attempts/Show', [
-            'attempt' => [
+            'attempt' => Inertia::live(fn (): array => [
                 'id' => $mediaReplacementAttempt->id,
                 'action_request_id' => $mediaReplacementAttempt->action_request_id,
                 'status' => $mediaReplacementAttempt->status->value,
@@ -136,7 +140,7 @@ class MediaReplacementAttemptController extends Controller
                     'grab_queue' => $downloadId === null ? null : route('media.library.activity.queue'),
                 ],
                 'can' => $this->abilities($mediaReplacementAttempt),
-            ],
+            ], on: MediaReplacementAttemptChanged::class, channel: LiveChannels::mediaReplacementAttempt($mediaReplacementAttempt->id)),
         ]);
     }
 
