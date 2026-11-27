@@ -166,6 +166,7 @@ class NotificationPreferencesController extends Controller
                     ->get()
                     ->map(fn (PushSubscription $pushSubscription): array => [
                         'id' => $pushSubscription->id,
+                        'endpoint_hash' => hash('sha256', $pushSubscription->endpoint),
                         'label' => $pushSubscription->label,
                         'created_at' => $pushSubscription->created_at?->toIso8601String(),
                         'last_used_at' => $pushSubscription->last_used_at?->toIso8601String(),

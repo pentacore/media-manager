@@ -201,6 +201,7 @@ test('the settings page lists only the users own devices', function (): void {
             ->has('webPush.devices', 1)
             ->where('webPush.devices.0.id', $mine->id)
             ->where('webPush.devices.0.label', 'Chrome on Android')
+            ->where('webPush.devices.0.endpoint_hash', hash('sha256', $mine->endpoint))
             ->has('webPush.devices.0.created_at')
             ->where('webPush.devices.0.last_used_at', null)
             ->where('channels', fn ($channels): bool => in_array('webpush', $channels->all(), true)));

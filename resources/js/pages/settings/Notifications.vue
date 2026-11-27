@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
+import PushDeviceCard from '@/components/settings/PushDeviceCard.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +38,18 @@ const props = defineProps<{
     channels: string[];
     severities: string[];
     destinations: Destinations;
-    channelsConfigured: { ntfy: boolean; telegram: boolean };
+    channelsConfigured: { ntfy: boolean; telegram: boolean; webpush: boolean };
+    webPush: {
+        available: boolean;
+        publicKey: string | null;
+        devices: {
+            id: number;
+            endpoint_hash: string;
+            label: string | null;
+            created_at: string | null;
+            last_used_at: string | null;
+        }[];
+    };
 }>();
 
 defineOptions({
@@ -72,7 +84,17 @@ const CHANNEL_LABELS: Record<string, string> = {
     discord: 'Discord',
     telegram: 'Telegram',
     webhook: 'Webhook',
+    webpush: 'Web push',
 };
+
+const WEBPUSH_UNAVAILABLE = 'Web push is not configured on this server';
+
+function channelDisabled(entry: CatalogEntry, channel: string): boolean {
+    return (
+        entry.unsupported.includes(channel) ||
+        (channel === 'webpush' && !props.webPush.available)
+    );
+}
 
 function channelLabel(channel: string): string {
     return CHANNEL_LABELS[channel] ?? channel;
@@ -193,6 +215,12 @@ function save(): void {
             description="Pick which channels each notification reaches you on. Defaults: in-app + live toast on."
         />
 
+        <PushDeviceCard
+            :available="webPush.available"
+            :public-key="webPush.publicKey"
+            :devices="webPush.devices"
+        />
+
         <div class="space-y-6">
             <div
                 v-for="entry in working"
@@ -222,6 +250,15 @@ function save(): void {
                                     class="border-b border-border bg-card px-3 py-2 text-center text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
                                     {{ channelLabel(channel) }}
+                                    <span
+                                        v-if="
+                                            channel === 'webpush' &&
+                                            !webPush.available
+                                        "
+                                        data-webpush-unavailable
+                                        class="block text-[10px] font-normal tracking-normal normal-case"
+                                        >Not configured</span
+                                    >
                                 </th>
                             </tr>
                         </thead>
@@ -250,16 +287,19 @@ function save(): void {
                                                 ]
                                             "
                                             :disabled="
-                                                entry.unsupported.includes(
-                                                    channel,
-                                                )
+                                                channelDisabled(entry, channel)
                                             "
                                             :title="
                                                 entry.unsupported.includes(
                                                     channel,
                                                 )
                                                     ? `${entry.label} is not sent by ${channelLabel(channel)}`
-                                                    : undefined
+                                                    : channelDisabled(
+                                                            entry,
+                                                            channel,
+                                                        )
+                                                      ? WEBPUSH_UNAVAILABLE
+                                                      : undefined
                                             "
                                             :data-notification-unsupported="
                                                 entry.unsupported.includes(
