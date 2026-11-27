@@ -39,7 +39,7 @@ class MovieController extends BaseArrController
         return Inertia::render('Radarr/Movies/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
-            // The list reads the service-wide channel: ?connection= can vary per request.
+            // The list follows whichever connection is active, so it listens service-wide.
             'movies' => Inertia::defer(fn (): array => $this->tryClientList(
                 $connection,
                 $request->user(),

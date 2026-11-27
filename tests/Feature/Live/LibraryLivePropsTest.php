@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Enums\ServiceType;
 use App\Enums\WhisparrVersion;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\ServiceConnection;
@@ -33,10 +32,10 @@ function libraryLivePage(string $url, User $user): array
  */
 function expectLiveProp(array $page, string $prop, string $channel): void
 {
-    expect($page['liveProps'][$prop]['listeners'][0])->toBe([
+    expect($page['liveProps'][$prop]['listeners'])->toBe([[
         'channel' => ['name' => $channel, 'type' => 'private'],
         'events' => ['WebhookEventProcessed'],
-    ]);
+    ]]);
 }
 
 test('the series list is live on the Sonarr webhook channel', function (): void {
@@ -96,7 +95,6 @@ test('a Whisparr title and its scenes are live on the connection channel', funct
 
     $page = libraryLivePage(route('media.whisparr.show', ['id' => 5], absolute: false), User::factory()->admin()->create());
 
-    expect($whisparr->type)->toBe(ServiceType::Whisparr);
     expectLiveProp($page, 'item', 'webhooks.whisparr.'.$whisparr->id);
     expectLiveProp($page, 'scenes', 'webhooks.whisparr.'.$whisparr->id);
 });

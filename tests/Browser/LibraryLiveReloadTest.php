@@ -65,12 +65,13 @@ test('the series list reloads only after a Sonarr webhook was processed', functi
     $webpage->script(appHydratedScript());
     $webpage->script(libraryLiveRecorderScript());
 
-    // Stored but not yet processed: the cache may still be stale, so nothing
-    // on the page listens for it (no minimum listener count to wait for).
-    $webpage->script(echoEmitScript('dashboard', 'WebhookReceived', [
-        'id' => 7000, 'service_connection_id' => $sonarr->id, 'service_name' => 'Sonarr', 'service_type' => 'sonarr',
-        'event_type' => 'Download', 'created_at' => '2026-10-12T10:00:00.000000Z',
-    ], 0));
+    // The page listens on the Sonarr channel, not Radarr's. (The old
+    // WebhookReceived-on-dashboard case is dropped: the feature test pins the
+    // listener's events to WebhookEventProcessed only.)
+    $channels = $webpage->script(echoSubscribedChannelsScript('webhooks.sonarr', 'WebhookEventProcessed'));
+    expect($channels)->toContain('private-webhooks.sonarr')
+        ->not->toContain('private-webhooks.radarr');
+
     // Processed, but for another service (a Radarr connection that is not on this page).
     $webpage->script(echoEmitScript('webhooks.radarr', 'WebhookEventProcessed', libraryLiveProcessed('radarr', 2), 0));
     $webpage->wait(2);
@@ -172,6 +173,11 @@ test('a series page reloads only after its own Sonarr connection processed a web
     $webpage->script(libraryLiveRecorderScript());
 
     // Another Sonarr connection, then another service: neither is this page's.
+    $channels = $webpage->script(echoSubscribedChannelsScript('webhooks.sonarr.'.$sonarr->id, 'WebhookEventProcessed'));
+    expect($channels)->toContain('private-webhooks.sonarr.'.$sonarr->id)
+        ->not->toContain('private-webhooks.sonarr')
+        ->not->toContain('private-webhooks.sonarr.'.($sonarr->id + 1000))
+        ->not->toContain('private-webhooks.radarr.'.$sonarr->id);
     $webpage->script(echoEmitScript('webhooks.sonarr.'.($sonarr->id + 1000), 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $sonarr->id + 1000), 0));
     $webpage->script(echoEmitScript('webhooks.radarr.'.$sonarr->id, 'WebhookEventProcessed', libraryLiveProcessed('radarr', $sonarr->id), 0));
     $webpage->wait(2);
@@ -227,6 +233,10 @@ test('a series page ignores a webhook from another Sonarr connection', function 
 
     // The other connection's event reaches its own channel and the service-wide
     // one, neither of which this page listens on.
+    $channels = $webpage->script(echoSubscribedChannelsScript('webhooks.sonarr.'.$sonarr->id, 'WebhookEventProcessed'));
+    expect($channels)->toContain('private-webhooks.sonarr.'.$sonarr->id)
+        ->not->toContain('private-webhooks.sonarr')
+        ->not->toContain('private-webhooks.sonarr.'.$other->id);
     $webpage->script(echoEmitScript('webhooks.sonarr.'.$other->id, 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $other->id), 0));
     $webpage->script(echoEmitScript('webhooks.sonarr', 'WebhookEventProcessed', libraryLiveProcessed('sonarr', $other->id), 0));
     $webpage->wait(2);

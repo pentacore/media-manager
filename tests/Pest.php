@@ -313,6 +313,30 @@ function appHydratedScript(): string
 }
 
 /**
+ * Waits (up to ~5 s) until the page's own `private-{$channel}` has a listener
+ * for `$event`, then returns the names of every channel the page subscribed
+ * to. Negative live-prop cases call it first, so an emit on another channel
+ * cannot pass just because the subscription had not happened yet, and assert
+ * on the returned set.
+ */
+function echoSubscribedChannelsScript(string $channel, string $event): string
+{
+    return <<<JS
+        (async () => {
+            const pusher = () => window.Pusher?.instances?.[0];
+            const bound = () => (pusher()?.channel('private-{$channel}')?.callbacks?.get('{$event}') ?? []).length;
+            for (let attempt = 0; attempt < 250 && bound() < 1; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            if (bound() < 1) {
+                throw new Error('private-{$channel} has no listener for {$event} after 5 s.');
+            }
+            return Object.keys(pusher().channels.channels).sort();
+        })()
+    JS;
+}
+
+/**
  * Hands a broadcast to the page's Echo listeners. Tests broadcast through the
  * null driver, so this emits on the pusher-js channel Echo created for
  * `private-{$channel}`, after waiting (up to ~5 s) until at least
