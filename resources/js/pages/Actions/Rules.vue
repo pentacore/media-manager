@@ -16,7 +16,7 @@ defineOptions({
         breadcrumbs: [
             { title: 'Automation', href: dashboard().url },
             {
-                title: 'Approval Rules',
+                title: 'Approval rules',
                 href: ActionTypeConfigController.index.url(),
             },
         ],

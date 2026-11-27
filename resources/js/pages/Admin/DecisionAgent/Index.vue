@@ -141,7 +141,7 @@ function submit(): void {
                 The autonomous agent reacts to inbound webhook events and
                 proposes actions through the approval pipeline. Suggest-vs-act
                 is governed per-action by
-                <span class="font-mono-tabular">Approval Rules</span>; this page
+                <span class="font-mono-tabular">Approval rules</span>; this page
                 controls which events wake it and what it may attempt.
             </p>
             <p class="mt-2 text-[13px]">
@@ -396,7 +396,7 @@ function submit(): void {
                         <Field
                             label-id="decision-agent-second-opinion-label"
                             label="Second opinion"
-                            hint="How automated proposals are double-checked on the action types you choose under Approval Rules. A failed check always holds the action for approval."
+                            hint="How automated proposals are double-checked on the action types you choose under Approval rules. A failed check always holds the action for approval."
                         >
                             <span />
                         </Field>

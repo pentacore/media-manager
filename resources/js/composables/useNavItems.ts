@@ -334,7 +334,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         icon: Users,
                     },
                     {
-                        title: 'Approval Rules',
+                        title: 'Approval rules',
                         href: ActionTypeConfigController.index.url(),
                         icon: Shield,
                     },

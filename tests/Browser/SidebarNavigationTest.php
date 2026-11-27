@@ -178,14 +178,14 @@ test('admin sub-groups start collapsed and reveal children on click', function (
         ->assertSeeIn('[data-sidebar="content"]', 'Configuration')
         ->assertSeeIn('[data-sidebar="content"]', 'Diagnostics')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Connections')
-        ->assertDontSeeIn('[data-sidebar="content"]', 'Approval Rules')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Approval rules')
         ->click('[data-sidebar="content"] button:has-text("Configuration")')
         // Scoped: the dashboard body renders "0 connections" and "No service
         // connections configured.", either of which would satisfy an unscoped
         // assertSee('Connections') whether the group expanded or not.
         ->assertSeeIn('[data-sidebar="content"]', 'Connections')
         ->assertSeeIn('[data-sidebar="content"]', 'Users')
-        ->assertSeeIn('[data-sidebar="content"]', 'Approval Rules');
+        ->assertSeeIn('[data-sidebar="content"]', 'Approval rules');
 });
 
 test('the parent group auto-opens when a child page is current', function (): void {
@@ -233,7 +233,7 @@ test('the parent group auto-opens on a page nested under a child', function (): 
         // A sibling child, so this reads the whole sub-group rendering rather
         // than the one active row. Scoped: the create form has no such field,
         // but the sidebar is the only place this may be read from.
-        ->assertSeeIn('[data-sidebar="content"]', 'Approval Rules');
+        ->assertSeeIn('[data-sidebar="content"]', 'Approval rules');
 });
 
 test('an opened sub-group stays open across a navigation', function (): void {
